@@ -368,6 +368,37 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 
+<!-- ══ SKIPPED ══ -->
+<div id="panel-skipped" class="panel">
+  <div class="stats" id="skipped-stats"></div>
+  <div id="skipped-vlist">
+    <div class="tb">
+      <input type="text" id="sk-search" placeholder="🔍 Search vendo name or IP..." oninput="filterSkipped()">
+      <select id="sk-area" onchange="filterSkipped()">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+      <button class="btn p" onclick="loadSkipped()">⟳ Refresh</button>
+    </div>
+    <div id="skipped-todo"></div>
+  </div>
+  <div id="skipped-detail" style="display:none;">
+    <button onclick="closeSkippedDetail()" style="padding:6px 16px;background:#d97706;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:12px;">← Back to Skipped List</button>
+    <div style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:700;color:#d97706" id="sk-detail-title"></div>
+      <div style="font-size:12px;color:var(--mu)" id="sk-detail-sub"></div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>Time</th><th>IP</th><th>MAC</th><th>Amount</th><th>Voucher</th><th>Reason</th><th>Action</th></tr></thead>
+        <tbody id="sk-txn-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ══ DEVICES ══ -->
 <div id="panel-devices" class="panel">
   <button class="btn p" onclick="loadDevices()" style="margin-bottom:12px;">⟳ Refresh</button>
@@ -521,7 +552,9 @@ setInterval(()=>{
 function showP(id, btn) {
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
-  document.getElementById("panel-"+id).classList.add("active");
+  const panel = document.getElementById("panel-"+id);
+  if(!panel) { console.error("Panel not found: panel-"+id); return; }
+  panel.classList.add("active");
   if(btn) btn.classList.add("active");
   hideBread();
   if(id==="harvest")   loadHarvests();
@@ -813,7 +846,10 @@ function showAreaVendos(area) {
 async function openVendoDetail(vendo, area) {
   currentVendo=vendo; vtPage_n=1;
   // Make sure we're on vendos panel
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
   document.getElementById("panel-vendos").classList.add("active");
+  document.querySelector(".nav button:nth-child(2)").classList.add("active");
   document.getElementById("view-vlist").style.display="none";
   document.getElementById("view-vtxns").style.display="block";
   document.getElementById("vtxn-title").textContent=vendo;
@@ -1068,31 +1104,30 @@ function renderSuspiciousTodo(rows) {
 }
 
 async function markVendoNotSuspicious(vendo, area, btn) {
-  const note = localStorage.getItem("hacked_note_vendo_"+vendo)||"";
-  if(!confirm(`Mark "${vendo}" as NOT suspicious? It will be removed from this list permanently.`)) return;
-  btn.disabled = true;
-  btn.textContent = "Saving...";
-  // Save to Supabase not_suspicious table
-  await fetch(`${SB_URL}/rest/v1/not_suspicious`, {
-    method:"POST",
-    headers:{...HDR,"Content-Type":"application/json",Prefer:"return=minimal"},
-    body:JSON.stringify({vendo, area, note})
+  if(!confirm(`Mark "${vendo}" as NOT suspicious? It will be removed from the suspicious list.`)) return;
+  
+  // Save to localStorage
+  let notsus = JSON.parse(localStorage.getItem("not_suspicious_vendos") || "[]");
+  if (!notsus.find(v => v.vendo === vendo)) {
+    notsus.push({ vendo, area, cleared_at: new Date().toLocaleString("en-PH",{timeZone:"Asia/Manila"}) });
+    localStorage.setItem("not_suspicious_vendos", JSON.stringify(notsus));
+  }
+  
+  // Mark all transactions as extended=1 (legitimate)
+  await fetch(`${SB_URL}/rest/v1/transactions?vendo=eq.${encodeURIComponent(vendo)}&extended=eq.0`, {
+    method: "PATCH",
+    headers: {...HDR, "Content-Type":"application/json", Prefer:"return=minimal"},
+    body: JSON.stringify({extended: "1"})
   });
-  // Remove from DOM
-  const id="hack-"+btoa(encodeURIComponent(vendo)).replace(/[^a-zA-Z0-9]/g,"");
-  const item=document.getElementById(id);
+  
+  // Remove from todo list
+  const itemId = "hack-"+btoa(encodeURIComponent(vendo)).replace(/[^a-zA-Z0-9]/g,"");
+  const item = document.getElementById(itemId);
   if(item) item.remove();
-  // Show success
-  showAlert(`✅ ${vendo} marked as not suspicious!`,"ok");
+  
+  alert(`✅ ${vendo} marked as Not Suspicious!`);
 }
 
-function showAlert(msg, type) {
-  const el = document.createElement("div");
-  el.style.cssText = `position:fixed;top:70px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.2);${type==="ok"?"background:#d1fae5;color:#065f46;border:1px solid #6ee7b7":"background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"}`;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(()=>el.remove(), 3000);
-}
 
 async function openSuspiciousDetail(vendo, area) {
   document.getElementById("suspicious-vlist").style.display="none";
@@ -1274,17 +1309,34 @@ setInterval(()=>{
 // NOT SUSPICIOUS
 // ══════════════════════════════════════════════════════════
 async function loadNotSuspicious() {
-  const rows = await sb("not_suspicious","select=*&order=cleared_at.desc",500);
-  document.getElementById("notsus-tbody").innerHTML = rows.map((r,i)=>`
+  // Reads from localStorage - vendos marked as not suspicious
+  const notsus = JSON.parse(localStorage.getItem("not_suspicious_vendos") || "[]");
+  
+  document.getElementById("notsus-stats") && (document.getElementById("notsus-stats").innerHTML = `
+    <div class="stat"><div class="sl">Not Suspicious Vendos</div><div class="sv green">${notsus.length}</div></div>
+    <div class="stat"><div class="sl">Cleared from Suspicious</div><div class="sv green">✅ Legitimate</div></div>
+  `);
+
+  const tbody = document.getElementById("notsus-tbody");
+  if(!tbody) return;
+  tbody.innerHTML = notsus.length ? notsus.map((v,i) => `
     <tr>
       <td style="color:var(--mu)">${i+1}</td>
-      <td style="font-weight:600;color:var(--ok)">${r.vendo||"—"}</td>
-      <td>${r.area||"—"}</td>
-      <td style="color:var(--mu)">${r.note||"—"}</td>
-      <td style="color:var(--mu);font-size:11px">${r.cleared_at ? new Date(r.cleared_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",hour12:true}) : "—"}</td>
-      <td><button class="btn sm danger" onclick="removeNotSuspicious(${r.id},'${esc(r.vendo)}',this)">↩ Restore</button></td>
-    </tr>`).join("") || '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--mu)">No cleared vendos yet</td></tr>';
+      <td style="font-weight:500;color:var(--ok)">${v.vendo}</td>
+      <td>${v.area||"—"}</td>
+      <td style="color:var(--mu)">${v.cleared_at||"—"}</td>
+      <td><button class="btn sm danger" onclick="removeFromNotSuspicious('${esc(v.vendo)}')">Remove</button></td>
+    </tr>`).join("") 
+    : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--mu)">No vendos marked as not suspicious yet</td></tr>';
 }
+
+function removeFromNotSuspicious(vendo) {
+  let notsus = JSON.parse(localStorage.getItem("not_suspicious_vendos") || "[]");
+  notsus = notsus.filter(v => v.vendo !== vendo);
+  localStorage.setItem("not_suspicious_vendos", JSON.stringify(notsus));
+  loadNotSuspicious();
+}
+
 
 async function removeNotSuspicious(id, vendo, btn) {
   if(!confirm(`Restore "${vendo}" back to suspicious list?`)) return;
@@ -1299,7 +1351,7 @@ async function removeNotSuspicious(id, vendo, btn) {
 let skippedByVendo = {};
 
 async function loadSkipped() {
-  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc");
+  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc&limit=5000");
   skippedAll = rows;
 
   // Group by vendo
@@ -1758,8 +1810,7 @@ setInterval(async () => {
 
 // ── INIT ──────────────────────────────────────────────────
 loadDashboard();
-checkWebhookHealth(); // Check immediately on load
-setTimeout(pollRecentTxns, 2000); // Start polling after 2 seconds
+checkWebhookHealth();
 </script>
 </body>
 </html>
