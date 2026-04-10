@@ -108,7 +108,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div style="font-size:10px;opacity:.7">Vendo Monitor</div>
     </div>
     <span class="sdot"></span>
-    <span style="font-size:11px;opacity:.8">Live</span>
+    <span style="font-size:11px;opacity:.8" id="top-status">Live</span>
     <span style="font-size:11px;opacity:.65;margin-left:6px" id="top-clock"></span>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -126,14 +126,17 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <option value="all">All Years</option>
     </select>
     <button class="btn p" style="font-size:11px;padding:4px 10px;" onclick="loadDashboard()">⟳ Refresh</button>
+    <button id="webhook-btn" onclick="resetWebhook()" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;font-size:11px;cursor:pointer;">🔗 Webhook</button>
   </div>
   <div class="nav">
     <button class="active" onclick="showP('dash',this)">Dashboard</button>
     <button onclick="showP('vendos',this)">Vendos</button>
     <button onclick="showP('harvest',this)">Harvest</button>
-    <button onclick="showP('hacked',this)" style="border-color:rgba(239,68,68,.5);color:#fca5a5">🚨 Hacked</button>
+    <button onclick="showP('hacked',this)" style="border-color:rgba(239,68,68,.5);color:#fca5a5">⚠️ Suspicious</button>
     <button onclick="showP('devices',this)">📱 Devices</button>
     <button onclick="showP('analytics',this)">📈 Analytics</button>
+    <button onclick="showP('skipped',this)" style="border-color:rgba(251,191,36,.5);color:#fcd34d">⏭ Skipped</button>
+    <button onclick="showP('notsus',this)" style="border-color:rgba(16,185,129,.5);color:#6ee7b7">✓ Not Suspicious</button>
   </div>
 </div>
 
@@ -170,7 +173,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <span style="font-size:20px">🚨</span>
     <div style="flex:1"><div style="font-weight:600;color:#dc2626;font-size:13px">Suspicious transactions detected!</div>
     <div style="font-size:11px;color:#dc2626;opacity:.8" id="alert-detail"></div></div>
-    <button onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))" style="padding:6px 14px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View Hacked →</button>
+    <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'))" style="padding:6px 14px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View Hacked →</button>
   </div>
   <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
     <div class="cs">
@@ -195,19 +198,25 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div class="cs-t" style="color:#dc2626">🚨 Recent Suspicious <span id="susp-count" class="pill red">0</span></div>
       <div id="suspicious-sidebar" class="cs-scroll" style="max-height:280px"></div>
       <div style="padding:8px 0 0;border-top:1px solid #fecaca;margin-top:8px">
-        <button onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Hacked →</button>
+        <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'))" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Suspicious →</button>
       </div>
     </div>
+  </div>
+  <!-- Recent transactions FIRST -->
+  <div class="cs" style="margin-bottom:12px;">
+    <div class="cs-t">
+      Recent transactions 
+      <span id="live-badge" class="pill ok" style="font-size:9px;">● LIVE</span>
+      <span id="last-received" style="font-size:10px;color:var(--mu);font-weight:400;margin-left:8px;"></span>
+    </div>
+    <div id="recent-txns" class="cs-scroll" style="max-height:200px;"></div>
   </div>
   <div class="two">
     <div class="cs">
       <div class="cs-t">Areas — click to explore</div>
       <div class="area-grid" id="area-grid"></div>
     </div>
-    <div class="cs">
-      <div class="cs-t">Recent transactions <span class="pill ok" style="font-size:9px;">● LIVE</span></div>
-      <div id="recent-txns" class="cs-scroll"></div>
-    </div>
+    <div class="cs" style="display:none;"></div>
   </div>
 </div>
 
@@ -327,33 +336,33 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 
-<!-- ══ HACKED — TODO LIST ══ -->
-<div id="panel-hacked" class="panel">
-  <div class="stats" id="hacked-stats"></div>
+<!-- ══ SUSPICIOUS — TODO LIST ══ -->
+<div id="panel-suspicious" class="panel">
+  <div class="stats" id="suspicious-stats"></div>
   <!-- Hacked vendo list -->
-  <div id="hacked-vlist">
+  <div id="suspicious-vlist">
     <div class="tb">
-      <input type="text" id="hk-search" placeholder="🔍 Search vendo..." oninput="filterHacked()">
-      <select id="hk-area" onchange="filterHacked()">
+      <input type="text" id="sus-search" placeholder="🔍 Search vendo..." oninput="filterSuspicious()">
+      <select id="sus-area" onchange="filterSuspicious()">
         <option value="">All Areas</option>
         <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
         <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
         <option>MINAOG</option><option>MIX AREAS</option>
       </select>
     </div>
-    <div id="hacked-todo"></div>
+    <div id="suspicious-todo"></div>
   </div>
   <!-- Hacked vendo detail -->
-  <div id="hacked-detail" style="display:none;">
+  <div id="suspicious-detail" style="display:none;">
     <div style="margin-bottom:12px">
-      <button onclick="closeHackedDetail()" style="padding:6px 16px;background:#dc2626;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Hacked List</button>
-      <div style="font-size:16px;font-weight:700;color:#dc2626" id="hk-detail-title"></div>
-      <div style="font-size:12px;color:var(--mu)" id="hk-detail-sub"></div>
+      <button onclick="closeSuspiciousDetail()" style="padding:6px 16px;background:#dc2626;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Hacked List</button>
+      <div style="font-size:16px;font-weight:700;color:#dc2626" id="sus-detail-title"></div>
+      <div style="font-size:12px;color:var(--mu)" id="sus-detail-sub"></div>
     </div>
     <div class="tw">
       <table>
         <thead><tr><th>#</th><th>Date</th><th>Time</th><th>Amount</th><th>IP</th><th>MAC</th><th>Total Time</th><th>Action</th></tr></thead>
-        <tbody id="hk-txn-tbody"></tbody>
+        <tbody id="sus-txn-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -413,6 +422,98 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 
+<!-- ══ NOT SUSPICIOUS ══ -->
+<div id="panel-notsus" class="panel">
+  <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-size:16px;font-weight:700;color:var(--ok)">✓ Not Suspicious Vendos</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:4px">Vendos you have cleared — they will not appear in Suspicious tab</div>
+    </div>
+    <button class="btn p" onclick="loadNotSuspicious()">⟳ Refresh</button>
+  </div>
+  <div class="tw">
+    <table>
+      <thead><tr><th>#</th><th>Vendo</th><th>Area</th><th>Note</th><th>Cleared At</th><th>Action</th></tr></thead>
+      <tbody id="notsus-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ SKIPPED ══ -->
+<div id="panel-skipped" class="panel">
+  <div class="stats" id="skipped-stats"></div>
+  <!-- Skipped vendo list (todo style) -->
+  <div id="skipped-vlist">
+    <div class="tb">
+      <input type="text" id="sk-search" placeholder="🔍 Search vendo name or IP..." oninput="filterSkipped()">
+      <select id="sk-area" onchange="filterSkipped()">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+      <button class="btn p" onclick="loadSkipped()">⟳ Refresh</button>
+    </div>
+    <div id="skipped-todo"></div>
+  </div>
+  <!-- Skipped vendo detail -->
+  <div id="skipped-detail" style="display:none;">
+    <button onclick="closeSkippedDetail()" style="padding:6px 16px;background:#d97706;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:12px;">← Back to Skipped List</button>
+    <div style="margin-bottom:12px">
+      <div style="font-size:16px;font-weight:700;color:#d97706" id="sk-detail-title"></div>
+      <div style="font-size:12px;color:var(--mu)" id="sk-detail-sub"></div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>IP</th><th>MAC</th><th>Amount</th><th>Reason</th><th>Received</th><th>Action</th></tr></thead>
+        <tbody id="sk-txn-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SKIPPED — TODO LIST ══ -->
+<div id="panel-skipped" class="panel">
+  <div class="stats" id="skipped-stats"></div>
+  <div id="skipped-vlist">
+    <div class="tb">
+      <input type="text" id="sk-search" placeholder="🔍 Search vendo name..." oninput="filterSkippedVendos()" style="flex:1;">
+      <select id="sk-area" onchange="filterSkippedVendos()">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+      <button class="btn p" onclick="loadSkipped()">⟳ Refresh</button>
+    </div>
+    <div class="rc" id="sk-rc"></div>
+    <div id="skipped-todo"></div>
+  </div>
+  <div id="skipped-detail" style="display:none;">
+    <div style="margin-bottom:12px">
+      <button onclick="closeSkippedDetail()" style="padding:6px 16px;background:#d97706;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Skipped List</button>
+      <div style="font-size:16px;font-weight:700;color:#d97706" id="sk-detail-title"></div>
+      <div style="font-size:12px;color:var(--mu)" id="sk-detail-sub"></div>
+    </div>
+    <div class="stats" id="sk-detail-stats"></div>
+    <div class="tb" style="margin-top:8px;">
+      <input type="text" id="sk-txn-search" placeholder="🔍 Search IP, MAC, amount..." oninput="filterSkTxns()">
+    </div>
+    <div class="rc" id="sk-txn-rc"></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>Time</th><th>Amount</th><th>IP</th><th>MAC</th><th>Voucher</th><th>Action</th></tr></thead>
+        <tbody id="sk-txn-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pg">
+      <button id="skp-p" onclick="skTxPage(-1)" disabled>← Prev</button>
+      <span id="skp-l">Page 1</span>
+      <button id="skp-n" onclick="skTxPage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- end .w -->
 <!-- Floating back button -->
 <button id="float-back" onclick="goBack()" 
@@ -443,6 +544,16 @@ let filteredHacked= [];
 let navStack      = [];
 let vendoAnalyticsChart = null;
 let vendoChart    = null;
+let skippedAll    = [];
+let skPage_n      = 1;
+let skippedVendos = [];
+let skCurrentVendo= "";
+let skTxnAll      = [];
+let skTxPage_n    = 1;
+let hkTxnAll      = [];
+let hkTxPage_n    = 1;
+let hkCurrentVendo= "";
+let lastTxnTime   = null;
 let trendChart    = null;
 let areaChart     = null;
 let monthlyChart  = null;
@@ -488,11 +599,12 @@ function showP(id, btn) {
   document.getElementById("panel-"+id).classList.add("active");
   if(btn) btn.classList.add("active");
   hideBread();
-  if(id==="hacked")    loadHacked();
   if(id==="harvest")   loadHarvests();
   if(id==="devices")   loadDevices();
   if(id==="analytics") loadAnalytics();
   if(id==="vendos")    loadVendos();
+  if(id==="skipped")   loadSkipped();
+  if(id==="notsus")    loadNotSuspicious();
 }
 
 function showBread(text, backFn) {
@@ -585,7 +697,7 @@ async function loadDashboard() {
       <div class="stat"><div class="sl">Total Transactions</div><div class="sv blue">${totalTx.toLocaleString()}</div></div>
       <div class="stat"><div class="sl">Total Sales</div><div class="sv blue">${fmt(totalSales)}</div></div>
       <div class="stat"><div class="sl">Today's Sales</div><div class="sv green">${fmt(todaySales)}</div></div>
-      <div class="stat" onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))"><div class="sl">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
+      <div class="stat" onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'))"><div class="sl">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
     `;
 
     if(hackedCnt>0){
@@ -799,7 +911,7 @@ async function loadVendoTxns() {
   const to=document.getElementById("vtxn-to").value;
   vtPage_n=1;
   document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading transactions...</td></tr>';
-  let params=`select=date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&order=date.desc,time.desc`;
+  let params=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.desc,time.desc`;
   if(from) params+=`&date=gte.${from}`;
   if(to)   params+=`&date=lte.${to}`;
   try {
@@ -889,7 +1001,7 @@ async function loadVendoSuspicious(vendo) {
           <td><input class="note-input" value="${(notes[t.id]||"").replace(/"/g,"&quot;")}" placeholder="Add note..." onchange="saveNote(${t.id},'${esc(vendo)}',this.value)"></td>
           <td style="display:flex;gap:4px;">
             <button class="btn sm ${isDone?"":"p"}" onclick="toggleDone(${t.id},'${esc(vendo)}',this)">${isDone?"↩ Undo":"✓ Done"}</button>
-            <button class="btn sm danger" onclick="markNotHacked(${t.id},this)">Not Hacked</button>
+            <button class="btn sm danger" onclick="markLegitimate(${t.id},this)">Not Hacked</button>
           </td>
         </tr>`;
       }).join("")}
@@ -913,7 +1025,7 @@ function toggleDone(id, vendo, btn) {
   btn.textContent=isDone?"✓ Done":"↩ Undo";
   btn.classList.toggle("p",isDone);
 }
-async function markNotHacked(id, btn) {
+async function markLegitimate(id, btn) {
   if(!confirm("Mark this transaction as NOT hacked (free time)?")) return;
   await fetch(`${SB_URL}/rest/v1/transactions?id=eq.${id}`,{
     method:"PATCH",headers:{...HDR,"Content-Type":"application/json",Prefer:"return=minimal"},
@@ -985,72 +1097,88 @@ function hPage(d){hPage_n+=d;filterHarvests();}
 // ══════════════════════════════════════════════════════════
 // HACKED — TODO LIST
 // ══════════════════════════════════════════════════════════
-async function loadHacked() {
+async function loadSuspicious() {
   const rows=await sb("hacked_summary","",500);
   hackedAll=rows;
   const total_txns=rows.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
   const total_amt=rows.reduce((s,h)=>s+parseFloat(h.total_amount||0),0);
-  document.getElementById("hacked-stats").innerHTML=`
+  document.getElementById("suspicious-stats").innerHTML=`
     <div class="stat"><div class="sl">Affected Vendos</div><div class="sv red">${rows.length}</div></div>
     <div class="stat"><div class="sl">Suspicious Txns</div><div class="sv red">${total_txns.toLocaleString()}</div></div>
     <div class="stat"><div class="sl">Total Amount</div><div class="sv red">${fmt(total_amt)}</div></div>
   `;
   filteredHacked=rows;
-  renderHackedTodo(rows);
+  renderSuspiciousTodo(rows);
 }
 
-function filterHacked() {
-  const q=(document.getElementById("hk-search")?.value||"").toLowerCase();
-  const area=document.getElementById("hk-area")?.value||"";
+function filterSuspicious() {
+  const q=(document.getElementById("sus-search")?.value||"").toLowerCase();
+  const area=document.getElementById("sus-area")?.value||"";
   filteredHacked=hackedAll.filter(h=>(!q||(h.vendo||"").toLowerCase().includes(q))&&(!area||h.area===area));
-  renderHackedTodo(filteredHacked);
+  renderSuspiciousTodo(filteredHacked);
 }
 
-function renderHackedTodo(rows) {
-  document.getElementById("hacked-todo").innerHTML = rows.map(h=>{
-    const done=JSON.parse(localStorage.getItem("hacked_done_vendo_"+h.vendo)||"false");
+function renderSuspiciousTodo(rows) {
+  document.getElementById("suspicious-todo").innerHTML = rows.map(h=>{
     const note=localStorage.getItem("hacked_note_vendo_"+h.vendo)||"";
-    return `<div class="todo-item${done?" done":""}" id="hack-${btoa(h.vendo).replace(/=/g,"")}">
-      <input type="checkbox" ${done?"checked":""} onchange="toggleHackVendo('${esc(h.vendo)}',this.checked,this)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
+    return `<div class="todo-item" id="hack-${btoa(encodeURIComponent(h.vendo)).replace(/[^a-zA-Z0-9]/g,"")}">
       <div style="flex:1;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span class="todo-text${done?" done":""}" style="font-weight:600;color:#dc2626;cursor:pointer" onclick="openHackedDetail('${esc(h.vendo)}','${h.area}')">${h.vendo}</span>
+          <span style="font-weight:600;color:#dc2626;cursor:pointer;font-size:14px;" onclick="openSuspiciousDetail('${esc(h.vendo)}','${h.area}')">${h.vendo}</span>
           <span class="pill info">${h.area}</span>
           <span class="pill red">⚠️ ${h.txn_count} txns</span>
           <span style="font-weight:700;color:#dc2626">${fmt(h.total_amount)}</span>
           <span style="font-size:11px;color:var(--mu)">Last: ${h.last_date||"—"}</span>
         </div>
-        <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+        <div style="margin-top:8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <span style="font-size:11px;color:var(--mu)">Note:</span>
-          <input class="note-input" value="${note.replace(/"/g,"&quot;")}" placeholder="Add note... e.g. MAC blocked, owner notified"
-            onchange="localStorage.setItem('hacked_note_vendo_${esc(h.vendo)}',this.value)" style="flex:1;max-width:300px;">
-          <button class="btn sm p" onclick="openHackedDetail('${esc(h.vendo)}','${h.area}')">View Transactions →</button>
+          <input class="note-input" value="${note.replace(/"/g,"&quot;")}" placeholder="e.g. MAC blocked, owner notified"
+            onchange="localStorage.setItem('hacked_note_vendo_${esc(h.vendo)}',this.value)" style="flex:1;max-width:280px;">
+          <button class="btn sm p" onclick="openSuspiciousDetail('${esc(h.vendo)}','${h.area}')">📊 View →</button>
+          <button class="btn sm" style="background:#10b981;color:white;border-color:#10b981;" onclick="markVendoNotSuspicious('${esc(h.vendo)}','${h.area}',this)">✓ Not Suspicious</button>
         </div>
       </div>
     </div>`;
   }).join("")||'<div style="padding:30px;text-align:center;color:var(--ok);font-size:14px;">✅ No suspicious transactions found!</div>';
 }
 
-function toggleHackVendo(vendo, checked, cb) {
-  localStorage.setItem("hacked_done_vendo_"+vendo, JSON.stringify(checked));
-  const id="hack-"+btoa(vendo).replace(/=/g,"");
+async function markVendoNotSuspicious(vendo, area, btn) {
+  const note = localStorage.getItem("hacked_note_vendo_"+vendo)||"";
+  if(!confirm(`Mark "${vendo}" as NOT suspicious? It will be removed from this list permanently.`)) return;
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  // Save to Supabase not_suspicious table
+  await fetch(`${SB_URL}/rest/v1/not_suspicious`, {
+    method:"POST",
+    headers:{...HDR,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify({vendo, area, note})
+  });
+  // Remove from DOM
+  const id="hack-"+btoa(encodeURIComponent(vendo)).replace(/[^a-zA-Z0-9]/g,"");
   const item=document.getElementById(id);
-  if(item) {
-    item.classList.toggle("done",checked);
-    item.querySelector(".todo-text").classList.toggle("done",checked);
-  }
+  if(item) item.remove();
+  // Show success
+  showAlert(`✅ ${vendo} marked as not suspicious!`,"ok");
 }
 
-async function openHackedDetail(vendo, area) {
-  document.getElementById("hacked-vlist").style.display="none";
-  document.getElementById("hacked-detail").style.display="block";
-  document.getElementById("hk-detail-title").textContent="🚨 "+vendo;
-  document.getElementById("hk-detail-sub").textContent=area+" area · Suspicious transactions breakdown";
+function showAlert(msg, type) {
+  const el = document.createElement("div");
+  el.style.cssText = `position:fixed;top:70px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:999;box-shadow:0 4px 16px rgba(0,0,0,.2);${type==="ok"?"background:#d1fae5;color:#065f46;border:1px solid #6ee7b7":"background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 3000);
+}
+
+async function openSuspiciousDetail(vendo, area) {
+  document.getElementById("suspicious-vlist").style.display="none";
+  document.getElementById("suspicious-detail").style.display="block";
+  document.getElementById("sus-detail-title").textContent="🚨 "+vendo;
+  document.getElementById("sus-detail-sub").textContent=area+" area · Suspicious transactions breakdown";
   showBread(`Hacked → ${vendo}`, closeHackedDetail);
   const rows=await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&extended=in.(0,'')&order=date.desc`,500);
   const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
   const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
-  document.getElementById("hk-txn-tbody").innerHTML=rows.map((t,i)=>{
+  document.getElementById("sus-txn-tbody").innerHTML=rows.map((t,i)=>{
     const isDone=done.includes(t.id);
     return `<tr class="txn-row-hack${isDone?" done":""}">
       <td style="color:var(--mu)">${i+1}</td>
@@ -1061,15 +1189,15 @@ async function openHackedDetail(vendo, area) {
       <td style="color:#dc2626">${t.total_time} ⚠️</td>
       <td style="display:flex;gap:4px;">
         <button class="btn sm ${isDone?"":"p"}" onclick="toggleDone(${t.id},'${esc(vendo)}',this)">${isDone?"↩ Undo":"✓ Done"}</button>
-        <button class="btn sm danger" onclick="markNotHacked(${t.id},this)">Not Hacked</button>
+        <button class="btn sm danger" onclick="markLegitimate(${t.id},this)">Not Hacked</button>
       </td>
     </tr>`;
   }).join("")||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ok)">✅ No suspicious transactions</td></tr>';
 }
 
-function closeHackedDetail() {
-  document.getElementById("hacked-vlist").style.display="block";
-  document.getElementById("hacked-detail").style.display="none";
+function closeSuspiciousDetail() {
+  document.getElementById("suspicious-vlist").style.display="block";
+  document.getElementById("suspicious-detail").style.display="none";
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1206,14 +1334,574 @@ function clearAnalyticsVendo() {
 }
 
 // ══════════════════════════════════════════════════════════
-// AUTO REFRESH every 5 min
+// AUTO REFRESH
 // ══════════════════════════════════════════════════════════
+// Refresh recent transactions every 10 seconds
+setInterval(()=>{ if(document.getElementById("panel-dash").classList.contains("active")) refreshRecentTxns(); }, 10000);
+refreshRecentTxns();
+
+// Full dashboard refresh every 5 min
 setInterval(()=>{
   if(document.getElementById("panel-dash").classList.contains("active")) loadDashboard();
 },5*60*1000);
 
+// ══════════════════════════════════════════════════════════
+// NOT SUSPICIOUS
+// ══════════════════════════════════════════════════════════
+async function loadNotSuspicious() {
+  const rows = await sb("not_suspicious","select=*&order=cleared_at.desc",500);
+  document.getElementById("notsus-tbody").innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td style="color:var(--mu)">${i+1}</td>
+      <td style="font-weight:600;color:var(--ok)">${r.vendo||"—"}</td>
+      <td>${r.area||"—"}</td>
+      <td style="color:var(--mu)">${r.note||"—"}</td>
+      <td style="color:var(--mu);font-size:11px">${r.cleared_at ? new Date(r.cleared_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",hour12:true}) : "—"}</td>
+      <td><button class="btn sm danger" onclick="removeNotSuspicious(${r.id},'${esc(r.vendo)}',this)">↩ Restore</button></td>
+    </tr>`).join("") || '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--mu)">No cleared vendos yet</td></tr>';
+}
+
+async function removeNotSuspicious(id, vendo, btn) {
+  if(!confirm(`Restore "${vendo}" back to suspicious list?`)) return;
+  await fetch(`${SB_URL}/rest/v1/not_suspicious?id=eq.${id}`,{method:"DELETE",headers:HDR});
+  btn.closest("tr").remove();
+  showAlert(`↩ ${vendo} restored to suspicious list!`,"ok");
+}
+
+// ══════════════════════════════════════════════════════════
+// SKIPPED — TODO LIST
+// ══════════════════════════════════════════════════════════
+let skippedByVendo = {};
+
+async function loadSkipped() {
+  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc");
+  skippedAll = rows;
+
+  // Group by vendo
+  skippedByVendo = {};
+  rows.forEach(r => {
+    const v = r.vendo || "Unknown";
+    if (!skippedByVendo[v]) skippedByVendo[v] = { vendo: v, rows: [], area: r.area || "" };
+    skippedByVendo[v].rows.push(r);
+  });
+
+  const vendoList = Object.values(skippedByVendo);
+  const total_amt = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+
+  document.getElementById("skipped-stats").innerHTML=`
+    <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${vendoList.length.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${rows.length.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Amount</div><div class="sv amber">${fmt(total_amt)}</div></div>
+    <div class="stat"><div class="sl">Rule</div><div class="sv blue" style="font-size:11px">Same IP+MAC+Amount+Date+Voucher</div></div>
+    <div class="stat"><div class="sl">Mark Legitimate</div><div class="sv green" style="font-size:11px">→ Moves to transactions</div></div>
+  `;
+  filterSkipped();
+}
+
+function filterSkipped() {
+  const q    = (document.getElementById("sk-search")?.value||"").toLowerCase();
+  const area = document.getElementById("sk-area")?.value||"";
+  const vendoList = Object.values(skippedByVendo).filter(v =>
+    (!q || v.vendo.toLowerCase().includes(q)) &&
+    (!area || v.area === area)
+  );
+  renderSkippedTodo(vendoList);
+}
+
+function renderSkippedTodo(vendoList) {
+  document.getElementById("skipped-todo").innerHTML = vendoList.map(v => {
+    const done   = JSON.parse(localStorage.getItem("skipped_done_"+v.vendo)||"false");
+    const note   = localStorage.getItem("skipped_note_"+v.vendo)||"";
+    const total  = v.rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+    const lastDate = v.rows[0]?.date || "—";
+    return `<div class="todo-item${done?" done":""}" id="sk-${btoa(encodeURIComponent(v.vendo)).replace(/=/g,"")}">
+      <input type="checkbox" ${done?"checked":""} onchange="toggleSkippedVendo('${esc(v.vendo)}',this.checked)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="todo-text${done?" done":""}" style="font-weight:600;color:#d97706;cursor:pointer" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">${v.vendo}</span>
+          <span class="pill info">${v.area||"—"}</span>
+          <span class="pill" style="background:#fef3c7;color:#92400e">⏭ ${v.rows.length} skipped txns</span>
+          <span style="font-weight:700;color:#d97706">${fmt(total)}</span>
+          <span style="font-size:11px;color:var(--mu)">Last: ${lastDate}</span>
+        </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--mu)">Note:</span>
+          <input class="note-input" value="${note.replace(/"/g,"&quot;")}" placeholder="Add note..."
+            onchange="localStorage.setItem('skipped_note_${esc(v.vendo)}',this.value)" style="flex:1;max-width:300px;">
+          <button class="btn sm p" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">View Transactions →</button>
+          <button class="btn sm" style="background:#16a34a;color:white;border-color:#16a34a" onclick="markSkippedLegitimate('${esc(v.vendo)}','${v.area}')">✅ Legitimate → Add to Transactions</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("") || '<div style="padding:30px;text-align:center;color:var(--mu);font-size:14px;">✅ No skipped transactions!</div>';
+}
+
+function toggleSkippedVendo(vendo, checked) {
+  localStorage.setItem("skipped_done_"+vendo, JSON.stringify(checked));
+  const id = "sk-"+btoa(encodeURIComponent(vendo)).replace(/=/g,"");
+  const item = document.getElementById(id);
+  if(item) {
+    item.classList.toggle("done", checked);
+    item.querySelector(".todo-text")?.classList.toggle("done", checked);
+  }
+}
+
+async function openSkippedDetail(vendo, area) {
+  document.getElementById("skipped-vlist").style.display = "none";
+  document.getElementById("skipped-detail").style.display = "block";
+  document.getElementById("sk-detail-title").textContent = "⏭ " + vendo;
+  document.getElementById("sk-detail-sub").textContent = area + " area · Skipped (duplicate) transactions";
+  showBread(`Skipped → ${vendo}`, closeSkippedDetail);
+
+  const vdata = skippedByVendo[vendo];
+  const rows  = vdata ? vdata.rows : [];
+  document.getElementById("sk-txn-tbody").innerHTML = rows.map((r,i)=>`
+    <tr>
+      <td style="color:var(--mu)">${i+1}</td>
+      <td>${r.date||"—"}</td>
+      <td style="font-family:monospace;font-size:11px">${r.ip||"—"}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--mu)">${r.mac||"—"}</td>
+      <td style="font-weight:700;color:#d97706">${fmt(r.amount)}</td>
+      <td><span class="pill" style="background:#fef3c7;color:#92400e">${r.reason||"Duplicate"}</span></td>
+      <td style="font-size:11px;color:var(--mu)">${r.created_at ? new Date(r.created_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",hour12:true}) : "—"}</td>
+      <td>
+        <button class="btn sm" style="background:#16a34a;color:white;border-color:#16a34a;font-size:10px" onclick="addSingleToTransactions(${JSON.stringify(r).replace(/"/g,"&quot;")})">✅ Add to Txns</button>
+      </td>
+    </tr>`).join("") || '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">No skipped transactions</td></tr>';
+}
+
+function closeSkippedDetail() {
+  document.getElementById("skipped-vlist").style.display = "block";
+  document.getElementById("skipped-detail").style.display = "none";
+}
+
+async function markSkippedLegitimate(vendo, area) {
+  if(!confirm(`Mark ALL skipped transactions for "${vendo}" as legitimate? They will appear in vendo transactions!`)) return;
+  const vdata = skippedByVendo[vendo];
+  if(!vdata) return;
+
+  // Set is_skipped=FALSE for all transactions of this vendo
+  const res = await fetch(`${SB_URL}/rest/v1/transactions?vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.true`, {
+    method: "PATCH",
+    headers: {...HDR, "Content-Type":"application/json", Prefer:"return=minimal"},
+    body: JSON.stringify({is_skipped: false})
+  });
+
+  if(res.ok) {
+    alert(`✅ ${vdata.rows.length} transactions for ${vendo} are now active!`);
+    loadSkipped();
+  } else {
+    const err = await res.text();
+    alert("Error: " + err);
+  }
+}
+
+async function addSingleToTransactions(r) {
+  const res = await fetch(`${SB_URL}/rest/v1/transactions?id=eq.${r.id}`, {
+    method: "PATCH",
+    headers: {...HDR, "Content-Type":"application/json", Prefer:"return=minimal"},
+    body: JSON.stringify({is_skipped: false})
+  });
+  if(res.ok) {
+    alert("✅ Transaction is now active in vendo transactions!");
+    openSkippedDetail(r.vendo, r.area);
+    loadSkipped();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// LIVE RECENT TRANSACTIONS — polls every 10 seconds
+// ══════════════════════════════════════════════════════════
+async function refreshRecentTxns() {
+  try {
+    const recent = await sb("transactions","select=date,time,vendo,area,amount,created_at&order=created_at.desc",20);
+    if(!recent?.length) return;
+    
+    // Check if new data arrived
+    const newestTime = recent[0].created_at;
+    const isNew = newestTime !== lastTxnTime;
+    if(isNew) lastTxnTime = newestTime;
+    
+    const el = document.getElementById("recent-txns");
+    if(!el) return;
+    el.innerHTML = recent.map((t,i)=>{
+      const phTime = t.created_at ? new Date(t.created_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:true}) : "";
+      const isLatest = i===0 && isNew;
+      return `<div class="lr" style="${isLatest?'background:#f0fff4;':''}" onclick="openVendoFromSearch('${esc(t.vendo)}','${t.area}')">
+        <div>
+          <div class="lrn" style="${isLatest?'color:#16a34a;':''}">${isLatest?'🆕 ':''}${t.vendo}</div>
+          <div class="lrm">${t.area} · ${t.date} ${t.time}</div>
+          <div style="font-size:10px;color:#9FE1CB">● received ${phTime}</div>
+        </div>
+        <span style="font-weight:700;color:#1565c0">${fmt(t.amount)}</span>
+      </div>`;
+    }).join("");
+    
+    // Update live dot color — green if received in last 5 min
+    const lastReceived = new Date(newestTime);
+    const minsAgo = (Date.now() - lastReceived.getTime()) / 60000;
+    const dot = document.querySelector(".sdot");
+    if(dot) dot.style.background = minsAgo < 5 ? "#9FE1CB" : minsAgo < 30 ? "#fcd34d" : "#ef4444";
+    
+    // Update status
+    const status = document.getElementById("top-status");
+    if(status) {
+      const ago = minsAgo < 1 ? "just now" : minsAgo < 60 ? `${Math.floor(minsAgo)}m ago` : `${Math.floor(minsAgo/60)}h ago`;
+      status.textContent = `Live · last ${ago}`;
+      status.style.color = minsAgo < 5 ? "#9FE1CB" : "#fcd34d";
+    }
+  } catch(e) { console.error("Recent txn error:", e); }
+}
+
+// ══════════════════════════════════════════════════════════
+// SKIPPED — TODO LIST
+// ══════════════════════════════════════════════════════════
+async function loadSkipped() {
+  document.getElementById("skipped-todo").innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu)">Loading...</div>';
+  
+  // Group skipped by vendo
+  const rows = await sbAll("skipped","select=*&order=created_at.desc");
+  skippedAll = rows;
+  
+  // Group by vendo
+  const vendoMap = {};
+  rows.forEach(r => {
+    const key = r.vendo || "Unknown";
+    if(!vendoMap[key]) vendoMap[key] = { vendo: key, area: r.area||"", rows: [], total: 0 };
+    vendoMap[key].rows.push(r);
+    vendoMap[key].total += parseFloat(r.amount||0);
+  });
+  skippedVendos = Object.values(vendoMap).sort((a,b) => b.rows.length - a.rows.length);
+  
+  const totalSkipped = rows.length;
+  const totalAmt = rows.reduce((s,r) => s+parseFloat(r.amount||0), 0);
+  document.getElementById("skipped-stats").innerHTML = `
+    <div class="stat"><div class="sl">Total Skipped Txns</div><div class="sv amber">${totalSkipped.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Amount</div><div class="sv amber">${fmt(totalAmt)}</div></div>
+    <div class="stat"><div class="sl">Affected Vendos</div><div class="sv blue">${skippedVendos.length}</div></div>
+    <div class="stat"><div class="sl">Reason</div><div class="sv blue" style="font-size:13px">Same IP+MAC+Amount+Date+Voucher</div></div>
+  `;
+  
+  filterSkippedVendos();
+}
+
+function filterSkippedVendos() {
+  const q = (document.getElementById("sk-search")?.value||"").toLowerCase();
+  const area = document.getElementById("sk-area")?.value||"";
+  const filtered = skippedVendos.filter(v =>
+    (!q || v.vendo.toLowerCase().includes(q)) &&
+    (!area || v.area === area)
+  );
+  document.getElementById("sk-rc").textContent = `${filtered.length} vendos with skipped transactions`;
+  
+  document.getElementById("skipped-todo").innerHTML = filtered.map(v => {
+    const done = JSON.parse(localStorage.getItem("skipped_legit_"+v.vendo)||"false");
+    const note = localStorage.getItem("skipped_note_"+v.vendo)||"";
+    return `<div class="todo-item${done?" done":""}" style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--bd);align-items:flex-start;">
+      <input type="checkbox" ${done?"checked":""} onchange="toggleSkippedLegit('${esc(v.vendo)}',this.checked)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-weight:600;color:#d97706;cursor:pointer;${done?"text-decoration:line-through;color:var(--mu);":""}" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">${v.vendo}</span>
+          <span class="pill info">${v.area}</span>
+          <span class="pill" style="background:#fef3c7;color:#92400e">⏭ ${v.rows.length} skipped</span>
+          <span style="font-weight:700;color:#d97706">${fmt(v.total)}</span>
+          ${done?'<span class="pill ok">✅ Legitimate</span>':''}
+        </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--mu)">Note:</span>
+          <input class="note-input" value="${note.replace(/"/g,"&quot;")}" placeholder="Add note..."
+            onchange="localStorage.setItem('skipped_note_${esc(v.vendo)}',this.value)" style="flex:1;max-width:300px;">
+          <button class="btn sm p" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">View Transactions →</button>
+          ${done?`<button class="btn sm p" onclick="moveToLegitimate('${esc(v.vendo)}')">➕ Add to Transactions</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join("") || '<div style="padding:30px;text-align:center;color:var(--ok)">✅ No skipped transactions!</div>';
+}
+
+function toggleSkippedLegit(vendo, checked) {
+  localStorage.setItem("skipped_legit_"+vendo, JSON.stringify(checked));
+  filterSkippedVendos();
+}
+
+async function moveToLegitimate(vendo) {
+  if(!confirm(`Move all skipped transactions for "${vendo}" to legitimate transactions?`)) return;
+  const rows = skippedVendos.find(v=>v.vendo===vendo)?.rows || [];
+  if(!rows.length) return;
+  
+  // Insert skipped rows into transactions table
+  const txns = rows.map(r => ({
+    vendo: r.vendo, area: r.area, ip: r.ip, mac: r.mac||"",
+    amount: r.amount, date: r.date, time: r.time||"",
+    voucher: r.mac||"", month: r.month||"", extended: "1"
+  }));
+  
+  const res = await fetch(`${SB_URL}/rest/v1/transactions`, {
+    method:"POST", headers:{...HDR,"Content-Type":"application/json",Prefer:"resolution=ignore-duplicates,return=minimal"},
+    body: JSON.stringify(txns)
+  });
+  
+  if(res.ok) {
+    alert(`✅ ${rows.length} transactions moved to legitimate for ${vendo}!`);
+    loadSkipped();
+  }
+}
+
+async function openSkippedDetail(vendo, area) {
+  skCurrentVendo = vendo;
+  skTxPage_n = 1;
+  document.getElementById("skipped-vlist").style.display="none";
+  document.getElementById("skipped-detail").style.display="block";
+  document.getElementById("sk-detail-title").textContent = "⏭ "+vendo;
+  document.getElementById("sk-detail-sub").textContent = area+" area · Skipped (duplicate) transactions";
+  showBread(`Skipped → ${vendo}`, closeSkippedDetail);
+  
+  const rows = skippedVendos.find(v=>v.vendo===vendo)?.rows || [];
+  skTxnAll = rows;
+  
+  const total = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  document.getElementById("sk-detail-stats").innerHTML=`
+    <div class="stat" style="padding:8px 12px;min-width:120px"><div class="sl">Skipped Txns</div><div class="sv amber" style="font-size:16px">${rows.length.toLocaleString()}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:120px"><div class="sl">Total Amount</div><div class="sv amber" style="font-size:16px">${fmt(total)}</div></div>
+  `;
+  
+  filterSkTxns();
+}
+
+function filterSkTxns() {
+  const q = (document.getElementById("sk-txn-search")?.value||"").toLowerCase();
+  const filtered = skTxnAll.filter(r=>
+    !q || (r.ip||"").includes(q) || (r.mac||"").toLowerCase().includes(q) || String(r.amount||"").includes(q)
+  );
+  document.getElementById("sk-txn-rc").textContent = `Showing ${filtered.length.toLocaleString()} | Total: ${fmt(filtered.reduce((s,r)=>s+parseFloat(r.amount||0),0))}`;
+  renderSkTxns(filtered);
+}
+
+function renderSkTxns(rows) {
+  const PG=100, total=rows.length, start=(skTxPage_n-1)*PG, page=rows.slice(start,start+PG);
+  document.getElementById("skp-l").textContent=`Page ${skTxPage_n} of ${Math.ceil(total/PG)||1}`;
+  document.getElementById("skp-p").disabled=skTxPage_n===1;
+  document.getElementById("skp-n").disabled=start+PG>=total;
+  document.getElementById("sk-txn-tbody").innerHTML=page.map((r,i)=>`
+    <tr>
+      <td style="color:var(--mu)">${start+i+1}</td>
+      <td>${r.date||"—"}</td><td style="color:var(--mu)">${r.time||"—"}</td>
+      <td style="font-weight:700;color:#d97706">${fmt(r.amount)}</td>
+      <td style="font-family:monospace;font-size:11px">${r.ip||"—"}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--mu)">${r.mac||"—"}</td>
+      <td style="font-family:monospace;font-size:11px">${r.voucher||r.mac||"—"}</td>
+      <td><button class="btn sm p" onclick="moveSingleToLegit(${r.id},'${esc(skCurrentVendo)}')">✅ Legitimate</button></td>
+    </tr>`).join("") || '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">No skipped transactions</td></tr>';
+}
+
+function skTxPage(d){skTxPage_n+=d;filterSkTxns();}
+
+async function moveSingleToLegit(id, vendo) {
+  const row = skTxnAll.find(r=>r.id===id);
+  if(!row) return;
+  const res = await fetch(`${SB_URL}/rest/v1/transactions`, {
+    method:"POST", headers:{...HDR,"Content-Type":"application/json",Prefer:"resolution=ignore-duplicates,return=minimal"},
+    body: JSON.stringify([{vendo:row.vendo,area:row.area,ip:row.ip,mac:row.mac||"",amount:row.amount,date:row.date,time:row.time||"",voucher:row.mac||"",month:row.month||"",extended:"1"}])
+  });
+  if(res.ok) { alert("✅ Moved to legitimate transactions!"); loadSkipped(); closeSkippedDetail(); }
+}
+
+function closeSkippedDetail() {
+  document.getElementById("skipped-vlist").style.display="block";
+  document.getElementById("skipped-detail").style.display="none";
+  skCurrentVendo="";
+}
+
+// ── Update hacked detail with pagination and search ────────
+let hkTxns = [];
+async function openSuspiciousDetail(vendo, area) {
+  hkCurrentVendo = vendo;
+  hkTxPage_n = 1;
+  document.getElementById("suspicious-vlist").style.display="none";
+  document.getElementById("suspicious-detail").style.display="block";
+  document.getElementById("sus-detail-title").textContent="⚠️ "+vendo;
+  document.getElementById("sus-detail-sub").textContent=area+" area · Suspicious transactions breakdown";
+  showBread(`Suspicious → ${vendo}`, closeHackedDetail);
+  
+  const rows = await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&order=date.desc,time.desc`,2000);
+  // Filter only suspicious ones
+  hkTxns = rows.filter(r =>
+    (parseFloat(r.amount||0)<=10 && ((r.total_time||"").includes("d")||(r.total_time||"").includes("w"))) ||
+    (parseFloat(r.amount||0)<=20 && ((r.total_time||"").startsWith("2d")||(r.total_time||"").startsWith("3d")||(r.total_time||"").includes("w"))) ||
+    parseFloat(r.amount||0) >= 100
+  );
+  hkTxnAll = hkTxns;
+  
+  const total = hkTxns.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  document.getElementById("hk-detail-stats").innerHTML=`
+    <div class="stat" style="padding:8px 12px;min-width:120px"><div class="sl">Suspicious Txns</div><div class="sv red" style="font-size:16px">${hkTxns.length.toLocaleString()}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:120px"><div class="sl">Total Amount</div><div class="sv red" style="font-size:16px">${fmt(total)}</div></div>
+  `;
+  filterHkTxns();
+}
+
+function filterHkTxns() {
+  const q = (document.getElementById("hk-txn-search")?.value||"").toLowerCase();
+  const filtered = hkTxnAll.filter(r=>
+    !q || (r.ip||"").includes(q)||(r.mac||"").toLowerCase().includes(q)||String(r.amount||"").includes(q)
+  );
+  document.getElementById("hk-txn-rc").textContent=`Showing ${filtered.length.toLocaleString()} | Total: ${fmt(filtered.reduce((s,r)=>s+parseFloat(r.amount||0),0))}`;
+  renderHkTxns(filtered);
+}
+
+function renderHkTxns(rows) {
+  const PG=100,total=rows.length,start=(hkTxPage_n-1)*PG,page=rows.slice(start,start+PG);
+  document.getElementById("hkp-l").textContent=`Page ${hkTxPage_n} of ${Math.ceil(total/PG)||1}`;
+  document.getElementById("hkp-p").disabled=hkTxPage_n===1;
+  document.getElementById("hkp-n").disabled=start+PG>=total;
+  const notes=JSON.parse(localStorage.getItem("hacked_notes_"+hkCurrentVendo)||"{}");
+  const done=JSON.parse(localStorage.getItem("hacked_done_"+hkCurrentVendo)||"[]");
+  document.getElementById("sus-txn-tbody").innerHTML=page.map((t,i)=>{
+    const isDone=done.includes(t.id);
+    return `<tr class="txn-row-hack${isDone?" done":""}">
+      <td style="color:var(--mu)">${start+i+1}</td>
+      <td>${t.date}</td><td>${t.time}</td>
+      <td style="font-weight:700;color:#dc2626">${fmt(t.amount)}</td>
+      <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
+      <td style="font-family:monospace;font-size:11px">${t.mac||"—"}</td>
+      <td style="color:#dc2626">${t.total_time||"—"}</td>
+      <td style="display:flex;gap:3px;flex-wrap:wrap;">
+        <button class="btn sm ${isDone?"":"p"}" onclick="toggleDone(${t.id},'${esc(hkCurrentVendo)}',this)">${isDone?"↩ Undo":"✓ Done"}</button>
+        <button class="btn sm danger" onclick="markLegitimate(${t.id},this)">✅ Legitimate</button>
+      </td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ok)">No suspicious transactions</td></tr>';
+}
+
+function hkTxPage(d){hkTxPage_n+=d;filterHkTxns();}
+
+// ══════════════════════════════════════════════════════════
+// WEBHOOK HEALTH CHECKER
+// ══════════════════════════════════════════════════════════
+const WORKER_URL = "https://vendo-webhook.spawnremote.workers.dev";
+const BOT_TOKEN  = "6620853442:AAFrQWYu6oYbsdkZ6p_PgxPBaaEpIrZwO80";
+
+async function checkWebhookHealth() {
+  try {
+    const res  = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
+    const data = await res.json();
+    const url  = data?.result?.url || "";
+    const pending = data?.result?.pending_update_count || 0;
+    const lastError = data?.result?.last_error_message || "";
+    
+    const btn = document.getElementById("webhook-btn");
+    if (!btn) return;
+
+    if (!url || url !== WORKER_URL + "/") {
+      // Webhook missing!
+      btn.style.background = "#dc2626";
+      btn.style.borderColor = "#dc2626";
+      btn.textContent = "🔴 Webhook DOWN — Click to Fix!";
+      btn.style.animation = "pulse 1s infinite";
+      showWebhookAlert("DOWN");
+    } else if (pending > 100) {
+      // Many pending updates
+      btn.style.background = "#d97706";
+      btn.style.borderColor = "#d97706";
+      btn.textContent = `⚠️ Webhook ${pending} pending`;
+      showWebhookAlert("SLOW");
+    } else if (lastError) {
+      btn.style.background = "#d97706";
+      btn.textContent = `⚠️ Webhook Error`;
+      showWebhookAlert("ERROR", lastError);
+    } else {
+      btn.style.background = "rgba(22,163,74,.6)";
+      btn.style.borderColor = "#16a34a";
+      btn.textContent = `✅ Webhook OK`;
+      hideWebhookAlert();
+    }
+  } catch(e) {
+    console.error("Webhook check failed:", e);
+  }
+}
+
+function showWebhookAlert(type, msg="") {
+  let existing = document.getElementById("webhook-alert");
+  if (!existing) {
+    existing = document.createElement("div");
+    existing.id = "webhook-alert";
+    existing.style.cssText = "position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:999;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.3);";
+    document.body.appendChild(existing);
+  }
+  if (type === "DOWN") {
+    existing.style.background = "#dc2626";
+    existing.style.color = "white";
+    existing.innerHTML = `🚨 <strong>WEBHOOK IS DOWN!</strong> — Transactions are not being collected! <button onclick="resetWebhook()" style="padding:4px 12px;background:white;color:#dc2626;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-left:8px;">Fix Now →</button> <button onclick="hideWebhookAlert()" style="background:none;border:none;color:white;cursor:pointer;font-size:16px;margin-left:4px;">✕</button>`;
+  } else if (type === "SLOW") {
+    existing.style.background = "#d97706";
+    existing.style.color = "white";
+    existing.innerHTML = `⚠️ Webhook is slow — ${msg} messages pending <button onclick="hideWebhookAlert()" style="background:none;border:none;color:white;cursor:pointer;font-size:16px;margin-left:8px;">✕</button>`;
+  } else if (type === "ERROR") {
+    existing.style.background = "#d97706";
+    existing.style.color = "white";
+    existing.innerHTML = `⚠️ Webhook error: ${msg} <button onclick="resetWebhook()" style="padding:4px 12px;background:white;color:#d97706;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-left:8px;">Reset →</button> <button onclick="hideWebhookAlert()" style="background:none;border:none;color:white;cursor:pointer;font-size:16px;">✕</button>`;
+  }
+}
+
+function hideWebhookAlert() {
+  const el = document.getElementById("webhook-alert");
+  if (el) el.remove();
+}
+
+async function resetWebhook() {
+  const btn = document.getElementById("webhook-btn");
+  if (btn) btn.textContent = "⏳ Resetting...";
+  try {
+    // First delete
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook`);
+    // Wait 1 second
+    await new Promise(r => setTimeout(r, 1000));
+    // Set again
+    const res  = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${encodeURIComponent(WORKER_URL+"/")}`);
+    const data = await res.json();
+    if (data.ok) {
+      if (btn) {
+        btn.textContent = "✅ Webhook Reset!";
+        btn.style.background = "rgba(22,163,74,.6)";
+      }
+      hideWebhookAlert();
+      alert("✅ Webhook successfully reset! Transactions will now be collected.");
+    } else {
+      alert("❌ Reset failed: " + JSON.stringify(data));
+    }
+  } catch(e) {
+    alert("❌ Error: " + e.message);
+  }
+  // Re-check after 3 seconds
+  setTimeout(checkWebhookHealth, 3000);
+}
+
+// Check webhook health every 5 minutes
+setInterval(checkWebhookHealth, 5 * 60 * 1000);
+
+// Also check last transaction time every minute
+setInterval(async () => {
+  try {
+    const res  = await fetch(`${SB_URL}/rest/v1/transactions?select=created_at&is_skipped=eq.false&order=created_at.desc&limit=1`, { headers: HDR });
+    const data = await res.json();
+    if (data?.length > 0) {
+      const lastTxn  = new Date(data[0].created_at);
+      const minsAgo  = Math.floor((Date.now() - lastTxn.getTime()) / 60000);
+      const statusEl = document.getElementById("top-status");
+      if (minsAgo > 30 && statusEl) {
+        statusEl.textContent = `⚠️ Last txn ${minsAgo}m ago`;
+        statusEl.style.color = "#fca5a5";
+      } else if (statusEl) {
+        statusEl.style.color = "";
+      }
+    }
+  } catch(e) {}
+}, 60 * 1000);
+
 // ── INIT ──────────────────────────────────────────────────
 loadDashboard();
+checkWebhookHealth(); // Check immediately on load
+setTimeout(pollRecentTxns, 2000); // Start polling after 2 seconds
 </script>
 </body>
 </html>
