@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spawn Internetan — Vendo Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --g:#1565c0;--g2:#0d47a1;--bg:#f0f4ff;--card:#fff;--bd:rgba(30,60,200,.12);
+  --t:#1a1d2e;--mu:#6b7394;--ok:#2d6e3b;--obg:#eaf3de;
+  --pur:#7c3aed;--purbg:#ede9fe;--red:#dc2626;--redbg:#fee2e2;--amber:#d97706;
+}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--t);font-size:14px}
+.topbar{background:#1565c0;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:50}
+.logo{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sdot{width:8px;height:8px;border-radius:50%;background:#9FE1CB;display:inline-block;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(159,225,203,.5)}70%{box-shadow:0 0 0 6px rgba(159,225,203,0)}}
+.nav{display:flex;gap:3px;flex-wrap:wrap}
+.nav button{padding:6px 13px;border:1px solid rgba(255,255,255,.3);border-radius:5px;background:transparent;color:#fff;font-size:12px;cursor:pointer;font-weight:500}
+.nav button.active{background:#7c3aed;border-color:#7c3aed}
+.nav button:hover:not(.active){background:rgba(255,255,255,.2)}
+.breadbar{background:#1250a0;padding:6px 16px;display:none;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.85);position:sticky;top:52px;z-index:49}
+.breadbar.show{display:flex}
+.back-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:12px;padding:3px 10px;cursor:pointer}
+.w{max-width:1200px;margin:0 auto;padding:12px}
+.panel{display:none}.panel.active{display:block}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.stat{background:var(--card);border-radius:8px;padding:12px 14px;border:1px solid var(--bd);cursor:pointer;transition:box-shadow .15s}
+.stat:hover{box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.sl{font-size:10px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.sv{font-size:22px;font-weight:700}
+.sv.blue{color:#1565c0}.sv.green{color:var(--ok)}.sv.red{color:var(--red)}.sv.pur{color:var(--pur)}.sv.amber{color:var(--amber)}
+.cs{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(30,60,200,.06)}
+.cs-scroll{max-height:320px;overflow-y:auto;scrollbar-width:thin}
+.cs-t{font-size:10px;font-weight:600;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.chart-wrap{position:relative;height:200px;margin:8px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+@media(max-width:680px){.two{grid-template-columns:1fr}}
+.tw{background:var(--card);border:1px solid var(--bd);border-radius:10px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{padding:8px 10px;text-align:left;font-weight:500;color:#1565c0;background:#f0f4ff;border-bottom:1px solid var(--bd);white-space:nowrap;font-size:11px}
+td{padding:8px 11px;border-bottom:1px solid var(--bd);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8f9ff;cursor:pointer}
+.btn{padding:6px 13px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--t);font-size:12px;cursor:pointer;white-space:nowrap;transition:background .12s}
+.btn.p{background:var(--g);color:#fff;border-color:var(--g)}.btn.p:hover{background:var(--g2)}
+.btn.danger{border-color:#f09595;color:var(--red)}.btn.danger:hover{background:var(--redbg)}
+.btn.sm{padding:3px 8px;font-size:11px}
+.tb{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.tb input,.tb select{padding:6px 9px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--t);font-size:12px;outline:none}
+.tb input{flex:1;min-width:140px}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--obg);color:var(--ok)}.pill.red{background:var(--redbg);color:var(--red)}
+.pill.pur{background:var(--purbg);color:var(--pur)}.pill.info{background:#e6f1fb;color:#185fa5}
+.rc{font-size:12px;color:var(--mu);margin-bottom:8px;font-weight:500}
+.pg{display:flex;gap:5px;align-items:center;margin-top:9px;font-size:12px}
+.pg button{padding:3px 10px;border:1px solid var(--bd);border-radius:5px;background:var(--card);cursor:pointer;font-size:11px}
+.pg button:disabled{opacity:.4;cursor:not-allowed}
+.tab-row{display:flex;gap:3px;background:var(--bg);padding:3px;border-radius:8px;margin-bottom:12px;flex-wrap:wrap}
+.tab-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--mu);font-size:13px;cursor:pointer}
+.tab-btn.active{background:#1565c0;color:#fff;font-weight:500}
+.subpanel{display:none}.subpanel.active{display:block}
+.top10-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--bd);cursor:pointer;font-size:12px;transition:background .12s}
+.top10-item:hover{background:#f8f9ff}
+.top10-item:last-child{border-bottom:none}
+.txn-row-hack{background:#fff5f5!important}
+.lr{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd);font-size:12px;cursor:pointer}
+.lr:last-child{border-bottom:none}.lr:hover{background:#f8f9ff;padding-left:4px}
+.lrn{font-weight:500}.lrm{font-size:11px;color:var(--mu);margin-top:1px}
+.area-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.area-card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;cursor:pointer;transition:all .15s;border-top:4px solid #1565c0}
+.area-card:hover{box-shadow:0 4px 16px rgba(30,60,200,.15);transform:translateY(-2px)}
+/* Modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;width:min(700px,100%);padding:20px;margin:auto;max-height:90vh;overflow-y:auto}
+.modal-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.modal-title{font-size:16px;font-weight:700;color:#1565c0}
+.modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:var(--mu)}
+/* Vendo list modal items */
+.vlist-row{padding:10px 14px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .12s;display:flex;justify-content:space-between;align-items:center}
+.vlist-row:hover{background:#f0f4ff}
+.vlist-row:last-child{border-bottom:none}
+/* Hacked todo */
+.todo-item{padding:12px 16px;border-bottom:1px solid var(--bd);display:flex;gap:10px;align-items:flex-start;transition:opacity .2s}
+.todo-item.done{opacity:.5;background:#f9fafb}
+.todo-text.done{text-decoration:line-through;color:var(--mu)}
+.note-input{border:1px solid var(--bd);border-radius:5px;padding:4px 8px;font-size:11px;width:200px;outline:none;color:var(--t)}
+.note-input:focus{border-color:#1565c0}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <svg width="26" height="26" viewBox="0 0 100 100">
+      <ellipse cx="50" cy="50" rx="48" ry="48" fill="#1a2340"/>
+      <path d="M10,35 Q30,20 50,28 Q70,36 90,22" stroke="#F5C518" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M8,47 Q28,31 50,40 Q72,49 92,34" stroke="#1D9E75" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M6,58 Q27,42 50,51 Q73,60 94,45" stroke="#4A90D9" stroke-width="8" fill="none" stroke-linecap="round"/>
+      <path d="M8,69 Q28,53 50,62 Q72,71 92,57" stroke="#7B5EA7" stroke-width="8" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <div style="font-size:13px;font-weight:700;letter-spacing:.03em">SPAWN INTERNETAN</div>
+      <div style="font-size:10px;opacity:.7">Vendo Monitor</div>
+    </div>
+    <span class="sdot"></span>
+    <span style="font-size:11px;opacity:.8">Live</span>
+    <span style="font-size:11px;opacity:.65;margin-left:6px" id="top-clock"></span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div style="position:relative">
+      <input type="text" id="global-search" placeholder="🔍 Search vendo name..."
+        style="padding:7px 14px;border-radius:8px;border:2px solid rgba(255,255,255,.6);background:white;color:#1a1d2e;font-size:13px;outline:none;width:220px;font-weight:500;"
+        oninput="globalSearch(this.value)" onfocus="showSearchDrop()" onblur="setTimeout(hideSearchDrop,200)">
+      <div id="search-drop" style="display:none;position:absolute;top:38px;right:0;background:white;border:1px solid var(--bd);border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.2);width:320px;max-height:350px;overflow-y:auto;z-index:100;"></div>
+    </div>
+    <select id="year-select" onchange="changeYear(this.value)"
+      style="padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;font-size:12px;outline:none;cursor:pointer;">
+      <option value="2026" selected>2026</option>
+      <option value="2025-2026">2025-2026</option>
+      <option value="2025">2025</option>
+      <option value="all">All Years</option>
+    </select>
+    <button class="btn p" style="font-size:11px;padding:4px 10px;" onclick="loadDashboard()">⟳ Refresh</button>
+  </div>
+  <div class="nav">
+    <button class="active" onclick="showP('dash',this)">Dashboard</button>
+    <button onclick="showP('vendos',this)">Vendos</button>
+    <button onclick="showP('harvest',this)">Harvest</button>
+    <button onclick="showP('hacked',this)" style="border-color:rgba(239,68,68,.5);color:#fca5a5">🚨 Hacked</button>
+    <button onclick="showP('devices',this)">📱 Devices</button>
+    <button onclick="showP('analytics',this)">📈 Analytics</button>
+  </div>
+</div>
+
+<!-- BREADCRUMB -->
+<div class="breadbar" id="breadbar" style="background:#0d47a1;padding:8px 16px;gap:12px;">
+  <button class="back-btn" onclick="goBack()" style="background:#fff;color:#1565c0;font-weight:700;padding:5px 14px;border-radius:6px;border:none;cursor:pointer;font-size:13px;">← Back</button>
+  <span id="breadcrumb" style="opacity:.85;flex:1;font-size:13px;"></span>
+</div>
+
+<!-- VENDO LIST MODAL -->
+<div class="modal-bg" id="vendo-modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">📊 Active Vendos</div>
+      <button class="modal-close" onclick="closeVendoModal()" style="font-size:28px;line-height:1;color:#dc2626;font-weight:700;">✕</button>
+    </div>
+    <input type="text" id="modal-search" placeholder="🔍 Search vendo name..."
+      style="width:100%;padding:9px 14px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;outline:none;margin-bottom:8px;"
+      oninput="filterModalVendos(this.value)">
+    <div id="modal-vendo-stats" style="display:flex;gap:8px;margin-bottom:8px;font-size:12px;color:var(--mu);align-items:center;justify-content:space-between;">
+      <span id="modal-count"></span>
+      <button class="btn danger sm" onclick="closeVendoModal()">✕ Close</button>
+    </div>
+    <div id="modal-vlist" style="max-height:60vh;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;"></div>
+  </div>
+</div>
+
+<div class="w">
+
+<!-- ══ DASHBOARD ══ -->
+<div id="panel-dash" class="panel active">
+  <div class="stats" id="dash-stats"></div>
+  <div id="suspicious-alert" style="display:none;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;margin-bottom:12px;align-items:center;gap:12px;">
+    <span style="font-size:20px">🚨</span>
+    <div style="flex:1"><div style="font-weight:600;color:#dc2626;font-size:13px">Suspicious transactions detected!</div>
+    <div style="font-size:11px;color:#dc2626;opacity:.8" id="alert-detail"></div></div>
+    <button onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))" style="padding:6px 14px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View Hacked →</button>
+  </div>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
+    <div class="cs">
+      <div class="cs-t">7-day sales trend <span id="trend-range" style="font-weight:400;color:var(--mu)"></span></div>
+      <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+    </div>
+    <div class="cs">
+      <div class="cs-t">Sales by area</div>
+      <div style="position:relative;height:220px;margin-top:6px"><canvas id="area-chart"></canvas></div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 300px;gap:12px;margin-bottom:12px">
+    <div class="cs">
+      <div class="cs-t">🏆 Top 10 — Strongest</div>
+      <div id="top10-high" class="cs-scroll"></div>
+    </div>
+    <div class="cs">
+      <div class="cs-t">📉 Top 10 — Weakest</div>
+      <div id="top10-low" class="cs-scroll"></div>
+    </div>
+    <div class="cs" style="border:1.5px solid #fecaca;background:#fff5f5">
+      <div class="cs-t" style="color:#dc2626">🚨 Recent Suspicious <span id="susp-count" class="pill red">0</span></div>
+      <div id="suspicious-sidebar" class="cs-scroll" style="max-height:280px"></div>
+      <div style="padding:8px 0 0;border-top:1px solid #fecaca;margin-top:8px">
+        <button onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Hacked →</button>
+      </div>
+    </div>
+  </div>
+  <div class="two">
+    <div class="cs">
+      <div class="cs-t">Areas — click to explore</div>
+      <div class="area-grid" id="area-grid"></div>
+    </div>
+    <div class="cs">
+      <div class="cs-t">Recent transactions <span class="pill ok" style="font-size:9px;">● LIVE</span></div>
+      <div id="recent-txns" class="cs-scroll"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ VENDOS ══ -->
+<div id="panel-vendos" class="panel">
+  <div id="view-vlist">
+    <div class="stats" id="vendo-totals"></div>
+    <div class="tb">
+      <input type="text" id="v-search" placeholder="🔍 Search vendo name or area..." oninput="filterVendos()">
+      <select id="v-area" onchange="filterVendos()">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+      <select id="v-sort" onchange="filterVendos()">
+        <option value="desc">Highest sales first</option>
+        <option value="asc">Lowest sales first</option>
+        <option value="name">A-Z name</option>
+        <option value="suspicious">Most suspicious</option>
+      </select>
+    </div>
+    <div class="rc" id="v-rc"></div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Vendo Name</th><th>Area</th><th>Sales</th>
+          <th>Transactions</th><th>Last Date</th><th>Suspicious</th>
+        </tr></thead>
+        <tbody id="v-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pg">
+      <button id="vp-p" onclick="vPage(-1)" disabled>← Prev</button>
+      <span id="vp-l">Page 1</span>
+      <button id="vp-n" onclick="vPage(1)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Vendo detail -->
+  <div id="view-vtxns" style="display:none;">
+    <div style="margin-bottom:12px">
+      <button onclick="closeVendo()" style="padding:6px 16px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Vendos</button>
+      <div style="font-size:18px;font-weight:700;color:#1565c0" id="vtxn-title">—</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:2px" id="vtxn-sub">—</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px" id="vtxn-stats"></div>
+    </div>
+    <div class="tab-row">
+      <button class="tab-btn active" onclick="showVTab('txns',this)">📝 Transactions</button>
+      <button class="tab-btn" onclick="showVTab('chart',this)">📊 Monthly Chart</button>
+      <button class="tab-btn" onclick="showVTab('suspicious',this)" id="sus-tab-btn" style="color:#dc2626;">⚠️ Suspicious</button>
+    </div>
+
+    <!-- Transactions tab -->
+    <div id="vt-txns" class="subpanel active">
+      <div class="tb">
+        <input type="text" id="vtxn-q" placeholder="🔍 Search IP, MAC, voucher, amount..." oninput="filterVTxns()">
+        <span style="font-size:12px;color:var(--mu)">From:</span>
+        <input type="date" id="vtxn-from" onchange="loadVendoTxns()">
+        <span style="font-size:12px;color:var(--mu)">To:</span>
+        <input type="date" id="vtxn-to" onchange="loadVendoTxns()">
+        <button class="btn" onclick="clearVFilter()">✕ Clear</button>
+      </div>
+      <div class="rc" id="vtxn-rc"></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>#</th><th>Date</th><th>Time</th><th>Amount</th><th>IP</th><th>MAC</th><th>Voucher</th><th>Total Time</th></tr></thead>
+          <tbody id="vtxn-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pg">
+        <button id="vtp-p" onclick="vtPage(-1)" disabled>← Prev</button>
+        <span id="vtp-l">Page 1</span>
+        <button id="vtp-n" onclick="vtPage(1)">Next →</button>
+      </div>
+    </div>
+
+    <!-- Chart tab -->
+    <div id="vt-chart" class="subpanel">
+      <div class="chart-wrap" style="height:300px"><canvas id="vendo-chart"></canvas></div>
+    </div>
+
+    <!-- Suspicious tab -->
+    <div id="vt-suspicious" class="subpanel">
+      <div id="sus-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ HARVEST ══ -->
+<div id="panel-harvest" class="panel">
+  <div class="tb">
+    <input type="text" id="h-search" placeholder="🔍 Search vendo..." oninput="filterHarvests()">
+    <select id="h-area" onchange="filterHarvests()">
+      <option value="">All Areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+      <option>MINAOG</option><option>MIX AREAS</option>
+    </select>
+    <button class="btn p" onclick="loadHarvests()">⟳ Refresh</button>
+  </div>
+  <div class="stats" id="harvest-stats"></div>
+  <div class="tw">
+    <table>
+      <thead><tr>
+        <th>Vendo</th><th>Area</th><th>Date</th><th>Time</th>
+        <th>System Total</th><th>Old Coins</th><th>Free Time</th>
+        <th>Collectible</th><th>Collected</th><th>Discrepancy</th><th>Status</th><th>Collector</th>
+      </tr></thead>
+      <tbody id="h-tbody"></tbody>
+    </table>
+  </div>
+  <div class="pg">
+    <button id="hp-p" onclick="hPage(-1)" disabled>← Prev</button>
+    <span id="hp-l">Page 1</span>
+    <button id="hp-n" onclick="hPage(1)">Next →</button>
+  </div>
+</div>
+
+<!-- ══ HACKED — TODO LIST ══ -->
+<div id="panel-hacked" class="panel">
+  <div class="stats" id="hacked-stats"></div>
+  <!-- Hacked vendo list -->
+  <div id="hacked-vlist">
+    <div class="tb">
+      <input type="text" id="hk-search" placeholder="🔍 Search vendo..." oninput="filterHacked()">
+      <select id="hk-area" onchange="filterHacked()">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+    </div>
+    <div id="hacked-todo"></div>
+  </div>
+  <!-- Hacked vendo detail -->
+  <div id="hacked-detail" style="display:none;">
+    <div style="margin-bottom:12px">
+      <button onclick="closeHackedDetail()" style="padding:6px 16px;background:#dc2626;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Hacked List</button>
+      <div style="font-size:16px;font-weight:700;color:#dc2626" id="hk-detail-title"></div>
+      <div style="font-size:12px;color:var(--mu)" id="hk-detail-sub"></div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>Time</th><th>Amount</th><th>IP</th><th>MAC</th><th>Total Time</th><th>Action</th></tr></thead>
+        <tbody id="hk-txn-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ DEVICES ══ -->
+<div id="panel-devices" class="panel">
+  <button class="btn p" onclick="loadDevices()" style="margin-bottom:12px;">⟳ Refresh</button>
+  <div class="stats" id="device-stats"></div>
+  <h3 style="margin:12px 0 8px;font-size:13px;color:var(--mu)">⏳ Pending Approvals</h3>
+  <div id="pending-list" class="tw" style="margin-bottom:16px;"></div>
+  <h3 style="margin:12px 0 8px;font-size:13px;color:var(--mu)">✅ Approved Devices</h3>
+  <div id="approved-list" class="tw"></div>
+</div>
+
+<!-- ══ ANALYTICS ══ -->
+<div id="panel-analytics" class="panel">
+  <div class="cs" style="margin-bottom:12px;">
+    <div class="cs-t">Monthly Sales — All Vendos</div>
+    <div class="chart-wrap" style="height:300px"><canvas id="monthly-chart"></canvas></div>
+  </div>
+  <div class="two" style="margin-bottom:12px;">
+    <div class="cs">
+      <div class="cs-t">Sales by Area</div>
+      <div style="height:280px;position:relative"><canvas id="analytics-area-chart"></canvas></div>
+    </div>
+    <div class="cs">
+      <div class="cs-t">Monthly Breakdown</div>
+      <div id="monthly-table" style="max-height:280px;overflow-y:auto;"></div>
+    </div>
+  </div>
+  <!-- Per vendo analytics -->
+  <div class="cs">
+    <div class="cs-t">📊 Per Vendo Analytics</div>
+    <div class="tb" style="margin-bottom:12px;">
+      <input type="text" id="analytics-vendo-search" placeholder="🔍 Search and select a vendo..." oninput="searchAnalyticsVendo(this.value)"
+        style="flex:1;padding:8px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;outline:none;">
+      <select id="analytics-vendo-area" onchange="searchAnalyticsVendo(document.getElementById('analytics-vendo-search').value)">
+        <option value="">All Areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+    </div>
+    <div id="analytics-vendo-list" style="max-height:200px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;margin-bottom:12px;display:none;"></div>
+    <div id="analytics-vendo-chart-wrap" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-weight:700;color:#1565c0" id="analytics-vendo-name"></div>
+        <button class="btn sm" onclick="clearAnalyticsVendo()">✕ Clear</button>
+      </div>
+      <div class="stats" id="analytics-vendo-stats" style="margin-bottom:12px;"></div>
+      <div class="chart-wrap" style="height:280px"><canvas id="vendo-analytics-chart"></canvas></div>
+    </div>
+    <div id="analytics-vendo-placeholder" style="padding:30px;text-align:center;color:var(--mu);font-size:13px;">
+      🔍 Search for a vendo above to see its monthly sales chart
+    </div>
+  </div>
+</div>
+
+</div><!-- end .w -->
+<!-- Floating back button -->
+<button id="float-back" onclick="goBack()" 
+  style="display:none;position:fixed;bottom:24px;left:24px;background:#1565c0;color:white;border:none;border-radius:50px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 16px rgba(21,101,192,.4);z-index:100;">
+  ← Back
+</button>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════
+const SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+const HDR = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
+
+let currentYear   = "2026";
+let allVendos     = [];
+let filteredVendos= [];
+let suspMap       = {};
+let vPage_n       = 1;
+let vtPage_n      = 1;
+let hPage_n       = 1;
+let currentVendo  = "";
+let vtxnAll       = [];
+let harvestAll    = [];
+let hackedAll     = [];
+let filteredHacked= [];
+let navStack      = [];
+let vendoAnalyticsChart = null;
+let vendoChart    = null;
+let trendChart    = null;
+let areaChart     = null;
+let monthlyChart  = null;
+let analyticsAreaChart = null;
+
+// ── Supabase ──────────────────────────────────────────────
+async function sb(table, params="", limit=1000) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=${limit}`, { headers: HDR });
+  return r.json();
+}
+async function sbAll(table, params="") {
+  let all=[], offset=0;
+  while(true) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1000&offset=${offset}`, { headers: HDR });
+    const rows = await r.json();
+    if (!rows?.length) break;
+    all.push(...rows);
+    if (rows.length < 1000) break;
+    offset += 1000;
+  }
+  return all;
+}
+
+// ── Helpers ───────────────────────────────────────────────
+const fmt = n => "₱" + Number(n||0).toLocaleString();
+const esc = s => (s||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
+function yf(y) {
+  if (!y || y==="all") return "";
+  if (y==="2025-2026") return "date=gte.2025-01-01";
+  return `date=gte.${y}-01-01&date=lte.${y}-12-31`;
+}
+
+// ── Clock ─────────────────────────────────────────────────
+setInterval(()=>{
+  document.getElementById("top-clock").textContent =
+    new Date().toLocaleTimeString("en-PH",{hour12:true,hour:"2-digit",minute:"2-digit",second:"2-digit"});
+},1000);
+
+// ── Navigation ────────────────────────────────────────────
+function showP(id, btn) {
+  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("panel-"+id).classList.add("active");
+  if(btn) btn.classList.add("active");
+  hideBread();
+  if(id==="hacked")    loadHacked();
+  if(id==="harvest")   loadHarvests();
+  if(id==="devices")   loadDevices();
+  if(id==="analytics") loadAnalytics();
+  if(id==="vendos")    loadVendos();
+}
+
+function showBread(text, backFn) {
+  navStack.push(backFn);
+  document.getElementById("breadbar").classList.add("show");
+  document.getElementById("breadcrumb").textContent = text;
+  document.getElementById("float-back").style.display = "block";
+}
+function hideBread() {
+  navStack = [];
+  document.getElementById("breadbar").classList.remove("show");
+  document.getElementById("float-back").style.display = "none";
+}
+function goBack() {
+  if (navStack.length) {
+    navStack.pop()();
+    if (!navStack.length) hideBread();
+  }
+}
+
+function changeYear(y) { currentYear = y; loadDashboard(); }
+
+// ══════════════════════════════════════════════════════════
+// GLOBAL SEARCH
+// ══════════════════════════════════════════════════════════
+function showSearchDrop() {
+  if (allVendos.length) document.getElementById("search-drop").style.display = "block";
+}
+function hideSearchDrop() { document.getElementById("search-drop").style.display = "none"; }
+
+function globalSearch(q) {
+  const drop = document.getElementById("search-drop");
+  if (!q || q.length < 2) { drop.style.display = "none"; return; }
+  const results = allVendos.filter(v => v.vendo.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+  if (!results.length) { drop.style.display = "none"; return; }
+  drop.style.display = "block";
+  drop.innerHTML = 
+    `<div style="padding:8px 14px;background:#f0f4ff;border-bottom:1px solid var(--bd);font-size:11px;color:#1565c0;font-weight:600;">
+      ${results.length} vendos found — click to view transactions
+    </div>` +
+    results.map(v => `
+    <div onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')"
+      style="padding:11px 14px;border-bottom:1px solid var(--bd);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .12s;"
+      onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+      <div>
+        <div style="font-weight:600;font-size:13px;color:#1a1d2e">${v.vendo}</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:2px">📍 ${v.area} · ${parseInt(v.txns||0).toLocaleString()} txns</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+        <div style="font-weight:700;color:#1565c0;font-size:13px">${fmt(v.sales)}</div>
+        <div style="font-size:10px;color:#9FE1CB;font-weight:600;">→ View txns</div>
+      </div>
+    </div>`).join("");
+}
+
+function openVendoFromSearch(vendo, area) {
+  document.getElementById("search-drop").style.display = "none";
+  document.getElementById("global-search").value = "";
+  // Go to vendos tab then open detail
+  showP("vendos", document.querySelector(".nav button:nth-child(2)"));
+  setTimeout(() => openVendoDetail(vendo, area), 100);
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════
+async function loadDashboard() {
+  document.getElementById("dash-stats").innerHTML = '<div style="padding:20px;color:var(--mu)">Loading...</div>';
+  try {
+    const [areas, trend, hacked, recent, vendos] = await Promise.all([
+      sb("area_summary","",20),
+      sb("trend_7day","",7),
+      sb("hacked_summary","",500),
+      sb("transactions","select=date,time,vendo,area,amount,created_at&order=created_at.desc",30),
+      sb("vendo_summary","order=sales.desc",2000)
+    ]);
+
+    allVendos = vendos;
+    suspMap   = {};
+    hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
+
+    const totalTx    = areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
+    const totalSales = areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
+    const todaySales = areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0);
+    const totalVendos= areas.reduce((s,a)=>s+parseInt(a.vendo_count||0),0);
+    const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
+
+    document.getElementById("dash-stats").innerHTML = `
+      <div class="stat" onclick="openVendoModal()"><div class="sl">Active Vendos</div><div class="sv pur">${totalVendos.toLocaleString()}</div><div style="font-size:10px;color:var(--mu);margin-top:4px">click to view all</div></div>
+      <div class="stat"><div class="sl">Total Transactions</div><div class="sv blue">${totalTx.toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">Total Sales</div><div class="sv blue">${fmt(totalSales)}</div></div>
+      <div class="stat"><div class="sl">Today's Sales</div><div class="sv green">${fmt(todaySales)}</div></div>
+      <div class="stat" onclick="showP('hacked',document.querySelector('.nav button:nth-child(4)'))"><div class="sl">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
+    `;
+
+    if(hackedCnt>0){
+      document.getElementById("suspicious-alert").style.display="flex";
+      document.getElementById("alert-detail").textContent=`${hackedCnt} suspicious transactions detected`;
+      document.getElementById("susp-count").textContent=hackedCnt;
+    }
+
+    // 7-day trend
+    const tDates = trend.map(t=>{ const d=new Date(t.date); return d.toLocaleDateString("en-PH",{month:"short",day:"numeric"}); });
+    if(trendChart) trendChart.destroy();
+    trendChart = new Chart(document.getElementById("trend-chart"),{
+      type:"bar",
+      data:{labels:tDates,datasets:[{label:"Sales",data:trend.map(t=>parseFloat(t.total_sales||0)),backgroundColor:"#1565c0",borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
+    });
+    if(trend.length) document.getElementById("trend-range").textContent=`${trend[0].date} — ${trend[trend.length-1].date}`;
+
+    // Area chart
+    const colors=["#1565c0","#1D9E75","#F5C518","#7B5EA7","#E85D24","#4A90D9","#d97706","#dc2626"];
+    if(areaChart) areaChart.destroy();
+    areaChart = new Chart(document.getElementById("area-chart"),{
+      type:"bar",
+      data:{labels:areas.map(a=>a.area),datasets:[{data:areas.map(a=>parseFloat(a.total_sales||0)),backgroundColor:colors}]},
+      options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>"₱"+(v/1000).toFixed(0)+"K"}}}}
+    });
+
+    // Area grid
+    document.getElementById("area-grid").innerHTML = areas.map(a=>`
+      <div class="area-card" onclick="showAreaVendos('${a.area}')">
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px">${a.area}</div>
+        <div style="font-size:18px;font-weight:800;color:#1565c0">${fmt(a.total_sales)}</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:4px">${parseInt(a.txn_count).toLocaleString()} txns · ${a.vendo_count} vendos</div>
+        <div style="font-size:11px;color:var(--ok);margin-top:2px">Today: ${fmt(a.today_sales)}</div>
+      </div>`).join("");
+
+    // Top 10
+    const top10h = allVendos.slice(0,10);
+    const top10l = [...allVendos].sort((a,b)=>(a.sales||0)-(b.sales||0)).slice(0,10);
+    document.getElementById("top10-high").innerHTML = top10h.map((v,i)=>`
+      <div class="top10-item" onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')">
+        <span style="font-weight:700;color:${i<3?'#d97706':'var(--mu)'};min-width:20px">${i+1}</span>
+        <div style="flex:1;min-width:0"><div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.vendo}</div><div style="font-size:10px;color:var(--mu)">${v.area}</div></div>
+        <span style="font-weight:700;color:var(--ok)">${fmt(v.sales)}</span>
+      </div>`).join("");
+    document.getElementById("top10-low").innerHTML = top10l.map((v,i)=>`
+      <div class="top10-item" onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')">
+        <span style="font-weight:700;color:var(--mu);min-width:20px">${i+1}</span>
+        <div style="flex:1;min-width:0"><div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.vendo}</div><div style="font-size:10px;color:var(--mu)">${v.area}</div></div>
+        <span style="font-weight:700;color:var(--red)">${fmt(v.sales)}</span>
+      </div>`).join("");
+
+    // Suspicious sidebar
+    document.getElementById("suspicious-sidebar").innerHTML = hacked.slice(0,15).map(h=>`
+      <div class="lr" onclick="openVendoFromSearch('${esc(h.vendo)}','${h.area}')">
+        <div><div class="lrn" style="color:#dc2626">${h.vendo}</div><div class="lrm">${h.area} · ${h.txn_count} txns</div></div>
+        <span style="font-weight:700;color:#dc2626">${fmt(h.total_amount)}</span>
+      </div>`).join("") || '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px">No suspicious transactions</div>';
+
+    // Recent — show truly live transactions ordered by created_at
+    document.getElementById("recent-txns").innerHTML = recent.map(t=>{
+      const createdPH = t.created_at ? new Date(t.created_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:true}) : "";
+      return `<div class="lr">
+        <div><div class="lrn">${t.vendo}</div><div class="lrm">${t.area} · ${t.date} ${t.time}</div><div style="font-size:10px;color:#9FE1CB">received: ${createdPH}</div></div>
+        <span style="font-weight:700;color:#1565c0">${fmt(t.amount)}</span>
+      </div>`;
+    }).join("");
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById("dash-stats").innerHTML=`<div style="padding:20px;color:red;">Error: ${e.message}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// VENDO MODAL
+// ══════════════════════════════════════════════════════════
+function openVendoModal() {
+  document.getElementById("vendo-modal").classList.add("open");
+  document.getElementById("modal-search").value = "";
+  filterModalVendos("");
+}
+function closeVendoModal() { document.getElementById("vendo-modal").classList.remove("open"); }
+
+function filterModalVendos(q) {
+  const lower = q.toLowerCase();
+  const filtered = allVendos.filter(v =>
+    !q || v.vendo.toLowerCase().includes(lower)
+  );
+
+  document.getElementById("modal-count").textContent =
+    `Showing ${filtered.length} of ${allVendos.length} vendos`;
+
+  document.getElementById("modal-vlist").innerHTML = filtered.map(v=>`
+    <div class="vlist-row" onclick="closeVendoModal();openVendoFromSearch('${esc(v.vendo)}','${v.area}')">
+      <div>
+        <div style="font-weight:600;font-size:13px">${v.vendo}</div>
+        <div style="font-size:11px;color:var(--mu)">${v.area}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:700;color:#1565c0">${fmt(v.sales)}</div>
+        <div style="font-size:11px;color:var(--mu)">${parseInt(v.txns||0).toLocaleString()} txns</div>
+      </div>
+    </div>`).join("") || '<div style="padding:20px;text-align:center;color:var(--mu)">No vendos found</div>';
+}
+
+// ══════════════════════════════════════════════════════════
+// VENDOS
+// ══════════════════════════════════════════════════════════
+async function loadVendos() {
+  if(!allVendos.length) {
+    const v = await sb("vendo_summary","order=sales.desc",2000);
+    allVendos = v;
+  }
+  const totalSales = allVendos.reduce((s,v)=>s+parseFloat(v.sales||0),0);
+  const totalTxns  = allVendos.reduce((s,v)=>s+parseInt(v.txns||0),0);
+  const totalVendos= allVendos.length;
+  document.getElementById("vendo-totals").innerHTML = `
+    <div class="stat"><div class="sl">Total Vendos</div><div class="sv pur">${totalVendos.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Sales</div><div class="sv blue">${fmt(totalSales)}</div></div>
+    <div class="stat"><div class="sl">Total Transactions</div><div class="sv blue">${totalTxns.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Avg per Vendo</div><div class="sv amber">${fmt(Math.round(totalSales/totalVendos))}</div></div>
+  `;
+  filterVendos();
+}
+
+function filterVendos() {
+  const q    = (document.getElementById("v-search")?.value||"").toLowerCase();
+  const area = document.getElementById("v-area")?.value||"";
+  const sort = document.getElementById("v-sort")?.value||"desc";
+
+  filteredVendos = allVendos.filter(v=>{
+    if(q && !v.vendo.toLowerCase().includes(q) && !v.area.toLowerCase().includes(q)) return false;
+    if(area && v.area!==area) return false;
+    return true;
+  });
+
+  if(sort==="asc")         filteredVendos.sort((a,b)=>(a.sales||0)-(b.sales||0));
+  else if(sort==="desc")   filteredVendos.sort((a,b)=>(b.sales||0)-(a.sales||0));
+  else if(sort==="name")   filteredVendos.sort((a,b)=>a.vendo.localeCompare(b.vendo));
+  else if(sort==="suspicious") filteredVendos.sort((a,b)=>(suspMap[b.vendo]||0)-(suspMap[a.vendo]||0));
+
+  // Update filtered totals
+  const fSales = filteredVendos.reduce((s,v)=>s+parseFloat(v.sales||0),0);
+  const fTxns  = filteredVendos.reduce((s,v)=>s+parseInt(v.txns||0),0);
+  document.getElementById("vendo-totals").innerHTML = `
+    <div class="stat"><div class="sl">Showing Vendos</div><div class="sv pur">${filteredVendos.length.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Filtered Sales</div><div class="sv blue">${fmt(fSales)}</div></div>
+    <div class="stat"><div class="sl">Filtered Txns</div><div class="sv blue">${fTxns.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Vendos</div><div class="sv amber">${allVendos.length.toLocaleString()}</div></div>
+  `;
+
+  vPage_n = 1;
+  renderVendos();
+}
+
+function renderVendos() {
+  const PG=50, total=filteredVendos.length, start=(vPage_n-1)*PG;
+  const page=filteredVendos.slice(start,start+PG);
+  document.getElementById("v-rc").textContent=`${total.toLocaleString()} vendos found`;
+  document.getElementById("vp-l").textContent=`Page ${vPage_n} of ${Math.ceil(total/PG)||1}`;
+  document.getElementById("vp-p").disabled=vPage_n===1;
+  document.getElementById("vp-n").disabled=start+PG>=total;
+  document.getElementById("v-tbody").innerHTML=page.map((v,i)=>{
+    const susp=suspMap[v.vendo]||0;
+    return `<tr onclick="openVendoDetail('${esc(v.vendo)}','${v.area}')">
+      <td style="color:var(--mu)">${start+i+1}</td>
+      <td style="font-weight:500;color:#1565c0">${v.vendo}</td>
+      <td><span class="pill info">${v.area}</span></td>
+      <td style="font-weight:700">${fmt(v.sales)}</td>
+      <td>${parseInt(v.txns||0).toLocaleString()}</td>
+      <td style="color:var(--mu)">${v.last_date||"—"}</td>
+      <td>${susp?`<span class="pill red">⚠️ ${susp}</span>`:`<span class="pill ok">✓ OK</span>`}</td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--mu)">No vendos found</td></tr>';
+}
+function vPage(d){vPage_n+=d;renderVendos();}
+
+function showAreaVendos(area) {
+  showP("vendos",document.querySelector(".nav button:nth-child(2)"));
+  document.getElementById("v-area").value=area;
+  filterVendos();
+}
+
+// ══════════════════════════════════════════════════════════
+// VENDO DETAIL
+// ══════════════════════════════════════════════════════════
+async function openVendoDetail(vendo, area) {
+  currentVendo=vendo; vtPage_n=1;
+  // Make sure we're on vendos panel
+  document.getElementById("panel-vendos").classList.add("active");
+  document.getElementById("view-vlist").style.display="none";
+  document.getElementById("view-vtxns").style.display="block";
+  document.getElementById("vtxn-title").textContent=vendo;
+  document.getElementById("vtxn-sub").textContent=area+" area";
+  showBread(`Vendos → ${vendo}`, closeVendo);
+
+  // Default last 30 days
+  const today=new Date(), from=new Date(today);
+  from.setDate(from.getDate()-30);
+  document.getElementById("vtxn-to").value=today.toISOString().slice(0,10);
+  document.getElementById("vtxn-from").value=from.toISOString().slice(0,10);
+
+  await Promise.all([loadVendoTxns(), loadVendoMonthly(vendo), loadVendoSuspicious(vendo)]);
+}
+
+async function loadVendoTxns() {
+  const vendo=currentVendo;
+  if(!vendo) return;
+  const from=document.getElementById("vtxn-from").value;
+  const to=document.getElementById("vtxn-to").value;
+  vtPage_n=1;
+  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading transactions...</td></tr>';
+  let params=`select=date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&order=date.desc,time.desc`;
+  if(from) params+=`&date=gte.${from}`;
+  if(to)   params+=`&date=lte.${to}`;
+  try {
+    const rows=await sbAll("transactions",params);
+    vtxnAll=rows;
+    console.log(`Loaded ${rows.length} transactions for ${vendo}`);
+    const hacked=rows.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
+    document.getElementById("sus-tab-btn").textContent=`⚠️ Suspicious (${hacked})`;
+    filterVTxns();
+  } catch(e) {
+    console.error("Error loading transactions:", e);
+    document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:red;">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function filterVTxns() {
+  const q=(document.getElementById("vtxn-q")?.value||"").toLowerCase();
+  let filtered=vtxnAll;
+  if(q) filtered=filtered.filter(r=>(r.ip||"").includes(q)||(r.mac||"").toLowerCase().includes(q)||(r.voucher||"").toLowerCase().includes(q)||String(r.amount||"").includes(q));
+  const total=filtered.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  const hacked=filtered.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
+  const avg=filtered.length?total/filtered.length:0;
+  const max=filtered.length?Math.max(...filtered.map(r=>parseFloat(r.amount||0))):0;
+  const isF=q||document.getElementById("vtxn-from").value||document.getElementById("vtxn-to").value;
+  document.getElementById("vtxn-stats").innerHTML=`
+    <div class="stat" style="padding:8px 12px;min-width:120px"><div class="sl">${isF?"Filtered Sales":"Total Sales"}</div><div class="sv blue" style="font-size:16px">${fmt(total)}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:100px"><div class="sl">${isF?"Filtered Txns":"Total Txns"}</div><div class="sv pur" style="font-size:16px">${filtered.length.toLocaleString()}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:90px"><div class="sl">Avg/Txn</div><div class="sv amber" style="font-size:16px">${fmt(Math.round(avg))}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:90px"><div class="sl">Max</div><div class="sv green" style="font-size:16px">${fmt(max)}</div></div>
+    <div class="stat" style="padding:8px 12px;min-width:90px"><div class="sl">Suspicious</div><div class="sv red" style="font-size:16px">${hacked}</div></div>
+    ${isF?`<div class="stat" style="padding:8px 12px;min-width:120px;border-color:#1565c0"><div class="sl" style="color:#1565c0">All Time Total</div><div class="sv blue" style="font-size:16px">${fmt(vtxnAll.reduce((s,r)=>s+parseFloat(r.amount||0),0))}</div></div>`:""}
+  `;
+  renderVTxns(filtered);
+}
+
+function renderVTxns(rows) {
+  const PG=100,total=rows.length,start=(vtPage_n-1)*PG,page=rows.slice(start,start+PG);
+  const rcTotal = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  document.getElementById("vtxn-rc").innerHTML=`<span>Showing <strong>${total.toLocaleString()}</strong> transactions &nbsp;|&nbsp; Total Amount: <strong style="color:#1565c0">₱${rcTotal.toLocaleString()}</strong></span>`;
+  document.getElementById("vtp-l").textContent=`Page ${vtPage_n} of ${Math.ceil(total/PG)||1}`;
+  document.getElementById("vtp-p").disabled=vtPage_n===1;
+  document.getElementById("vtp-n").disabled=start+PG>=total;
+  document.getElementById("vtxn-tbody").innerHTML=page.map((t,i)=>{
+    const isHack=(t.total_time||"").includes("w")&&(t.extended||"0")==="0";
+    return `<tr class="${isHack?"txn-row-hack":""}">
+      <td style="color:var(--mu)">${start+i+1}</td>
+      <td>${t.date||""}</td><td style="color:var(--mu)">${t.time||""}</td>
+      <td style="font-weight:700;color:${isHack?"#dc2626":"#1565c0"}">${fmt(t.amount)}</td>
+      <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
+      <td style="font-family:monospace;font-size:11px;color:var(--mu)">${t.mac||"—"}</td>
+      <td style="font-family:monospace;font-size:11px">${t.voucher||"—"}</td>
+      <td style="color:${isHack?"#dc2626":"var(--mu)"}">${t.total_time||"—"}${isHack?" ⚠️":""}</td>
+    </tr>`;
+  }).join("") ||
+  '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">No transactions found</td></tr>';
+}
+
+function vtPage(d){vtPage_n+=d;filterVTxns();}
+function clearVFilter(){document.getElementById("vtxn-from").value="";document.getElementById("vtxn-to").value="";document.getElementById("vtxn-q").value="";loadVendoTxns();}
+
+async function loadVendoMonthly(vendo) {
+  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2026-01-01&date=lte.2026-12-31`);
+  const mmap={};
+  rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
+  const labels=Object.keys(mmap).sort(),data=labels.map(m=>mmap[m]);
+  if(vendoChart) vendoChart.destroy();
+  vendoChart=new Chart(document.getElementById("vendo-chart"),{
+    type:"bar",data:{labels,datasets:[{label:"Sales",data,backgroundColor:"#1565c0",borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
+  });
+}
+
+async function loadVendoSuspicious(vendo) {
+  const rows=await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&extended=in.(0,'')&order=date.desc`,200);
+  const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
+  const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
+  document.getElementById("sus-list").innerHTML=rows.length
+    ?`<div class="tw"><table><thead><tr><th>Date</th><th>Time</th><th>Amount</th><th>IP</th><th>MAC</th><th>Total Time</th><th>Note</th><th>Action</th></tr></thead><tbody>
+      ${rows.map(t=>{
+        const isDone=done.includes(t.id);
+        return `<tr class="txn-row-hack${isDone?" done":""}">
+          <td>${t.date}</td><td>${t.time}</td>
+          <td style="font-weight:700;color:#dc2626">${fmt(t.amount)}</td>
+          <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
+          <td style="font-family:monospace;font-size:11px">${t.mac||"—"}</td>
+          <td style="color:#dc2626">${t.total_time} ⚠️</td>
+          <td><input class="note-input" value="${(notes[t.id]||"").replace(/"/g,"&quot;")}" placeholder="Add note..." onchange="saveNote(${t.id},'${esc(vendo)}',this.value)"></td>
+          <td style="display:flex;gap:4px;">
+            <button class="btn sm ${isDone?"":"p"}" onclick="toggleDone(${t.id},'${esc(vendo)}',this)">${isDone?"↩ Undo":"✓ Done"}</button>
+            <button class="btn sm danger" onclick="markNotHacked(${t.id},this)">Not Hacked</button>
+          </td>
+        </tr>`;
+      }).join("")}
+      </tbody></table></div>`
+    :'<div style="padding:20px;text-align:center;color:var(--ok)">✅ No suspicious transactions found</div>';
+}
+
+function saveNote(id, vendo, val) {
+  const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
+  notes[id]=val;
+  localStorage.setItem("hacked_notes_"+vendo,JSON.stringify(notes));
+}
+function toggleDone(id, vendo, btn) {
+  let done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
+  const isDone=done.includes(id);
+  if(isDone) done=done.filter(x=>x!==id);
+  else done.push(id);
+  localStorage.setItem("hacked_done_"+vendo,JSON.stringify(done));
+  const row=btn.closest("tr");
+  row.classList.toggle("done",!isDone);
+  btn.textContent=isDone?"✓ Done":"↩ Undo";
+  btn.classList.toggle("p",isDone);
+}
+async function markNotHacked(id, btn) {
+  if(!confirm("Mark this transaction as NOT hacked (free time)?")) return;
+  await fetch(`${SB_URL}/rest/v1/transactions?id=eq.${id}`,{
+    method:"PATCH",headers:{...HDR,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify({extended:"1"})
+  });
+  btn.closest("tr").remove();
+}
+
+function showVTab(tab,btn) {
+  document.querySelectorAll(".subpanel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+  document.getElementById("vt-"+tab).classList.add("active");
+  if(btn) btn.classList.add("active");
+}
+
+function closeVendo() {
+  document.getElementById("view-vlist").style.display="block";
+  document.getElementById("view-vtxns").style.display="none";
+  currentVendo="";
+}
+
+// ══════════════════════════════════════════════════════════
+// HARVEST
+// ══════════════════════════════════════════════════════════
+async function loadHarvests() {
+  const rows=await sbAll("harvests","select=*&order=harvest_datetime.desc");
+  harvestAll=rows;
+  const ts=rows.reduce((s,r)=>s+parseFloat(r.system_total||0),0);
+  const tc=rows.reduce((s,r)=>s+parseFloat(r.collector_amount||0),0);
+  const td=rows.reduce((s,r)=>s+parseFloat(r.discrepancy||0),0);
+  document.getElementById("harvest-stats").innerHTML=`
+    <div class="stat"><div class="sl">Total Harvests</div><div class="sv blue">${rows.length}</div></div>
+    <div class="stat"><div class="sl">System Total</div><div class="sv blue">${fmt(ts)}</div></div>
+    <div class="stat"><div class="sl">Total Collected</div><div class="sv green">${fmt(tc)}</div></div>
+    <div class="stat"><div class="sl">Discrepancy</div><div class="sv ${td>=0?"amber":"red"}">${fmt(Math.abs(td))}</div></div>
+  `;
+  filterHarvests();
+}
+function filterHarvests(){
+  const q=(document.getElementById("h-search")?.value||"").toLowerCase();
+  const area=document.getElementById("h-area")?.value||"";
+  let filtered=harvestAll.filter(h=>(!q||(h.vendo||"").toLowerCase().includes(q))&&(!area||h.area===area));
+  hPage_n=1;renderHarvests(filtered);
+}
+function renderHarvests(rows){
+  const PG=50,start=(hPage_n-1)*PG,page=rows.slice(start,start+PG);
+  document.getElementById("hp-l").textContent=`Page ${hPage_n} of ${Math.ceil(rows.length/PG)||1}`;
+  document.getElementById("hp-p").disabled=hPage_n===1;
+  document.getElementById("hp-n").disabled=start+PG>=rows.length;
+  document.getElementById("h-tbody").innerHTML=page.map(h=>{
+    const disc=parseFloat(h.discrepancy||0);
+    const status=Math.abs(disc)<1?"MATCH":disc>0?"OVER":"SHORT";
+    const sc=status==="MATCH"?"var(--ok)":status==="OVER"?"var(--amber)":"var(--red)";
+    return `<tr>
+      <td style="font-weight:500">${h.vendo||"—"}</td><td>${h.area||"—"}</td>
+      <td>${h.harvest_date||"—"}</td><td style="color:var(--mu)">${h.harvest_time||"—"}</td>
+      <td style="font-weight:700">${fmt(h.system_total)}</td>
+      <td>${fmt(h.old_coins)}</td><td>${fmt(h.free_time_coins)}</td>
+      <td>${fmt(h.collectible_amount||h.system_total)}</td>
+      <td style="font-weight:700;color:var(--ok)">${fmt(h.collector_amount)}</td>
+      <td style="font-weight:700;color:${sc}">${fmt(Math.abs(disc))}</td>
+      <td><span style="color:${sc};font-weight:700;font-size:11px">${status}</span></td>
+      <td style="color:var(--mu)">${h.collector_name||"—"}</td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="12" style="text-align:center;padding:20px;color:var(--mu)">No harvests found</td></tr>';
+}
+function hPage(d){hPage_n+=d;filterHarvests();}
+
+// ══════════════════════════════════════════════════════════
+// HACKED — TODO LIST
+// ══════════════════════════════════════════════════════════
+async function loadHacked() {
+  const rows=await sb("hacked_summary","",500);
+  hackedAll=rows;
+  const total_txns=rows.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
+  const total_amt=rows.reduce((s,h)=>s+parseFloat(h.total_amount||0),0);
+  document.getElementById("hacked-stats").innerHTML=`
+    <div class="stat"><div class="sl">Affected Vendos</div><div class="sv red">${rows.length}</div></div>
+    <div class="stat"><div class="sl">Suspicious Txns</div><div class="sv red">${total_txns.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Total Amount</div><div class="sv red">${fmt(total_amt)}</div></div>
+  `;
+  filteredHacked=rows;
+  renderHackedTodo(rows);
+}
+
+function filterHacked() {
+  const q=(document.getElementById("hk-search")?.value||"").toLowerCase();
+  const area=document.getElementById("hk-area")?.value||"";
+  filteredHacked=hackedAll.filter(h=>(!q||(h.vendo||"").toLowerCase().includes(q))&&(!area||h.area===area));
+  renderHackedTodo(filteredHacked);
+}
+
+function renderHackedTodo(rows) {
+  document.getElementById("hacked-todo").innerHTML = rows.map(h=>{
+    const done=JSON.parse(localStorage.getItem("hacked_done_vendo_"+h.vendo)||"false");
+    const note=localStorage.getItem("hacked_note_vendo_"+h.vendo)||"";
+    return `<div class="todo-item${done?" done":""}" id="hack-${btoa(h.vendo).replace(/=/g,"")}">
+      <input type="checkbox" ${done?"checked":""} onchange="toggleHackVendo('${esc(h.vendo)}',this.checked,this)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="todo-text${done?" done":""}" style="font-weight:600;color:#dc2626;cursor:pointer" onclick="openHackedDetail('${esc(h.vendo)}','${h.area}')">${h.vendo}</span>
+          <span class="pill info">${h.area}</span>
+          <span class="pill red">⚠️ ${h.txn_count} txns</span>
+          <span style="font-weight:700;color:#dc2626">${fmt(h.total_amount)}</span>
+          <span style="font-size:11px;color:var(--mu)">Last: ${h.last_date||"—"}</span>
+        </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--mu)">Note:</span>
+          <input class="note-input" value="${note.replace(/"/g,"&quot;")}" placeholder="Add note... e.g. MAC blocked, owner notified"
+            onchange="localStorage.setItem('hacked_note_vendo_${esc(h.vendo)}',this.value)" style="flex:1;max-width:300px;">
+          <button class="btn sm p" onclick="openHackedDetail('${esc(h.vendo)}','${h.area}')">View Transactions →</button>
+        </div>
+      </div>
+    </div>`;
+  }).join("")||'<div style="padding:30px;text-align:center;color:var(--ok);font-size:14px;">✅ No suspicious transactions found!</div>';
+}
+
+function toggleHackVendo(vendo, checked, cb) {
+  localStorage.setItem("hacked_done_vendo_"+vendo, JSON.stringify(checked));
+  const id="hack-"+btoa(vendo).replace(/=/g,"");
+  const item=document.getElementById(id);
+  if(item) {
+    item.classList.toggle("done",checked);
+    item.querySelector(".todo-text").classList.toggle("done",checked);
+  }
+}
+
+async function openHackedDetail(vendo, area) {
+  document.getElementById("hacked-vlist").style.display="none";
+  document.getElementById("hacked-detail").style.display="block";
+  document.getElementById("hk-detail-title").textContent="🚨 "+vendo;
+  document.getElementById("hk-detail-sub").textContent=area+" area · Suspicious transactions breakdown";
+  showBread(`Hacked → ${vendo}`, closeHackedDetail);
+  const rows=await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&extended=in.(0,'')&order=date.desc`,500);
+  const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
+  const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
+  document.getElementById("hk-txn-tbody").innerHTML=rows.map((t,i)=>{
+    const isDone=done.includes(t.id);
+    return `<tr class="txn-row-hack${isDone?" done":""}">
+      <td style="color:var(--mu)">${i+1}</td>
+      <td>${t.date}</td><td>${t.time}</td>
+      <td style="font-weight:700;color:#dc2626">${fmt(t.amount)}</td>
+      <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
+      <td style="font-family:monospace;font-size:11px">${t.mac||"—"}</td>
+      <td style="color:#dc2626">${t.total_time} ⚠️</td>
+      <td style="display:flex;gap:4px;">
+        <button class="btn sm ${isDone?"":"p"}" onclick="toggleDone(${t.id},'${esc(vendo)}',this)">${isDone?"↩ Undo":"✓ Done"}</button>
+        <button class="btn sm danger" onclick="markNotHacked(${t.id},this)">Not Hacked</button>
+      </td>
+    </tr>`;
+  }).join("")||'<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--ok)">✅ No suspicious transactions</td></tr>';
+}
+
+function closeHackedDetail() {
+  document.getElementById("hacked-vlist").style.display="block";
+  document.getElementById("hacked-detail").style.display="none";
+}
+
+// ══════════════════════════════════════════════════════════
+// DEVICES
+// ══════════════════════════════════════════════════════════
+async function loadDevices() {
+  const devices=await sb("devices","select=*&order=registered_at.desc",200);
+  const pending=devices.filter(d=>d.status==="pending");
+  const approved=devices.filter(d=>d.status==="approved");
+  document.getElementById("device-stats").innerHTML=`
+    <div class="stat"><div class="sl">Total</div><div class="sv blue">${devices.length}</div></div>
+    <div class="stat"><div class="sl">Approved</div><div class="sv green">${approved.length}</div></div>
+    <div class="stat"><div class="sl">Pending</div><div class="sv amber">${pending.length}</div></div>
+  `;
+  const devRow=(d,showApprove)=>`<tr>
+    <td style="font-weight:500">${d.collector_name||"—"}</td>
+    <td style="font-family:monospace;font-size:11px;color:var(--mu)">${d.device_id||"—"}</td>
+    <td>${d.area||"—"}</td>
+    <td>${d.registered_at||"—"}</td>
+    <td style="display:flex;gap:4px;">
+      ${showApprove?`<button class="btn p sm" onclick="approveDevice('${d.device_id}')">✅ Approve</button>
+        <button class="btn danger sm" onclick="removeDevice('${d.device_id}')">✕ Reject</button>`
+      :`<button class="btn danger sm" onclick="removeDevice('${d.device_id}')">🗑 Remove</button>`}
+    </td>
+  </tr>`;
+  document.getElementById("pending-list").innerHTML=pending.length
+    ?`<table><thead><tr><th>Name</th><th>Device ID</th><th>Area</th><th>Registered</th><th>Action</th></tr></thead><tbody>${pending.map(d=>devRow(d,true)).join("")}</tbody></table>`
+    :'<div style="padding:20px;text-align:center;color:var(--mu)">No pending requests 🎉</div>';
+  document.getElementById("approved-list").innerHTML=approved.length
+    ?`<table><thead><tr><th>Name</th><th>Device ID</th><th>Area</th><th>Approved</th><th>Action</th></tr></thead><tbody>${approved.map(d=>devRow(d,false)).join("")}</tbody></table>`
+    :'<div style="padding:20px;text-align:center;color:var(--mu)">No approved devices</div>';
+}
+async function approveDevice(id) {
+  await fetch(`${SB_URL}/rest/v1/devices?device_id=eq.${encodeURIComponent(id)}`,{
+    method:"PATCH",headers:{...HDR,"Content-Type":"application/json",Prefer:"return=minimal"},
+    body:JSON.stringify({status:"approved",approved_at:new Date().toISOString()})
+  });loadDevices();
+}
+async function removeDevice(id) {
+  if(!confirm("Remove this device?")) return;
+  await fetch(`${SB_URL}/rest/v1/devices?device_id=eq.${encodeURIComponent(id)}`,{method:"DELETE",headers:HDR});
+  loadDevices();
+}
+
+// ══════════════════════════════════════════════════════════
+// ANALYTICS
+// ══════════════════════════════════════════════════════════
+async function loadAnalytics() {
+  const [rows, areas] = await Promise.all([
+    sb("monthly_summary","",50),
+    sb("area_summary","",20)
+  ]);
+
+  if(monthlyChart) monthlyChart.destroy();
+  monthlyChart=new Chart(document.getElementById("monthly-chart"),{
+    type:"bar",
+    data:{labels:rows.map(r=>r.month),datasets:[{label:"Sales",data:rows.map(r=>parseFloat(r.sales||0)),backgroundColor:"#1565c0",borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
+  });
+
+  const colors=["#1565c0","#1D9E75","#F5C518","#7B5EA7","#E85D24","#4A90D9","#d97706","#dc2626"];
+  if(analyticsAreaChart) analyticsAreaChart.destroy();
+  analyticsAreaChart=new Chart(document.getElementById("analytics-area-chart"),{
+    type:"doughnut",
+    data:{labels:areas.map(a=>a.area),datasets:[{data:areas.map(a=>parseFloat(a.total_sales||0)),backgroundColor:colors}]},
+    options:{responsive:true,maintainAspectRatio:false}
+  });
+
+  document.getElementById("monthly-table").innerHTML=`
+    <table style="font-size:12px"><thead><tr><th>Month</th><th>Txns</th><th>Sales</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr>
+      <td>${r.month}</td>
+      <td>${parseInt(r.txns||0).toLocaleString()}</td>
+      <td style="font-weight:700">${fmt(r.sales)}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+// Per vendo analytics
+let analyticsVendoList=[];
+function searchAnalyticsVendo(q) {
+  const area=document.getElementById("analytics-vendo-area")?.value||"";
+  const lower=q.toLowerCase();
+  const filtered=allVendos.filter(v=>
+    (!q||v.vendo.toLowerCase().includes(lower)||v.area.toLowerCase().includes(lower))&&
+    (!area||v.area===area)
+  ).slice(0,20);
+
+  const list=document.getElementById("analytics-vendo-list");
+  if(!q&&!area){list.style.display="none";return;}
+  list.style.display="block";
+  list.innerHTML=filtered.map(v=>`
+    <div class="vlist-row" onclick="loadVendoAnalytics('${esc(v.vendo)}','${v.area}')">
+      <div><div style="font-weight:600;font-size:13px">${v.vendo}</div><div style="font-size:11px;color:var(--mu)">${v.area}</div></div>
+      <div style="font-weight:700;color:#1565c0">${fmt(v.sales)}</div>
+    </div>`).join("")||'<div style="padding:12px;text-align:center;color:var(--mu)">No vendos found</div>';
+}
+
+async function loadVendoAnalytics(vendo, area) {
+  document.getElementById("analytics-vendo-list").style.display="none";
+  document.getElementById("analytics-vendo-search").value=vendo;
+  document.getElementById("analytics-vendo-placeholder").style.display="none";
+  document.getElementById("analytics-vendo-chart-wrap").style.display="block";
+  document.getElementById("analytics-vendo-name").textContent=`${vendo} — ${area}`;
+
+  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2026-01-01&date=lte.2026-12-31`);
+  const mmap={};
+  rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
+  const labels=Object.keys(mmap).sort(),data=labels.map(m=>mmap[m]);
+  const total=data.reduce((s,v)=>s+v,0);
+  const avg=data.length?total/data.length:0;
+  const max=data.length?Math.max(...data):0;
+
+  document.getElementById("analytics-vendo-stats").innerHTML=`
+    <div class="stat"><div class="sl">Total Sales 2026</div><div class="sv blue">${fmt(total)}</div></div>
+    <div class="stat"><div class="sl">Total Txns</div><div class="sv pur">${rows.length.toLocaleString()}</div></div>
+    <div class="stat"><div class="sl">Avg/Month</div><div class="sv amber">${fmt(Math.round(avg))}</div></div>
+    <div class="stat"><div class="sl">Best Month</div><div class="sv green">${fmt(max)}</div></div>
+  `;
+
+  if(vendoAnalyticsChart) vendoAnalyticsChart.destroy();
+  vendoAnalyticsChart=new Chart(document.getElementById("vendo-analytics-chart"),{
+    type:"bar",
+    data:{labels,datasets:[{label:"Monthly Sales",data,backgroundColor:"#1565c0",borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
+  });
+}
+
+function clearAnalyticsVendo() {
+  document.getElementById("analytics-vendo-search").value="";
+  document.getElementById("analytics-vendo-chart-wrap").style.display="none";
+  document.getElementById("analytics-vendo-placeholder").style.display="block";
+  document.getElementById("analytics-vendo-list").style.display="none";
+  if(vendoAnalyticsChart){vendoAnalyticsChart.destroy();vendoAnalyticsChart=null;}
+}
+
+// ══════════════════════════════════════════════════════════
+// AUTO REFRESH every 5 min
+// ══════════════════════════════════════════════════════════
+setInterval(()=>{
+  if(document.getElementById("panel-dash").classList.contains("active")) loadDashboard();
+},5*60*1000);
+
+// ── INIT ──────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>
