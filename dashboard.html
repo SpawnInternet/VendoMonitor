@@ -595,13 +595,30 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- ══ SYSTEM STATUS ══ -->
 <div id="panel-status" class="panel">
-  <div style="margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+  <div style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
     <div>
       <div style="font-size:16px;font-weight:700;color:#1565c0">🖥 System Status</div>
       <div style="font-size:12px;color:var(--mu);margin-top:4px">Railway + Supabase health monitor</div>
     </div>
-    <button class="btn p" onclick="loadSystemStatus()">⟳ Refresh</button>
-    <button class="btn" style="background:#16a34a;color:white;border-color:#16a34a" onclick="backupData()">⬇ Backup DB (CSV)</button>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
+      <button class="btn p" onclick="loadSystemStatus()">⟳ Refresh</button>
+      <a href="https://railway.app/project/pretty-exploration" target="_blank"
+        style="padding:5px 12px;background:#0f172a;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        🚂 Railway Logs
+      </a>
+      <a href="https://supabase.com/dashboard/project/cviraqfhphhsonjmrtvu" target="_blank"
+        style="padding:5px 12px;background:#1C8C3E;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:5px;">
+        🗄 Supabase
+      </a>
+      <button class="btn" style="background:#7c3aed;color:white;border-color:#7c3aed" onclick="checkDataGaps()">🔍 Check Data Gaps</button>
+      <button class="btn" style="background:#16a34a;color:white;border-color:#16a34a" onclick="backupData()">⬇ Backup DB (CSV)</button>
+    </div>
+  </div>
+
+  <!-- Data gap results -->
+  <div id="gap-results" style="display:none;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:700;color:#7c3aed;margin-bottom:8px;">🔍 Data Gap Check Results</div>
+    <div id="gap-content" style="font-size:12px;"></div>
   </div>
 
   <!-- Status Cards -->
@@ -612,6 +629,64 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="stat"><div class="sl">Today's Transactions</div><div class="sv blue" id="sys-today">—</div></div>
     <div class="stat"><div class="sl">Today's Sales</div><div class="sv green" id="sys-sales">—</div></div>
     <div class="stat"><div class="sl">DB Storage</div><div class="sv pur" id="sys-storage">—</div></div>
+  </div>
+
+  <!-- Telegram Session Health + Live Auth Panel -->
+  <div class="cs" style="margin-bottom:14px;border:2px solid rgba(30,60,200,.15);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#1565c0;">📱 Telegram Session Status</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:2px;">Live auth — enter code here if session expires</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div id="tg-status-pill" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#dcfce7;color:#16a34a;">● Checking...</div>
+        <button onclick="checkTgSession()" class="btn" style="font-size:11px;padding:4px 10px;">⟳ Check</button>
+      </div>
+    </div>
+
+    <!-- Status message -->
+    <div id="tg-status-msg" style="font-size:12px;color:var(--mu);margin-bottom:12px;padding:8px 12px;background:#f8faff;border-radius:6px;border:1px solid var(--bd);">
+      Click "Check" to verify your Telegram session health.
+    </div>
+
+    <!-- Auth code input — shown when waiting_code or waiting_password -->
+    <div id="tg-auth-panel" style="display:none;background:#fef3c7;border:2px solid #d97706;border-radius:8px;padding:14px;">
+      <div style="font-size:13px;font-weight:700;color:#92400e;margin-bottom:4px;" id="tg-auth-label">📱 Enter Telegram Code</div>
+      <div style="font-size:11px;color:#78350f;margin-bottom:10px;">Telegram sent a code to your phone. Enter it below to re-authenticate.</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" id="tg-code-input" placeholder="e.g. 12345"
+          style="flex:1;padding:9px 14px;border:2px solid #d97706;border-radius:7px;font-size:18px;font-weight:700;letter-spacing:.2em;text-align:center;outline:none;font-family:monospace;"
+          maxlength="8" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+        <button onclick="submitTgCode()" id="tg-submit-btn"
+          style="padding:9px 20px;background:#d97706;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+          Submit Code →
+        </button>
+      </div>
+      <div id="tg-code-result" style="margin-top:8px;font-size:12px;font-weight:600;"></div>
+    </div>
+
+    <!-- Railway URL config (needed for auth API) -->
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+      <span style="font-size:11px;color:var(--mu);white-space:nowrap;">Railway URL:</span>
+      <input type="text" id="railway-url" placeholder="https://your-app.up.railway.app"
+        style="flex:1;padding:5px 10px;border:1px solid var(--bd);border-radius:6px;font-size:11px;outline:none;font-family:monospace;"
+        value="">
+      <button onclick="saveTgUrl()" class="btn" style="font-size:11px;padding:4px 10px;white-space:nowrap;">💾 Save</button>
+    </div>
+    <div style="font-size:10px;color:var(--mu);margin-top:4px;">
+      Enter your Railway app URL above. Find it at railway.app → your project → Settings → Domains.
+    </div>
+  </div>
+
+  <!-- Old session warning (still shown for no-txn alerts) -->
+  <div id="tg-session-alert" style="display:none;background:#fef3c7;border:2px solid #d97706;border-radius:10px;padding:14px 18px;margin-bottom:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:22px;">⚠️</span>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#92400e;">No transactions received for a long time!</div>
+        <div style="font-size:12px;color:#78350f;margin-top:3px;" id="tg-session-msg">Railway may be down or session expired.</div>
+      </div>
+    </div>
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -2083,8 +2158,41 @@ async function loadSystemStatus() {
       if (minsAgo > 60) { railColor = "var(--red)"; railText = "❌ Stopped?"; warnings.push(`❌ No transactions for ${minsAgo} minutes — Railway may be down!`); }
       else if (minsAgo > 30) { railColor = "var(--amber)"; railText = "⚠️ Slow"; warnings.push(`⚠️ No transactions for ${minsAgo} minutes`); }
 
+      // Telegram session check — if no txns for 2+ hours, show session alert
+      const tgAlert = document.getElementById("tg-session-alert");
+      const tgMsg   = document.getElementById("tg-session-msg");
+      if (minsAgo > 120) {
+        const hoursAgo = Math.floor(minsAgo / 60);
+        tgAlert.style.display = "block";
+        tgMsg.textContent = `No transactions received for ${hoursAgo} hour${hoursAgo>1?'s':''} (last was ${timeStr}). This could mean: Railway is down, OR your Telegram session has expired and needs re-authentication. Check Railway logs immediately.`;
+        warnings.push(`🔐 Telegram session may be expired — no data for ${hoursAgo}h. Check Railway logs!`);
+      } else if (minsAgo > 60) {
+        tgAlert.style.display = "block";
+        tgMsg.textContent = `No transactions for ${minsAgo} minutes. Monitor closely — if this continues past 2 hours, your Telegram session may have expired.`;
+      } else {
+        tgAlert.style.display = "none";
+      }
+
       document.getElementById("sys-railway").innerHTML = `<span style="color:${railColor}">${railText}</span>`;
       document.getElementById("sys-last").innerHTML = `<span style="font-size:14px;color:${minsAgo>30?'var(--red)':'var(--ok)'}">${minsAgo}m ago</span><div style="font-size:10px;color:var(--mu)">${timeStr}</div>`;
+
+      // Update topbar status
+      const statusEl = document.getElementById("top-status");
+      if (statusEl) {
+        if (minsAgo > 120) {
+          statusEl.textContent = "⚠️ Session?";
+          statusEl.style.color = "#fcd34d";
+          document.querySelector(".sdot").style.background = "#ef4444";
+        } else if (minsAgo > 30) {
+          statusEl.textContent = `⚠️ ${minsAgo}m ago`;
+          statusEl.style.color = "#fcd34d";
+          document.querySelector(".sdot").style.background = "#fcd34d";
+        } else {
+          statusEl.textContent = `Live · ${minsAgo}m ago`;
+          statusEl.style.color = "";
+          document.querySelector(".sdot").style.background = "#4ade80";
+        }
+      }
 
       // Recent 10
       document.getElementById("sys-recent").innerHTML = rows.map(r => {
@@ -2232,6 +2340,109 @@ async function backupData() {
     alert("Backup error: " + e.message);
   }
 }
+
+// ══════════════════════════════════════════════════════════
+// TELEGRAM SESSION AUTH
+// ══════════════════════════════════════════════════════════
+function getTgUrl() {
+  return localStorage.getItem("railway_url") || "";
+}
+function saveTgUrl() {
+  const url = (document.getElementById("railway-url")?.value||"").trim().replace(/\/$/,"");
+  if (!url) { alert("Please enter your Railway URL first"); return; }
+  localStorage.setItem("railway_url", url);
+  document.getElementById("railway-url").value = url;
+  showAlert("✅ Railway URL saved!", "ok");
+}
+
+async function checkTgSession() {
+  const url  = getTgUrl();
+  const pill = document.getElementById("tg-status-pill");
+  const msg  = document.getElementById("tg-status-msg");
+  const panel= document.getElementById("tg-auth-panel");
+  const lbl  = document.getElementById("tg-auth-label");
+
+  if (!url) {
+    pill.style.background="#fee2e2"; pill.style.color="#dc2626"; pill.textContent="⚠ No URL set";
+    msg.textContent = "Enter your Railway URL below and click Save first.";
+    return;
+  }
+  pill.style.background="#e0f2fe"; pill.style.color="#1565c0"; pill.textContent="⏳ Checking...";
+
+  try {
+    const r = await fetch(`${url}/api/tg_status`, { signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    if (data.status === "ok") {
+      pill.style.background="#dcfce7"; pill.style.color="#16a34a"; pill.textContent="● Session Active";
+      msg.textContent = "✅ Telegram session is active — collecting transactions normally.";
+      panel.style.display="none";
+      document.getElementById("tg-session-alert").style.display="none";
+    } else if (data.status === "waiting_code") {
+      pill.style.background="#fef3c7"; pill.style.color="#d97706"; pill.textContent="📱 Code Required";
+      msg.textContent = "⚠️ Telegram sent a verification code to your phone. Enter it below.";
+      lbl.textContent = "📱 Enter Telegram Verification Code";
+      const inp = document.getElementById("tg-code-input");
+      inp.type="text"; inp.placeholder="Enter code e.g. 12345";
+      panel.style.display="block";
+    } else if (data.status === "waiting_password") {
+      pill.style.background="#fef3c7"; pill.style.color="#d97706"; pill.textContent="🔒 2FA Required";
+      msg.textContent = "⚠️ Two-factor authentication password required.";
+      lbl.textContent = "🔒 Enter Your 2FA Password";
+      const inp = document.getElementById("tg-code-input");
+      inp.type="password"; inp.placeholder="Enter 2FA password";
+      panel.style.display="block";
+    } else {
+      pill.style.background="#fee2e2"; pill.style.color="#dc2626"; pill.textContent="❌ Error";
+      msg.textContent = "❌ " + (data.message||"Unknown status");
+      panel.style.display="none";
+    }
+  } catch(e) {
+    pill.style.background="#fee2e2"; pill.style.color="#dc2626"; pill.textContent="❌ Unreachable";
+    msg.innerHTML = `Cannot reach Railway at <b>${url}</b> — check the URL or ensure app.py has the auth patch applied.`;
+    panel.style.display="none";
+  }
+}
+
+async function submitTgCode() {
+  const url  = getTgUrl();
+  const inp  = document.getElementById("tg-code-input");
+  const code = (inp?.value||"").trim();
+  const btn  = document.getElementById("tg-submit-btn");
+  const res  = document.getElementById("tg-code-result");
+
+  if (!code) { res.style.color="#dc2626"; res.textContent="⚠ Please enter the code."; return; }
+  if (!url)  { res.style.color="#dc2626"; res.textContent="⚠ No Railway URL saved."; return; }
+
+  btn.textContent="⏳ Submitting..."; btn.disabled=true;
+  const isPassword = inp.type==="password";
+  const body = isPassword ? {password:code} : {code:code};
+
+  try {
+    const r = await fetch(`${url}/api/tg_auth`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body), signal:AbortSignal.timeout(10000)
+    });
+    const data = await r.json();
+    if (data.ok) {
+      res.style.color="#16a34a";
+      res.textContent = "✅ " + data.message + " Checking session in 3 seconds...";
+      inp.value="";
+      setTimeout(checkTgSession, 3000);
+    } else {
+      res.style.color="#dc2626";
+      res.textContent = "❌ " + (data.error||"Failed — try again");
+    }
+  } catch(e) {
+    res.style.color="#dc2626"; res.textContent="❌ Error: "+e.message;
+  }
+  btn.textContent="Submit →"; btn.disabled=false;
+}
+
+// Auto-restore saved Railway URL
+(function(){
+  const saved = localStorage.getItem("railway_url");
+  if (saved) { const el=document.getElementById("railway-url"); if(el)el.value=saved; }
+})();
 
 // ── INIT ──────────────────────────────────────────────────
 testConnection().then(() => loadDashboard());
