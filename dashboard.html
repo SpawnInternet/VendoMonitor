@@ -195,22 +195,24 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div class="cs-t">📉 Top 10 — Weakest</div>
       <div id="top10-low" class="cs-scroll"></div>
     </div>
-    <div class="cs" style="border:1.5px solid #fecaca;background:#fff5f5">
-      <div class="cs-t" style="color:#dc2626">🚨 Recent Suspicious <span id="susp-count" class="pill red">0</span></div>
-      <div id="suspicious-sidebar" class="cs-scroll" style="max-height:280px"></div>
-      <div style="padding:8px 0 0;border-top:1px solid #fecaca;margin-top:8px">
-        <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Suspicious →</button>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <!-- Recent Transactions — ABOVE suspicious -->
+      <div class="cs" style="flex:1;border:2px solid #1565c0;background:#f0f4ff;">
+        <div class="cs-t" style="color:#1565c0;font-size:11px;">
+          ⚡ Recent Transactions
+          <span id="live-badge" class="pill ok" style="font-size:9px;margin-left:4px;">● LIVE</span>
+        </div>
+        <div id="recent-txns" style="max-height:200px;overflow-y:auto;"></div>
+      </div>
+      <!-- Suspicious — BELOW recent -->
+      <div class="cs" style="border:1.5px solid #fecaca;background:#fff5f5">
+        <div class="cs-t" style="color:#dc2626">🚨 Suspicious <span id="susp-count" class="pill red">0</span></div>
+        <div id="suspicious-sidebar" class="cs-scroll" style="max-height:200px"></div>
+        <div style="padding:6px 0 0;border-top:1px solid #fecaca;margin-top:6px">
+          <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:5px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">View All →</button>
+        </div>
       </div>
     </div>
-  </div>
-  <!-- Recent transactions BELOW suspicious -->
-  <div class="cs" style="margin-bottom:12px;">
-    <div class="cs-t">
-      Recent transactions 
-      <span id="live-badge" class="pill ok" style="font-size:9px;">● LIVE</span>
-      <span id="last-received" style="font-size:10px;color:var(--mu);font-weight:400;margin-left:8px;"></span>
-    </div>
-    <div id="recent-txns" class="cs-scroll" style="max-height:200px;"></div>
   </div>
   <div class="two">
     <div class="cs">
@@ -959,10 +961,9 @@ async function openVendoDetail(vendo, area) {
   document.getElementById("vtxn-sub").textContent=area+" area";
   showBread(`Vendos → ${vendo}`, closeVendo);
 
-  // Default from March 1 2026 to today (all current data)
-  const today=new Date(), from=new Date("2026-03-01");
-  document.getElementById("vtxn-to").value=today.toISOString().slice(0,10);
-  document.getElementById("vtxn-from").value=from.toISOString().slice(0,10);
+  // No default date filter — load ALL transactions
+  document.getElementById("vtxn-to").value="";
+  document.getElementById("vtxn-from").value="";
 
   await Promise.all([loadVendoTxns(), loadVendoMonthly(vendo), loadVendoSuspicious(vendo)]);
 }
@@ -973,19 +974,17 @@ async function loadVendoTxns() {
   const from=document.getElementById("vtxn-from").value;
   const to=document.getElementById("vtxn-to").value;
   vtPage_n=1;
-  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading transactions...</td></tr>';
+  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading all transactions...</td></tr>';
+  // No date filter by default — fetch ALL for this vendo
   let params=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.desc,time.desc`;
   if(from) params+=`&date=gte.${from}`;
   if(to)   params+=`&date=lte.${to}`;
   try {
-    const rows=await sbAll("transactions",params);
-    vtxnAll=rows;
-    console.log(`Loaded ${rows.length} transactions for ${vendo}`);
-    const hacked=rows.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
+    vtxnAll = await sbAll("transactions", params);
+    const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")).length;
     document.getElementById("sus-tab-btn").textContent=`⚠️ Suspicious (${hacked})`;
     filterVTxns();
   } catch(e) {
-    console.error("Error loading transactions:", e);
     document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:red;">Error: ${e.message}</td></tr>`;
   }
 }
@@ -1034,8 +1033,8 @@ function renderVTxns(rows) {
 
 function vtPage(d){vtPage_n+=d;filterVTxns();}
 function clearVFilter(){
-  document.getElementById("vtxn-from").value="2026-03-01";
-  document.getElementById("vtxn-to").value=new Date().toISOString().slice(0,10);
+  document.getElementById("vtxn-from").value="";
+  document.getElementById("vtxn-to").value="";
   document.getElementById("vtxn-q").value="";
   loadVendoTxns();
 }
@@ -1053,7 +1052,8 @@ async function loadVendoMonthly(vendo) {
 }
 
 async function loadVendoSuspicious(vendo) {
-  const rows=await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&order=date.desc`);
+  document.getElementById("sus-list").innerHTML='<div style="padding:16px;text-align:center;color:var(--mu)">Loading suspicious transactions...</div>';
+  const rows=await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&is_skipped=eq.false&order=date.desc`);
   const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
   const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
   document.getElementById("sus-list").innerHTML=rows.length
@@ -1242,7 +1242,7 @@ async function openSuspiciousDetail(vendo, area) {
   document.getElementById("sus-detail-title").textContent="🚨 "+vendo;
   document.getElementById("sus-detail-sub").textContent=area+" area · Suspicious transactions breakdown";
   showBread(`Hacked → ${vendo}`, closeHackedDetail);
-  const rows=await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&extended=in.(0,'')&order=date.desc`,500);
+  const rows=await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&is_skipped=eq.false&order=date.desc`);
   const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
   const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
   document.getElementById("sus-txn-tbody").innerHTML=rows.map((t,i)=>{
@@ -1458,7 +1458,10 @@ async function removeNotSuspicious(id, vendo, btn) {
 let skippedByVendo = {};
 
 async function loadSkipped() {
-  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc");
+  document.getElementById("skipped-stats").innerHTML='<div style="padding:12px;color:var(--mu)">Loading skipped transactions...</div>';
+  document.getElementById("skipped-todo").innerHTML='<div style="padding:20px;text-align:center;color:var(--mu)">⏳ Fetching data...</div>';
+
+  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at&is_skipped=eq.true&order=created_at.desc");
   skippedAll = rows;
 
   // Group by vendo
@@ -1611,13 +1614,12 @@ async function refreshRecentTxns() {
     el.innerHTML = recent.map((t,i)=>{
       const phTime = t.created_at ? new Date(t.created_at).toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:true}) : "";
       const isLatest = i===0 && isNew;
-      return `<div class="lr" style="${isLatest?'background:#f0fff4;':''}" onclick="openVendoFromSearch('${esc(t.vendo)}','${t.area}')">
-        <div>
-          <div class="lrn" style="${isLatest?'color:#16a34a;':''}">${isLatest?'🆕 ':''}${t.vendo}</div>
-          <div class="lrm">${t.area} · ${t.date} ${t.time}</div>
-          <div style="font-size:10px;color:#9FE1CB">● received ${phTime}</div>
+      return `<div onclick="openVendoFromSearch('${esc(t.vendo)}','${t.area}')" style="padding:7px 10px;border-bottom:1px solid #dbeafe;cursor:pointer;background:${isLatest?'#dbeafe':'#f0f4ff'};display:flex;justify-content:space-between;align-items:center;transition:background .12s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='${isLatest?'#dbeafe':'#f0f4ff'}'">
+        <div style="min-width:0;flex:1;">
+          <div style="font-weight:700;font-size:13px;color:#1a1d2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${isLatest?'🆕 ':''}${t.vendo}</div>
+          <div style="font-size:10px;color:#6b7394;margin-top:1px;">${t.area} · ${phTime}</div>
         </div>
-        <span style="font-weight:700;color:#1565c0">${fmt(t.amount)}</span>
+        <div style="font-weight:800;font-size:14px;color:#1565c0;margin-left:8px;flex-shrink:0;">${fmt(t.amount)}</div>
       </div>`;
     }).join("");
     
@@ -1976,15 +1978,28 @@ async function loadSystemStatus() {
     warnings.push("❌ Error fetching today's stats: " + e.message);
   }
 
-  // 4. Storage - get accurate row count
+  // 4. Storage - accurate live count
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: {...HDR, "Prefer":"count=exact"} });
-    const count = r.headers.get("content-range")?.split("/")?.[1] || "?";
-    const rows = parseInt(count||0);
-    // Estimate: ~175MB for 332,930 rows = ~0.526 bytes/row overhead estimate
-    // More accurate: each row ~530 bytes avg based on known 175MB / 332930 rows
-    const estMB = rows > 0 ? ((rows / 332930) * 175).toFixed(0) : "?";
-    document.getElementById("sys-storage").innerHTML = `<span style="font-size:14px">~${estMB}MB</span><div style="font-size:10px;color:var(--mu)">${rows.toLocaleString()} rows total</div>`;
+    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, {
+      headers: {...HDR, "Prefer": "count=exact"},
+      signal: AbortSignal.timeout(10000)
+    });
+    const range = r.headers.get("content-range") || "";
+    const total = parseInt(range.split("/")[1] || "0");
+    const skippedR = await fetch(`${SB_URL}/rest/v1/transactions?select=id&is_skipped=eq.true&limit=1`, {
+      headers: {...HDR, "Prefer": "count=exact"},
+      signal: AbortSignal.timeout(10000)
+    });
+    const skRange = skippedR.headers.get("content-range") || "";
+    const skTotal = parseInt(skRange.split("/")[1] || "0");
+    const active = total - skTotal;
+    // Estimate MB: 175MB baseline at 332,930 rows
+    const estMB = total > 0 ? Math.round((total / 332930) * 175) : "?";
+    document.getElementById("sys-storage").innerHTML =
+      `<span style="font-size:14px">~${estMB}MB</span>
+       <div style="font-size:10px;color:var(--mu)">${total.toLocaleString()} total rows</div>
+       <div style="font-size:10px;color:var(--ok)">${active.toLocaleString()} active</div>
+       <div style="font-size:10px;color:var(--amber)">${skTotal.toLocaleString()} skipped</div>`;
   } catch(e) {}
 
   // 5. Show warnings
