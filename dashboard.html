@@ -132,7 +132,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <button class="active" onclick="showP('dash',this)">Dashboard</button>
     <button onclick="showP('vendos',this)">Vendos</button>
     <button onclick="showP('harvest',this)">Harvest</button>
-    <button onclick="showP('suspicious',this)" style="border-color:rgba(239,68,68,.5);color:#fca5a5">⚠️ Suspicious</button>
+    <button onclick="showP('suspicious',this);loadSuspicious()" style="border-color:rgba(239,68,68,.5);color:#fca5a5">⚠️ Suspicious</button>
     <button onclick="showP('devices',this)">📱 Devices</button>
     <button onclick="showP('analytics',this)">📈 Analytics</button>
     <button onclick="showP('skipped',this)" style="border-color:rgba(251,191,36,.5);color:#fcd34d">⏭ Skipped</button>
@@ -199,11 +199,11 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div class="cs-t" style="color:#dc2626">🚨 Recent Suspicious <span id="susp-count" class="pill red">0</span></div>
       <div id="suspicious-sidebar" class="cs-scroll" style="max-height:280px"></div>
       <div style="padding:8px 0 0;border-top:1px solid #fecaca;margin-top:8px">
-        <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'))" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Suspicious →</button>
+        <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:6px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">View All Suspicious →</button>
       </div>
     </div>
   </div>
-  <!-- Recent transactions FIRST -->
+  <!-- Recent transactions BELOW suspicious -->
   <div class="cs" style="margin-bottom:12px;">
     <div class="cs-t">
       Recent transactions 
@@ -479,6 +479,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div style="font-size:12px;color:var(--mu);margin-top:4px">Railway + Supabase health monitor</div>
     </div>
     <button class="btn p" onclick="loadSystemStatus()">⟳ Refresh</button>
+    <button class="btn" style="background:#16a34a;color:white;border-color:#16a34a" onclick="backupData()">⬇ Backup DB (CSV)</button>
   </div>
 
   <!-- Status Cards -->
@@ -564,21 +565,74 @@ let monthlyChart  = null;
 let analyticsAreaChart = null;
 
 // ── Supabase ──────────────────────────────────────────────
+let sbOffline = false;
+
 async function sb(table, params="", limit=1000) {
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=${limit}`, { headers: HDR });
-  return r.json();
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=${limit}`, {
+      headers: HDR,
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(`HTTP ${r.status}: ${err.slice(0,200)}`);
+    }
+    sbOffline = false;
+    return r.json();
+  } catch(e) {
+    if (!sbOffline) { sbOffline = true; showConnError(e.message); }
+    return [];
+  }
 }
+
 async function sbAll(table, params="") {
   let all=[], offset=0;
   while(true) {
-    const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1000&offset=${offset}`, { headers: HDR });
-    const rows = await r.json();
-    if (!rows?.length) break;
-    all.push(...rows);
-    if (rows.length < 1000) break;
-    offset += 1000;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1000&offset=${offset}`, {
+        headers: HDR,
+        signal: AbortSignal.timeout(20000)
+      });
+      if (!r.ok) { const err = await r.text(); throw new Error(`HTTP ${r.status}: ${err.slice(0,200)}`); }
+      const rows = await r.json();
+      sbOffline = false;
+      if (!rows?.length) break;
+      all.push(...rows);
+      if (rows.length < 1000) break;
+      offset += 1000;
+    } catch(e) {
+      if (!sbOffline) { sbOffline = true; showConnError(e.message); }
+      break;
+    }
   }
   return all;
+}
+
+function showConnError(msg) {
+  let el = document.getElementById("conn-error-banner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "conn-error-banner";
+    el.style.cssText = "position:fixed;top:52px;left:0;right:0;background:#dc2626;color:white;padding:8px 16px;font-size:12px;font-weight:600;z-index:999;display:flex;justify-content:space-between;align-items:center;";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `⚠️ Cannot reach Supabase — check your internet connection or Supabase status. <span style="opacity:.7;font-weight:400">${msg}</span>
+    <button onclick="document.getElementById('conn-error-banner').remove();sbOffline=false;loadDashboard();" style="padding:3px 10px;background:white;color:#dc2626;border:none;border-radius:4px;cursor:pointer;font-weight:700;margin-left:12px;">Retry</button>`;
+}
+
+async function testConnection() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR });
+    if (r.ok) {
+      sbOffline = false;
+      const el = document.getElementById("conn-error-banner");
+      if (el) el.remove();
+    } else {
+      showConnError(`HTTP ${r.status}`);
+    }
+  } catch(e) {
+    showConnError(e.message);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────
@@ -774,8 +828,8 @@ async function loadDashboard() {
     }).join("");
 
   } catch(e) {
-    console.error(e);
-    document.getElementById("dash-stats").innerHTML=`<div style="padding:20px;color:red;">Error: ${e.message}</div>`;
+    if (e.message !== 'undefined') // sb() already shows connection banner
+      document.getElementById("dash-stats").innerHTML=`<div style="padding:20px;color:red;">Error loading dashboard: ${e.message}</div>`;
   }
 }
 
@@ -905,9 +959,8 @@ async function openVendoDetail(vendo, area) {
   document.getElementById("vtxn-sub").textContent=area+" area";
   showBread(`Vendos → ${vendo}`, closeVendo);
 
-  // Default last 30 days
-  const today=new Date(), from=new Date(today);
-  from.setDate(from.getDate()-30);
+  // Default from March 1 2026 to today (all current data)
+  const today=new Date(), from=new Date("2026-03-01");
   document.getElementById("vtxn-to").value=today.toISOString().slice(0,10);
   document.getElementById("vtxn-from").value=from.toISOString().slice(0,10);
 
@@ -980,10 +1033,15 @@ function renderVTxns(rows) {
 }
 
 function vtPage(d){vtPage_n+=d;filterVTxns();}
-function clearVFilter(){document.getElementById("vtxn-from").value="";document.getElementById("vtxn-to").value="";document.getElementById("vtxn-q").value="";loadVendoTxns();}
+function clearVFilter(){
+  document.getElementById("vtxn-from").value="2026-03-01";
+  document.getElementById("vtxn-to").value=new Date().toISOString().slice(0,10);
+  document.getElementById("vtxn-q").value="";
+  loadVendoTxns();
+}
 
 async function loadVendoMonthly(vendo) {
-  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2026-01-01&date=lte.2026-12-31`);
+  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2025-01-01&is_skipped=eq.false`);
   const mmap={};
   rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
   const labels=Object.keys(mmap).sort(),data=labels.map(m=>mmap[m]);
@@ -995,7 +1053,7 @@ async function loadVendoMonthly(vendo) {
 }
 
 async function loadVendoSuspicious(vendo) {
-  const rows=await sb("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&extended=in.(0,'')&order=date.desc`,200);
+  const rows=await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&order=date.desc`);
   const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
   const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
   document.getElementById("sus-list").innerHTML=rows.length
@@ -1400,7 +1458,7 @@ async function removeNotSuspicious(id, vendo, btn) {
 let skippedByVendo = {};
 
 async function loadSkipped() {
-  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc&limit=5000");
+  const rows = await sbAll("transactions", "select=id,vendo,area,date,time,ip,mac,amount,voucher,total_time,reason,created_at,is_skipped&is_skipped=eq.true&order=created_at.desc");
   skippedAll = rows;
 
   // Group by vendo
@@ -1576,7 +1634,9 @@ async function refreshRecentTxns() {
       status.textContent = `Live · last ${ago}`;
       status.style.color = minsAgo < 5 ? "#9FE1CB" : "#fcd34d";
     }
-  } catch(e) { console.error("Recent txn error:", e); }
+  } catch(e) { 
+    // Don't log every 10 seconds — sb() already handles and shows banner
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1735,48 +1795,15 @@ function renderHkTxns(rows) {
 function hkTxPage(d){hkTxPage_n+=d;filterHkTxns();}
 
 // ══════════════════════════════════════════════════════════
-// WEBHOOK HEALTH CHECKER
+// WEBHOOK HEALTH CHECKER — DISABLED (Railway replaced webhook)
 // ══════════════════════════════════════════════════════════
-const WORKER_URL = "https://vendo-webhook.spawnremote.workers.dev";
-const BOT_TOKEN  = "6620853442:AAFrQWYu6oYbsdkZ6p_PgxPBaaEpIrZwO80";
+const WORKER_URL = "";
+const BOT_TOKEN  = "";
 
 async function checkWebhookHealth() {
-  try {
-    const res  = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`);
-    const data = await res.json();
-    const url  = data?.result?.url || "";
-    const pending = data?.result?.pending_update_count || 0;
-    const lastError = data?.result?.last_error_message || "";
-    
-    const btn = document.getElementById("webhook-btn");
-    if (!btn) return;
-
-    if (!url || url !== WORKER_URL + "/") {
-      // Webhook missing!
-      btn.style.background = "#dc2626";
-      btn.style.borderColor = "#dc2626";
-      btn.textContent = "🔴 Webhook DOWN — Click to Fix!";
-      btn.style.animation = "pulse 1s infinite";
-      showWebhookAlert("DOWN");
-    } else if (pending > 100) {
-      // Many pending updates
-      btn.style.background = "#d97706";
-      btn.style.borderColor = "#d97706";
-      btn.textContent = `⚠️ Webhook ${pending} pending`;
-      showWebhookAlert("SLOW");
-    } else if (lastError) {
-      btn.style.background = "#d97706";
-      btn.textContent = `⚠️ Webhook Error`;
-      showWebhookAlert("ERROR", lastError);
-    } else {
-      btn.style.background = "rgba(22,163,74,.6)";
-      btn.style.borderColor = "#16a34a";
-      btn.textContent = `✅ Webhook OK`;
-      hideWebhookAlert();
-    }
-  } catch(e) {
-    console.error("Webhook check failed:", e);
-  }
+  // Railway Telethon replaced the webhook — nothing to check
+  const btn = document.getElementById("webhook-btn");
+  if (btn) { btn.style.display = "none"; }
 }
 
 function showWebhookAlert(type, msg="") {
@@ -1835,13 +1862,15 @@ async function resetWebhook() {
   setTimeout(checkWebhookHealth, 3000);
 }
 
-// Check webhook health every 5 minutes
+// Check webhook health every 5 minutes — no-op since Railway replaced it
 setInterval(checkWebhookHealth, 5 * 60 * 1000);
 
-// Also check last transaction time every minute
+// Also check last transaction time every minute (silent — uses sb() error handling)
 setInterval(async () => {
+  if (sbOffline) return; // don't pile on when already offline
   try {
     const res  = await fetch(`${SB_URL}/rest/v1/transactions?select=created_at&is_skipped=eq.false&order=created_at.desc&limit=1`, { headers: HDR });
+    if (!res.ok) return;
     const data = await res.json();
     if (data?.length > 0) {
       const lastTxn  = new Date(data[0].created_at);
@@ -1947,11 +1976,15 @@ async function loadSystemStatus() {
     warnings.push("❌ Error fetching today's stats: " + e.message);
   }
 
-  // 4. Storage estimate
+  // 4. Storage - get accurate row count
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR });
+    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: {...HDR, "Prefer":"count=exact"} });
     const count = r.headers.get("content-range")?.split("/")?.[1] || "?";
-    document.getElementById("sys-storage").innerHTML = `<span style="font-size:14px">~165MB</span><div style="font-size:10px;color:var(--mu)">${parseInt(count||0).toLocaleString()} rows</div>`;
+    const rows = parseInt(count||0);
+    // Estimate: ~175MB for 332,930 rows = ~0.526 bytes/row overhead estimate
+    // More accurate: each row ~530 bytes avg based on known 175MB / 332930 rows
+    const estMB = rows > 0 ? ((rows / 332930) * 175).toFixed(0) : "?";
+    document.getElementById("sys-storage").innerHTML = `<span style="font-size:14px">~${estMB}MB</span><div style="font-size:10px;color:var(--mu)">${rows.toLocaleString()} rows total</div>`;
   } catch(e) {}
 
   // 5. Show warnings
@@ -1963,10 +1996,69 @@ async function loadSystemStatus() {
   }
 }
 
+// ── closeHackedDetail alias (used in breadcrumb) ──────────
+function closeHackedDetail() { closeSuspiciousDetail(); }
+
+// ══════════════════════════════════════════════════════════
+// BACKUP — Export full transactions to CSV
+// ══════════════════════════════════════════════════════════
+async function backupData() {
+  const btn = event.target;
+  btn.textContent = "⏳ Preparing backup...";
+  btn.disabled = true;
+
+  try {
+    // Fetch all non-skipped transactions in pages
+    let all = [], offset = 0, page = 1000;
+    while (true) {
+      btn.textContent = `⏳ Fetching rows ${all.length.toLocaleString()}...`;
+      const r = await fetch(
+        `${SB_URL}/rest/v1/transactions?select=id,date,time,vendo,area,amount,ip,mac,voucher,total_time,extended,is_skipped,created_at&is_skipped=eq.false&order=date.desc,time.desc&limit=${page}&offset=${offset}`,
+        { headers: HDR }
+      );
+      const rows = await r.json();
+      if (!rows?.length) break;
+      all.push(...rows);
+      if (rows.length < page) break;
+      offset += page;
+    }
+
+    // Build CSV
+    btn.textContent = "⏳ Building CSV...";
+    const headers = ["id","date","time","vendo","area","amount","ip","mac","voucher","total_time","extended","is_skipped","created_at"];
+    const csvRows = [headers.join(",")];
+    all.forEach(r => {
+      csvRows.push(headers.map(h => {
+        const val = r[h] ?? "";
+        const s = String(val).replace(/"/g, '""');
+        return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
+      }).join(","));
+    });
+
+    const csv = csvRows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+    a.href = url;
+    a.download = `spawn_transactions_backup_${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    btn.textContent = `✅ Backup done! (${all.length.toLocaleString()} rows)`;
+    setTimeout(() => { btn.textContent = "⬇ Backup DB (CSV)"; btn.disabled = false; }, 4000);
+  } catch(e) {
+    btn.textContent = "❌ Backup failed";
+    btn.disabled = false;
+    alert("Backup error: " + e.message);
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────
-loadDashboard();
-checkWebhookHealth();
+testConnection().then(() => loadDashboard());
+checkWebhookHealth(); // no-op — Railway replaced webhook
 </script>
 </body>
 </html>
-
