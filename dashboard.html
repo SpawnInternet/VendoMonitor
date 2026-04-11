@@ -21,14 +21,13 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}70%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
 
 /* ── WHITE ICON NAV ── */
-.nav-bar{background:#fff;border-bottom:1.5px solid #e8eeff;padding:0 10px;display:flex;align-items:stretch;position:sticky;top:44px;z-index:49}
-.nav{display:flex;align-items:stretch;gap:0;flex:1}
-.nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:5px 6px;border:none;border-bottom:3px solid transparent;background:transparent;cursor:pointer;flex:1;font-family:inherit;transition:background .12s;position:relative;min-width:0}
-.nav button .ni{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px}
-.nav button .nl{font-size:8px;font-weight:600;color:#6b7394;text-transform:uppercase;letter-spacing:.03em;text-align:center;line-height:1.2;white-space:nowrap}
-.nav button.active{border-bottom-color:#1565c0;background:#f0f4ff}
-.nav button.active .nl{color:#1565c0}
-.nav button:hover:not(.active){background:#f8faff;border-bottom-color:#dbeafe}
+.nav-bar{background:#fff;border-bottom:1.5px solid #e8eeff;padding:0;display:flex;align-items:stretch;position:sticky;top:44px;z-index:49}
+.nav-bar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:5px 4px;border:none;border-bottom:3px solid transparent;background:transparent;cursor:pointer;flex:1;font-family:inherit;transition:background .12s;position:relative;min-width:0}
+.nav-bar button .ni{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px}
+.nav-bar button .nl{font-size:8px;font-weight:600;color:#6b7394;text-transform:uppercase;letter-spacing:.03em;text-align:center;line-height:1.2;white-space:nowrap}
+.nav-bar button.active{border-bottom-color:#1565c0;background:#f0f4ff}
+.nav-bar button.active .nl{color:#1565c0}
+.nav-bar button:hover:not(.active){background:#f8faff;border-bottom-color:#dbeafe}
 .nbadge{position:absolute;top:3px;right:4px;font-size:7px;font-weight:700;padding:1px 3px;border-radius:5px;min-width:12px;text-align:center;line-height:1.4}
 .nbadge.r{background:#dc2626;color:#fff}
 .nbadge.am{background:#d97706;color:#fff}
@@ -173,7 +172,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- WHITE ICON NAV BAR -->
 <div class="nav-bar">
-  <div class="nav">
     <!-- Dashboard -->
     <button class="active" onclick="showP('dash',this)">
       <div class="ni" style="background:#dbeafe">
@@ -239,7 +237,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
       <span class="nl">System</span>
     </button>
-  </div>
 
   <!-- Date + Time box -->
   <div class="dt-box">
@@ -288,7 +285,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div id="suspicious-alert" style="display:none;background:#fee2e2;border:1px solid #fecaca;border-radius:7px;padding:6px 12px;margin-bottom:7px;align-items:center;gap:10px;">
     <span>🚨</span>
     <div style="flex:1;font-size:11px;font-weight:600;color:#dc2626" id="alert-detail"></div>
-    <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()" style="padding:3px 10px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">View →</button>
+    <button onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()" style="padding:3px 10px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">View →</button>
   </div>
 
   <!-- 4-column main grid -->
@@ -339,7 +336,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div class="cs" style="border:1.5px solid rgba(220,38,38,.2);background:#fff8f8;">
         <div class="cs-t" style="color:#dc2626;">🚨 Suspicious <span id="susp-count" class="pill red" style="font-size:8px;">0</span></div>
         <div id="suspicious-sidebar" style="max-height:200px;overflow-y:auto;"></div>
-        <button onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:4px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:10px;cursor:pointer;font-weight:700;margin-top:6px;font-family:inherit;">View All →</button>
+        <button onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:4px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:10px;cursor:pointer;font-weight:700;margin-top:6px;font-family:inherit;">View All →</button>
       </div>
     </div>
 
@@ -792,7 +789,7 @@ setInterval(_tickClock,1000);
 // ── Navigation ────────────────────────────────────────────
 function showP(id, btn) {
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
-  document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
   const panel = document.getElementById("panel-"+id);
   if(!panel) { console.error("Panel not found: panel-"+id); return; }
   panel.classList.add("active");
@@ -864,7 +861,7 @@ async function openVendoFromSearch(vendo, area) {
   document.getElementById("search-drop").style.display = "none";
   document.getElementById("global-search").value = "";
   // Switch to vendos panel
-  showP("vendos", document.querySelector(".nav button:nth-child(2)"));
+  showP("vendos", document.querySelector(".nav-bar button:nth-child(2)"));
   // Make sure vendos list is loaded first
   if (!allVendos.length) await loadVendos();
   // Short delay for DOM, then open detail
@@ -900,7 +897,7 @@ async function loadDashboard() {
       <div class="stat" style="border-bottom-color:#1565c0"><div class="sl">Total Transactions</div><div class="sv blue">${totalTx.toLocaleString()}</div></div>
       <div class="stat" style="border-bottom-color:#1565c0"><div class="sl">Total Sales</div><div class="sv blue">${fmt(totalSales)}</div></div>
       <div class="stat" style="border-bottom-color:#16a34a"><div class="sl">Today's Sales</div><div class="sv green">${fmt(todaySales)}</div></div>
-      <div class="stat" style="border-bottom-color:#dc2626;border-color:rgba(220,38,38,.15)" onclick="showP('suspicious',document.querySelector('.nav button:nth-child(4)'));loadSuspicious()"><div class="sl" style="color:#dc2626">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
+      <div class="stat" style="border-bottom-color:#dc2626;border-color:rgba(220,38,38,.15)" onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()"><div class="sl" style="color:#dc2626">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
     `;
 
     if(hackedCnt>0){
@@ -1092,7 +1089,7 @@ function renderVendos() {
 function vPage(d){vPage_n+=d;renderVendos();}
 
 function showAreaVendos(area) {
-  showP("vendos",document.querySelector(".nav button:nth-child(2)"));
+  showP("vendos",document.querySelector(".nav-bar button:nth-child(2)"));
   document.getElementById("v-area").value=area;
   filterVendos();
 }
@@ -1104,9 +1101,9 @@ async function openVendoDetail(vendo, area) {
   currentVendo=vendo; vtPage_n=1;
   // Make sure we're on vendos panel
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
-  document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));
+  document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
   document.getElementById("panel-vendos").classList.add("active");
-  document.querySelector(".nav button:nth-child(2)").classList.add("active");
+  document.querySelector(".nav-bar button:nth-child(2)").classList.add("active");
   document.getElementById("view-vlist").style.display="none";
   document.getElementById("view-vtxns").style.display="block";
   document.getElementById("vtxn-title").textContent=vendo;
