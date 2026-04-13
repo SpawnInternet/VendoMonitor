@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spawn Internetan — Vendo Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -611,14 +612,99 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         🗄 Supabase
       </a>
       <button class="btn" style="background:#7c3aed;color:white;border-color:#7c3aed" onclick="checkDataGaps()">🔍 Check Data Gaps</button>
-      <button class="btn" style="background:#16a34a;color:white;border-color:#16a34a" onclick="backupData()">⬇ Backup DB (CSV)</button>
+      <button class="btn" style="background:#16a34a;color:white;border-color:#16a34a" onclick="fullBackup()">📦 Full Backup + Drive</button>
     </div>
   </div>
 
   <!-- Data gap results -->
   <div id="gap-results" style="display:none;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
     <div style="font-size:12px;font-weight:700;color:#7c3aed;margin-bottom:8px;">🔍 Data Gap Check Results</div>
+
+  <!-- Full Backup Progress Card -->
+  <div id="backup-panel" style="display:none;background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:16px;margin-bottom:12px;">
+    <div style="font-size:13px;font-weight:700;color:#16a34a;margin-bottom:10px;">📦 Full System Backup</div>
+    <div id="backup-steps" style="font-size:12px;line-height:2;color:#1a1d2e;"></div>
+    <div style="margin-top:10px;">
+      <div style="background:#dcfce7;border-radius:5px;height:8px;overflow:hidden;">
+        <div id="backup-bar" style="background:#16a34a;height:8px;border-radius:5px;width:0%;transition:width .4s;"></div>
+      </div>
+      <div id="backup-pct" style="font-size:11px;color:#6b7394;margin-top:4px;text-align:right;">0%</div>
+    </div>
+  </div>
     <div id="gap-content" style="font-size:12px;"></div>
+  </div>
+
+  <!-- BACKUP CENTER -->
+  <div class="cs" style="margin-bottom:14px;border:2px solid rgba(22,163,74,.2);background:#f0fdf4;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#16a34a;">🛡️ Backup Center</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:2px;" id="last-backup-time">Last backup: never — back up now!</div>
+      </div>
+      <button onclick="runFullBackup()" id="full-backup-btn"
+        style="padding:8px 18px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
+        ⬇ Full Backup (All Files)
+      </button>
+    </div>
+
+    <!-- Backup progress -->
+    <div id="backup-progress" style="display:none;background:#fff;border:1px solid rgba(22,163,74,.2);border-radius:7px;padding:10px 14px;margin-bottom:10px;font-size:12px;">
+      <div style="font-weight:600;color:#16a34a;margin-bottom:6px;" id="backup-progress-msg">Starting backup...</div>
+      <div style="background:#f0fdf4;border-radius:4px;height:6px;overflow:hidden;">
+        <div id="backup-progress-bar" style="height:6px;background:#16a34a;border-radius:4px;width:0%;transition:width .3s;"></div>
+      </div>
+    </div>
+
+    <!-- Individual backup items -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+
+      <div style="background:#fff;border:1px solid rgba(22,163,74,.15);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">📊 Transactions CSV</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:8px;">All 334k+ transaction records from Supabase</div>
+        <button onclick="backupData()" id="backup-txn-btn"
+          style="width:100%;padding:6px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          ⬇ Download CSV
+        </button>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(21,101,192,.15);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">🌐 Dashboard HTML</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:8px;">dashboard.html — the monitor interface</div>
+        <button onclick="backupDashboard()"
+          style="width:100%;padding:6px;background:#1565c0;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          ⬇ Download HTML
+        </button>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(124,58,237,.15);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">📱 Harvester App</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:8px;">index.html — collector mobile app</div>
+        <a href="https://github.com/SpawnInternet/VendoMonitor/blob/main/index.html" target="_blank"
+          style="display:block;width:100%;padding:6px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-sizing:border-box;">
+          ⬇ Open on GitHub
+        </a>
+      </div>
+
+      <div style="background:#fff;border:1px solid rgba(217,119,6,.15);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">🐍 app.py (Railway)</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:8px;">Telethon listener — Railway cloud code</div>
+        <a href="https://github.com/SpawnInternet/VendoMonitor-Cloud/archive/refs/heads/main.zip" target="_blank"
+          style="display:block;width:100%;padding:6px;background:#d97706;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-sizing:border-box;">
+          ⬇ Download ZIP
+        </a>
+      </div>
+
+    </div>
+
+    <!-- Drive reminder -->
+    <div style="margin-top:10px;background:#fff;border:1px solid rgba(22,163,74,.15);border-radius:7px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:18px;flex-shrink:0;">☁️</span>
+      <div style="font-size:11px;color:var(--mu);flex:1;">After downloading — upload to <b style="color:#16a34a">Google Drive</b> → <b>VendoMonitor Backups</b> folder for safekeeping.</div>
+      <a href="https://drive.google.com" target="_blank"
+        style="padding:5px 10px;background:#16a34a;color:#fff;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;white-space:nowrap;flex-shrink:0;">
+        Open Drive →
+      </a>
+    </div>
   </div>
 
   <!-- Status Cards -->
@@ -631,7 +717,34 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="stat"><div class="sl">DB Storage</div><div class="sv pur" id="sys-storage">—</div></div>
   </div>
 
-  <!-- Telegram Session Health + Live Auth Panel -->
+  <!-- ⚠️ Storage Alert Banner — shown automatically based on usage -->
+  <div id="storage-alert" style="display:none;border:2px solid;border-radius:10px;padding:14px 18px;margin-bottom:14px;align-items:flex-start;gap:12px;">
+    <span id="storage-alert-icon" style="font-size:24px;flex-shrink:0;">🔵</span>
+    <div style="flex:1;">
+      <div id="storage-alert-msg" style="font-size:13px;line-height:1.6;"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        <button onclick="fullBackup()" style="padding:5px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📦 Backup Now</button>
+        <a href="https://supabase.com/dashboard/project/cviraqfhphhsonjmrtvu/database/backups/scheduled" target="_blank"
+          style="padding:5px 14px;background:#1565c0;color:#fff;border-radius:6px;font-size:11px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;">
+          ⬆ Upgrade Supabase
+        </a>
+        <button onclick="document.getElementById('archive-instructions').style.display=document.getElementById('archive-instructions').style.display==='none'?'block':'none'"
+          style="padding:5px 14px;background:#d97706;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          📂 How to Archive Old Data
+        </button>
+      </div>
+      <!-- Archive instructions dropdown -->
+      <div id="archive-instructions" style="display:none;margin-top:10px;background:#fff;border:1px solid #d97706;border-radius:7px;padding:12px;font-size:11px;color:#78350f;line-height:1.9;">
+        <div style="font-weight:700;margin-bottom:6px;">How to free up space — archive 2025 data:</div>
+        1. Click <b>📦 Backup Now</b> first — always backup before deleting<br>
+        2. Go to Supabase SQL Editor and run this to remove old skipped rows:<br>
+        <code style="background:#fef3c7;padding:3px 8px;border-radius:4px;display:block;margin:5px 0;font-size:11px;word-break:break-all;">DELETE FROM transactions WHERE date &lt; '2026-01-01' AND is_skipped = true;</code>
+        This removes ~30-40MB of duplicate/skipped rows from 2025.<br>
+        3. If you need more space, export 2025 active data to CSV first, then delete:<br>
+        <code style="background:#fef3c7;padding:3px 8px;border-radius:4px;display:block;margin:5px 0;font-size:11px;word-break:break-all;">DELETE FROM transactions WHERE date &lt; '2026-01-01';</code>
+      </div>
+    </div>
+  </div>
   <div class="cs" style="margin-bottom:14px;border:2px solid rgba(30,60,200,.15);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div>
@@ -2248,7 +2361,7 @@ async function loadSystemStatus() {
     warnings.push("❌ Error fetching today's stats: " + e.message);
   }
 
-  // 4. Storage - accurate live count
+  // 4. Storage - accurate live count + alert
   try {
     const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, {
       headers: {...HDR, "Prefer": "count=exact"},
@@ -2263,13 +2376,66 @@ async function loadSystemStatus() {
     const skRange = skippedR.headers.get("content-range") || "";
     const skTotal = parseInt(skRange.split("/")[1] || "0");
     const active = total - skTotal;
+
     // Estimate MB: 175MB baseline at 332,930 rows
-    const estMB = total > 0 ? Math.round((total / 332930) * 175) : "?";
+    const estMB  = total > 0 ? Math.round((total / 332930) * 175) : 0;
+    const limitMB = 500;
+    const usedPct = Math.round((estMB / limitMB) * 100);
+
+    // Color based on usage
+    const storColor = usedPct >= 90 ? "var(--red)" : usedPct >= 75 ? "var(--amber)" : "var(--ok)";
+    const barColor  = usedPct >= 90 ? "#dc2626"    : usedPct >= 75 ? "#d97706"    : "#16a34a";
+
     document.getElementById("sys-storage").innerHTML =
-      `<span style="font-size:14px">~${estMB}MB</span>
+      `<span style="font-size:14px;color:${storColor};font-weight:700">~${estMB}MB / 500MB</span>
+       <div style="background:#f0f4ff;border-radius:4px;height:6px;margin:4px 0;overflow:hidden;">
+         <div style="background:${barColor};height:6px;width:${Math.min(usedPct,100)}%;border-radius:4px;transition:width .5s;"></div>
+       </div>
+       <div style="font-size:10px;color:${storColor};font-weight:600">${usedPct}% used</div>
        <div style="font-size:10px;color:var(--mu)">${total.toLocaleString()} total rows</div>
        <div style="font-size:10px;color:var(--ok)">${active.toLocaleString()} active</div>
        <div style="font-size:10px;color:var(--amber)">${skTotal.toLocaleString()} skipped</div>`;
+
+    // Storage alert banner
+    const storAlert = document.getElementById("storage-alert");
+    if (storAlert) {
+      if (usedPct >= 90) {
+        storAlert.style.display = "flex";
+        storAlert.style.background = "#fee2e2";
+        storAlert.style.borderColor = "#dc2626";
+        document.getElementById("storage-alert-icon").textContent = "🔴";
+        document.getElementById("storage-alert-msg").innerHTML =
+          `<b>CRITICAL: Storage at ${usedPct}% (${estMB}MB / 500MB)!</b><br>
+           You will hit the Supabase free limit soon. Do a Full Backup NOW, then archive 2025 data.`;
+        document.getElementById("storage-alert-msg").style.color = "#dc2626";
+        warnings.push(`🔴 CRITICAL: Supabase storage at ${usedPct}% — ${estMB}MB of 500MB used!`);
+      } else if (usedPct >= 75) {
+        storAlert.style.display = "flex";
+        storAlert.style.background = "#fef3c7";
+        storAlert.style.borderColor = "#d97706";
+        document.getElementById("storage-alert-icon").textContent = "🟡";
+        document.getElementById("storage-alert-msg").innerHTML =
+          `<b>Warning: Storage at ${usedPct}% (${estMB}MB / 500MB)</b><br>
+           Getting full. Consider doing a backup and archiving old 2025 data soon.`;
+        document.getElementById("storage-alert-msg").style.color = "#92400e";
+        warnings.push(`⚠️ Storage at ${usedPct}% — ${estMB}MB of 500MB used`);
+      } else if (usedPct >= 60) {
+        storAlert.style.display = "flex";
+        storAlert.style.background = "#f0f9ff";
+        storAlert.style.borderColor = "#0284c7";
+        document.getElementById("storage-alert-icon").textContent = "🔵";
+        document.getElementById("storage-alert-msg").innerHTML =
+          `Storage at ${usedPct}% (${estMB}MB / 500MB) — healthy, keep monitoring.`;
+        document.getElementById("storage-alert-msg").style.color = "#0369a1";
+      } else {
+        storAlert.style.display = "none";
+      }
+      // Update topbar dot color if critical
+      if (usedPct >= 90) {
+        document.querySelector(".sdot").style.background = "#ef4444";
+        document.getElementById("top-status").textContent = "⚠️ Storage Full!";
+      }
+    }
   } catch(e) {}
 
   // 5. Show warnings
@@ -2288,15 +2454,14 @@ function closeHackedDetail() { closeSuspiciousDetail(); }
 // BACKUP — Export full transactions to CSV
 // ══════════════════════════════════════════════════════════
 async function backupData() {
-  const btn = event.target;
-  btn.textContent = "⏳ Preparing backup...";
-  btn.disabled = true;
+  const btn = document.getElementById('backup-txn-btn') || event?.target;
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = "⏳ Fetching..."; btn.disabled = true; }
 
   try {
-    // Fetch all non-skipped transactions in pages
     let all = [], offset = 0, page = 1000;
     while (true) {
-      btn.textContent = `⏳ Fetching rows ${all.length.toLocaleString()}...`;
+      if (btn) btn.textContent = `⏳ ${all.length.toLocaleString()} rows...`;
       const r = await fetch(
         `${SB_URL}/rest/v1/transactions?select=id,date,time,vendo,area,amount,ip,mac,voucher,total_time,extended,is_skipped,created_at&is_skipped=eq.false&order=date.desc,time.desc&limit=${page}&offset=${offset}`,
         { headers: HDR }
@@ -2308,8 +2473,7 @@ async function backupData() {
       offset += page;
     }
 
-    // Build CSV
-    btn.textContent = "⏳ Building CSV...";
+    if (btn) btn.textContent = "⏳ Building CSV...";
     const headers = ["id","date","time","vendo","area","amount","ip","mac","voucher","total_time","extended","is_skipped","created_at"];
     const csvRows = [headers.join(",")];
     all.forEach(r => {
@@ -2327,18 +2491,85 @@ async function backupData() {
     const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
     a.href = url;
     a.download = `spawn_transactions_backup_${dateStr}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    btn.textContent = `✅ Backup done! (${all.length.toLocaleString()} rows)`;
-    setTimeout(() => { btn.textContent = "⬇ Backup DB (CSV)"; btn.disabled = false; }, 4000);
+    const now = new Date().toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:true});
+    localStorage.setItem("last_backup", now);
+    const lbt = document.getElementById("last-backup-time");
+    if (lbt) lbt.textContent = `Last backup: ${now} — ${all.length.toLocaleString()} rows`;
+
+    if (btn) { btn.textContent = `✅ Done! (${all.length.toLocaleString()} rows)`; btn.style.background="#0d9488"; }
+    setTimeout(() => { if(btn){btn.textContent=origText||"⬇ Download CSV";btn.disabled=false;btn.style.background="";} }, 4000);
+    return all.length;
   } catch(e) {
-    btn.textContent = "❌ Backup failed";
-    btn.disabled = false;
+    if (btn) { btn.textContent = "❌ Failed"; btn.disabled = false; }
     alert("Backup error: " + e.message);
+    return 0;
   }
+}
+
+function backupDashboard() {
+  // Download the current page HTML
+  const html = document.documentElement.outerHTML;
+  const blob = new Blob([html], { type: "text/html;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  a.href = url;
+  a.download = `dashboard_backup_${dateStr}.html`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showAlert("✅ Dashboard HTML downloaded!", "ok");
+}
+
+async function runFullBackup() {
+  const btn = document.getElementById("full-backup-btn");
+  const prog = document.getElementById("backup-progress");
+  const progMsg = document.getElementById("backup-progress-msg");
+  const progBar = document.getElementById("backup-progress-bar");
+
+  btn.textContent = "⏳ Running..."; btn.disabled = true;
+  prog.style.display = "block";
+
+  // Step 1 — Transactions CSV
+  progMsg.textContent = "Step 1/3 — Downloading transactions CSV...";
+  progBar.style.width = "10%";
+  const rows = await backupData();
+  progBar.style.width = "60%";
+
+  // Step 2 — Dashboard HTML
+  await new Promise(r => setTimeout(r, 800));
+  progMsg.textContent = "Step 2/3 — Downloading dashboard HTML...";
+  progBar.style.width = "70%";
+  backupDashboard();
+
+  // Step 3 — Remind about GitHub ZIPs
+  await new Promise(r => setTimeout(r, 800));
+  progMsg.textContent = "Step 3/3 — Opening GitHub ZIP downloads...";
+  progBar.style.width = "90%";
+  await new Promise(r => setTimeout(r, 500));
+
+  // Open GitHub ZIP downloads in new tabs
+  window.open("https://github.com/SpawnInternet/VendoMonitor-Cloud/archive/refs/heads/main.zip", "_blank");
+
+  progBar.style.width = "100%";
+  const now = new Date().toLocaleString("en-PH",{timeZone:"Asia/Manila",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:true});
+  localStorage.setItem("last_backup", now);
+  progMsg.textContent = `✅ Full backup complete! ${rows.toLocaleString()} rows + HTML + code ZIP downloaded.`;
+  progMsg.style.color = "#16a34a";
+
+  const lbt = document.getElementById("last-backup-time");
+  if (lbt) lbt.textContent = `Last backup: ${now}`;
+
+  btn.textContent = "✅ Backup Complete!"; btn.style.background="#0d9488";
+  setTimeout(() => {
+    btn.textContent = "⬇ Full Backup (All Files)";
+    btn.disabled = false; btn.style.background = "";
+    prog.style.display = "none";
+    progMsg.style.color = "";
+    progBar.style.width = "0%";
+  }, 6000);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2442,11 +2673,150 @@ async function submitTgCode() {
 (function(){
   const saved = localStorage.getItem("railway_url");
   if (saved) { const el=document.getElementById("railway-url"); if(el)el.value=saved; }
+  // Restore last backup time
+  const lb = localStorage.getItem("last_backup");
+  const lbt = document.getElementById("last-backup-time");
+  if (lb && lbt) lbt.textContent = `Last backup: ${lb} — click to backup again`;
 })();
 
-// ── INIT ──────────────────────────────────────────────────
-testConnection().then(() => loadDashboard());
-checkWebhookHealth(); // no-op — Railway replaced webhook
+// ══════════════════════════════════════════════════════════
+// FULL BACKUP — ZIP with all data + code files
+// ══════════════════════════════════════════════════════════
+async function fullBackup() {
+  const panel = document.getElementById('backup-panel');
+  const stepsEl = document.getElementById('backup-steps');
+  const bar = document.getElementById('backup-bar');
+  const pct = document.getElementById('backup-pct');
+  panel.style.display = 'block';
+  panel.scrollIntoView({behavior:'smooth'});
+
+  const log = (msg, done=false) => {
+    const icon = done ? '✅' : '⏳';
+    stepsEl.innerHTML += `<div>${icon} ${msg}</div>`;
+  };
+  const setProgress = (p) => {
+    bar.style.width = p + '%';
+    pct.textContent = Math.round(p) + '%';
+  };
+
+  stepsEl.innerHTML = '';
+  setProgress(0);
+
+  try {
+    const zip = new JSZip();
+    const dateStr = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    const timeStr = new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',hour12:true});
+
+    // ── STEP 1: Transactions CSV ──────────────────────────
+    log('Fetching all transactions from Supabase...');
+    let txns = [], offset = 0;
+    while(true) {
+      const r = await fetch(
+        `${SB_URL}/rest/v1/transactions?select=id,date,time,vendo,area,amount,ip,mac,voucher,total_time,extended,is_skipped,reason,created_at&order=date.desc,time.desc&limit=1000&offset=${offset}`,
+        { headers: HDR }
+      );
+      const rows = await r.json();
+      if (!rows?.length) break;
+      txns.push(...rows);
+      setProgress(Math.min(35, (txns.length / 340000) * 35));
+      if (rows.length < 1000) break;
+      offset += 1000;
+    }
+    const txnHeaders = ['id','date','time','vendo','area','amount','ip','mac','voucher','total_time','extended','is_skipped','reason','created_at'];
+    const txnCsv = [txnHeaders.join(','), ...txns.map(r =>
+      txnHeaders.map(h => { const v=String(r[h]??'').replace(/"/g,'""'); return v.includes(',')||v.includes('"')?`"${v}"`:v; }).join(',')
+    )].join('\n');
+    zip.file(`data/transactions_${dateStr}.csv`, txnCsv);
+    log(`Transactions: ${txns.length.toLocaleString()} rows saved`, true);
+    setProgress(40);
+
+    // ── STEP 2: Vendo Summary CSV ─────────────────────────
+    log('Fetching vendo summary...');
+    const vsR = await fetch(`${SB_URL}/rest/v1/vendo_summary?select=vendo,area,sales,txn_count&order=sales.desc&limit=2000`, { headers: HDR });
+    const vs = await vsR.json();
+    if (vs?.length) {
+      const vsCsv = ['vendo,area,sales,txn_count', ...vs.map(r => `"${r.vendo}","${r.area}",${r.sales},${r.txn_count}`)].join('\n');
+      zip.file(`data/vendo_summary_${dateStr}.csv`, vsCsv);
+      log(`Vendo summary: ${vs.length} vendos saved`, true);
+    }
+    setProgress(55);
+
+    // ── STEP 3: Code files from GitHub ───────────────────
+    log('Fetching code files from GitHub...');
+    const ghBase = 'https://raw.githubusercontent.com/SpawnInternet';
+    const files = [
+      { url: `${ghBase}/VendoMonitor-Cloud/main/app.py`, name: 'code/app.py' },
+      { url: `${ghBase}/VendoMonitor/main/dashboard.html`, name: 'code/dashboard.html' },
+    ];
+    for (const f of files) {
+      try {
+        const r = await fetch(f.url);
+        if (r.ok) {
+          zip.file(f.name, await r.text());
+          log(`${f.name.split('/')[1]} saved`, true);
+        }
+      } catch(e) { log(`⚠️ Could not fetch ${f.name}`, false); }
+    }
+    setProgress(75);
+
+    // ── STEP 4: Backup info file ──────────────────────────
+    const info = [
+      `SPAWN INTERNETAN — VendoMonitor Backup`,
+      `=====================================`,
+      `Backup Date : ${timeStr}`,
+      `Transactions: ${txns.length.toLocaleString()} rows`,
+      `Vendos      : ${vs?.length || 0} active`,
+      `Supabase URL: ${SB_URL}`,
+      `Dashboard   : spawninternet.github.io/VendoMonitor/dashboard.html`,
+      `Railway     : worker-production-43ce.up.railway.app`,
+      ``,
+      `FILES IN THIS BACKUP:`,
+      `  data/transactions_${dateStr}.csv  — all transactions`,
+      `  data/vendo_summary_${dateStr}.csv — vendo totals`,
+      `  code/app.py                       — Railway Telethon listener`,
+      `  code/dashboard.html               — web dashboard`,
+      `  backup_info.txt                   — this file`,
+    ].join('\n');
+    zip.file('backup_info.txt', info);
+    setProgress(85);
+
+    // ── STEP 5: Generate ZIP ──────────────────────────────
+    log('Building ZIP file...');
+    const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}},
+      (meta) => setProgress(85 + meta.percent * 0.1)
+    );
+    setProgress(95);
+
+    // ── STEP 6: Download ──────────────────────────────────
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SpawnInternetan_Backup_${dateStr}.zip`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setProgress(100);
+    log(`ZIP downloaded: SpawnInternetan_Backup_${dateStr}.zip`, true);
+
+    // ── STEP 7: Open Google Drive ─────────────────────────
+    stepsEl.innerHTML += `
+      <div style="margin-top:12px;padding:10px;background:#e0f2fe;border:1px solid #0284c7;border-radius:7px;">
+        <div style="font-size:12px;font-weight:700;color:#0369a1;margin-bottom:6px;">📁 Upload to Google Drive</div>
+        <div style="font-size:11px;color:#0369a1;margin-bottom:8px;">Your ZIP is downloaded. Drag and drop it into Google Drive:</div>
+        <a href="https://drive.google.com/drive/my-drive" target="_blank"
+          style="display:inline-block;padding:7px 16px;background:#0369a1;color:#fff;border-radius:6px;font-size:12px;font-weight:700;text-decoration:none;">
+          📂 Open Google Drive →
+        </a>
+      </div>`;
+
+    // Save backup record
+    const now = new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+    localStorage.setItem('last_backup', `${now} — ${txns.length.toLocaleString()} rows`);
+
+  } catch(e) {
+    stepsEl.innerHTML += `<div style="color:#dc2626;">❌ Backup error: ${e.message}</div>`;
+    console.error('Backup error:', e);
+  }
+}
 </script>
 </body>
 </html>
