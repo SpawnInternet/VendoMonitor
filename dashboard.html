@@ -1907,27 +1907,6 @@ async function loadSkipped() {
   }
 }
 
-  // Group by vendo
-  skippedByVendo = {};
-  rows.forEach(r => {
-    const v = r.vendo || "Unknown";
-    if (!skippedByVendo[v]) skippedByVendo[v] = { vendo: v, rows: [], area: r.area || "" };
-    skippedByVendo[v].rows.push(r);
-  });
-
-  const vendoList = Object.values(skippedByVendo);
-  const total_amt = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
-
-  document.getElementById("skipped-stats").innerHTML=`
-    <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${vendoList.length.toLocaleString()}</div></div>
-    <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${rows.length.toLocaleString()}</div></div>
-    <div class="stat"><div class="sl">Total Amount</div><div class="sv amber">${fmt(total_amt)}</div></div>
-    <div class="stat"><div class="sl">Rule</div><div class="sv blue" style="font-size:11px">Same IP+MAC+Amount+Date+Voucher</div></div>
-    <div class="stat"><div class="sl">Mark Legitimate</div><div class="sv green" style="font-size:11px">→ Moves to transactions</div></div>
-  `;
-  filterSkipped();
-}
-
 function filterSkipped() {
   const q    = (document.getElementById("sk-search")?.value||"").toLowerCase();
   const area = document.getElementById("sk-area")?.value||"";
