@@ -1048,12 +1048,9 @@ function globalSearch(q) {
 async function openVendoFromSearch(vendo, area) {
   document.getElementById("search-drop").style.display = "none";
   document.getElementById("global-search").value = "";
-  // Switch to vendos panel
   showP("vendos", document.querySelector(".nav-bar button:nth-child(2)"));
-  // Make sure vendos list is loaded first
-  if (!allVendos.length) await loadVendos();
-  // Short delay for DOM, then open detail
-  setTimeout(() => openVendoDetail(vendo, area), 150);
+  await loadVendos();
+  await openVendoDetail(vendo, area);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1074,10 +1071,13 @@ async function loadDashboard() {
     suspMap   = {};
     hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
 
-    const totalTx    = areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
-    const totalSales = areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
-    const todaySales = areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0);
-    const totalVendos= areas.reduce((s,a)=>s+parseInt(a.vendo_count||0),0);
+    // Exclude MIX AREAS from totals to prevent double-counting
+    // MIX AREAS = transactions from outside named area GCs (already counted in their area)
+    const mainAreas  = areas.filter(a=>a.area !== 'MIX AREAS');
+    const totalTx    = mainAreas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
+    const totalSales = mainAreas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
+    const todaySales = areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0); // keep all for today
+    const totalVendos= new Set(vendos.map(v=>v.vendo)).size; // unique vendo count
     const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
 
     document.getElementById("dash-stats").innerHTML = `
@@ -1115,22 +1115,33 @@ async function loadDashboard() {
       options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>"₱"+(v/1000).toFixed(0)+"K"}}}}
     });
 
-    // Today by area — vertical list in right column
-    const todayByArea = areas.filter(a=>parseFloat(a.today_sales||0)>0).sort((a,b)=>parseFloat(b.today_sales||0)-parseFloat(a.today_sales||0));
+    // Today by area — show all areas with today_sales > 0, MIX AREAS at bottom labeled separately
+    const todayByArea = areas.filter(a=>parseFloat(a.today_sales||0)>0)
+      .sort((a,b)=>parseFloat(b.today_sales||0)-parseFloat(a.today_sales||0));
     document.getElementById("today-strip").innerHTML = todayByArea.length
       ? todayByArea.map(a=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--bd);font-size:12px;">
-          <span style="color:var(--mu);font-size:11px;">${a.area}</span>
-          <span style="font-weight:700;color:#1565c0;">${fmt(a.today_sales)}</span>
+          <span style="color:${a.area==='MIX AREAS'?'#d97706':'var(--mu)'};font-size:11px;">${a.area}${a.area==='MIX AREAS'?' 📡':''}</span>
+          <span style="font-weight:700;color:${a.area==='MIX AREAS'?'#d97706':'#1565c0'};">${fmt(a.today_sales)}</span>
         </div>`).join("")
       : '<div style="font-size:11px;color:var(--mu);padding:4px 0;">No sales yet today</div>';
-    document.getElementById("area-grid").innerHTML = areas.map(a=>`
+    // Area grid — exclude MIX AREAS from main grid, show it separately
+    const mainAreaList = areas.filter(a=>a.area!=='MIX AREAS');
+    const mixArea = areas.find(a=>a.area==='MIX AREAS');
+    document.getElementById("area-grid").innerHTML = mainAreaList.map(a=>`
       <div onclick="showAreaVendos('${a.area}')" style="background:#f8faff;border:1px solid rgba(30,60,200,.09);border-top:2px solid #1565c0;border-radius:6px;padding:6px 8px;cursor:pointer;transition:box-shadow .12s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(30,60,200,.12)'" onmouseout="this.style.boxShadow=''">
         <div style="font-size:8px;color:#6b7394;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">${a.area}</div>
         <div style="font-size:13px;font-weight:700;color:#1565c0">${fmt(a.total_sales)}</div>
         <div style="font-size:8px;color:#6b7394;margin-top:1px">${parseInt(a.txn_count).toLocaleString()} txns</div>
         <div style="font-size:9px;color:#16a34a;margin-top:1px">↑ ${fmt(a.today_sales)}</div>
-      </div>`).join("");
+      </div>`).join("")
+    + (mixArea ? `
+      <div onclick="showAreaVendos('MIX AREAS')" style="background:#fff8f0;border:1px solid rgba(217,119,6,.2);border-top:2px solid #d97706;border-radius:6px;padding:6px 8px;cursor:pointer;transition:box-shadow .12s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(217,119,6,.12)'" onmouseout="this.style.boxShadow=''">
+        <div style="font-size:8px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px">📡 MIX AREAS <span style="font-size:7px;opacity:.7">(outside GC)</span></div>
+        <div style="font-size:13px;font-weight:700;color:#d97706">${fmt(mixArea.total_sales)}</div>
+        <div style="font-size:8px;color:#92400e;margin-top:1px">${parseInt(mixArea.txn_count).toLocaleString()} txns</div>
+        <div style="font-size:9px;color:#16a34a;margin-top:1px">↑ ${fmt(mixArea.today_sales)}</div>
+      </div>` : '');
 
     // Top 20 strongest + weakest
     const top20h = allVendos.slice(0,20);
@@ -1311,14 +1322,13 @@ async function loadVendoTxns() {
   const from=document.getElementById("vtxn-from").value;
   const to=document.getElementById("vtxn-to").value;
   vtPage_n=1;
-  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading all transactions...</td></tr>';
-  // No date filter by default — fetch ALL for this vendo
-  let params=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.desc,time.desc`;
+  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading transactions...</td></tr>';
+  let params=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped,area&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.desc,time.desc`;
   if(from) params+=`&date=gte.${from}`;
   if(to)   params+=`&date=lte.${to}`;
   try {
     vtxnAll = await sbAll("transactions", params);
-    const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")).length;
+    const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
     document.getElementById("sus-tab-btn").textContent=`⚠️ Suspicious (${hacked})`;
     filterVTxns();
   } catch(e) {
@@ -1377,14 +1387,19 @@ function clearVFilter(){
 }
 
 async function loadVendoMonthly(vendo) {
-  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2025-01-01&is_skipped=eq.false`);
+  // Full history — gray=2024, blue=2025, green=2026
+  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`);
   const mmap={};
   rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
-  const labels=Object.keys(mmap).sort(),data=labels.map(m=>mmap[m]);
+  const labels=Object.keys(mmap).sort(), data=labels.map(m=>mmap[m]);
+  const colors=labels.map(l=>l.startsWith('2026')?'#16a34a':l.startsWith('2025')?'#1565c0':'#94a3b8');
   if(vendoChart) vendoChart.destroy();
   vendoChart=new Chart(document.getElementById("vendo-chart"),{
-    type:"bar",data:{labels,datasets:[{label:"Sales",data,backgroundColor:"#1565c0",borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
+    type:"bar",
+    data:{labels,datasets:[{label:"Monthly Sales",data,backgroundColor:colors,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>"₱"+c.raw.toLocaleString()}}},
+      scales:{y:{ticks:{callback:v=>"₱"+v.toLocaleString()}}}}
   });
 }
 
@@ -1706,7 +1721,7 @@ async function loadVendoAnalytics(vendo, area) {
   document.getElementById("analytics-vendo-chart-wrap").style.display="block";
   document.getElementById("analytics-vendo-name").textContent=`${vendo} — ${area}`;
 
-  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&date=gte.2026-01-01&date=lte.2026-12-31`);
+  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`);
   const mmap={};
   rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
   const labels=Object.keys(mmap).sort(),data=labels.map(m=>mmap[m]);
@@ -1715,7 +1730,7 @@ async function loadVendoAnalytics(vendo, area) {
   const max=data.length?Math.max(...data):0;
 
   document.getElementById("analytics-vendo-stats").innerHTML=`
-    <div class="stat"><div class="sl">Total Sales 2026</div><div class="sv blue">${fmt(total)}</div></div>
+    <div class="stat"><div class="sl">All-Time Sales</div><div class="sv blue">${fmt(total)}</div></div>
     <div class="stat"><div class="sl">Total Txns</div><div class="sv pur">${rows.length.toLocaleString()}</div></div>
     <div class="stat"><div class="sl">Avg/Month</div><div class="sv amber">${fmt(Math.round(avg))}</div></div>
     <div class="stat"><div class="sl">Best Month</div><div class="sv green">${fmt(max)}</div></div>
@@ -1743,6 +1758,9 @@ function clearAnalyticsVendo() {
 // Refresh recent transactions every 10 seconds
 setInterval(()=>{ if(document.getElementById("panel-dash").classList.contains("active")) refreshRecentTxns(); }, 10000);
 refreshRecentTxns();
+
+// ── Auto-load dashboard on first open ────────────────────
+window.addEventListener('load', () => { setTimeout(() => loadDashboard(), 500); });
 
 // Full dashboard refresh every 5 min
 setInterval(()=>{
