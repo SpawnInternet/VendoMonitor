@@ -1876,36 +1876,39 @@ async function loadSkipped() {
       <div class="stat"><div class="sl">Status</div><div class="sv blue" style="font-size:12px;">⏳ Loading summary...</div></div>`;
   } catch(e) {}
 
-  // Step 2: Load grouped summary ONLY (vendo + count + total amount) — NOT individual rows
-  // This is fast because we only get one row per vendo
+  // Step 2: Use skipped_by_vendo view — one row per vendo, fast
   try {
     const r = await fetch(
-      `${SB_URL}/rest/v1/transactions?select=vendo,area,amount&is_skipped=eq.true&limit=50000`,
+      `${SB_URL}/rest/v1/skipped_by_vendo?select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc&limit=1000`,
       { headers: HDR, signal: AbortSignal.timeout(30000) }
     );
-    const rows = r.ok ? await r.json() : [];
-    skippedAll = rows;
+    const vendoRows = r.ok ? await r.json() : [];
 
-    // Group by vendo in JS
+    // Build skippedByVendo from summary view
     skippedByVendo = {};
-    rows.forEach(r => {
-      const v = r.vendo || "Unknown";
-      if (!skippedByVendo[v]) skippedByVendo[v] = { vendo: v, rows: [], area: r.area || "" };
-      skippedByVendo[v].rows.push(r);
+    vendoRows.forEach(v => {
+      skippedByVendo[v.vendo] = {
+        vendo: v.vendo,
+        area: v.area || "",
+        rows: Array(parseInt(v.skipped_count||0)).fill({amount:0}), // placeholder for count
+        total: parseFloat(v.total_amount||0),
+        last_date: v.last_date || "—",
+        skipped_count: parseInt(v.skipped_count||0)
+      };
     });
 
-    const vendoList = Object.values(skippedByVendo);
-    const total_amt = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+    const total_amt = vendoRows.reduce((s,v)=>s+parseFloat(v.total_amount||0),0);
+    const total_cnt = vendoRows.reduce((s,v)=>s+parseInt(v.skipped_count||0),0);
 
     document.getElementById("skipped-stats").innerHTML=`
-      <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${vendoList.length.toLocaleString()}</div></div>
-      <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${rows.length.toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${vendoRows.length.toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${total_cnt.toLocaleString()}</div></div>
       <div class="stat"><div class="sl">Total Amount</div><div class="sv amber">${fmt(total_amt)}</div></div>
-      <div class="stat"><div class="sl">⚠️ Action</div><div class="sv blue" style="font-size:10px">Stop old Railway first!</div></div>
+      <div class="stat"><div class="sl">Status</div><div class="sv blue" style="font-size:10px">✅ Dedup active</div></div>
     `;
     filterSkipped();
   } catch(e) {
-    document.getElementById("skipped-todo").innerHTML=`<div style="padding:20px;text-align:center;color:#dc2626">⚠️ Dataset too large to load (${e.message}). <br>Stop the old Railway instance first to stop new duplicates.</div>`;
+    document.getElementById("skipped-todo").innerHTML=`<div style="padding:20px;text-align:center;color:#dc2626">⚠️ Error loading skipped data: ${e.message}</div>`;
   }
 }
 
@@ -1921,17 +1924,18 @@ function filterSkipped() {
 
 function renderSkippedTodo(vendoList) {
   document.getElementById("skipped-todo").innerHTML = vendoList.map(v => {
-    const done   = JSON.parse(localStorage.getItem("skipped_done_"+v.vendo)||"false");
-    const note   = localStorage.getItem("skipped_note_"+v.vendo)||"";
-    const total  = v.rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
-    const lastDate = v.rows[0]?.date || "—";
+    const done     = JSON.parse(localStorage.getItem("skipped_done_"+v.vendo)||"false");
+    const note     = localStorage.getItem("skipped_note_"+v.vendo)||"";
+    const total    = v.total || v.rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
+    const count    = v.skipped_count || v.rows.length;
+    const lastDate = v.last_date || v.rows[0]?.date || "—";
     return `<div class="todo-item${done?" done":""}" id="sk-${btoa(encodeURIComponent(v.vendo)).replace(/=/g,"")}">
       <input type="checkbox" ${done?"checked":""} onchange="toggleSkippedVendo('${esc(v.vendo)}',this.checked)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
       <div style="flex:1;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="todo-text${done?" done":""}" style="font-weight:600;color:#d97706;cursor:pointer" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">${v.vendo}</span>
           <span class="pill info">${v.area||"—"}</span>
-          <span class="pill" style="background:#fef3c7;color:#92400e">⏭ ${v.rows.length} skipped txns</span>
+          <span class="pill" style="background:#fef3c7;color:#92400e">⏭ ${count.toLocaleString()} skipped txns</span>
           <span style="font-weight:700;color:#d97706">${fmt(total)}</span>
           <span style="font-size:11px;color:var(--mu)">Last: ${lastDate}</span>
         </div>
