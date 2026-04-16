@@ -1364,7 +1364,7 @@ async function loadVendoTxns() {
   if(to)   params+=`&date=lte.${to}`;
   try {
     vtxnAll = await sbAll("transactions", params);
-    const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
+    const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")&&r.extended==='1').length;
     document.getElementById("sus-tab-btn").textContent=`⚠️ Suspicious (${hacked})`;
     filterVTxns();
   } catch(e) {
@@ -1376,8 +1376,8 @@ function filterVTxns() {
   const q=(document.getElementById("vtxn-q")?.value||"").toLowerCase();
   let filtered=vtxnAll;
   if(q) filtered=filtered.filter(r=>(r.ip||"").includes(q)||(r.mac||"").toLowerCase().includes(q)||(r.voucher||"").toLowerCase().includes(q)||String(r.amount||"").includes(q));
-  const total=filtered.reduce((s,r)=>s+parseFloat(r.amount||0),0);
-  const hacked=filtered.filter(r=>(r.total_time||"").includes("w")&&(r.extended||"0")==="0").length;
+  const total=filtered.filter(r=>!(r.total_time?.includes('w')&&r.extended==='1')).reduce((s,r)=>s+parseFloat(r.amount||0),0);
+  const hacked=filtered.filter(r=>(r.total_time||"").includes("w")&&r.extended==='1').length;
   const avg=filtered.length?total/filtered.length:0;
   const max=filtered.length?Math.max(...filtered.map(r=>parseFloat(r.amount||0))):0;
   const isF=q||document.getElementById("vtxn-from").value||document.getElementById("vtxn-to").value;
@@ -1400,7 +1400,7 @@ function renderVTxns(rows) {
   document.getElementById("vtp-p").disabled=vtPage_n===1;
   document.getElementById("vtp-n").disabled=start+PG>=total;
   document.getElementById("vtxn-tbody").innerHTML=page.map((t,i)=>{
-    const isHack=(t.total_time||"").includes("w")&&(t.extended||"0")==="0";
+    const isHack=(t.total_time||"").includes("w")&&t.extended==='1';
     return `<tr class="${isHack?"txn-row-hack":""}">
       <td style="color:var(--mu)">${start+i+1}</td>
       <td>${t.date||""}</td><td style="color:var(--mu)">${t.time||""}</td>
