@@ -218,7 +218,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     </button>
     <!-- Skipped -->
     <button onclick="showP('skipped',this)">
-      <span class="nbadge am">67k</span>
+      <span class="nbadge am" id="nav-skipped-badge"></span>
       <div class="ni" style="background:#fef3c7">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#d97706" stroke-width="2" fill="none"/><path d="M8 12 L16 12 M13 9 L16 12 L13 15" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="8" y1="8" x2="8" y2="16" stroke="#d97706" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
@@ -1108,9 +1108,8 @@ async function loadDashboard() {
 
     // Exclude MIX AREAS from totals to prevent double-counting
     // MIX AREAS = transactions from outside named area GCs (already counted in their area)
-    const mainAreas  = areas.filter(a=>a.area !== 'MIX AREAS');
-    const totalTx    = mainAreas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
-    const totalSales = mainAreas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
+    const totalTx    = areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
+    const totalSales = areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
     const todaySales = areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0); // keep all for today
     const totalVendos= new Set(vendos.map(v=>v.vendo)).size; // unique vendo count
     const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
@@ -1424,9 +1423,10 @@ function clearVFilter(){
 
 async function loadVendoMonthly(vendo) {
   // Full history — gray=2024, blue=2025, green=2026
-  const rows=await sbAll("transactions",`select=date,amount&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`);
+  const rows=await sbAll("transactions",`select=date,amount,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`);
+  const cleanRows=rows.filter(r=>!(r.total_time?.includes('w')&&r.extended==='1'));
   const mmap={};
-  rows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
+  cleanRows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
   const rawLabels=Object.keys(mmap).sort();
   const displayLabels=rawLabels.map(k=>{try{return new Date(k+"-01").toLocaleDateString("en-PH",{month:"short",year:"2-digit"});}catch{return k;}});
   const data=rawLabels.map(m=>mmap[m]);
@@ -1871,6 +1871,8 @@ async function loadSkipped() {
     });
     const range = cr.headers.get("content-range") || "";
     const cnt = parseInt(range.split("/")[1] || "0");
+    const nb = document.getElementById("nav-skipped-badge");
+    if(nb) nb.textContent = cnt > 999 ? Math.round(cnt/1000)+'k' : cnt;
     document.getElementById("skipped-stats").innerHTML=`
       <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${cnt.toLocaleString()}</div></div>
       <div class="stat"><div class="sl">Status</div><div class="sv blue" style="font-size:12px;">⏳ Loading summary...</div></div>`;
