@@ -720,8 +720,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <button class="hff med" onclick="hvFilt('medium',this)">🟣 Medium (57)</button>
   <button class="hff low" onclick="hvFilt('low',this)">🟢 Low (194)</button>
   <span class="hff-sep"></span>
-  <button class="hff" style="border-color:#fcd34d;color:#d97706;" onclick="hvFilt('unmatched',this)">⚠ Unmatched (193)</button>
-  <button class="hff" style="border-color:#c4b5fd;color:#7c3aed;" onclick="hvFilt('new',this)">🆕 New (2)</button>
+  <button class="hff" style="border-color:#fcd34d;color:#d97706;" onclick="hvFilt('unmatched',this)">⚠ Unmatched (1,615)</button>
+  <button class="hff" style="border-color:#c4b5fd;color:#7c3aed;" onclick="hvFilt('new',this)">🆕 New (1,008)</button>
   <input class="hv-search" id="hv-search-inp" placeholder="🔍 Search name..." oninput="hvSearch(this.value)">
   <span style="font-size:10px;color:var(--mu);margin-left:6px;" id="hv-sel-count">Loading...</span>
 </div>
@@ -1458,15 +1458,17 @@ const matched = !!(v.tg_name && v.sheet_name);
           tgCell = `<div><div class="hv-vtname" title="${v.tg_name}">${tgDisplay}</div><div class="hv-vtlbl">telegram <span class="new-badge">new</span></div></div>`;
           addBtn = `<button class="hv-ab reg" onclick="event.stopPropagation();hvOpenRegister('${tg}','${v.area||''}','${v.vlan||''}')">Register</button>`;
         } else {
+          const snTrunc = v.sheet_name && v.sheet_name.length>24 ? v.sheet_name.substring(0,24)+'…' : v.sheet_name;
           sheetCell = v.sheet_name
-            ? `<div><div class="hv-vsname">${v.sheet_name}</div><div class="hv-vslbl">sheet</div></div>`
+            ? `<div><div class="hv-vsname" title="${v.sheet_name}">${snTrunc}</div><div class="hv-vslbl">sheet</div></div>`
             : `<div><div class="hv-vtmatch">Sheet not found</div><button class="hv-vmatch-btn" onclick="hvOpenMatch('${tg}','sheet',event)">💡 suggest match</button></div>`;
           const badge = matched ? '<span class="matched-badge">✓ matched</span>' : '<span class="unmatched-badge">unmatched</span>';
+          const tgTrunc = v.tg_name && v.tg_name.length>22 ? v.tg_name.substring(0,22)+'…' : v.tg_name;
           tgCell = v.tg_name
-            ? `<div><div class="hv-vtname">${v.tg_name}</div><div class="hv-vtlbl">telegram ${badge}</div></div>`
+            ? `<div><div class="hv-vtname" title="${v.tg_name}">${tgTrunc}</div><div class="hv-vtlbl">telegram ${badge}</div></div>`
             : `<div><div class="hv-vtmatch">TG not found</div><button class="hv-vmatch-btn" onclick="hvOpenMatch('${sn}','tg',event)">💡 suggest match</button></div>`;
-          const qrBtn = tg ? `<button style="padding:2px 5px;border-radius:4px;border:1px solid var(--bd);background:#fff;cursor:pointer;font-size:10px;margin-right:3px;" onclick="event.stopPropagation();hvQuickQR('${tg}','${sn}')" title="Generate QR">📱</button>` : '';
-          addBtn = qrBtn + `<button class="hv-ab" onclick="event.stopPropagation();hvToggleAdd(this,'${display}')" data-sheet="${sn}" data-tg="${tg}">+ add</button>`;
+          const qrBtn = tg ? `<button style="padding:2px 4px;border-radius:4px;border:1px solid var(--bd);background:#fff;cursor:pointer;font-size:11px;line-height:1;" onclick="event.stopPropagation();hvQuickQR('${tg}','${sn}')" title="QR">📱</button>` : '';
+          addBtn = `<div style="display:flex;gap:3px;align-items:center;">${qrBtn}<button class="hv-ab" onclick="event.stopPropagation();hvToggleAdd(this,'${display}')" data-sheet="${sn}" data-tg="${tg}">+ add</button></div>`;
         }
 
         const div = document.createElement('div');
