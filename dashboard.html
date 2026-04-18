@@ -1534,19 +1534,20 @@ async function hvLoadVendos() {
     const headers={'apikey':KEY,'Authorization':'Bearer '+KEY};
     const base=`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc`;
     let allData=[];
+    scroll.innerHTML='';
+    const seen=new Set();
     for(const offset of [0,500,1000,1500,2000]){
       const r=await fetch(`${base}&limit=500&offset=${offset}`,{headers});
       if(!r.ok)break;
       const page=await r.json();
       if(!page||!page.length)break;
-      allData=allData.concat(page);
+      page.forEach(v=>{
+        if(!seen.has(v.id)){seen.add(v.id);allData.push(v);buildVendoRow(v,scroll);}
+      });
+      hvApplyFilter();
       if(page.length<500)break;
     }
     if(!allData.length)throw new Error('No data returned');
-    const seen=new Set();
-    allData=allData.filter(v=>{if(seen.has(v.id))return false;seen.add(v.id);return true;});
-    scroll.innerHTML='';
-    allData.forEach(v=>buildVendoRow(v,scroll));
     const ac={};
     allData.forEach(v=>{const a=(v.area||'MIX AREAS').toUpperCase();ac[a]=(ac[a]||0)+1;});
     const atcMap={'DAPITAN':'atc-dapitan','DIPOLOG':'atc-dipolog','SINDANGAN':'atc-sindangan','ROXAS':'atc-roxas','POLANCO':'atc-polanco','SINAMAN':'atc-sinaman','MINAOG':'atc-minaog','MIX AREAS':'atc-mix'};
