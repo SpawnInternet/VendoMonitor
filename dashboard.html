@@ -437,7 +437,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <style>
 /* ══ HARVEST PANEL — CLEAN REDESIGN ══ */
 #panel-harvest.active{display:block!important;}
-#panel-harvest .page{height:calc(100vh - 232px);min-height:420px;}
+#panel-harvest .page{height:calc(100vh - 220px);min-height:420px;}
 
 /* ── HARVEST HEADER BAR ── */
 .hv-head{background:#fff;border-bottom:1px solid var(--bd);padding:6px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;}
@@ -613,8 +613,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 /* ── SCHEDULE + RECORDS TABS ── */
 .hv-tab{display:none;}
-#hv-tab-schedule{padding:16px;overflow-y:auto;max-height:calc(100vh - 232px);}
-#hv-tab-records{padding:12px;overflow-y:auto;max-height:calc(100vh - 232px);}
+#hv-tab-schedule{padding:16px;overflow-y:auto;max-height:calc(100vh - 220px);}
+#hv-tab-records{padding:12px;overflow-y:auto;max-height:calc(100vh - 220px);}
 .section{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:14px;}
 .section-title{font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
 .stag{font-size:10px;padding:2px 8px;border-radius:10px;background:#dbeafe;color:#1565c0;font-weight:500;text-transform:none;letter-spacing:0;}
@@ -659,6 +659,16 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .rec-table th{padding:7px 10px;text-align:left;font-size:9px;font-weight:700;color:#1565c0;background:var(--bg);border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;}
 .rec-table td{padding:6px 10px;border-bottom:1px solid rgba(30,60,200,.06);}
 .rec-table tr:hover td{background:#f8f9ff;}
+
+/* ── AREA TABS ── */
+.area-tabs{background:#fff;border-bottom:2px solid var(--bd);padding:0 10px;display:flex;align-items:stretch;gap:0;flex-shrink:0;overflow-x:auto;}
+.area-tab{padding:6px 14px;border:none;border-bottom:3px solid transparent;background:transparent;font-size:11px;font-weight:600;color:var(--mu);cursor:pointer;font-family:inherit;white-space:nowrap;margin-bottom:-2px;transition:all .12s;}
+.area-tab:hover{color:#1565c0;background:var(--bg);}
+.area-tab.on{border-bottom-color:#1565c0;color:#1565c0;background:#f0f4ff;}
+.area-tab .atc{font-size:9px;background:#e8eeff;color:#1565c0;padding:1px 5px;border-radius:8px;margin-left:4px;font-weight:700;}
+.area-tab.on .atc{background:#1565c0;color:#fff;}
+.area-tab.crit-tab .atc{background:#fee2e2;color:#dc2626;}
+.area-tab.on.crit-tab .atc{background:#dc2626;color:#fff;}
 </style>
 
 <div class="hv-head">
@@ -693,6 +703,17 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <span style="margin-left:auto;font-size:10px;color:var(--mu);" id="hv-sel-count">0 selected</span>
 </div>
 
+<div class="area-tabs" id="hv-area-tabs">
+  <button class="area-tab on" onclick="hvArea('all',this)">All areas <span class="atc">338</span></button>
+  <button class="area-tab" onclick="hvArea('DAPITAN',this)">Dapitan <span class="atc">106</span></button>
+  <button class="area-tab" onclick="hvArea('DIPOLOG',this)">Dipolog <span class="atc">89</span></button>
+  <button class="area-tab" onclick="hvArea('SINDANGAN',this)">Sindangan <span class="atc">72</span></button>
+  <button class="area-tab" onclick="hvArea('ROXAS',this)">Roxas <span class="atc">34</span></button>
+  <button class="area-tab" onclick="hvArea('POLANCO',this)">Polanco <span class="atc">18</span></button>
+  <button class="area-tab" onclick="hvArea('SINAMAN',this)">Sinaman <span class="atc">12</span></button>
+  <button class="area-tab" onclick="hvArea('MINAOG',this)">Minaog <span class="atc">7</span></button>
+  <button class="area-tab crit-tab" onclick="hvArea('critical',this)">🔴 Critical only <span class="atc">24</span></button>
+</div>
 <div class="page">
 
   <!-- COL 1: ROUTE -->
@@ -785,7 +806,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="vc-scroll">
 
       <!-- MATCHED — both names known, both sources have data -->
-      <div class="vr sel">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false" sel">
         <input type="checkbox" class="vcb" checked>
         <div class="vdot-g" title="Matched"></div>
         <div class="vsheet">
@@ -804,7 +825,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- MATCHED -->
-      <div class="vr sel">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false" sel">
         <input type="checkbox" class="vcb" checked>
         <div class="vdot-g" title="Matched"></div>
         <div class="vsheet"><div class="vsname">Rayl</div><div class="vslbl">sheet</div></div>
@@ -817,7 +838,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- SHEET ONLY — no TG match yet -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a" title="Sheet only — TG untraced"></div>
         <div class="vsheet"><div class="vsname">Polo Net</div><div class="vslbl">sheet</div></div>
@@ -833,7 +854,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- MATCHED -->
-      <div class="vr sel">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false" sel">
         <input type="checkbox" class="vcb" checked>
         <div class="vdot-g" title="Matched"></div>
         <div class="vsheet"><div class="vsname">Inday Zamora</div><div class="vslbl">sheet</div></div>
@@ -846,7 +867,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- TG ONLY — no sheet match yet -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a" title="TG only — sheet unmatched"></div>
         <div class="vsheet">
@@ -862,7 +883,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- TG ONLY — island with gap alert -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a" title="TG only — gap detected"></div>
         <div class="vsheet">
@@ -878,7 +899,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- MATCHED -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-g" title="Matched"></div>
         <div class="vsheet"><div class="vsname">Joan Sy / JSB</div><div class="vslbl">sheet</div></div>
@@ -891,7 +912,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- TG ONLY -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a"></div>
         <div class="vsheet">
@@ -907,7 +928,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- SHEET ONLY -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a"></div>
         <div class="vsheet"><div class="vsname">COGON</div><div class="vslbl">sheet</div></div>
@@ -923,7 +944,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- MATCHED -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-g"></div>
         <div class="vsheet"><div class="vsname">Dumajel</div><div class="vslbl">sheet</div></div>
@@ -936,7 +957,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
 
       <!-- SHEET ONLY -->
-      <div class="vr">
+      <div class="vr" data-area="OTHER" data-days="0" data-matched="false"">
         <input type="checkbox" class="vcb">
         <div class="vdot-a"></div>
         <div class="vsheet"><div class="vsname">BANDERA</div><div class="vslbl">sheet</div></div>
@@ -1248,6 +1269,83 @@ function hvNewRoute() {
 function hvFilt(f, btn) {
   document.querySelectorAll('.hff').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
+}
+
+/* ── AREA FILTER ── */
+let hvCurrentArea = 'all';
+let hvCurrentFilter = 'all';
+
+function hvArea(area, btn) {
+  hvCurrentArea = area;
+  document.querySelectorAll('.area-tab').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  applyVendoFilter();
+}
+
+function hvFilt(f, btn) {
+  hvCurrentFilter = f;
+  document.querySelectorAll('.hff').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  applyVendoFilter();
+}
+
+function applyVendoFilter() {
+  const rows = document.querySelectorAll('#panel-harvest .vc-scroll .vr');
+  let visible = 0;
+  rows.forEach(row => {
+    const area = (row.dataset.area || '').toUpperCase();
+    const days = parseInt(row.dataset.days || 0);
+    const isUnmatched = row.dataset.matched === 'false';
+
+    let showArea = true;
+    if (hvCurrentArea === 'critical') showArea = days >= 90;
+    else if (hvCurrentArea !== 'all') showArea = area === hvCurrentArea.toUpperCase();
+
+    let showFilter = true;
+    if (hvCurrentFilter === 'critical') showFilter = days >= 90;
+    else if (hvCurrentFilter === 'high') showFilter = days >= 61 && days < 90;
+    else if (hvCurrentFilter === 'medium') showFilter = days >= 31 && days < 61;
+    else if (hvCurrentFilter === 'low') showFilter = days > 0 && days < 31;
+    else if (hvCurrentFilter === 'unmatched') showFilter = isUnmatched;
+
+    const show = showArea && showFilter;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const cnt = document.getElementById('hv-sel-count');
+  if (cnt) cnt.textContent = visible + ' vendos shown';
+}
+
+/* ── FIX hvShowTab to handle area tabs ── */
+function hvShowTab(tab, btn) {
+  hvActiveTab = tab;
+  document.querySelectorAll('#panel-harvest .hvtab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  const page = document.querySelector('#panel-harvest .page');
+  const areaTabsEl = document.getElementById('hv-area-tabs');
+  const filtersEl = document.querySelector('#panel-harvest .hv-filters');
+  const schedTab = document.getElementById('hv-tab-schedule');
+  const recTab = document.getElementById('hv-tab-records');
+  if (tab === 'route') {
+    if (page) page.style.display = 'grid';
+    if (areaTabsEl) areaTabsEl.style.display = 'flex';
+    if (filtersEl) filtersEl.style.display = 'flex';
+    if (schedTab) schedTab.style.display = 'none';
+    if (recTab) recTab.style.display = 'none';
+  } else if (tab === 'schedule') {
+    if (page) page.style.display = 'none';
+    if (areaTabsEl) areaTabsEl.style.display = 'none';
+    if (filtersEl) filtersEl.style.display = 'none';
+    if (schedTab) schedTab.style.display = 'block';
+    if (recTab) recTab.style.display = 'none';
+  } else if (tab === 'records') {
+    if (page) page.style.display = 'none';
+    if (areaTabsEl) areaTabsEl.style.display = 'none';
+    if (filtersEl) filtersEl.style.display = 'none';
+    if (schedTab) schedTab.style.display = 'none';
+    if (recTab) recTab.style.display = 'block';
+    loadRecords();
+  }
 }
 </script>
 
