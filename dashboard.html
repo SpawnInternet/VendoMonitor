@@ -434,33 +434,553 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- ══ HARVEST ══ -->
 <div id="panel-harvest" class="panel">
-  <div class="tb">
-    <input type="text" id="h-search" placeholder="🔍 Search vendo..." oninput="filterHarvests()">
-    <select id="h-area" onchange="filterHarvests()">
-      <option value="">All Areas</option>
-      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
-      <option>MINAOG</option><option>MIX AREAS</option>
-    </select>
-    <button class="btn p" onclick="loadHarvests()">⟳ Refresh</button>
+
+<!-- ══ HARVEST STYLES ══ -->
+<style>
+.hv-wrap{display:grid;grid-template-columns:1fr 264px;height:calc(100vh - 130px);min-height:500px;background:var(--bg);gap:0;}
+.hv-left{display:flex;flex-direction:column;overflow:hidden;background:#fff;border-right:1px solid var(--bd);}
+.hv-right{display:flex;flex-direction:column;overflow:hidden;background:#fff;}
+
+/* stats */
+.hv-stats{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;padding:7px 10px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;}
+.hv-stat{background:#fff;border-radius:7px;padding:6px 8px;border-bottom:3px solid #e8eeff;cursor:pointer;}
+.hv-stat:hover{box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.hv-stat .sl{font-size:7px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:1px;}
+.hv-stat .sv{font-size:14px;font-weight:700;}
+.hv-stat.s-blue{border-bottom-color:#1565c0;} .hv-stat.s-red{border-bottom-color:#dc2626;}
+.hv-stat.s-amber{border-bottom-color:#d97706;} .hv-stat.s-green{border-bottom-color:#16a34a;}
+.hv-stat.s-pur{border-bottom-color:#7c3aed;}
+.sv-blue{color:#1565c0;} .sv-red{color:#dc2626;} .sv-amber{color:#d97706;}
+.sv-green{color:#16a34a;} .sv-pur{color:#7c3aed;}
+
+/* header bar */
+.hv-hdr{background:#fff;border-bottom:1px solid var(--bd);padding:6px 10px;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.hv-title{font-size:12px;font-weight:700;color:#1565c0;}
+.hv-sub{font-size:10px;color:var(--mu);}
+.hv-hdr-btns{margin-left:auto;display:flex;gap:5px;}
+.hv-btn{padding:3px 10px;border-radius:5px;border:1px solid var(--bd);background:#fff;font-size:11px;color:var(--t);cursor:pointer;font-family:inherit;}
+.hv-btn.blue{background:#1565c0;color:#fff;border-color:#1565c0;}
+.hv-btn.green{background:#16a34a;color:#fff;border-color:#16a34a;}
+.hv-btn.red{color:var(--red);border-color:#fca5a5;}
+
+/* urgency filters */
+.hv-filters{padding:5px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:4px;flex-wrap:wrap;background:#fff;flex-shrink:0;}
+.hv-filters .flbl{font-size:8px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;}
+.uf-btn{padding:2px 9px;border-radius:20px;border:1px solid var(--bd);background:var(--bg);font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--mu);}
+.uf-btn.active,.uf-btn:hover{background:#1565c0;color:#fff;border-color:#1565c0;}
+.uf-btn.uc{border-color:#fca5a5;color:#dc2626;background:#fff5f5;}
+.uf-btn.uc.active{background:#dc2626;color:#fff;}
+.uf-btn.uh{border-color:#fcd34d;color:#d97706;background:#fffbeb;}
+.uf-btn.uh.active{background:#d97706;color:#fff;}
+.uf-btn.um{border-color:#c4b5fd;color:#7c3aed;background:#f5f3ff;}
+.uf-btn.um.active{background:#7c3aed;color:#fff;}
+.uf-btn.ul{border-color:#86efac;color:#16a34a;background:#f0fdf4;}
+.uf-btn.ul.active{background:#16a34a;color:#fff;}
+.uf-btn.utg{border-color:#c4b5fd;color:#7c3aed;}
+.uf-btn.uut{border-color:#fcd34d;color:#d97706;}
+.uf-sep{width:1px;height:14px;background:var(--bd);}
+.hv-selcount{margin-left:auto;font-size:10px;color:var(--mu);}
+
+/* route top */
+.hv-route-top{padding:6px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:5px;flex-wrap:wrap;flex-shrink:0;background:#f8f9ff;}
+.hv-route-top .rlbl{font-size:8px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;}
+.hv-inp{padding:4px 7px;border:1px solid var(--bd);border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:var(--t);background:#fff;}
+.hv-inp:focus{border-color:#1565c0;}
+.hv-route-count{margin-left:auto;font-size:10px;color:var(--mu);font-weight:600;}
+
+/* route vendo list */
+.hv-route-list{max-height:108px;overflow-y:auto;border-bottom:2px solid #e8eeff;flex-shrink:0;}
+.hv-route-list .rvlbl{font-size:7px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;padding:3px 10px;border-bottom:1px solid var(--bd);background:#fafbff;}
+.rv-row{display:grid;grid-template-columns:18px 1fr auto auto;align-items:center;gap:5px;padding:3px 10px;border-bottom:1px solid rgba(30,60,200,.05);}
+.rv-row:hover{background:#f8f9ff;}
+.rv-num{font-size:9px;font-weight:700;color:var(--mu);}
+.rv-vname{font-size:11px;font-weight:500;}
+.rv-vmeta{font-size:8px;color:var(--mu);}
+.rv-tgtag{font-size:8px;padding:1px 5px;border-radius:4px;font-weight:600;white-space:nowrap;}
+.rv-tgtag.ok{background:var(--obg);color:var(--ok);}
+.rv-tgtag.no{background:#fef3c7;color:#d97706;}
+.rv-del{background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;line-height:1;padding:0 2px;}
+
+/* two-list area */
+.hv-lists{flex:1;display:grid;grid-template-rows:1fr 1px 1fr;overflow:hidden;}
+.hv-list-half{display:grid;grid-template-columns:1fr 58px 64px;overflow:hidden;}
+.hv-list-main{display:flex;flex-direction:column;overflow:hidden;}
+.hv-list-hdr{background:var(--bg);border-bottom:1px solid var(--bd);padding:4px 8px;display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.src-tag{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+.src-tag.sheet{color:#1565c0;} .src-tag.tg{color:#7c3aed;}
+.src-cnt{font-size:8px;color:var(--mu);}
+.hv-search{padding:2px 6px;border:1px solid var(--bd);border-radius:4px;font-size:10px;font-family:inherit;outline:none;width:90px;margin-left:auto;color:var(--t);}
+.hv-vsearch:focus{border-color:#1565c0;}
+.vscroll{flex:1;overflow-y:auto;}
+.vrow{display:grid;grid-template-columns:13px 1fr 36px;align-items:center;gap:4px;padding:3px 7px;border-bottom:1px solid rgba(30,60,200,.05);cursor:pointer;}
+.vrow:hover{background:#f8f9ff;}
+.vrow.vsel{background:#eff6ff;}
+.vcb{width:11px;height:11px;accent-color:#1565c0;}
+.vdot-g{width:5px;height:5px;border-radius:50%;background:#16a34a;display:inline-block;margin-right:3px;flex-shrink:0;vertical-align:middle;}
+.vdot-a{width:5px;height:5px;border-radius:50%;background:#d97706;display:inline-block;margin-right:3px;flex-shrink:0;vertical-align:middle;}
+.vname{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vmeta{font-size:8px;color:var(--mu);display:flex;gap:3px;margin-top:1px;flex-wrap:nowrap;}
+.vdays{font-size:9px;font-weight:700;text-align:right;}
+.vdays.vc{color:#dc2626;} .vdays.vh{color:#d97706;} .vdays.vm{color:#7c3aed;} .vdays.vl{color:#16a34a;}
+.vincm{font-size:9px;font-weight:700;text-align:right;}
+.vincm.hot{color:#dc2626;} .vincm.warm{color:#d97706;}
+
+/* notes col */
+.hv-nc{border-left:1px solid var(--bd);background:#fafbff;display:flex;flex-direction:column;overflow:hidden;}
+.hv-nc-hdr{background:var(--bg);border-bottom:1px solid var(--bd);padding:4px 5px;font-size:7px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;text-align:center;flex-shrink:0;}
+.hv-nc-scroll{flex:1;overflow-y:auto;padding:3px 4px;}
+.nc-it{background:#fff;border:1px solid var(--bd);border-radius:4px;padding:3px 4px;margin-bottom:3px;cursor:pointer;}
+.nc-it.has{border-left:3px solid #1565c0;}
+.nc-iname{font-size:8px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nc-inote{font-size:7px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-style:italic;margin-top:1px;}
+.nc-iadd{font-size:7px;color:#1565c0;text-decoration:underline;cursor:pointer;}
+
+/* add col */
+.hv-ac{border-left:1px solid var(--bd);background:#fff;display:flex;flex-direction:column;overflow:hidden;}
+.hv-ac-hdr{background:#1565c0;padding:4px 4px;font-size:7px;font-weight:700;color:#fff;text-align:center;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;}
+.hv-ac-scroll{flex:1;overflow-y:auto;padding:3px 4px;}
+.hv-ac-it{margin-bottom:3px;}
+.hv-addbtn{width:100%;padding:3px 3px;border-radius:4px;border:1px solid var(--bd);background:#fff;font-size:8px;color:#1565c0;cursor:pointer;font-family:inherit;font-weight:600;}
+.hv-addbtn:hover{background:var(--bg);}
+.hv-addbtn.done{background:var(--obg);border-color:#86efac;color:var(--ok);}
+
+/* confirm bar */
+.hv-confirm{background:#fff;border-top:2px solid #1565c0;padding:6px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;}
+.hv-cinfo{font-size:11px;color:var(--mu);}
+.hv-cinfo strong{color:#1565c0;}
+.hv-cinfo .cwarn{color:#d97706;}
+.hv-cbtnrow{display:flex;gap:5px;}
+
+/* right panel */
+.hv-rp-hdr{background:var(--bg);border-bottom:1px solid var(--bd);padding:6px 10px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.hv-rp-title{font-size:8px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.05em;}
+.hv-rp-sub{font-size:8px;color:var(--mu);margin-top:1px;}
+.hv-pending{flex:1;overflow-y:auto;padding:5px 8px;min-height:0;}
+.pi-card{padding:5px 7px;border-radius:6px;border:1px solid var(--bd);margin-bottom:4px;cursor:pointer;}
+.pi-card:hover{background:var(--bg);}
+.pi-card.active{background:#eff6ff;border-color:#1565c0;}
+.pi-top{display:flex;justify-content:space-between;align-items:center;}
+.pi-name{font-size:11px;font-weight:600;}
+.pi-income{font-size:11px;font-weight:700;}
+.pi-income.hot{color:#dc2626;} .pi-income.warm{color:#d97706;}
+.pi-meta{font-size:8px;color:var(--mu);margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;}
+.hpill{display:inline-block;padding:1px 5px;border-radius:5px;font-size:7px;font-weight:700;}
+.hpill.b{background:#dbeafe;color:#1565c0;} .hpill.g{background:var(--obg);color:var(--ok);}
+.hpill.a{background:#fef3c7;color:#d97706;} .hpill.r{background:var(--redbg);color:var(--red);}
+.hpill.gray{background:#f1efe8;color:#5f5e5a;}
+
+/* notes board */
+.hv-notes-board{border-top:2px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;min-height:0;flex:1;}
+.hv-notes-scroll{flex:1;overflow-y:auto;padding:5px 8px;}
+.hnote{border-radius:5px;padding:5px 8px;margin-bottom:4px;position:relative;padding-right:18px;}
+.hnote.nb{background:#dbeafe;border-left:3px solid #1565c0;}
+.hnote.nr{background:var(--redbg);border-left:3px solid var(--red);}
+.hnote.na{background:#fef3c7;border-left:3px solid var(--amber);}
+.hnote.ng{background:var(--obg);border-left:3px solid var(--ok);}
+.hnote-text{font-size:10px;line-height:1.4;}
+.hnote.nb .hnote-text{color:#1e40af;} .hnote.nr .hnote-text{color:#991b1b;}
+.hnote.na .hnote-text{color:#92400e;} .hnote.ng .hnote-text{color:#14532d;}
+.hnote-del{position:absolute;top:3px;right:5px;background:none;border:none;font-size:11px;color:#9ca3af;cursor:pointer;line-height:1;}
+.hv-notes-add{padding:6px 8px;border-top:1px solid var(--bd);flex-shrink:0;}
+.hv-notes-inp{width:100%;padding:4px 7px;border:1px solid var(--bd);border-radius:5px;font-size:10px;font-family:inherit;outline:none;margin-bottom:4px;color:var(--t);}
+.hv-notes-inp:focus{border-color:#1565c0;}
+.hv-cdots{display:flex;gap:4px;align-items:center;margin-bottom:4px;}
+.hv-cdot{width:12px;height:12px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+.hv-cdot.sel{border-color:#1a1d2e;}
+.hv-notes-savebtn{width:100%;padding:4px;background:#1565c0;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;}
+.hv-notes-savebtn:hover{background:#0d47a1;}
+
+/* dividers */
+.hv-dh{height:1px;background:var(--bd);}
+.hv-dv{width:1px;background:var(--bd);}
+</style>
+
+<!-- ══ HARVEST PANEL BODY ══ -->
+
+<!-- STATS -->
+<div class="hv-stats">
+  <div class="hv-stat s-blue"><div class="sl">Total vendos</div><div class="sv sv-blue">764</div></div>
+  <div class="hv-stat s-red"><div class="sl">Critical &gt;90d</div><div class="sv sv-red" id="hstat-crit">24</div></div>
+  <div class="hv-stat s-amber"><div class="sl">High 61–90d</div><div class="sv sv-amber" id="hstat-high">63</div></div>
+  <div class="hv-stat s-pur"><div class="sl">Medium 31–60d</div><div class="sv sv-pur" id="hstat-med">57</div></div>
+  <div class="hv-stat s-green"><div class="sl">Low &gt;30d</div><div class="sv sv-green" id="hstat-low">194</div></div>
+  <div class="hv-stat s-amber"><div class="sl">TG &gt;₱3,000</div><div class="sv sv-amber" id="hstat-tg">87</div></div>
+  <div class="hv-stat s-blue"><div class="sl">Untraced</div><div class="sv sv-blue" id="hstat-untr">193</div></div>
+</div>
+
+<!-- HEADER -->
+<div class="hv-hdr">
+  <div>
+    <div class="hv-title">Harvest route builder</div>
+    <div class="hv-sub">Select vendos from Sheet or Telegram · add to route · confirm to assign collector</div>
   </div>
-  <div class="stats" id="harvest-stats"></div>
-  <div class="tw">
-    <table>
-      <thead><tr>
-        <th>Vendo</th><th>Area</th><th>Date</th><th>Time</th>
-        <th>System Total</th><th>Old Coins</th><th>Free Time</th>
-        <th>Collectible</th><th>Collected</th><th>Discrepancy</th><th>Status</th><th>Collector</th>
-      </tr></thead>
-      <tbody id="h-tbody"></tbody>
-    </table>
-  </div>
-  <div class="pg">
-    <button id="hp-p" onclick="hPage(-1)" disabled>← Prev</button>
-    <span id="hp-l">Page 1</span>
-    <button id="hp-n" onclick="hPage(1)">Next →</button>
+  <div class="hv-hdr-btns">
+    <button class="hv-btn">Records</button>
+    <button class="hv-btn">Schedule</button>
+    <button class="hv-btn blue" onclick="hvNewRoute()">+ New route</button>
   </div>
 </div>
+
+<!-- URGENCY FILTERS -->
+<div class="hv-filters">
+  <span class="flbl">Filter:</span>
+  <button class="uf-btn active" onclick="hvSetFilter('all',this)">All (338)</button>
+  <button class="uf-btn uc" onclick="hvSetFilter('critical',this)">Critical (24)</button>
+  <button class="uf-btn uh" onclick="hvSetFilter('high',this)">High (63)</button>
+  <button class="uf-btn um" onclick="hvSetFilter('medium',this)">Medium (57)</button>
+  <button class="uf-btn ul" onclick="hvSetFilter('low',this)">Low (194)</button>
+  <div class="uf-sep"></div>
+  <button class="uf-btn utg" onclick="hvSetFilter('tg',this)">TG &gt;₱3k (87)</button>
+  <button class="uf-btn uut" onclick="hvSetFilter('untraced',this)">Untraced (193)</button>
+  <span class="hv-selcount" id="hv-selcount">0 selected</span>
+</div>
+
+<!-- MAIN WRAP -->
+<div class="hv-wrap">
+
+  <!-- ══ LEFT ══ -->
+  <div class="hv-left">
+
+    <!-- Route controls -->
+    <div class="hv-route-top">
+      <span class="rlbl">Route</span>
+      <input class="hv-inp" id="hv-collector" placeholder="Collector name" style="width:130px;">
+      <input class="hv-inp" type="date" id="hv-date" style="width:130px;">
+      <select class="hv-inp" id="hv-area-sel" style="width:110px;">
+        <option value="">All areas</option>
+        <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+      </select>
+      <span class="hv-route-count" id="hv-route-count">0 vendos in route</span>
+    </div>
+
+    <!-- Route vendo list -->
+    <div class="hv-route-list">
+      <div class="rvlbl">Vendos added to this route — all selected below will appear here</div>
+      <div id="hv-rv-list">
+        <div class="rv-row"><span class="rv-num">1</span><div><div class="rv-vname">Valles</div><div class="rv-vmeta">SINDANGAN · VLAN 27</div></div><span class="rv-tgtag ok">TG: valles</span><button class="rv-del" onclick="hvRemoveRoute(this)">×</button></div>
+        <div class="rv-row"><span class="rv-num">2</span><div><div class="rv-vname">Rayl</div><div class="rv-vmeta">SINDANGAN · VLAN 19</div></div><span class="rv-tgtag ok">TG: rayl</span><button class="rv-del" onclick="hvRemoveRoute(this)">×</button></div>
+        <div class="rv-row"><span class="rv-num">3</span><div><div class="rv-vname">Polo Net</div><div class="rv-vmeta">DAPITAN · no VLAN</div></div><span class="rv-tgtag no">TG: untraced</span><button class="rv-del" onclick="hvRemoveRoute(this)">×</button></div>
+        <div class="rv-row"><span class="rv-num">4</span><div><div class="rv-vname">Inday Zamora</div><div class="rv-vmeta">SINDANGAN · VLAN 30</div></div><span class="rv-tgtag ok">TG: indayzamora</span><button class="rv-del" onclick="hvRemoveRoute(this)">×</button></div>
+        <div class="rv-row"><span class="rv-num">5</span><div><div class="rv-vname">sugabo</div><div class="rv-vmeta">SINDANGAN · VLAN 13</div></div><span class="rv-tgtag ok">TG: sugabo</span><button class="rv-del" onclick="hvRemoveRoute(this)">×</button></div>
+      </div>
+    </div>
+
+    <!-- Two lists stacked -->
+    <div class="hv-lists">
+
+      <!-- SHEET LIST -->
+      <div class="hv-list-half">
+        <div class="hv-list-main">
+          <div class="hv-list-hdr">
+            <span class="src-tag sheet">Google Sheet</span>
+            <span class="src-cnt">338 overdue · &gt;1 month since last collection</span>
+            <input class="hv-search" placeholder="Search..." oninput="hvFilterSheet(this.value)">
+          </div>
+          <div class="vscroll" id="hv-sheet-list">
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>Valles</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 27</span><span>Mar 17</span></div></div><span class="vdays vl">32d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>Polo Net</div><div class="vmeta"><span>DAPITAN</span><span style="color:var(--red)">Jan 2024</span></div></div><span class="vdays vc">826d</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>Rayl</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 19</span><span>Mar 6</span></div></div><span class="vdays vh">43d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>COGON</div><div class="vmeta"><span>DIPOLOG</span><span style="color:var(--red)">Apr 2024</span></div></div><span class="vdays vc">735d</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>Inday Zamora</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 30</span><span>Mar 3</span></div></div><span class="vdays vh">46d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>Polo Wifi</div><div class="vmeta"><span>DAPITAN</span><span style="color:var(--red)">May 2024</span></div></div><span class="vdays vc">705d</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>Dumajel</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 28</span><span>Mar 17</span></div></div><span class="vdays vl">32d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>BANDERA</div><div class="vmeta"><span>DIPOLOG</span><span style="color:var(--red)">Apr 2024</span></div></div><span class="vdays vc">726d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>SINAMAN</div><div class="vmeta"><span>DIPOLOG</span><span style="color:var(--red)">Apr 2024</span></div></div><span class="vdays vc">723d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-g"></span>Felly Bano</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 37</span><span>Mar 14</span></div></div><span class="vdays vl">35d</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>sugabo</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 13</span><span>Mar 5</span></div></div><span class="vdays vh">44d</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-g"></span>Dumajel</div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 28</span><span>Mar 17</span></div></div><span class="vdays vl">32d</span></div>
+          </div>
+        </div>
+        <!-- Sheet notes col -->
+        <div class="hv-nc">
+          <div class="hv-nc-hdr">Notes<br>per vendo</div>
+          <div class="hv-nc-scroll">
+            <div class="nc-it has"><div class="nc-iname">Valles</div><div class="nc-inote">Check coin box</div></div>
+            <div class="nc-it"><div class="nc-iname">Polo Net</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it has"><div class="nc-iname">Rayl</div><div class="nc-inote">High earner</div></div>
+            <div class="nc-it"><div class="nc-iname">COGON</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it has"><div class="nc-iname">Inday Zamora</div><div class="nc-inote">Coin slot issue</div></div>
+            <div class="nc-it"><div class="nc-iname">Polo Wifi</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">Dumajel</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">BANDERA</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">SINAMAN</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it has"><div class="nc-iname">Felly Bano</div><div class="nc-inote">Confirm active</div></div>
+            <div class="nc-it has"><div class="nc-iname">sugabo</div><div class="nc-inote">Match to sheet</div></div>
+            <div class="nc-it"><div class="nc-iname">Dumajel</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+          </div>
+        </div>
+        <!-- Sheet add col -->
+        <div class="hv-ac">
+          <div class="hv-ac-hdr">Add<br>to route</div>
+          <div class="hv-ac-scroll">
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hv-dh"></div>
+
+      <!-- TELEGRAM LIST -->
+      <div class="hv-list-half">
+        <div class="hv-list-main">
+          <div class="hv-list-hdr">
+            <span class="src-tag tg">Telegram</span>
+            <span class="src-cnt">87 vendos · &gt;₱3,000 income · unharvested this month</span>
+            <input class="hv-search" placeholder="Search TG..." oninput="hvFilterTG(this.value)">
+          </div>
+          <div class="vscroll" id="hv-tg-list">
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>valles <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Valles</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 27</span><span>Mar 17</span></div></div><span class="vincm warm">₱3,762</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>rayl <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Rayl</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 19</span><span>Mar 6</span></div></div><span class="vincm hot">₱4,458</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>sugabo <span style="font-size:8px;color:#d97706;margin-left:3px;">unmatched</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 13</span></div></div><span class="vincm hot">₱5,209</span></div>
+            <div class="vrow vsel"><input type="checkbox" class="vcb" checked><div><div class="vname"><span class="vdot-g"></span>indayzamora <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Inday Zamora</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 30</span></div></div><span class="vincm warm">₱3,233</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>cindy34 <span style="font-size:8px;color:#d97706;margin-left:3px;">unmatched</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 34</span></div></div><span class="vincm hot">₱6,175</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>island <span style="font-size:8px;color:#d97706;margin-left:3px;">unmatched</span></div><div class="vmeta"><span>DAPITAN</span><span>VLAN 32</span></div></div><span class="vincm hot">₱4,900</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-g"></span>joansyJSB <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Joan Sy / JSB</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 46</span></div></div><span class="vincm hot">₱5,358</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-g"></span>dumajel <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Dumajel</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 28</span></div></div><span class="vincm warm">₱3,886</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-a"></span>manigos <span style="font-size:8px;color:#d97706;margin-left:3px;">unmatched</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 36</span></div></div><span class="vincm hot">₱3,039</span></div>
+            <div class="vrow"><input type="checkbox" class="vcb"><div><div class="vname"><span class="vdot-g"></span>lea49 <span style="font-size:8px;color:var(--mu);margin-left:3px;">→ Lea</span></div><div class="vmeta"><span>SINDANGAN</span><span>VLAN 49</span></div></div><span class="vincm warm">₱3,150</span></div>
+          </div>
+        </div>
+        <!-- TG notes col -->
+        <div class="hv-nc">
+          <div class="hv-nc-hdr">Notes<br>per vendo</div>
+          <div class="hv-nc-scroll">
+            <div class="nc-it has"><div class="nc-iname">valles</div><div class="nc-inote">Check coin box</div></div>
+            <div class="nc-it has"><div class="nc-iname">rayl</div><div class="nc-inote">High earner</div></div>
+            <div class="nc-it has"><div class="nc-iname">sugabo</div><div class="nc-inote">Find sheet match</div></div>
+            <div class="nc-it"><div class="nc-iname">indayzamora</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it has"><div class="nc-iname">cindy34</div><div class="nc-inote">Find sheet name</div></div>
+            <div class="nc-it has"><div class="nc-iname">island</div><div class="nc-inote">₱8,218 gap — inv.</div></div>
+            <div class="nc-it"><div class="nc-iname">joansyJSB</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">dumajel</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">manigos</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+            <div class="nc-it"><div class="nc-iname">lea49</div><div class="nc-inote"><span class="nc-iadd">+ add note</span></div></div>
+          </div>
+        </div>
+        <!-- TG add col -->
+        <div class="hv-ac">
+          <div class="hv-ac-hdr">Add<br>to route</div>
+          <div class="hv-ac-scroll">
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn done" onclick="hvToggleAdd(this)">✓ added</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+            <div class="hv-ac-it"><button class="hv-addbtn" onclick="hvToggleAdd(this)">+ add</button></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end hv-lists -->
+
+    <!-- CONFIRM BAR -->
+    <div class="hv-confirm">
+      <div class="hv-cinfo"><strong id="hv-conf-count">5 vendos</strong> · Collector: <strong id="hv-conf-col">—</strong> · <span id="hv-conf-date">—</span> · <span class="cwarn" id="hv-conf-warn">3 untraced TG names — flagged in PWA</span></div>
+      <div class="hv-cbtnrow">
+        <button class="hv-btn red" onclick="hvClearRoute()">Clear route</button>
+        <button class="hv-btn green" onclick="hvConfirmRoute()">Confirm route →</button>
+      </div>
+    </div>
+
+  </div><!-- end hv-left -->
+
+  <!-- ══ RIGHT ══ -->
+  <div class="hv-right">
+
+    <!-- PENDING -->
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+      <div class="hv-rp-hdr">
+        <div>
+          <div class="hv-rp-title">Pending — not yet harvested</div>
+          <div class="hv-rp-sub">Based on active routes · click for collector + last harvest details</div>
+        </div>
+        <span class="hpill r">12</span>
+      </div>
+      <div class="hv-pending" id="hv-pending-list">
+        <div class="pi-card active">
+          <div class="pi-top"><div class="pi-name">Valles <span class="hpill b">Both</span></div><span class="pi-income warm">₱3,762</span></div>
+          <div class="pi-meta"><span>SINDANGAN</span><span>·</span><span>Juan dela Cruz</span><span>·</span><span style="color:#d97706;">Last: Mar 17 · 32d ago</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">Rayl <span class="hpill b">Both</span></div><span class="pi-income hot">₱4,458</span></div>
+          <div class="pi-meta"><span>SINDANGAN</span><span>·</span><span style="color:var(--red);">Last: Mar 6 · 43d ago</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">sugabo <span class="hpill gray">TG only</span></div><span class="pi-income hot">₱5,209</span></div>
+          <div class="pi-meta"><span>SINDANGAN</span><span>·</span><span style="color:#d97706;">Last: Mar 5 · 44d · unmatched</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">Inday Zamora <span class="hpill b">Both</span></div><span class="pi-income warm">₱3,233</span></div>
+          <div class="pi-meta"><span>SINDANGAN</span><span>·</span><span style="color:#d97706;">Last: Mar 3 · 46d ago</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">island <span class="hpill gray">TG only</span></div><span class="pi-income hot">₱4,900</span></div>
+          <div class="pi-meta"><span>DAPITAN · VLAN 32</span><span>·</span><span style="color:var(--red);">₱8,218 gap — investigate</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">Joan Sy / JSB <span class="hpill b">Both</span></div><span class="pi-income hot">₱5,358</span></div>
+          <div class="pi-meta"><span>SINDANGAN</span><span>·</span><span style="color:var(--red);">Last: Dec 2025 · 112d ago</span></div>
+        </div>
+        <div class="pi-card">
+          <div class="pi-top"><div class="pi-name">cindy34 <span class="hpill gray">TG only</span></div><span class="pi-income hot">₱6,175</span></div>
+          <div class="pi-meta"><span>SINDANGAN · VLAN 34</span><span>·</span><span style="color:#d97706;">Unmatched · find sheet name</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- NOTES BOARD -->
+    <div class="hv-notes-board">
+      <div class="hv-rp-hdr">
+        <div class="hv-rp-title">Notes</div>
+        <div class="hv-cdots">
+          <div class="hv-cdot sel" style="background:#1565c0;" onclick="hvSelColor('blue',this)"></div>
+          <div class="hv-cdot" style="background:#d97706;" onclick="hvSelColor('amber',this)"></div>
+          <div class="hv-cdot" style="background:#16a34a;" onclick="hvSelColor('green',this)"></div>
+          <div class="hv-cdot" style="background:#dc2626;" onclick="hvSelColor('red',this)"></div>
+        </div>
+      </div>
+      <div class="hv-notes-scroll" id="hv-notes-list">
+        <div class="hnote nr"><div class="hnote-text">Island vendo May 7 — ₱8,218 gap. Coin box vs system, MikroTik logs, change password.</div><button class="hnote-del" onclick="hvDelNote(this)">×</button></div>
+        <div class="hnote na"><div class="hnote-text">COGON / BANDERA / SINAMAN — no TG name found. Ask Sindangan GC.</div><button class="hnote-del" onclick="hvDelNote(this)">×</button></div>
+        <div class="hnote ng"><div class="hnote-text">Onis ✅ Labadlabad ✅ Navasca ✅ Baguio ✅ Emay ✅ — cleared Apr 2026</div><button class="hnote-del" onclick="hvDelNote(this)">×</button></div>
+        <div class="hnote nb"><div class="hnote-text">Polo Net 826d overdue — verify if active or pulled out before adding to route.</div><button class="hnote-del" onclick="hvDelNote(this)">×</button></div>
+        <div class="hnote na"><div class="hnote-text">sugabo / cindy34 — high income, no sheet match yet. Priority matching needed.</div><button class="hnote-del" onclick="hvDelNote(this)">×</button></div>
+      </div>
+      <div class="hv-notes-add">
+        <input class="hv-notes-inp" id="hv-note-inp" placeholder="Type a note...">
+        <button class="hv-notes-savebtn" onclick="hvAddNote()">+ Add note</button>
+      </div>
+    </div>
+
+  </div><!-- end hv-right -->
+
+</div><!-- end hv-wrap -->
+
+<script>
+/* ── Harvest JS ── */
+let hvNoteColor = 'blue';
+
+function hvSetFilter(f, btn) {
+  document.querySelectorAll('.uf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function hvNewRoute() {
+  document.getElementById('hv-collector').value = '';
+  document.getElementById('hv-date').value = '';
+  alert('Route cleared. Enter collector name and date to start a new route.');
+}
+
+function hvRemoveRoute(btn) {
+  btn.closest('.rv-row').remove();
+  hvUpdateRouteCount();
+}
+
+function hvToggleAdd(btn) {
+  const done = btn.classList.contains('done');
+  btn.classList.toggle('done', !done);
+  btn.textContent = done ? '+ add' : '✓ added';
+  hvUpdateRouteCount();
+}
+
+function hvUpdateRouteCount() {
+  const n = document.querySelectorAll('#hv-rv-list .rv-row').length;
+  document.getElementById('hv-route-count').textContent = n + ' vendos in route';
+  document.getElementById('hv-conf-count').textContent = n + ' vendos';
+  const col = document.getElementById('hv-collector').value || '—';
+  const dt = document.getElementById('hv-date').value || '—';
+  document.getElementById('hv-conf-col').textContent = col;
+  document.getElementById('hv-conf-date').textContent = dt;
+}
+
+function hvClearRoute() {
+  if (!confirm('Clear all vendos from this route?')) return;
+  document.getElementById('hv-rv-list').innerHTML = '';
+  document.querySelectorAll('.hv-addbtn.done').forEach(b => { b.classList.remove('done'); b.textContent = '+ add'; });
+  hvUpdateRouteCount();
+}
+
+function hvConfirmRoute() {
+  const col = document.getElementById('hv-collector').value;
+  const dt = document.getElementById('hv-date').value;
+  if (!col || !dt) { alert('Please enter collector name and date before confirming.'); return; }
+  const n = document.querySelectorAll('#hv-rv-list .rv-row').length;
+  alert('Route confirmed!
+
+' + n + ' vendos assigned to ' + col + ' on ' + dt + '.
+
+Route saved to Supabase.');
+}
+
+function hvFilterSheet(q) {
+  const rows = document.querySelectorAll('#hv-sheet-list .vrow');
+  rows.forEach(r => {
+    const name = r.querySelector('.vname').textContent.toLowerCase();
+    r.style.display = name.includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function hvFilterTG(q) {
+  const rows = document.querySelectorAll('#hv-tg-list .vrow');
+  rows.forEach(r => {
+    const name = r.querySelector('.vname').textContent.toLowerCase();
+    r.style.display = name.includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function hvSelColor(color, dot) {
+  hvNoteColor = color;
+  document.querySelectorAll('.hv-cdot').forEach(d => d.classList.remove('sel'));
+  dot.classList.add('sel');
+}
+
+function hvAddNote() {
+  const inp = document.getElementById('hv-note-inp');
+  const text = inp.value.trim();
+  if (!text) return;
+  const cls = { blue:'nb', amber:'na', green:'ng', red:'nr' }[hvNoteColor] || 'nb';
+  const div = document.createElement('div');
+  div.className = 'hnote ' + cls;
+  div.innerHTML = '<div class="hnote-text">' + text + '</div><button class="hnote-del" onclick="hvDelNote(this)">×</button>';
+  document.getElementById('hv-notes-list').prepend(div);
+  inp.value = '';
+}
+
+function hvDelNote(btn) {
+  btn.closest('.hnote').remove();
+}
+
+/* pending card click */
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.pi-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.pi-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    });
+  });
+  // set today's date
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('hv-date').value = today;
+  hvUpdateRouteCount();
+});
+</script>
+
 
 <!-- ══ SUSPICIOUS — TODO LIST ══ -->
 <div id="panel-suspicious" class="panel">
