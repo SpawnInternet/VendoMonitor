@@ -188,7 +188,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">Vendos</span>
     </button>
     <!-- Harvest -->
-    <button onclick="showP('harvest',this);setTimeout(function(){if(typeof hvLoadVendos==='function')hvLoadVendos();},300)">
+    <button onclick="showP('harvest',this);setTimeout(function(){if(typeof hvLoadVendos==='function')hvLoadVendos();var fab=document.getElementById('hv-refresh-fab');if(fab)fab.classList.add('visible');},300)">
       <div class="ni" style="background:#d1fae5">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3 C8 3 4 7 4 12 C4 16 8 20 12 20 C16 20 20 16 20 12" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 3 C14 6 18 6 20 3" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 8 L12 16 M9 13 L12 16 L15 13" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </div>
@@ -501,10 +501,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-vc-title{font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;}
 .hv-legend{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--mu);}
 .hv-legend span{display:flex;align-items:center;gap:3px;}
-.hv-vthead{display:grid;grid-template-columns:14px 10px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) 100px 22px 80px;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;}
+.hv-vthead{display:grid;grid-template-columns:14px 10px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) 100px 22px auto;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border-bottom:1px solid var(--bd);flex-shrink:0;}
 .hv-vth{font-size:9px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;}
 .hv-scroll{flex:1;overflow-y:auto;}
-.hv-vr{display:grid!important;grid-template-columns:14px 10px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) 100px 22px 80px;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid rgba(30,60,200,.05);cursor:pointer;pointer-events:all;}
+.hv-vr{display:grid!important;grid-template-columns:14px 10px minmax(0,1.5fr) minmax(0,1.2fr) minmax(0,1fr) 100px 22px auto;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid rgba(30,60,200,.05);cursor:pointer;pointer-events:all;}
 .hv-vr:hover{background:#f8f9ff;}
 .hv-vr.sel{background:#eff6ff;}
 .hv-vcb{width:12px;height:12px;accent-color:var(--blue);flex-shrink:0;}
@@ -666,6 +666,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab" id="hbtn-schedule" onclick="hvShowTab('schedule',this)">⏰ Schedule</button>
       <button class="hv-hvtab" id="hbtn-records" onclick="hvShowTab('records',this)">📊 Records</button>
       <button class="hv-hvtab new" onclick="hvNewRoute()">+ New route</button>
+      <a href="./match_confirm.html" target="_blank" style="padding:5px 12px;border-radius:6px;border:1px solid #c4b5fd;background:#ede9fe;color:#7c3aed;font-size:11px;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">🔗 Match names</a>
     </div>
   </div>
   <!-- STEP GUIDE -->
@@ -1051,6 +1052,15 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- ── POPUPS ── -->
 
+<!-- FLOATING REFRESH BUTTON -->
+<button class="hv-refresh-fab" id="hv-refresh-fab" onclick="hvRefreshVendos()" title="Refresh vendo list">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+    <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+  </svg>
+</button>
+<div class="hv-refresh-toast" id="hv-refresh-toast">Vendo list updated</div>
+
 <!-- NOTE POPUP -->
 <div class="hv-popbg" id="hv-note-pop">
   <div class="hv-pop" style="width:300px;">
@@ -1190,11 +1200,31 @@ let hvMatchType='sheet', hvMatchKnown='';
 let hvSelectedSuggest='';
 
 /* TAB SWITCHING */
+function hvRefreshVendos(){
+  const fab = document.getElementById('hv-refresh-fab');
+  if (fab) fab.classList.add('spinning');
+  const scroll = document.getElementById('vc-scroll');
+  if (scroll) scroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Refreshing...</div>';
+  hvLoadVendos().then(() => {
+    if (fab) fab.classList.remove('spinning');
+    const toast = document.getElementById('hv-refresh-toast');
+    if (toast) {
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+  }).catch(() => {
+    if (fab) fab.classList.remove('spinning');
+  });
+}
+
 function hvShowTab(tab,btn){
   hvActiveTab=tab;
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
   if(btn)btn.classList.add('on');
   const show=tab==='route';
+  // Show/hide refresh FAB
+  const fab=document.getElementById('hv-refresh-fab');
+  if(fab){if(tab==='route')fab.classList.add('visible');else fab.classList.remove('visible');}
   const els={
     page:document.getElementById('hv-route-page'),
     area:document.getElementById('hv-area-tabs'),
@@ -1276,6 +1306,11 @@ function hvOpenDetail(row,display,sheet,tg,area,vlan,last,note,isAlert){
   document.getElementById('hv-detail-pop').classList.add('show');
 }
 
+function hvQuickQR(tg, sheet){
+  hvCurrentDetail.tg = tg;
+  hvCurrentDetail.sheet = sheet;
+  hvGenQR();
+}
 function hvGenQR(){
   const id=hvCurrentDetail.tg||hvCurrentDetail.sheet||'unknown';
   const url=`https://spawninternet.github.io/VendoMonitor/harvest.html?vendo=${encodeURIComponent(id)}`;
@@ -1539,6 +1574,64 @@ async function hvLoadRecords(){
 document.addEventListener('click',e=>{if(e.target.classList.contains('hv-popbg'))e.target.classList.remove('show');});
 
 /* ── LOAD REAL VENDOS FROM SUPABASE ── */
+
+function buildVendoRow(v, scroll) {
+const matched = !!(v.tg_name && v.sheet_name);
+        const isNew = !v.sheet_name && v.tg_name;
+        const dot = matched ? 'hv-dot-g' : isNew ? 'hv-dot-p' : 'hv-dot-a';
+        const status = matched ? 'matched' : isNew ? 'new' : 'unmatched';
+        const days = v.last_harvest_date ? Math.floor((new Date() - new Date(v.last_harvest_date)) / 86400000) : 0;
+        const dc = days>=90?'c':days>=61?'h':days>=31?'m':days>0?'l':'na';
+        const lastFmt = v.last_harvest_date ? new Date(v.last_harvest_date).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        const vlan = v.vlan ? 'VLAN '+v.vlan : 'no VLAN';
+        const sn = (v.sheet_name||'').replace(/'/g,"\'");
+        const tg = (v.tg_name||'').replace(/'/g,"\'");
+        const display = (v.sheet_name||v.tg_name||'Unknown').replace(/'/g,"\'");
+        const note = (v.admin_notes||'').replace(/'/g,"\'");
+        const hasNote = !!v.admin_notes;
+        const stroke = hasNote ? '#1565c0' : '#9ca3af';
+        const niCls = hasNote ? 'has' : '';
+
+        let sheetCell, tgCell, addBtn;
+        if (status === 'new') {
+          sheetCell = `<div><div class="hv-vnew">🆕 New vendo</div><div class="hv-vslbl">not in Google Sheet</div></div>`;
+          const tgDisplay = v.tg_name && v.tg_name.length > 20 ? v.tg_name.substring(0,20)+'...' : v.tg_name;
+          tgCell = `<div><div class="hv-vtname" title="${v.tg_name}">${tgDisplay}</div><div class="hv-vtlbl">telegram <span class="new-badge">new</span></div></div>`;
+          addBtn = `<button class="hv-ab reg" onclick="event.stopPropagation();hvOpenRegister('${tg}','${v.area||''}','${v.vlan||''}')">Register</button>`;
+        } else {
+          sheetCell = v.sheet_name
+            ? `<div><div class="hv-vsname">${v.sheet_name}</div><div class="hv-vslbl">sheet</div></div>`
+            : `<div><div class="hv-vtmatch">Sheet not found</div><button class="hv-vmatch-btn" onclick="hvOpenMatch('${tg}','sheet',event)">💡 suggest match</button></div>`;
+          const badge = matched ? '<span class="matched-badge">✓ matched</span>' : '<span class="unmatched-badge">unmatched</span>';
+          tgCell = v.tg_name
+            ? `<div><div class="hv-vtname">${v.tg_name}</div><div class="hv-vtlbl">telegram ${badge}</div></div>`
+            : `<div><div class="hv-vtmatch">TG not found</div><button class="hv-vmatch-btn" onclick="hvOpenMatch('${sn}','tg',event)">💡 suggest match</button></div>`;
+          const qrBtn = tg ? `<button style="padding:2px 5px;border-radius:4px;border:1px solid var(--bd);background:#fff;cursor:pointer;font-size:10px;margin-right:3px;" onclick="event.stopPropagation();hvQuickQR('${tg}','${sn}')" title="Generate QR">📱</button>` : '';
+          addBtn = qrBtn + `<button class="hv-ab" onclick="event.stopPropagation();hvToggleAdd(this,'${display}')" data-sheet="${sn}" data-tg="${tg}">+ add</button>`;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'hv-vr';
+        div.dataset.area = (v.area||'').toUpperCase();
+        div.dataset.days = days;
+        div.dataset.matched = matched ? 'true' : 'false';
+        div.dataset.status = status;
+        div.onclick = () => hvOpenDetail(div, display, sn, tg, v.area||'', vlan, lastFmt, note, false);
+        div.innerHTML = `
+          <input type="checkbox" class="hv-vcb" onclick="event.stopPropagation()">
+          <div class="${dot}"></div>
+          ${sheetCell}${tgCell}
+          <div><div class="hv-vaname">${v.area||'—'}</div><div class="hv-vavlan">${vlan}</div></div>
+          <span class="hv-vdate ${dc}">${lastFmt}</span>
+          <button class="hv-ni ${niCls}" onclick="hvOpenNote(this,'${display}','${note}',event)" title="${hasNote?'Has note':'Add note'}">
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1" y="1" width="10" height="10" rx="2" stroke="${stroke}" stroke-width="1.2"/><path d="M3 4h6M3 6.5h4" stroke="${stroke}" stroke-width="1" stroke-linecap="round"/></svg>
+          </button>
+          ${addBtn}`;
+        scroll.appendChild(div);
+
+  scroll.appendChild(div);
+}
+
 async function hvLoadVendos() {
   const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
   const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
@@ -1550,7 +1643,7 @@ async function hvLoadVendos() {
     // Load in batches to avoid timeout - start with first 200
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=is_traced.desc,area.asc,tg_name.asc&limit=500&offset=0`, {
+    const r = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc&limit=500&offset=0`, {
       headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY},
       signal: controller.signal,
     });
@@ -1580,7 +1673,8 @@ async function hvLoadVendos() {
         let sheetCell, tgCell, addBtn;
         if (status === 'new') {
           sheetCell = `<div><div class="hv-vnew">🆕 New vendo</div><div class="hv-vslbl">not in Google Sheet</div></div>`;
-          tgCell = `<div><div class="hv-vtname">${v.tg_name}</div><div class="hv-vtlbl">telegram <span class="new-badge">new</span></div></div>`;
+          const tgDisplay = v.tg_name && v.tg_name.length > 20 ? v.tg_name.substring(0,20)+'...' : v.tg_name;
+          tgCell = `<div><div class="hv-vtname" title="${v.tg_name}">${tgDisplay}</div><div class="hv-vtlbl">telegram <span class="new-badge">new</span></div></div>`;
           addBtn = `<button class="hv-ab reg" onclick="event.stopPropagation();hvOpenRegister('${tg}','${v.area||''}','${v.vlan||''}')">Register</button>`;
         } else {
           sheetCell = v.sheet_name
@@ -1590,7 +1684,8 @@ async function hvLoadVendos() {
           tgCell = v.tg_name
             ? `<div><div class="hv-vtname">${v.tg_name}</div><div class="hv-vtlbl">telegram ${badge}</div></div>`
             : `<div><div class="hv-vtmatch">TG not found</div><button class="hv-vmatch-btn" onclick="hvOpenMatch('${sn}','tg',event)">💡 suggest match</button></div>`;
-          addBtn = `<button class="hv-ab" onclick="event.stopPropagation();hvToggleAdd(this,'${display}')" data-sheet="${sn}" data-tg="${tg}">+ add</button>`;
+          const qrBtn = tg ? `<button style="padding:2px 5px;border-radius:4px;border:1px solid var(--bd);background:#fff;cursor:pointer;font-size:10px;margin-right:3px;" onclick="event.stopPropagation();hvQuickQR('${tg}','${sn}')" title="Generate QR">📱</button>` : '';
+          addBtn = qrBtn + `<button class="hv-ab" onclick="event.stopPropagation();hvToggleAdd(this,'${display}')" data-sheet="${sn}" data-tg="${tg}">+ add</button>`;
         }
 
         const div = document.createElement('div');
@@ -1612,6 +1707,38 @@ async function hvLoadVendos() {
           ${addBtn}`;
         scroll.appendChild(div);
       });
+      // Load remaining pages if more than 500
+      if (data.length === 500) {
+        try {
+          const r2 = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc&limit=500&offset=500`, {
+            headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
+          });
+          const data2 = await r2.json();
+          if (data2 && data2.length) {
+            data2.forEach(v => { data.push(v); buildVendoRow(v, scroll); });
+          }
+          // Load page 3 if needed
+          if (data2 && data2.length === 500) {
+            const r3 = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc&limit=500&offset=1000`, {
+              headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
+            });
+            const data3 = await r3.json();
+            if (data3 && data3.length) {
+              data3.forEach(v => { data.push(v); buildVendoRow(v, scroll); });
+            }
+            // Load page 4
+            if (data3 && data3.length === 500) {
+              const r4 = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,is_traced,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc&limit=500&offset=1500`, {
+                headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
+              });
+              const data4 = await r4.json();
+              if (data4 && data4.length) {
+                data4.forEach(v => { data.push(v); buildVendoRow(v, scroll); });
+              }
+            }
+          }
+        } catch(e2) { console.log('Pagination error:', e2); }
+      }
       // Update area tab counts dynamically
       const areaCounts = {};
       data.forEach(v => {
