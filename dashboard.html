@@ -1100,9 +1100,9 @@ function hvShowTab(tab,btn){
 }
 
 /* AREA FILTER */
-function hvArea(area,btn){
-  hvCurrentArea=area;
-  document.querySelectorAll('.area-tab').forEach(b=>b.classList.remove('on'));
+function hvArea(area, btn){
+  hvCurrentArea = area;
+  document.querySelectorAll('.area-tab').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
   hvApplyFilter();
 }
@@ -1120,31 +1120,47 @@ function hvSearch(q){hvSearchQ=q.toLowerCase().trim();hvApplyFilter();}
 
 /* APPLY FILTERS */
 function hvApplyFilter(){
-  const rows=document.querySelectorAll('#vc-scroll .hv-vr');
-  let n=0;
-  rows.forEach(r=>{
-    const area=(r.dataset.area||'').toUpperCase();
-    const days=parseInt(r.dataset.days||0);
-    const matched=r.dataset.matched==='true';
-    const status=r.dataset.status||'matched';
-    const txt=r.textContent.toLowerCase();
-    let ok=true;
-    if(hvCurrentArea==='critical')ok=ok&&days>=90;
-    else if(hvCurrentArea==='new')ok=ok&&status==='new';
-    else if(hvCurrentArea!=='all')ok=ok&&area===hvCurrentArea;
-    if(hvCurrentFilter==='critical')ok=ok&&days>=90;
-    else if(hvCurrentFilter==='high')ok=ok&&days>=61&&days<90;
-    else if(hvCurrentFilter==='medium')ok=ok&&days>=31&&days<61;
-    else if(hvCurrentFilter==='low')ok=ok&&days>0&&days<31;
-    else if(hvCurrentFilter==='unmatched')ok=ok&&!matched&&status!=='new';
-    else if(hvCurrentFilter==='new')ok=ok&&status==='new';
-    if(hvSearchQ)ok=ok&&txt.includes(hvSearchQ);
-    r.style.display=ok?'':'none';
-    if(ok)n++;
+  const rows = document.querySelectorAll('#vc-scroll .hv-vr');
+  let n = 0;
+  rows.forEach(r => {
+    const area = (r.dataset.area || '').toUpperCase().trim();
+    const days = parseInt(r.dataset.days || 0);
+    const matched = r.dataset.matched === 'true';
+    const status = (r.dataset.status || 'matched').trim();
+    const txt = r.textContent.toLowerCase();
+    let ok = true;
+
+    // Area filter
+    if (hvCurrentArea === 'critical') {
+      ok = days >= 90;
+    } else if (hvCurrentArea === 'new') {
+      ok = status === 'new';
+    } else if (hvCurrentArea !== 'all') {
+      ok = area === hvCurrentArea.toUpperCase().trim();
+    }
+
+    // Status filter
+    if (ok) {
+      if (hvCurrentFilter === 'critical') ok = days >= 90;
+      else if (hvCurrentFilter === 'high') ok = days >= 61 && days < 90;
+      else if (hvCurrentFilter === 'medium') ok = days >= 31 && days < 61;
+      else if (hvCurrentFilter === 'low') ok = days > 0 && days < 31;
+      else if (hvCurrentFilter === 'unmatched') ok = !matched && status !== 'new';
+      else if (hvCurrentFilter === 'new') ok = status === 'new';
+    }
+
+    // Search filter
+    if (ok && hvSearchQ) ok = txt.includes(hvSearchQ);
+
+    // Show/hide
+    r.style.display = ok ? '' : 'none';
+    if (ok) n++;
   });
-  const cnt=document.getElementById('hv-sel-count');
-  if(cnt)cnt.textContent=n+' vendos';
+
+  const cnt = document.getElementById('hv-sel-count');
+  if (cnt) cnt.textContent = n.toLocaleString() + ' vendos';
 }
+
 
 /* VENDO DETAIL POPUP */
 function hvOpenDetail(row,display,sheet,tg,area,vlan,last,note,isAlert){
@@ -1583,7 +1599,7 @@ function buildVendoRow(v, scroll) {
 
   const div = document.createElement('div');
   div.className = 'hv-vr';
-  div.dataset.area = (v.area||'').toUpperCase();
+  div.dataset.area = (v.area||'').toUpperCase().trim();
   div.dataset.days = days;
   div.dataset.matched = matched ? 'true' : 'false';
   div.dataset.status = status;
