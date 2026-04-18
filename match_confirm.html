@@ -89,6 +89,7 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--t
 .empty{text-align:center;padding:40px;color:var(--mu);}
 .empty-ico{font-size:48px;margin-bottom:10px;}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -136,28 +137,35 @@ let allSuggestions = [];
 let confirmed = 0, skipped = 0;
 let currentFilter = 'all';
 
-async function sbFetch(query) {
-  const r = await fetch(`${SB}/rest/v1/rpc/get_match_suggestions`, {
-    method: 'POST',
-    headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'}
-  });
-  return r.json();
-}
+
 
 // Load suggestions via SQL query
 async function loadSuggestions() {
   try {
-    // Get TG-only vendos with VLAN
-    const r1 = await fetch(`${SB}/rest/v1/vendos?select=id,tg_name,area,vlan&tg_name=not.is.null&sheet_name=is.null&vlan=not.is.null&order=area.asc,vlan.asc&limit=1000`, {
-      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
-    });
-    const tgVendos = await r1.json();
+    const db = supabase.createClient(SB, KEY);
+    
+    console.log('Fetching TG vendos...');
+    const { data: tgVendos, error: e1 } = await db
+      .from('vendos')
+      .select('id,tg_name,area,vlan')
+      .not('tg_name', 'is', null)
+      .is('sheet_name', null)
+      .not('vlan', 'is', null)
+      .order('area').order('vlan')
+      .limit(2000);
+    if (e1) throw new Error('TG fetch: ' + e1.message);
+    console.log('TG vendos loaded:', tgVendos.length);
 
-    // Get sheet-only vendos with VLAN
-    const r2 = await fetch(`${SB}/rest/v1/vendos?select=id,sheet_name,area,vlan&tg_name=is.null&sheet_name=not.is.null&vlan=not.is.null&order=area.asc,vlan.asc&limit=1000`, {
-      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
-    });
-    const sheetVendos = await r2.json();
+    const { data: sheetVendos, error: e2 } = await db
+      .from('vendos')
+      .select('id,sheet_name,area,vlan')
+      .is('tg_name', null)
+      .not('sheet_name', 'is', null)
+      .not('vlan', 'is', null)
+      .order('area').order('vlan')
+      .limit(2000);
+    if (e2) throw new Error('Sheet fetch: ' + e2.message);
+    console.log('Sheet vendos loaded:', sheetVendos.length);
 
     // Build suggestions: for each TG vendo, find sheet vendos with same area+vlan
     const sheetByAreaVlan = {};
@@ -170,17 +178,31 @@ async function loadSuggestions() {
     const suggestions = [];
     const seenTg = new Set();
 
+    // Also build sheet index by VLAN only (for cross-area matching)
+    const sheetByVlan = {};
+    sheetVendos.forEach(s => {
+      const key = `${s.vlan}`;
+      if (!sheetByVlan[key]) sheetByVlan[key] = [];
+      sheetByVlan[key].push(s);
+    });
+
     tgVendos.forEach(tg => {
       if (seenTg.has(tg.tg_name)) return;
-      const key = `${tg.area}|${tg.vlan}`;
-      const candidates = sheetByAreaVlan[key] || [];
+      // Try same area+vlan first, then same vlan only
+      const exactKey = `${tg.area}|${tg.vlan}`;
+      const vlanKey = `${tg.vlan}`;
+      let candidates = sheetByAreaVlan[exactKey] || [];
+      if (candidates.length === 0) {
+        // Cross-area: same VLAN, different area — lower confidence
+        candidates = (sheetByVlan[vlanKey] || []).map(s => ({...s, crossArea: true}));
+      }
       if (candidates.length === 0) return;
 
       // Score each candidate by name similarity
       const scored = candidates.map(s => {
         const tgLower = (tg.tg_name || '').toLowerCase().replace(/\s+/g, '');
         const shLower = (s.sheet_name || '').toLowerCase().replace(/\s+/g, '');
-        let score = 50; // base: same VLAN
+        let score = s.crossArea ? 35 : 50; // base: same VLAN (lower if cross-area)
         if (tgLower === shLower) score = 100;
         else if (shLower.includes(tgLower) || tgLower.includes(shLower)) score = 85;
         else if (shLower.startsWith(tgLower.substring(0,4)) || tgLower.startsWith(shLower.substring(0,4))) score = 70;
@@ -197,6 +219,18 @@ async function loadSuggestions() {
     });
 
     allSuggestions = suggestions;
+    console.log('Suggestions built:', suggestions.length, 'from', tgVendos.length, 'TG and', sheetVendos.length, 'sheet vendos');
+    if (suggestions.length === 0) {
+      document.getElementById('main-content').innerHTML = `
+        <div class="empty">
+          <div class="empty-ico">🔍</div>
+          <div style="font-size:14px;font-weight:600;">No VLAN-based suggestions found</div>
+          <div style="margin-top:6px;color:var(--mu);">TG vendos loaded: ${tgVendos.length} · Sheet vendos: ${sheetVendos.length}</div>
+          <div style="margin-top:4px;color:var(--mu);font-size:11px;">Suggestions need matching area + VLAN between TG and Sheet records.</div>
+        </div>`;
+      document.getElementById('stat-pending').textContent = '⏳ 0 pending';
+      return;
+    }
     renderAll();
     updateStats();
 
@@ -204,11 +238,13 @@ async function loadSuggestions() {
     document.getElementById('stat-pending').textContent = `⏳ ${suggestions.length} pending`;
 
   } catch(e) {
+    console.error('loadSuggestions error:', e);
     document.getElementById('main-content').innerHTML = `
       <div class="empty">
         <div class="empty-ico">⚠️</div>
         <div style="font-size:14px;font-weight:600;color:var(--red);">Error loading suggestions</div>
         <div style="margin-top:6px;color:var(--mu);">${e.message}</div>
+        <button onclick="loadSuggestions()" style="margin-top:12px;padding:6px 16px;background:#1565c0;color:#fff;border:none;border-radius:6px;cursor:pointer;font-family:inherit;">Retry</button>
       </div>`;
   }
 }
@@ -217,7 +253,7 @@ function confidenceClass(score) {
   return score >= 80 ? 'hi' : score >= 60 ? 'md' : 'lo';
 }
 function confidenceLabel(score) {
-  return score >= 80 ? `${score}% · Strong` : score >= 60 ? `${score}% · Possible` : `${score}% · Weak`;
+  return score >= 80 ? `${score}% · Strong` : score >= 60 ? `${score}% · Possible` : score >= 40 ? `${score}% · Weak` : `${score}% · Cross-area`;
 }
 
 function renderAll() {
@@ -334,18 +370,11 @@ async function confirmMatch(idx) {
   const vlan = s.tg.vlan;
 
   try {
-    // Update TG vendo: add sheet_name, mark traced
-    await fetch(`${SB}/rest/v1/vendos?id=eq.${tgId}`, {
-      method: 'PATCH',
-      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal'},
-      body: JSON.stringify({ sheet_name: sheetName, vlan: vlan, is_traced: true })
-    });
-
-    // Delete the sheet-only duplicate row
-    await fetch(`${SB}/rest/v1/vendos?id=eq.${sheetId}`, {
-      method: 'DELETE',
-      headers: {'apikey': KEY, 'Authorization': 'Bearer ' + KEY}
-    });
+    const db = supabase.createClient(SB, KEY);
+    const { error: e1 } = await db.from('vendos').update({ sheet_name: sheetName, vlan: vlan, is_traced: true }).eq('id', tgId);
+    if (e1) throw new Error(e1.message);
+    const { error: e2 } = await db.from('vendos').delete().eq('id', sheetId);
+    if (e2) throw new Error(e2.message);
 
     allSuggestions[idx].status = 'confirmed';
     confirmed++;
