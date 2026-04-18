@@ -1195,16 +1195,88 @@ function hvAddFromDetail(){
 }
 
 /* MATCH POPUP */
-function hvOpenMatch(name,type,event){
+async function hvOpenMatch(name,type,event){
   if(event)event.stopPropagation();
   hvMatchKnown=name; hvMatchType=type; hvSelectedSuggest='';
   const isSheet=type==='sheet';
-  document.getElementById('hv-mp-title').textContent=isSheet?'Find sheet name for: '+name:'Find TG name for: '+name;
-  document.getElementById('hv-mp-known-lbl').textContent=isSheet?'TG name (permanent key)':'Sheet name (known)';
+  document.getElementById('hv-mp-title').textContent=isSheet?'Find TG name for: '+name:'Find sheet name for: '+name;
+  document.getElementById('hv-mp-known-lbl').textContent=isSheet?'Sheet name (known)':'TG name (permanent key)';
   document.getElementById('hv-mp-known-val').textContent=name;
-  document.getElementById('hv-mp-known-sub').textContent=isSheet?'Searching for matching sheet entry...':'Searching for matching TG entry...';
+  document.getElementById('hv-mp-known-sub').textContent='Searching...';
   document.getElementById('hv-match-confirm-btn').disabled=true;
+  const list=document.getElementById('hv-suggest-list');
+  list.innerHTML='<div style="padding:12px;text-align:center;color:var(--mu);font-size:11px;">⏳ Loading suggestions...</div>';
   document.getElementById('hv-match-pop').classList.add('show');
+
+  try {
+    const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+    const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+    const hdrs={'apikey':KEY,'Authorization':'Bearer '+KEY};
+
+    // Find the vendo's VLAN and area first
+    const nameCol = isSheet ? 'sheet_name' : 'tg_name';
+    const safeName = encodeURIComponent(name);
+    const vr = await fetch(`${SB}/rest/v1/vendos?select=vlan,area&${nameCol}=eq.${safeName}&limit=1`,{headers:hdrs});
+    const vdata = await vr.json();
+    const vlan = vdata[0]?.vlan;
+    const area = vdata[0]?.area;
+
+    document.getElementById('hv-mp-known-sub').textContent=`${area||''}${vlan?' · VLAN '+vlan:''}`;
+
+    // Fetch candidates from the opposite side
+    const searchCol = isSheet ? 'tg_name' : 'sheet_name';
+    const nullCol = isSheet ? 'sheet_name' : 'tg_name';
+    let url = `${SB}/rest/v1/vendos?select=id,${searchCol},area,vlan&${nullCol}=is.null&${searchCol}=not.is.null`;
+    if (vlan) url += `&vlan=eq.${vlan}`;
+    url += '&limit=20';
+    const cr = await fetch(url,{headers:hdrs});
+    let candidates = await cr.json();
+
+    // If no same-VLAN results, search by area
+    if (!candidates.length && area) {
+      const ar = await fetch(`${SB}/rest/v1/vendos?select=id,${searchCol},area,vlan&${nullCol}=is.null&${searchCol}=not.is.null&area=eq.${encodeURIComponent(area)}&limit=20`,{headers:hdrs});
+      candidates = await ar.json();
+    }
+
+    // Score and sort
+    const nameLower = name.toLowerCase().replace(/\s+/g,'');
+    candidates = candidates.map(cd => {
+      const cdName = (cd[searchCol]||'').toLowerCase().replace(/\s+/g,'');
+      let score = cd.vlan===vlan ? 50 : 20;
+      if (cdName===nameLower) score=100;
+      else if (cdName.includes(nameLower)||nameLower.includes(cdName)) score+=35;
+      else if (cdName.startsWith(nameLower.substring(0,4))||nameLower.startsWith(cdName.substring(0,4))) score+=20;
+      return {...cd, score};
+    }).sort((a,b)=>b.score-a.score).slice(0,5);
+
+    if (!candidates.length) {
+      list.innerHTML='<div style="padding:10px;text-align:center;color:var(--mu);font-size:11px;">No suggestions found — use search below</div>';
+      return;
+    }
+
+    list.innerHTML = candidates.map((cd,i) => {
+      const cdName = cd[searchCol]||'';
+      const conf = cd.score>=80?'hi':cd.score>=50?'md':'lo';
+      const confLabel = cd.score>=80?`${cd.score}% · Strong`:cd.score>=50?`${cd.score}% · Same VLAN`:`${cd.score}% · Weak`;
+      const dotColor = cd.score>=80?'#16a34a':cd.score>=50?'#d97706':'#dc2626';
+      return `<div class="hv-suggest-item${i===0?' sel':''}" onclick="hvSelSuggest(this,'${cdName.replace(/'/g,"\'")}')">
+        <span style="width:8px;height:8px;border-radius:50%;background:${dotColor};display:inline-block;flex-shrink:0;"></span>
+        <div style="flex:1;min-width:0;">
+          <div class="hv-si-name">${cdName}</div>
+          <div class="hv-si-meta">${cd.area||''}${cd.vlan?' · VLAN '+cd.vlan:''}</div>
+        </div>
+        <span class="hv-si-conf ${conf}">${confLabel}</span>
+      </div>`;
+    }).join('');
+
+    // Auto-select first
+    if (candidates.length) {
+      hvSelectedSuggest = candidates[0][searchCol]||'';
+      document.getElementById('hv-match-confirm-btn').disabled=false;
+    }
+  } catch(e) {
+    list.innerHTML=`<div style="padding:10px;text-align:center;color:#dc2626;font-size:11px;">Error: ${e.message}</div>`;
+  }
 }
 
 function hvSelSuggest(el,name){
@@ -1220,20 +1292,31 @@ function hvFilterSuggestions(q){
   });
 }
 
-function hvConfirmMatch(){
+async function hvConfirmMatch(){
   if(!hvSelectedSuggest)return;
-  alert(`✅ Match saved permanently!
-
-${hvMatchKnown} ↔ ${hvSelectedSuggest}
-
-TG name: ${hvMatchType==='sheet'?hvMatchKnown:hvSelectedSuggest}
-Sheet name: ${hvMatchType==='sheet'?hvSelectedSuggest:hvMatchKnown}
-
-QR code is now fully active for this vendo.`);
-  document.getElementById('hv-match-pop').classList.remove('show');
+  const btn=document.getElementById('hv-match-confirm-btn');
+  btn.textContent='Saving...'; btn.disabled=true;
+  try{
+    const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+    const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+    const hdrs={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json','Prefer':'return=minimal'};
+    const tgName=hvMatchType==='sheet'?hvMatchKnown:hvSelectedSuggest;
+    const sheetName=hvMatchType==='sheet'?hvSelectedSuggest:hvMatchKnown;
+    await fetch(`${SB}/rest/v1/vendos?tg_name=eq.${encodeURIComponent(tgName)}`,{
+      method:'PATCH',headers:hdrs,
+      body:JSON.stringify({sheet_name:sheetName,is_traced:true})
+    });
+    await fetch(`${SB}/rest/v1/vendos?tg_name=is.null&sheet_name=eq.${encodeURIComponent(sheetName)}`,{
+      method:'DELETE',headers:hdrs
+    });
+    document.getElementById('hv-match-pop').classList.remove('show');
+    hvLoadVendos();
+  }catch(e){
+    alert('Error saving: '+e.message);
+  }finally{
+    btn.textContent='✅ Confirm match →'; btn.disabled=false;
+  }
 }
-
-/* ADD TO ROUTE */
 function hvToggleAdd(btn,name){
   const row=btn.closest('.hv-vr');
   const sheet=btn.dataset.sheet||'';
