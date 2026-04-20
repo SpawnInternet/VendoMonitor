@@ -519,6 +519,9 @@ function calcNet() {
 
 // ── SUBMIT HARVEST ──
 async function submitHarvest() {
+  // Prevent double submission
+  const submitBtns = document.querySelectorAll('.action-row .btn-green');
+  submitBtns.forEach(function(b){ b.disabled = true; b.textContent = 'Saving...'; });
   const total    = parseFloat(document.getElementById('coin-total').value) || 0;
   const free     = parseFloat(document.getElementById('coin-free').value)  || 0;
   const old      = parseFloat(document.getElementById('coin-old').value)   || 0;
@@ -611,6 +614,9 @@ async function submitHarvest() {
     setTimeout(() => { backToRoute(); }, 1000);
   } catch(e) {
     toast('❌ ' + e.message, 4000);
+    // Re-enable button on error
+    const btns = document.querySelectorAll('.action-row .btn-green');
+    btns.forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
   }
 }
 
