@@ -549,15 +549,21 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-back-top:hover{background:#1a3fca;transform:scale(1.08);}
 .hv-vr{display:grid;grid-template-columns:14px 8px minmax(0,1.4fr) minmax(0,1.6fr) 70px 74px 70px;align-items:center;padding:4px 8px;gap:4px;border-bottom:1px solid rgba(30,60,200,.07);cursor:pointer;background:#fafbff;}
 .hv-vr:hover{background:#eef2ff;}
-.hv-vr.urg-c{border-left:3px solid #dc2626;background:#fef2f2;}
-.hv-vr.urg-c:hover{background:#fee2e2;}
-.hv-vr.urg-h{border-left:3px solid #d97706;background:#fffbeb;}
+.hv-vr.urg-c{border-left:4px solid #dc2626;background:#fff5f5;}
+.hv-vr.urg-c:hover{background:#fecaca;}
+.hv-vr.urg-h{border-left:4px solid #d97706;background:#fffbeb;}
 .hv-vr.urg-h:hover{background:#fef3c7;}
-.hv-vr.urg-m{border-left:3px solid #7c3aed;background:#f5f3ff;}
+.hv-vr.urg-m{border-left:4px solid #7c3aed;background:#faf5ff;}
 .hv-vr.urg-m:hover{background:#f5f3ff;}
-.hv-vr.urg-l{border-left:3px solid #16a34a;background:#f0fdf4;}
+.hv-vr.urg-l{border-left:4px solid #16a34a;background:#f0fdf4;}
 .hv-vr.urg-l:hover{background:#dcfce7;}
-.hv-vr.urg-n{border-left:3px solid #d1d5db;background:#fafbff;}
+.hv-vr.urg-n{border-left:4px solid #d1d5db;background:#f9fafb;}
+.urg-badge{display:inline-block;font-size:7px;font-weight:700;padding:1px 5px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;vertical-align:middle;}
+.urg-badge.c{background:#fecaca;color:#991b1b;}
+.urg-badge.h{background:#fef3c7;color:#92400e;}
+.urg-badge.m{background:#ede9fe;color:#5b21b6;}
+.urg-badge.l{background:#dcfce7;color:#14532d;}
+.urg-badge.n{background:#f3f4f6;color:#6b7280;}
 .hv-vcb{width:11px;height:11px;accent-color:var(--blue);flex-shrink:0;}
 /* Dots */
 .hv-dot-g{width:7px;height:7px;border-radius:50%;background:#16a34a;flex-shrink:0;}
@@ -578,7 +584,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-vaname{font-size:11px;color:#6b7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .hv-vavlan{font-size:9px;color:#9ca3af;}
 /* Last harvest */
-.hv-vdate{font-size:11px;font-weight:600;white-space:nowrap;}
+.hv-vdate{font-size:9px;color:var(--mu);white-space:nowrap;}
 .hv-vdate.c{color:#dc2626;}.hv-vdate.h{color:#d97706;}.hv-vdate.m{color:#7c3aed;}.hv-vdate.l{color:#16a34a;}.hv-vdate.na{color:#dc2626;font-weight:600;font-size:9px;}
 /* Actions cell */
 .hv-act{display:flex;align-items:center;gap:3px;}
@@ -1135,6 +1141,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 
 
+
+
 /* ═══════════════════════════════════════
    HARVEST PANEL — COMPLETE JS v5 (fixed)
    ═══════════════════════════════════════ */
@@ -1226,6 +1234,20 @@ function hvFilt(f, btn) {
   hvCurrentFilter = f;
   document.querySelectorAll('#panel-harvest .hff').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
+  // Restore original area counts when resetting to 'all'
+  if (f === 'all' && !hvSearchQ && window._hvAreaCounts) {
+    const atcMap = {
+      'DAPITAN':'atc-dapitan','DIPOLOG':'atc-dipolog','SINDANGAN':'atc-sindangan',
+      'ROXAS':'atc-roxas','POLANCO':'atc-polanco','SINAMAN':'atc-sinaman',
+      'MINAOG':'atc-minaog','MIX AREAS':'atc-mix'
+    };
+    Object.entries(atcMap).forEach(([area, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = window._hvAreaCounts[area] || 0;
+    });
+    const allEl = document.getElementById('atc-all');
+    if (allEl) allEl.textContent = window._hvTotalCount || '—';
+  }
   hvApplyFilter();
 }
 
@@ -1268,14 +1290,50 @@ function hvApplyFilter() {
   });
   const cnt = document.getElementById('hv-sel-count');
   if (cnt) cnt.textContent = n + ' vendos';
-  // Update area tab counts based on visible rows
-  const areaCounts2 = {};
-  document.querySelectorAll('#vc-scroll .hv-vr').forEach(r => {
-    if (r.style.display !== 'none') {
-      const a = r.dataset.area || 'MIX AREAS';
-      areaCounts2[a] = (areaCounts2[a]||0)+1;
-    }
-  });
+
+  // Show/hide empty state
+  let _em = document.getElementById('hv-filter-empty');
+  if (!_em) {
+    _em = document.createElement('div');
+    _em.id = 'hv-filter-empty';
+    _em.style.cssText = 'padding:40px 20px;text-align:center;color:var(--mu);font-size:12px;position:absolute;width:100%;top:60px;left:0;';
+    const _sc = document.getElementById('vc-scroll');
+    if (_sc) { _sc.style.position='relative'; _sc.appendChild(_em); }
+  }
+  if (n === 0 && document.querySelectorAll('#vc-scroll .hv-vr').length > 0) {
+    const _al = hvCurrentArea === 'all' ? 'all areas' : hvCurrentArea;
+    const _fm = {critical:'Critical (90+ days)',high:'High (61-90 days)',medium:'Medium (31-60 days)',low:'Low (0-30 days)',unmatched:'Unmatched',new:'New'};
+    const _fl = hvCurrentFilter !== 'all' ? _fm[hvCurrentFilter] || hvCurrentFilter : '';
+    const _tip = (hvCurrentFilter==='low'||hvCurrentFilter==='medium'||hvCurrentFilter==='high')
+      ? '<br><small style="color:#818cf8;">These filters populate once harvest records are saved.</small>' : '';
+    _em.innerHTML = '<div style="font-size:28px;margin-bottom:10px;">🔍</div><div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:4px;">No vendos found</div><div style="font-size:11px;line-height:1.6;">' + (_fl ? '<b>'+_fl+'</b> filter in <b>'+_al+'</b>' : 'No vendos in <b>'+_al+'</b>') + _tip + '</div>';
+    _em.style.display = '';
+  } else if (_em) {
+    _em.style.display = 'none';
+  }
+
+  // Update area tab counts to reflect CURRENT STATUS FILTER (not just area total)
+  const atcMap = {
+    'DAPITAN':'atc-dapitan','DIPOLOG':'atc-dipolog','SINDANGAN':'atc-sindangan',
+    'ROXAS':'atc-roxas','POLANCO':'atc-polanco','SINAMAN':'atc-sinaman',
+    'MINAOG':'atc-minaog','MIX AREAS':'atc-mix'
+  };
+  // Only update counts if a status filter is active (not 'all')
+  if (hvCurrentFilter !== 'all' || hvSearchQ) {
+    const filtered = {};
+    document.querySelectorAll('#vc-scroll .hv-vr').forEach(r => {
+      if (r.style.display !== 'none') {
+        const a = r.dataset.area || 'MIX AREAS';
+        filtered[a] = (filtered[a]||0)+1;
+      }
+    });
+    Object.entries(atcMap).forEach(([area, id]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = filtered[area] || 0;
+    });
+    const allEl = document.getElementById('atc-all');
+    if (allEl) allEl.textContent = n;
+  }
 }
 
 /* ─── BUILD ONE VENDO ROW (used by hvLoadVendos for all pages) ─── */
@@ -1350,7 +1408,10 @@ function buildVendoRow(v, scroll) {
     <div class="${dot}"></div>
     ${sheetCell}${tgCell}
     <div><div class="hv-vaname">${v.area||'—'}</div><div class="hv-vavlan">${vlanTxt}</div></div>
-    <span class="hv-vdate ${dc}">${lastFmt}</span>
+    <div>
+      <span class="urg-badge ${dc}">${dc==='c'?'Critical':dc==='h'?'High':dc==='m'?'Medium':dc==='l'?'Low':'No data'}</span>
+      <div class="hv-vdate ${dc}" style="font-size:9px;margin-top:1px;">${lastFmt}</div>
+    </div>
     <div class="hv-act">
       <button class="hv-ni ${niCls}" data-action="note" title="${hasNote?'Has note':'Add note'}">
         <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
@@ -1402,6 +1463,7 @@ async function hvLoadVendos() {
   const scroll = document.getElementById('vc-scroll');
   if (!scroll) { window._hvLoading = false; return; }
   scroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
+  const _ef = document.getElementById('hv-filter-empty'); if (_ef) _ef.style.display='none';
 
   const headers = { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY };
   const base = `${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc`;
@@ -1429,9 +1491,11 @@ async function hvLoadVendos() {
       return;
     }
 
-    // Update area tab counts
+    // Update area tab counts — store globally for filter reset
     const counts = {};
     allData.forEach(v => { const a = (v.area||'MIX AREAS').toUpperCase(); counts[a] = (counts[a]||0)+1; });
+    window._hvAreaCounts = counts;
+    window._hvTotalCount = allData.length;
     const atcMap = {
       'DAPITAN':'atc-dapitan','DIPOLOG':'atc-dipolog','SINDANGAN':'atc-sindangan',
       'ROXAS':'atc-roxas','POLANCO':'atc-polanco','SINAMAN':'atc-sinaman',
@@ -1445,7 +1509,6 @@ async function hvLoadVendos() {
     if (allEl) allEl.textContent = allData.length;
 
     hvApplyFilter();
-    window._hvLoading = false;
 
   } catch(e) {
     console.error('hvLoadVendos error:', e);
@@ -2184,6 +2247,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+
 
 
 
