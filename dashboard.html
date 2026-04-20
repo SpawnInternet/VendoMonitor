@@ -984,25 +984,69 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- DETAIL POPUP -->
 <div class="hv-popbg" id="hv-detail-pop">
-  <div class="hv-pop" style="width:380px;">
-    <div style="background:var(--blue);color:#fff;padding:10px 14px;border-radius:7px 7px 0 0;margin:-16px -16px 12px;display:flex;align-items:center;justify-content:space-between;">
+  <div style="background:#fff;border-radius:12px;width:440px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.18);">
+
+    <!-- Blue header -->
+    <div style="background:var(--blue);color:#fff;padding:12px 16px;display:flex;align-items:flex-start;justify-content:space-between;">
       <div>
-        <div style="font-size:13px;font-weight:700;" id="hv-dp-title">Vendo details</div>
-        <div style="font-size:10px;opacity:.85;margin-top:1px;" id="hv-dp-sub"></div>
+        <div style="font-size:15px;font-weight:700;letter-spacing:.01em;" id="hv-dp-title">Vendo details</div>
+        <div style="font-size:10px;opacity:.75;margin-top:2px;" id="hv-dp-sub"></div>
       </div>
-      <button style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;" onclick="document.getElementById('hv-detail-pop').classList.remove('show')">×</button>
+      <button style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:16px;cursor:pointer;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;" onclick="document.getElementById('hv-detail-pop').classList.remove('show')">×</button>
     </div>
-    <div class="hv-alert-note" id="hv-dp-alert" style="display:none;"></div>
-    <div class="hv-detail-grid">
-      <div class="hv-dc"><div class="hv-dc-lbl">Sheet name</div><div class="hv-dc-val bl" id="hv-dp-sheet">—</div><div class="hv-dc-sub">Google Sheet record</div></div>
-      <div class="hv-dc"><div class="hv-dc-lbl">TG name · Group</div><div class="hv-dc-val bl" id="hv-dp-tg">—</div><div class="hv-dc-sub" id="hv-dp-gc">—</div></div>
-      <div class="hv-dc"><div class="hv-dc-lbl">Last harvest</div><div class="hv-dc-val" id="hv-dp-last">—</div></div>
-      <div class="hv-dc"><div class="hv-dc-lbl">Area / VLAN</div><div class="hv-dc-val" id="hv-dp-area">—</div></div>
-    </div>
-    <div class="hv-detail-btns">
-      <button class="hv-db blue" onclick="hvGenQRFromDetail()">📱 QR</button>
-      <button class="hv-db gray" onclick="hvOpenMatchFromDetail()">💡 Match</button>
-      <button class="hv-db green" onclick="hvAddFromDetail()">+ Add to route</button>
+
+    <!-- Alert -->
+    <div class="hv-alert-note" id="hv-dp-alert" style="display:none;margin:0;border-radius:0;"></div>
+
+    <!-- Body -->
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+
+      <!-- Info grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="background:#eef2ff;border-radius:8px;padding:10px 12px;border-left:3px solid var(--blue);">
+          <div style="font-size:8px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Sheet name</div>
+          <div style="font-size:13px;font-weight:700;color:var(--blue);" id="hv-dp-sheet">—</div>
+          <div style="font-size:9px;color:#818cf8;margin-top:2px;">Google Sheet record</div>
+        </div>
+        <div style="background:#f5f3ff;border-radius:8px;padding:10px 12px;border-left:3px solid #7c3aed;">
+          <div style="font-size:8px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">TG name · Group</div>
+          <div style="font-size:12px;font-weight:700;color:#5b21b6;word-break:break-all;" id="hv-dp-tg">—</div>
+          <div style="font-size:9px;color:#8b5cf6;margin-top:2px;" id="hv-dp-gc">—</div>
+        </div>
+        <div style="background:#f0fdf4;border-radius:8px;padding:10px 12px;border-left:3px solid #16a34a;">
+          <div style="font-size:8px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Last harvest</div>
+          <div style="font-size:13px;font-weight:700;color:#15803d;" id="hv-dp-last">—</div>
+        </div>
+        <div style="background:#fafbff;border-radius:8px;padding:10px 12px;border-left:3px solid #6366f1;">
+          <div style="font-size:8px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Area / VLAN</div>
+          <div style="font-size:13px;font-weight:700;color:#4338ca;" id="hv-dp-area">—</div>
+        </div>
+      </div>
+
+      <!-- Schedule section -->
+      <div style="background:#f8faff;border:1.5px solid #c7d2fe;border-radius:8px;padding:10px 12px;">
+        <div style="font-size:9px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          ⏰ Harvest schedule
+          <span style="font-size:8px;font-weight:500;color:#818cf8;text-transform:none;letter-spacing:0;margin-left:auto;" id="hv-dp-sched-status">global default</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:10px;color:var(--mu);">Harvest every</span>
+          <input type="number" id="hv-dp-interval" min="7" max="365" value="30"
+            style="width:55px;padding:4px 6px;border:1.5px solid #c7d2fe;border-radius:5px;font-size:12px;font-weight:700;color:var(--blue);font-family:inherit;outline:none;text-align:center;">
+          <span style="font-size:10px;color:var(--mu);">days</span>
+          <button onclick="hvSaveSchedule()" style="padding:4px 12px;background:var(--blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>
+          <button onclick="hvClearSchedule()" style="padding:4px 8px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:9px;cursor:pointer;font-family:inherit;">Reset to global</button>
+        </div>
+        <div style="font-size:9px;color:#818cf8;margin-top:6px;" id="hv-dp-next-due">Next harvest due: —</div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:flex;gap:8px;">
+        <button onclick="hvGenQRFromDetail()" id="hv-dp-qr-btn" style="flex:1;padding:8px;background:#eef2ff;color:var(--blue);border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📱 QR code</button>
+        <button onclick="hvOpenMatchFromDetail()" style="flex:1;padding:8px;background:#f5f3ff;color:#7c3aed;border:1.5px solid #ddd6fe;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">💡 Match names</button>
+        <button onclick="hvAddFromDetail()" style="flex:1;padding:8px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">+ Add to route</button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -1261,7 +1305,7 @@ function buildVendoRow(v, scroll) {
     tgCell = v.tg_name
       ? `<div><div class="hv-vtname">${v.tg_name}</div><div class="hv-vgc">${gcName}</div></div>`
       : `<div><div class="hv-vtmatch">TG not found</div><button class="hv-vmatch-btn" data-action="match-tg">💡 suggest match</button></div>`;
-    const qrPart = v.tg_name ? `<button class="hv-qrbtn" data-action="qr" title="Generate QR">📱</button>` : '';
+    const qrPart = matched ? `<button class="hv-qrbtn" data-action="qr" title="Generate QR — match confirmed">📱</button>` : '';
     addBtn = qrPart + `<button class="hv-ab" data-action="add">+ add</button>`;
   }
 
@@ -1376,19 +1420,58 @@ function hvOpenDetailFromRow(row) {
     area: d.area, vlan: d.vlan, last: d.last, note: d.note
   };
   const title = d.sheet || d.tg || 'Vendo details';
-  const dp = document.getElementById('hv-detail-pop');
-  dp.querySelector('#hv-dp-title').textContent = title;
-  dp.querySelector('#hv-dp-sub').textContent = d.area + ' · ' + d.vlan + (d.tg ? ' · TG: ' + d.tg : '');
-  dp.querySelector('#hv-dp-sheet').textContent = d.sheet || 'Not yet matched';
-  dp.querySelector('#hv-dp-tg').textContent    = d.tg    || 'Not yet matched';
+  document.getElementById('hv-dp-title').textContent = title;
+  document.getElementById('hv-dp-sub').textContent = d.area + ' · ' + d.vlan + (d.tg ? ' · ' + d.tg : '');
+  document.getElementById('hv-dp-sheet').textContent = d.sheet || '— not matched';
+  document.getElementById('hv-dp-tg').textContent    = d.tg    || '— not matched';
   const gcNames = {'DAPITAN':'Dapitan GC','DIPOLOG':'Dipolog GC','SINDANGAN':'Sindangan GC','ROXAS':'Roxas GC','POLANCO':'Polanco GC','SINAMAN':'Sinaman GC','MINAOG':'Minaog GC','MIX AREAS':'No GC'};
-  const gcEl = dp.querySelector('#hv-dp-gc');
+  const gcEl = document.getElementById('hv-dp-gc');
   if (gcEl) gcEl.textContent = gcNames[(d.area||'').toUpperCase()] || d.area || '—';
-  dp.querySelector('#hv-dp-last').textContent  = d.last  || '—';
-  dp.querySelector('#hv-dp-area').textContent  = d.area  + ' · ' + d.vlan;
-  const alertEl = dp.querySelector('#hv-dp-alert');
+  document.getElementById('hv-dp-last').textContent  = d.last  || '—';
+  document.getElementById('hv-dp-area').textContent  = d.area  + ' · ' + d.vlan;
+  const alertEl = document.getElementById('hv-dp-alert');
   if (alertEl) alertEl.style.display = 'none';
-  dp.classList.add('show');
+  // Load schedule for this vendo
+  hvLoadDetailSchedule(d.vid);
+  // QR only available if fully matched (both sheet + TG name confirmed)
+  const qrBtn = document.getElementById('hv-dp-qr-btn');
+  if (qrBtn) {
+    const isMatched = !!(d.sheet && d.tg);
+    qrBtn.style.display = isMatched ? '' : 'none';
+    qrBtn.title = isMatched ? 'Generate QR — match confirmed ✅' : 'QR only available after match is confirmed';
+  }
+  document.getElementById('hv-detail-pop').classList.add('show');
+}
+
+async function hvLoadDetailSchedule(vid) {
+  const inp = document.getElementById('hv-dp-interval');
+  const stat = document.getElementById('hv-dp-sched-status');
+  const nextDue = document.getElementById('hv-dp-next-due');
+  if (!inp) return;
+  inp.value = 30;
+  if (stat) stat.textContent = 'global default (30 days)';
+  if (nextDue) nextDue.textContent = 'Next harvest due: —';
+  try {
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}&select=harvest_interval,last_harvest_date`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const data = await r.json();
+    if (data && data[0]) {
+      const v = data[0];
+      const interval = v.harvest_interval || 30;
+      inp.value = interval;
+      if (stat) stat.textContent = v.harvest_interval ? `custom: every ${interval} days` : 'global default (30 days)';
+      if (v.last_harvest_date) {
+        const last = new Date(v.last_harvest_date);
+        const due  = new Date(last.getTime() + interval * 86400000);
+        const dLeft = Math.ceil((due - new Date()) / 86400000);
+        const dueFmt = due.toLocaleDateString('en-PH', {month:'short',day:'numeric',year:'numeric'});
+        const cls = dLeft < 0 ? 'color:#dc2626' : dLeft <= 7 ? 'color:#d97706' : 'color:#16a34a';
+        const label = dLeft < 0 ? `${Math.abs(dLeft)}d overdue` : dLeft === 0 ? 'Due today' : `${dLeft}d left`;
+        if (nextDue) nextDue.innerHTML = `Next harvest due: <b style="${cls}">${dueFmt} (${label})</b>`;
+      }
+    }
+  } catch(e) { /* no harvest_interval col yet — silently ignore */ }
 }
 
 function hvAddFromDetail() {
@@ -1764,6 +1847,47 @@ function hvAddNote() {
   div.appendChild(x);
   document.getElementById('hv-nchips').prepend(div);
   inp.value = '';
+}
+
+/* ─── VENDO SCHEDULE (per-detail popup) ─── */
+async function hvSaveSchedule() {
+  const vid = hvCurrentDetail.id;
+  const interval = parseInt(document.getElementById('hv-dp-interval')?.value) || 30;
+  if (!vid) return;
+  try {
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ harvest_interval: interval })
+    });
+    const stat = document.getElementById('hv-dp-sched-status');
+    if (r.ok) {
+      if (stat) stat.textContent = `custom: every ${interval} days`;
+      const toast = document.getElementById('hv-refresh-toast');
+      if (toast) { toast.textContent = `✅ Schedule set: every ${interval} days`; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+    } else {
+      // harvest_interval column may not exist yet — show friendly message
+      const toast = document.getElementById('hv-refresh-toast');
+      if (toast) { toast.textContent = '⚠ Run update_sheet_names.sql first to enable schedules'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),4000); }
+    }
+  } catch(e) { console.error('Schedule save error:', e); }
+}
+
+async function hvClearSchedule() {
+  const vid = hvCurrentDetail.id;
+  if (!vid) return;
+  try {
+    await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ harvest_interval: null })
+    });
+    document.getElementById('hv-dp-interval').value = 30;
+    const stat = document.getElementById('hv-dp-sched-status');
+    if (stat) stat.textContent = 'global default (30 days)';
+    const toast = document.getElementById('hv-refresh-toast');
+    if (toast) { toast.textContent = '✅ Reset to global schedule'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2000); }
+  } catch(e) { console.error('Schedule clear error:', e); }
 }
 
 /* ─── ADD SHEET NAME INLINE ─── */
