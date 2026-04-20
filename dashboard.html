@@ -209,7 +209,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">Vendos</span>
     </button>
     <!-- Harvest -->
-    <button onclick="showP('harvest',this);setTimeout(function(){if(typeof hvLoadVendos==='function')hvLoadVendos();setTimeout(()=>{if(typeof hvRefreshPendingRoutes==='function')hvRefreshPendingRoutes();},800);var fab=document.getElementById('hv-refresh-fab');if(fab)fab.classList.add('visible');},300)">
+    <button onclick="showP('harvest',this);setTimeout(function(){window._hvLoading=false;if(typeof hvLoadVendos==='function')hvLoadVendos();setTimeout(()=>{if(typeof hvRefreshPendingRoutes==='function')hvRefreshPendingRoutes();},800);var fab=document.getElementById('hv-refresh-fab');if(fab)fab.classList.add('visible');},300)">
       <div class="ni" style="background:#d1fae5">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3 C8 3 4 7 4 12 C4 16 8 20 12 20 C16 20 20 16 20 12" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 3 C14 6 18 6 20 3" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 8 L12 16 M9 13 L12 16 L15 13" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </div>
@@ -1193,11 +1193,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button style="padding:8px 12px;border:1px solid var(--bd);border-radius:6px;font-size:11px;cursor:pointer;background:#fff;font-family:inherit;color:var(--mu);" onclick="document.getElementById('hv-reg-pop').classList
 .remove('show')">Cancel</button>
     </div>
-  </div>
-</div>
-
-
-<script>
+  
 
 
 
@@ -1535,6 +1531,8 @@ async function hvLoadVendos() {
   if (!scroll) return;
   if (window._hvLoading) return;
   window._hvLoading = true;
+  // Safety: force reset flag after 15s no matter what
+  const _loadTimeout = setTimeout(() => { window._hvLoading = false; }, 15000);
   scroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
   const _ef = document.getElementById('hv-filter-empty'); if (_ef) _ef.style.display='none';
 
@@ -1597,6 +1595,7 @@ async function hvLoadVendos() {
       <button onclick="hvLoadVendos()" style="margin-top:8px;padding:4px 12px;border-radius:5px;border:1px solid #dc2626;background:#fff;color:#dc2626;cursor:pointer;font-size:11px;">Retry</button>
     </div>`;
   } finally {
+    clearTimeout(_loadTimeout);
     window._hvLoading = false;
   }
 }
@@ -2724,6 +2723,25 @@ document.addEventListener('DOMContentLoaded', function() {
       btn.classList.toggle('vis', scroll.scrollTop > 300);
     });
   }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ }
 });
 
 
