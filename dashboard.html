@@ -1143,6 +1143,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 
 
+
 /* ═══════════════════════════════════════
    HARVEST PANEL — COMPLETE JS v5 (fixed)
    ═══════════════════════════════════════ */
@@ -1458,10 +1459,10 @@ document.addEventListener('click', function(e) {
 
 /* ─── LOAD VENDOS FROM SUPABASE ─── */
 async function hvLoadVendos() {
+  const scroll = document.getElementById('vc-scroll');
+  if (!scroll) return;
   if (window._hvLoading) return;
   window._hvLoading = true;
-  const scroll = document.getElementById('vc-scroll');
-  if (!scroll) { window._hvLoading = false; return; }
   scroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
   const _ef = document.getElementById('hv-filter-empty'); if (_ef) _ef.style.display='none';
 
@@ -1471,6 +1472,7 @@ async function hvLoadVendos() {
 
   try {
     scroll.innerHTML = '';
+    const seenIds = new Set();
     let offset = 0;
     const pageSize = 500;
     let keepGoing = true;
@@ -1480,10 +1482,16 @@ async function hvLoadVendos() {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const page = await r.json();
       if (!page || !page.length) { keepGoing = false; break; }
-      page.forEach(v => { allData.push(v); buildVendoRow(v, scroll); });
+      page.forEach(v => {
+        const key = v.id || (v.tg_name + '|' + v.area);
+        if (seenIds.has(key)) return;
+        seenIds.add(key);
+        allData.push(v);
+        buildVendoRow(v, scroll);
+      });
       if (page.length < pageSize) keepGoing = false;
       else offset += pageSize;
-      if (offset >= 3000) break; // safety cap
+      if (offset >= 3000) break;
     }
 
     if (!allData.length) {
@@ -2355,6 +2363,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
 
 
 
