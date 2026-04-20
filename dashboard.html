@@ -558,6 +558,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-vr.urg-l{border-left:4px solid #16a34a;background:#f0fdf4;}
 .hv-vr.urg-l:hover{background:#dcfce7;}
 .hv-vr.urg-n{border-left:4px solid #d1d5db;background:#f9fafb;}
+.hv-vr.sheet-only-row{opacity:.82;border-left-style:dashed;}
 .urg-badge{display:inline-block;font-size:7px;font-weight:700;padding:1px 5px;border-radius:8px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;vertical-align:middle;}
 .urg-badge.c{background:#fecaca;color:#991b1b;}
 .urg-badge.h{background:#fef3c7;color:#92400e;}
@@ -1144,6 +1145,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 
 
+
 /* ═══════════════════════════════════════
    HARVEST PANEL — COMPLETE JS v5 (fixed)
    ═══════════════════════════════════════ */
@@ -1364,7 +1366,8 @@ function buildVendoRow(v, scroll) {
   // Store raw values on dataset — no apostrophe escaping needed here
   const div = document.createElement('div');
   const urgCls = days >= 90 ? 'urg-c' : days >= 61 ? 'urg-h' : days >= 31 ? 'urg-m' : days > 0 ? 'urg-l' : 'urg-n';
-  div.className      = 'hv-vr ' + urgCls;
+  const sheetOnly = v.sheet_name && !v.tg_name ? ' sheet-only-row' : '';
+  div.className      = 'hv-vr ' + urgCls + sheetOnly;
   div.dataset.area   = (v.area || '').toUpperCase() || 'MIX AREAS';
   div.dataset.days   = days;
   div.dataset.matched = matched ? 'true' : 'false';
@@ -1390,9 +1393,10 @@ function buildVendoRow(v, scroll) {
     tgCell  = `<div><div class="hv-vtname">${tgShort}</div><div class="hv-vtlbl">telegram <span class="new-badge">new</span></div></div>`;
     addBtn  = `<button class="hv-ab reg" data-action="register">Register</button>`;
   } else {
+    const vlanBadge = v.vlan ? `<div style="font-size:8px;color:#9ca3af;margin-top:1px;">VLAN ${v.vlan}</div>` : '';
     sheetCell = v.sheet_name
-      ? `<div><div class="hv-vsname">${v.sheet_name}</div></div>`
-      : `<div><button class="hv-addname-btn" data-action="add-sheet-name">+ add sheet name</button><button class="hv-vmatch-btn" data-action="match-sheet" style="margin-top:2px;">💡 suggest match</button></div>`;
+      ? `<div><div class="hv-vsname">${v.sheet_name}</div>${vlanBadge}</div>`
+      : `<div><button class="hv-addname-btn" data-action="add-sheet-name">+ add sheet name</button><button class="hv-vmatch-btn" data-action="match-sheet" style="margin-top:2px;">💡 suggest match</button>${vlanBadge}</div>`;
     const badge = matched
       ? '<span class="matched-badge">✓ matched</span>'
       : '<span class="unmatched-badge">unmatched</span>';
@@ -2363,6 +2367,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
 
 
 
