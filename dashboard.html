@@ -2402,7 +2402,6 @@ function hvShowRouteDetail(code) {
 }
 
 function hvClearRoute() {
-  if (!confirm('Clear all vendos from this route?')) return;
   document.querySelectorAll('#hv-rv-scroll .hv-rv').forEach(r => r.remove());
   document.querySelectorAll('#vc-scroll .hv-vr[data-vid]').forEach(row => {
     const addBtn = row.querySelector('[data-action="add"]');
@@ -2792,22 +2791,22 @@ async function hvLoadRecordDates() {
   const content = document.getElementById('hv-rec-content');
   if (!tabBar) return;
   tabBar.innerHTML = '<div style="padding:7px 14px;font-size:11px;color:#9ca3af;">Loading...</div>';
+  if (content) content.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Select a date to view routes</div>';
 
   try {
-    const r = await fetch(`${_SB}/rest/v1/harvests?select=harvest_date&order=harvest_date.desc&limit=500`, {
+    // Load from ROUTES table — source of truth for route progress
+    const r = await fetch(`${_SB}/rest/v1/routes?select=route_date&order=route_date.desc&limit=200`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     const data = await r.json();
     if (!data.length) {
-      tabBar.innerHTML = '<div style="padding:7px 14px;font-size:11px;color:#9ca3af;">No harvest records yet</div>';
+      tabBar.innerHTML = '<div style="padding:7px 14px;font-size:11px;color:#9ca3af;">No routes yet — build a route first</div>';
       return;
     }
-    // Get unique dates
-    const dates = [...new Set(data.map(h => h.harvest_date))].sort((a,b) => b.localeCompare(a));
+    const dates = [...new Set(data.map(h => h.route_date))].sort((a,b) => b.localeCompare(a));
     tabBar.innerHTML = dates.map((d,i) =>
-      `<button class="hv-dtab${i===0?' on':''}" onclick="hvLoadRecordsByDate('${d}',this)">${new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</button>`
+      `<button class="hv-dtab${i===0?' on':''}" data-date="${d}" onclick="hvLoadRecordsByDate('${d}',this)">${new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</button>`
     ).join('');
-    // Load first date
     if (dates.length) hvLoadRecordsByDate(dates[0], tabBar.querySelector('.hv-dtab'));
   } catch(e) {
     tabBar.innerHTML = `<div style="padding:7px 14px;font-size:11px;color:#dc2626;">Error: ${e.message}</div>`;
@@ -2815,81 +2814,117 @@ async function hvLoadRecordDates() {
 }
 
 async function hvLoadRecordsByDate(date, btn) {
-  // Update active tab
   document.querySelectorAll('.hv-dtab').forEach(b => b.classList.remove('on'));
-  if (btn) btn.classList.add('on');
+  if (btn) { btn.classList.add('on'); btn.dataset.date = date; }
   const content = document.getElementById('hv-rec-content');
   if (!content) return;
   content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading...</div>';
 
   try {
-    const r = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&order=created_at.asc&limit=500`, {
+    // Load routes for this date
+    const rr = await fetch(`${_SB}/rest/v1/routes?route_date=eq.${date}&order=created_at.asc`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
-    const data = await r.json();
-    if (!data.length) { content.innerHTML = '<div class="hv-rec-empty">No records for this date</div>'; return; }
+    const routes = await rr.json();
+    if (!routes.length) {
+      content.innerHTML = '<div class="hv-rec-empty">No routes for this date</div>';
+      return;
+    }
 
-    // Group by collector
+    // For each route load its route_items
+    const routeIds = routes.map(r => r.id);
+    const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=in.(${routeIds.join(',')})&order=id.asc`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const allItems = await ri.json();
+
+    // Also load harvests for this date for coin data
+    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=tg_name,net_collectible,spawn_share,customer_share,coins_total,created_at,collector_note,status`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const harvests = await rh.json();
+    const harvestMap = {};
+    harvests.forEach(h => { harvestMap[h.tg_name] = h; });
+
+    // Group routes by collector
     const byCollector = {};
-    data.forEach(h => {
-      const key = h.collector || 'Unknown';
-      if (!byCollector[key]) byCollector[key] = [];
-      byCollector[key].push(h);
+    routes.forEach(route => {
+      const col = route.collector || 'Unknown';
+      if (!byCollector[col]) byCollector[col] = [];
+      byCollector[col].push(route);
     });
 
-    // Render
-    content.innerHTML = Object.entries(byCollector).map(([collector, records]) => {
-      const totalNet   = records.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-      const totalSpawn = records.reduce((s,h) => s+(parseFloat(h.spawn_share)||0), 0);
-      const totalCust  = records.reduce((s,h) => s+(parseFloat(h.customer_share)||0), 0);
+    content.innerHTML = Object.entries(byCollector).map(([collector, collRoutes]) => {
+      const collItems = allItems.filter(i => collRoutes.some(r => r.id === i.route_id));
+      const doneItems = collItems.filter(i => i.status === 'harvested');
+      const totalNet  = collItems.reduce((s,i) => s+(parseFloat(i.net_collectible)||0), 0);
+      const totalSpawn = totalNet * 0.75;
 
-      // Group by route
-      const byRoute = {};
-      records.forEach(h => {
-        const rc = h.route_code || 'No route';
-        if (!byRoute[rc]) byRoute[rc] = [];
-        byRoute[rc].push(h);
-      });
+      const routeSections = collRoutes.map(route => {
+        const items = allItems.filter(i => i.route_id === route.id);
+        const done  = items.filter(i => i.status === 'harvested').length;
+        const routeNet = items.reduce((s,i) => s+(parseFloat(i.net_collectible)||0), 0);
+        const statusBadge = route.status === 'completed'
+          ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:8px;background:#dcfce7;color:#15803d;">✅ Done</span>'
+          : '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e;">⏳ Active</span>';
 
-      const routeSections = Object.entries(byRoute).map(([rc, items]) => {
-        const routeNet = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-        const rows = items.map(h => {
-          const isDone = h.status === 'harvested';
-          const timeStr = h.created_at ? new Date(h.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
-          return `<div class="hv-rs-row">
+        // Progress bar
+        const pct = items.length ? Math.round(done/items.length*100) : 0;
+        const progressBar = `<div style="background:#e5e7eb;border-radius:99px;height:4px;margin:6px 0;">
+          <div style="background:#16a34a;border-radius:99px;height:4px;width:${pct}%;transition:width .3s;"></div>
+        </div>
+        <div style="font-size:9px;color:#6b7280;margin-bottom:8px;">${done}/${items.length} vendos harvested (${pct}%)</div>`;
+
+        const rows = items.map(item => {
+          const isDone  = item.status === 'harvested';
+          const harv    = harvestMap[item.tg_name] || {};
+          const net     = parseFloat(item.net_collectible || harv.net_collectible || 0);
+          const coins   = parseFloat(item.coins_total || harv.coins_total || 0);
+          const timeStr = item.harvested_at
+            ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true})
+            : '—';
+          const name = item.sheet_name || item.tg_name || '—';
+          return `<div class="hv-rs-row" style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid #f0f0f0;">
             <div>
-              <span style="font-weight:600;">${h.vendo_name||h.tg_name||'—'}</span>
-              <span class="hv-rs-status ${isDone?'done':'pending'}">${isDone?'✅ Done':'⏳ Pending'}</span>
-              ${h.collector_note ? `<div class="hv-rs-note">📝 ${h.collector_note}</div>` : ''}
-              <div style="font-size:9px;color:#9ca3af;">${timeStr}</div>
+              <div style="font-size:12px;font-weight:600;color:#374151;">${name}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:${isDone?'#dcfce7':'#fef9c3'};color:${isDone?'#15803d':'#92400e'};">${isDone?'✅ Done':'⏳ Pending'}</span>
+                ${timeStr !== '—' ? `<span style="font-size:9px;color:#9ca3af;">${timeStr}</span>` : ''}
+              </div>
+              ${item.collector_note ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;">📝 ${item.collector_note}</div>` : ''}
             </div>
-            <div style="text-align:right;">
-              <div style="font-weight:700;color:#16a34a;">₱${parseFloat(h.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-              <div style="font-size:9px;color:#6b7280;">Total: ₱${parseFloat(h.coins_total||0).toLocaleString()}</div>
+            <div style="text-align:right;flex-shrink:0;">
+              ${isDone ? `<div style="font-size:13px;font-weight:700;color:#16a34a;">₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+              <div style="font-size:9px;color:#9ca3af;">Coins: ₱${coins.toLocaleString()}</div>` : '<div style="font-size:11px;color:#9ca3af;">—</div>'}
             </div>
           </div>`;
         }).join('');
 
-        return `<div class="hv-route-section">
-          <div class="hv-rs-code">
-            <span>Route: ${rc}</span>
-            <span style="font-size:12px;color:#16a34a;">₱${routeNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+        return `<div class="hv-route-section" style="background:#f8faff;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:13px;font-weight:700;color:#1e3cb8;letter-spacing:.05em;">${route.route_code}</span>
+              ${statusBadge}
+            </div>
+            <span style="font-size:13px;font-weight:700;color:#16a34a;">₱${routeNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
           </div>
+          <div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">${route.area||'All areas'} · ${items.length} vendos</div>
+          ${progressBar}
           ${rows}
-          <div class="hv-rs-actions">
-            <button class="hv-rs-btn blue" onclick="hvAddToRoute('${rc}')">+ Add vendo</button>
-            <button class="hv-rs-btn" onclick="hvMarkRouteDone('${rc}')">✅ Mark done</button>
-            <button class="hv-rs-btn red" onclick="hvDeleteRoute('${rc}')">🗑 Delete</button>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button class="hv-rs-btn" onclick="hvMarkRouteDone('${route.route_code}')">✅ Mark done</button>
+            <button class="hv-rs-btn red" onclick="hvDeleteRoute('${route.route_code}')">🗑 Delete</button>
           </div>
         </div>`;
       }).join('');
 
-      return `<div class="hv-col-card">
-        <div class="hv-col-name">👤 ${collector}</div>
-        <div style="display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
-          <span class="hv-col-total">Net: ₱${totalNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-          <span style="font-size:11px;color:#16a34a;">Spawn (75%): ₱${totalSpawn.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-          <span style="font-size:11px;color:#7c3aed;">Owner (25%): ₱${totalCust.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+      return `<div class="hv-col-card" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:700;color:#374151;">👤 ${collector}</div>
+          <div style="text-align:right;">
+            <div style="font-size:12px;font-weight:700;color:#16a34a;">₱${totalNet.toLocaleString('en-PH',{minimumFractionDigits:2})} net</div>
+            <div style="font-size:10px;color:#6b7280;">${doneItems.length}/${collItems.length} done</div>
+          </div>
         </div>
         ${routeSections}
       </div>`;
