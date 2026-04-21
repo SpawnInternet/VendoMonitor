@@ -1768,6 +1768,8 @@ async function hvSaveDetailEdits() {
   if (areaSel)  updates.area       = areaSel;
   if (sheetInp) updates.sheet_name = sheetInp;
   if (tgInp)    updates.tg_name    = tgInp;
+  // Mark as confirmed by admin whenever names are saved
+  updates.name_confirmed = true;
 
   try {
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
@@ -1840,7 +1842,7 @@ async function hvSaveDetailEdits() {
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
     await hvLoadVendos();
-    if (typeof vnLoad === 'function' && document.getElementById('hv-tab-vnames') && !document.getElementById('hv-tab-vnames').classList.contains('hv-hidden')) {
+    if (typeof vnLoad === 'function') {
       vnLoad();
     }
   } catch(e) {
@@ -3071,18 +3073,21 @@ async function vnLoad() {
   if (!list) return;
   list.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Loading...</div>';
   try {
-    const rv = await fetch(`${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,last_harvest_date,harvest_interval,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc&limit=2000`, {
+    const rv = await fetch(`${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,last_harvest_date,harvest_interval,admin_notes,name_confirmed&order=area.asc,sheet_name.asc,tg_name.asc&limit=2000`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     _vnAll = await rv.json();
 
-    const matched  = _vnAll.filter(v => v.tg_name && v.sheet_name).length;
-    const tgOnly   = _vnAll.filter(v => v.tg_name && !v.sheet_name).length;
-    const withDate = _vnAll.filter(v => v.last_harvest_date).length;
+    const matched   = _vnAll.filter(v => v.tg_name && v.sheet_name).length;
+    const tgOnly    = _vnAll.filter(v => v.tg_name && !v.sheet_name).length;
+    const withDate  = _vnAll.filter(v => v.last_harvest_date).length;
+    const confirmed = _vnAll.filter(v => v.name_confirmed).length;
+    const cntEl = document.getElementById('vn-saved-count');
+    if (cntEl) cntEl.textContent = confirmed;
     stats.innerHTML = [
       ['Total', _vnAll.length, '#1e3cb8'],
       ['Matched', matched, '#16a34a'],
-      ['TG only', tgOnly, '#d97706'],
+      ['Saved by me', confirmed, '#0f766e'],
       ['Have harvest date', withDate, '#7c3aed']
     ].map(([lbl,val,clr]) =>
       `<div style="background:#f8faff;border-radius:8px;padding:10px 12px;border-left:3px solid ${clr};">
@@ -3102,9 +3107,11 @@ function vnApplyFilter() {
   const filter = document.getElementById('vn-filter')?.value || 'all';
 
   _vnFiltered = _vnAll.filter(v => {
+    if (_vnSubTabMode === 'saved' && !v.name_confirmed) return false;
     if (area && v.area !== area) return false;
     const name = (v.sheet_name||'') + ' ' + (v.tg_name||'');
     if (q && !name.toLowerCase().includes(q)) return false;
+    if (filter === 'confirmed')  return !!v.name_confirmed;
     if (filter === 'matched')    return v.tg_name && v.sheet_name;
     if (filter === 'unmatched')  return !v.tg_name || !v.sheet_name;
     if (filter === 'no-harvest') return !v.last_harvest_date;
@@ -3139,7 +3146,7 @@ function vnApplyFilter() {
           <span style="font-size:13px;font-weight:700;color:#1e3cb8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px;" title="${v.sheet_name||''}">${v.sheet_name||'<i style="color:#9ca3af;font-weight:400;font-size:11px;">no sheet name</i>'}</span>
           <span style="font-size:10px;color:#cbd5e1;">↔</span>
           <span style="font-size:11px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px;" title="${v.tg_name||''}">${v.tg_name||'<i style="color:#d97706;font-weight:400;">no TG name</i>'}</span>
-          ${matched ? '<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:#dcfce7;color:#15803d;flex-shrink:0;">✅ confirmed</span>' : '<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:#fef3c7;color:#92400e;flex-shrink:0;">⚠ unmatched</span>'}
+          ${v.name_confirmed ? '<span style="font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;background:#dcfce7;color:#15803d;flex-shrink:0;">✅ saved</span>' : ''}
         </div>
         <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${v.area||'—'} · VLAN ${v.vlan||'—'} · ${daysLbl}</div>
       </div>
@@ -3174,6 +3181,24 @@ function vnClickRow(el) {
   };
   hvOpenDetailFromRow(fakeRow);
 }
+
+
+function vnSubTab(tab, btn) {
+  document.querySelectorAll('[id^="vn-subtab-"]').forEach(b => {
+    b.style.color = '#6b7280';
+    b.style.borderBottomColor = 'transparent';
+  });
+  btn.style.color = '#0f766e';
+  btn.style.borderBottomColor = '#0f766e';
+  if (tab === 'saved') {
+    // Force filter to confirmed only
+    _vnSubTabMode = 'saved';
+  } else {
+    _vnSubTabMode = 'all';
+  }
+  vnApplyFilter();
+}
+let _vnSubTabMode = 'all';
 
 function toast(msg, dur) {
   const t = document.getElementById('hv-refresh-toast');
@@ -5629,11 +5654,14 @@ async function fullBackup() {
 
 <!-- VENDO NAMES PANEL -->
 <div id="hv-tab-vnames" class="hv-hidden" style="padding:14px 16px;">
+  <!-- Sub-tabs -->
+  <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:2px solid #e5e7eb;">
+    <button id="vn-subtab-all" onclick="vnSubTab('all',this)" style="padding:7px 18px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;font-family:inherit;color:#0f766e;border-bottom:2px solid #0f766e;margin-bottom:-2px;">All vendos</button>
+    <button id="vn-subtab-saved" onclick="vnSubTab('saved',this)" style="padding:7px 18px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;font-family:inherit;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;">✅ Saved by me &nbsp;<span id="vn-saved-count" style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:10px;">0</span></button>
+  </div>
+  <!-- Controls -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-    <div>
-      <div style="font-size:14px;font-weight:700;color:#0f766e;">🔗 Vendo Names &amp; Harvest History</div>
-      <div style="font-size:11px;color:#6b7280;margin-top:2px;">Click any vendo to view details, edit names, and see harvest history</div>
-    </div>
+    <div style="font-size:11px;color:#6b7280;">Click any vendo to view details, edit names, and see harvest history</div>
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <input id="vn-search" placeholder="Search vendo..." style="padding:5px 10px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-family:inherit;outline:none;width:180px;" oninput="vnApplyFilter()"/>
       <select id="vn-area" style="padding:5px 8px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-family:inherit;outline:none;" onchange="vnApplyFilter()">
@@ -5645,12 +5673,6 @@ async function fullBackup() {
         <option value="POLANCO">Polanco</option>
         <option value="SINAMAN">Sinaman</option>
         <option value="MINAOG">Minaog</option>
-      </select>
-      <select id="vn-filter" style="padding:5px 8px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-family:inherit;outline:none;" onchange="vnApplyFilter()">
-        <option value="all">All vendos</option>
-        <option value="matched">Confirmed by me</option>
-        <option value="unmatched">Unmatched only</option>
-        <option value="no-harvest">No harvest date</option>
       </select>
       <button onclick="vnLoad()" style="padding:5px 12px;background:#0f766e;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
     </div>
