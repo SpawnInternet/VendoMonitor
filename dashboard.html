@@ -1318,50 +1318,18 @@ function hvShowTab(tab, btn) {
     vnames: document.getElementById('hv-tab-vnames')
   };
   // Use classList to force display:none (overcomes !important in CSS)
-  const hide = el => el && el.classList.add('hv-hidden');
-  const show = (el, disp) => { if (!el) return; el.classList.remove('hv-hidden'); el.style.display = disp; };
+  const hide = el => { if (!el) return; el.classList.add('hv-hidden'); el.style.display = ''; };
+  const show = (el, disp) => { if (!el) return; el.style.display = ''; el.classList.remove('hv-hidden'); if (disp) el.style.display = disp; };
+  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, guide].forEach(hide);
   if (isRoute) {
-    show(guide,    '');
-    show(els.page, 'grid');
-    show(els.area, 'flex');
-    show(els.filt, 'flex');
-    hide(els.sched);
-    hide(els.rec);
-    hide(els.recon);
+    show(guide, ''); show(els.page, 'grid'); show(els.area, 'flex'); show(els.filt, 'flex');
   } else if (tab === 'schedule') {
-    hide(guide);
-    hide(els.page);
-    hide(els.area);
-    hide(els.filt);
     show(els.sched, 'block');
-    hide(els.rec);
-    hide(els.recon);
   } else if (tab === 'records') {
-    hide(guide);
-    hide(els.page);
-    hide(els.area);
-    hide(els.filt);
-    hide(els.sched);
-    hide(els.recon);
     show(els.rec, 'block');
   } else if (tab === 'recon') {
-    hide(guide);
-    hide(els.page);
-    hide(els.area);
-    hide(els.filt);
-    hide(els.sched);
-    hide(els.rec);
-    hide(els.vnames);
     show(els.recon, 'block');
-    els.recon && (els.recon.style.cssText += ';display:block!important');
   } else if (tab === 'vnames') {
-    hide(guide);
-    hide(els.page);
-    hide(els.area);
-    hide(els.filt);
-    hide(els.sched);
-    hide(els.rec);
-    hide(els.recon);
     show(els.vnames, 'block');
   }
   if (tab === 'records') hvLoadRecordDates();
