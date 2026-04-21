@@ -3016,7 +3016,7 @@ async function hvLoadRecon() {
 
   try {
     // Load harvests for selected date
-    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=vendo_name,tg_name,net_collectible,route_code,collector&limit=500`, {
+    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=vendo_name,tg_name,net_collectible,route_code,collector,harvest_window_start&limit=500`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     const harvests = await rh.json();
@@ -3027,50 +3027,34 @@ async function hvLoadRecon() {
     // This avoids using vendos.last_harvest_date which is already updated to today
     const DEFAULT_START = '2026-03-01';
     const tgNames = [...new Set(harvests.map(h => h.tg_name).filter(Boolean))];
-    // Also track vendo_name from harvests for cross-reference
-    const vendoNames = [...new Set(harvests.map(h => h.vendo_name).filter(Boolean))];
     const windowStartMap = {}; // tg_name → window start date
 
-    if (tgNames.length) {
-      // Find the most recent previous harvest per vendo before the selected date
-      const encodedNames = tgNames.map(n => '"' + encodeURIComponent(n) + '"').join(',');
-      const prevUrl = `${_SB}/rest/v1/harvests?tg_name=in.(${tgNames.map(n=>'"'+n+'"').join(',')})&harvest_date=lt.${date}&select=tg_name,harvest_date&order=harvest_date.desc&limit=500`;
+    // Priority 1: use harvest_window_start stored IN harvest record (most accurate)
+    harvests.forEach(h => {
+      if (h.tg_name && h.harvest_window_start) {
+        windowStartMap[h.tg_name] = h.harvest_window_start;
+      }
+    });
+
+    // Priority 2: look for previous harvest before this date
+    const missingTgs = tgNames.filter(tg => !windowStartMap[tg]);
+    if (missingTgs.length) {
       try {
+        const prevUrl = `${_SB}/rest/v1/harvests?tg_name=in.(${missingTgs.map(n=>'"'+n+'"').join(',')})&harvest_date=lt.${date}&select=tg_name,harvest_date,harvest_window_start&order=harvest_date.desc&limit=500`;
         const rp = await fetch(prevUrl, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
         const prevHarvests = await rp.json();
-        // For each tg_name, grab most recent previous harvest date
-        tgNames.forEach(tg => {
+        missingTgs.forEach(tg => {
           const prev = prevHarvests.find(h => h.tg_name === tg);
-          windowStartMap[tg] = prev ? prev.harvest_date : null;
+          if (prev) windowStartMap[tg] = prev.harvest_window_start || prev.harvest_date;
         });
       } catch(e) { console.warn('prev harvest lookup failed:', e); }
-
-      // For vendos with no previous harvest in harvests table,
-      // look at route_items for this route — find the vendo's last_harvest_date
-      // stored BEFORE PWA updated it. We use DEFAULT_START as safe fallback.
-      const missingTgs = tgNames.filter(tg => !windowStartMap[tg]);
-      if (missingTgs.length) {
-        try {
-          const rv = await fetch(`${_SB}/rest/v1/vendos?tg_name=in.(${missingTgs.map(n=>'"'+n+'"').join(',')})&select=tg_name,last_harvest_date`, {
-            headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-          });
-          const vendoRows = await rv.json();
-          vendoRows.forEach(v => {
-            // Use last_harvest_date regardless — even if it equals harvest date
-            // because the TG window is FROM that date TO harvest date
-            if (v.last_harvest_date) {
-              windowStartMap[v.tg_name] = v.last_harvest_date;
-            } else {
-              windowStartMap[v.tg_name] = DEFAULT_START;
-            }
-          });
-        } catch(e) { console.warn('vendos lookup failed:', e); }
-        // Any still missing → default start
-        missingTgs.forEach(tg => {
-          if (!windowStartMap[tg]) windowStartMap[tg] = DEFAULT_START;
-        });
-      }
     }
+
+    // Priority 3: fallback to DEFAULT_START for first-ever harvest
+    // DO NOT use vendos.last_harvest_date — already updated by PWA to today
+    tgNames.forEach(tg => {
+      if (!windowStartMap[tg]) windowStartMap[tg] = DEFAULT_START;
+    });
 
     // Global window = from earliest start across all vendos to selected date
     const allStarts = Object.values(windowStartMap).filter(Boolean);
