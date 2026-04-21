@@ -295,6 +295,7 @@ let currentItem  = null;
 let offlineQueue = JSON.parse(localStorage.getItem('harvest_queue') || '[]');
 
 // ── SERVICE WORKER ──
+let _allActiveRoutes = [];
 loadActiveRoutes();
 
 if ('serviceWorker' in navigator) {
@@ -352,7 +353,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 // ── LOAD ACTIVE ROUTES ON LOGIN SCREEN ──
-let _allActiveRoutes = [];
 
 async function loadActiveRoutes() {
   const list = document.getElementById('active-routes-list');
@@ -549,7 +549,7 @@ function openVendo(idx) {
   showScreen('screen-form');
 }
 
-// ── LOAD VENDO BY TG NAME (QR scan) ──
+// ── LOAD VENDO BY TG NAME ──
 async function loadVendoByTG(tgName) {
   showScreen('screen-form');
   document.getElementById('form-vname').textContent = 'Loading…';
@@ -612,10 +612,10 @@ async function submitHarvest() {
 
   const harvestRecord = {
     harvest_date:    today,
-    created_at:      now,
-    vendo_name:      currentItem.sheet_name || currentItem.tg_name,
-    tg_name:         currentItem.tg_name,
-    area:            currentItem.area,
+    vendo_name:      currentItem.sheet_name || currentItem.tg_name || '',
+    tg_name:         currentItem.tg_name    || null,
+    sheet_name:      currentItem.sheet_name || null,
+    area:            currentItem.area       || null,
     collector:       collector,
     route_code:      currentRoute?.route_code || null,
     coins_total:     total,
@@ -623,9 +623,7 @@ async function submitHarvest() {
     coins_old:       old,
     net_collectible: net,
     spawn_share:     spawn,
-    customer_share:  customer,
-    status:          'harvested',
-    collector_note:  ''
+    customer_share:  customer
   };
 
   try {
@@ -638,7 +636,7 @@ async function submitHarvest() {
       });
       if (!r1.ok) {
         const errText = await r1.text();
-        throw new Error('Save failed ' + r1.status + ': ' + errText.substring(0,120));
+        throw new Error('Save failed ' + r1.status + ': ' + errText.substring(0,300));
       }
 
       // Update route_item status
@@ -649,7 +647,6 @@ async function submitHarvest() {
           body: JSON.stringify({
             status: 'harvested', harvested_at: now,
             coins_total: total, coins_free: free, coins_old: old,
-            // correct column names
             net_collectible: net, spawn_share: spawn, customer_share: customer
           })
         });
@@ -836,9 +833,9 @@ function goHome() {
   showScreen('screen-entry');
 }
 
-// ── QR SCAN (placeholder) ──
+// ── QR SCAN REMOVED ──
 function startQR() {
-  const tg = prompt('Enter vendo TG name (QR scanner coming soon):');
+  toast('QR scanning not available');
   if (tg) loadVendoByTG(tg.trim());
 }
 
