@@ -170,7 +170,7 @@ textarea:focus{border-color:var(--red);}
     </div>
     <button class="btn btn-blue" onclick="loadRoute()">Load route →</button>
 
-    <div class="divider">or scan QR</div>
+
 
     <button class="btn btn-outline" onclick="startQR()">📷 Scan vendo QR code</button>
   </div>
@@ -469,9 +469,9 @@ function openVendo(idx) {
 
   // Pre-fill if already harvested
   if (currentItem.status === 'harvested') {
-    if (currentItem.total_coins) document.getElementById('coin-total').value = currentItem.total_coins;
-    if (currentItem.free_coins)  document.getElementById('coin-free').value  = currentItem.free_coins;
-    if (currentItem.old_coins)   document.getElementById('coin-old').value   = currentItem.old_coins;
+    if (currentItem.coins_total) document.getElementById('coin-total').value = currentItem.coins_total;
+    if (currentItem.coins_free)  document.getElementById('coin-free').value  = currentItem.coins_free;
+    if (currentItem.coins_old)   document.getElementById('coin-old').value   = currentItem.coins_old;
     calcNet();
     toast('Already harvested — tap Submit to update');
   }
@@ -522,6 +522,7 @@ async function submitHarvest() {
   // Prevent double submission
   const submitBtns = document.querySelectorAll('.action-row .btn-green');
   submitBtns.forEach(function(b){ b.disabled = true; b.textContent = 'Saving...'; });
+  // Re-enable after save attempt (success or fail) handled in finally block
   const total    = parseFloat(document.getElementById('coin-total').value) || 0;
   const free     = parseFloat(document.getElementById('coin-free').value)  || 0;
   const old      = parseFloat(document.getElementById('coin-old').value)   || 0;
@@ -543,9 +544,9 @@ async function submitHarvest() {
     area:            currentItem.area,
     collector:       collector,
     route_code:      currentRoute?.route_code || null,
-    total_coins:     total,
-    free_coins:      free,
-    old_coins:       old,
+    coins_total:     total,
+    coins_free:      free,
+    coins_old:       old,
     net_collectible: net,
     spawn_share:     spawn,
     customer_share:  customer,
@@ -573,7 +574,7 @@ async function submitHarvest() {
           headers: { ...HDR, 'Prefer': 'return=minimal' },
           body: JSON.stringify({
             status: 'harvested', harvested_at: now,
-            total_coins: total, free_coins: free, old_coins: old,
+            coins_total: total, coins_free: free, coins_old: old,
             net_collectible: net, spawn_share: spawn, customer_share: customer
           })
         });
@@ -600,11 +601,15 @@ async function submitHarvest() {
     // Update local item status
     if (currentItem) {
       currentItem.status          = 'harvested';
-      currentItem.total_coins     = total;
-      currentItem.free_coins      = free;
-      currentItem.old_coins       = old;
+      currentItem.coins_total     = total;
+      currentItem.coins_free      = free;
+      currentItem.coins_old       = old;
       currentItem.net_collectible = net;
     }
+    // Re-enable submit buttons for next vendo
+    document.querySelectorAll('.action-row .btn-green').forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
+    // Re-enable submit button for next vendo
+    document.querySelectorAll('.action-row .btn-green').forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
     // Save updated route to localStorage cache
     if (currentRoute?.route_code) {
       localStorage.setItem('cached_route_' + currentRoute.route_code, JSON.stringify(currentRoute));
@@ -655,6 +660,8 @@ async function submitPending() {
       currentItem.collector_note = note;
       currentItem.status = 'pending';
     }
+    // Re-enable submit buttons for next vendo
+    document.querySelectorAll('.action-row .btn-green').forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
     // Save updated route to localStorage cache
     if (currentRoute?.route_code) {
       localStorage.setItem('cached_route_' + currentRoute.route_code, JSON.stringify(currentRoute));
@@ -705,7 +712,7 @@ async function loadDailySummary() {
   const collector = currentRoute?.collector || '';
   const routeCode = currentRoute?.route_code || '';
   try {
-    const r = await fetch(`${SB}/rest/v1/harvests?route_code=eq.${routeCode}&select=vendo_name,total_coins,free_coins,old_coins,net_collectible,spawn_share,customer_share,collector`, {
+    const r = await fetch(`${SB}/rest/v1/harvests?route_code=eq.${routeCode}&select=vendo_name,coins_total,coins_free,coins_old,net_collectible,spawn_share,customer_share,collector`, {
       headers: HDR
     });
     const data = await r.json();
