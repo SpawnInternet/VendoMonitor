@@ -463,7 +463,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-head{background:#fff;border-bottom:1px solid var(--bd);flex-shrink:0;}
 .hv-toprow{padding:5px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--bd);}
 .hv-title{font-size:13px;font-weight:700;color:var(--blue);}
-.hv-tabs{display:flex;gap:4px;align-items:center;}
+.hv-tabs{display:flex;gap:4px;align-items:center;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap;}
+.hv-tabs::-webkit-scrollbar{display:none;}
 .hv-hvtab{padding:5px 14px;border-radius:6px;border:2px solid var(--bd);background:#fff;font-size:12px;font-weight:700;color:var(--mu);cursor:pointer;font-family:inherit;transition:.12s;}
 .hv-hvtab:hover{background:var(--bg);border-color:var(--blue);color:var(--blue);}
 .hv-hvtab.on{background:var(--blue);color:#fff;border-color:var(--blue);}
@@ -1742,9 +1743,31 @@ async function hvSaveDetailEdits() {
   const tgInp   = document.getElementById('hv-dp-tg-inp')?.value?.trim();
 
   if (!vid) return;
+  // Always allow saving name_confirmed (confirming existing match counts)
   if (!areaSel && !sheetInp && !tgInp) {
-    const toast = document.getElementById('hv-refresh-toast');
-    if (toast) { toast.textContent = '⚠ No changes to save'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2000); }
+    // Just confirm existing match — save name_confirmed only
+    const confirmOnly = { name_confirmed: true };
+    try {
+      const rc = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
+        method: 'PATCH',
+        headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify(confirmOnly)
+      });
+      if (rc.ok) {
+        const saveBtn = document.querySelector('#hv-detail-pop button[onclick="hvSaveDetailEdits()"]');
+        if (saveBtn) { saveBtn.textContent = '✅ Confirmed!'; saveBtn.style.background = '#16a34a'; saveBtn.disabled = true; setTimeout(()=>{ saveBtn.textContent = '💾 Save changes'; saveBtn.style.background = '#1e3cb8'; saveBtn.disabled = false; }, 2500); }
+        const badge = document.getElementById('hv-dp-match-badge');
+        if (badge) { badge.textContent = '✅ Matched'; badge.style.background = 'rgba(22,163,74,.3)'; badge.style.display = 'inline-block'; }
+        const toast = document.getElementById('hv-refresh-toast');
+        if (toast) { toast.textContent = '✅ Match confirmed'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+        // Update in-memory list so saved-by-me count updates
+        const v = _vnAll.find(x => String(x.id) === String(vid));
+        if (v) v.name_confirmed = true;
+        vnApplyFilter && vnApplyFilter();
+        const cntEl = document.getElementById('vn-saved-count');
+        if (cntEl) cntEl.textContent = _vnAll.filter(x=>x.name_confirmed).length;
+      }
+    } catch(e) { console.error(e); }
     return;
   }
 
@@ -1825,6 +1848,11 @@ async function hvSaveDetailEdits() {
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
+    // Update in-memory vendo entry so Saved by me count refreshes immediately
+    const v = _vnAll ? _vnAll.find(x => String(x.id) === String(vid)) : null;
+    if (v) { v.name_confirmed = true; if (updates.sheet_name) v.sheet_name = updates.sheet_name; if (updates.tg_name) v.tg_name = updates.tg_name; }
+    const cntEl = document.getElementById('vn-saved-count');
+    if (cntEl && _vnAll) cntEl.textContent = _vnAll.filter(x=>x.name_confirmed).length;
     await hvLoadVendos();
     if (typeof vnLoad === 'function') {
       vnLoad();
