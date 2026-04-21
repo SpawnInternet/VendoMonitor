@@ -1159,12 +1159,28 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         ⏰ Harvest schedule
         <span style="font-size:8px;font-weight:500;color:#818cf8;text-transform:none;letter-spacing:0;margin-left:auto;" id="hv-dp-sched-status">global default</span>
       </div>
-      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
-        <span style="font-size:10px;color:#6b7280;">Every</span>
-        <input type="number" id="hv-dp-interval" min="7" max="365" value="30" style="width:52px;padding:4px 6px;border:1.5px solid #c7d2fe;border-radius:5px;font-size:13px;font-weight:700;color:#1e3cb8;font-family:inherit;outline:none;text-align:center;">
+      <!-- Mode selector -->
+      <div style="display:flex;gap:4px;margin-bottom:8px;">
+        <button onclick="hvSchedMode('days',this)" id="hv-sched-btn-days" style="flex:1;padding:5px 4px;font-size:10px;font-weight:700;border-radius:5px;border:1.5px solid #c7d2fe;background:#1e3cb8;color:#fff;cursor:pointer;font-family:inherit;">📅 Days</button>
+        <button onclick="hvSchedMode('both',this)" id="hv-sched-btn-both" style="flex:1;padding:5px 4px;font-size:10px;font-weight:700;border-radius:5px;border:1.5px solid #c7d2fe;background:#fff;color:#1e3cb8;cursor:pointer;font-family:inherit;">📅+₱ Both</button>
+        <button onclick="hvSchedMode('amount',this)" id="hv-sched-btn-amount" style="flex:1;padding:5px 4px;font-size:10px;font-weight:700;border-radius:5px;border:1.5px solid #c7d2fe;background:#fff;color:#1e3cb8;cursor:pointer;font-family:inherit;">₱ Amount</button>
+      </div>
+      <!-- Days row -->
+      <div id="hv-sched-days-row" style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">
+        <span style="font-size:10px;color:#6b7280;width:52px;">Every</span>
+        <input type="number" id="hv-dp-interval" min="1" max="365" value="30" style="width:52px;padding:4px 6px;border:1.5px solid #c7d2fe;border-radius:5px;font-size:13px;font-weight:700;color:#1e3cb8;font-family:inherit;outline:none;text-align:center;">
         <span style="font-size:10px;color:#6b7280;">days</span>
-        <button onclick="hvSaveSchedule()" style="padding:4px 12px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>
-        <button onclick="hvClearSchedule()" style="padding:4px 8px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:9px;cursor:pointer;font-family:inherit;">Reset</button>
+      </div>
+      <!-- Amount row -->
+      <div id="hv-sched-amt-row" style="display:none;align-items:center;gap:7px;margin-bottom:6px;">
+        <span style="font-size:10px;color:#6b7280;width:52px;">₱ target</span>
+        <input type="number" id="hv-dp-amount" min="100" step="100" value="3000" style="width:80px;padding:4px 6px;border:1.5px solid #c7d2fe;border-radius:5px;font-size:13px;font-weight:700;color:#16a34a;font-family:inherit;outline:none;text-align:center;">
+        <span style="font-size:10px;color:#6b7280;">TG income</span>
+      </div>
+      <!-- Save/Reset -->
+      <div style="display:flex;gap:6px;margin-top:4px;">
+        <button onclick="hvSaveSchedule()" style="flex:1;padding:5px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>
+        <button onclick="hvClearSchedule()" style="padding:5px 8px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;font-size:9px;cursor:pointer;font-family:inherit;">Reset</button>
       </div>
       <div style="font-size:9px;color:#818cf8;margin-top:5px;" id="hv-dp-next-due">Next harvest due: —</div>
     </div>
@@ -1918,26 +1934,40 @@ async function hvLoadDetailSchedule(vid) {
   if (stat) stat.textContent = 'global default (30 days)';
   if (nextDue) nextDue.textContent = 'Next harvest due: —';
   try {
-    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}&select=harvest_interval,last_harvest_date`, {
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}&select=harvest_interval,last_harvest_date,schedule_mode,min_harvest_amount`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     const data = await r.json();
     if (data && data[0]) {
       const v = data[0];
       const interval = v.harvest_interval || 30;
-      inp.value = interval;
-      if (stat) stat.textContent = v.harvest_interval ? `custom: every ${interval} days` : 'global default (30 days)';
-      if (v.last_harvest_date) {
-        const last = new Date(v.last_harvest_date);
-        const due  = new Date(last.getTime() + interval * 86400000);
+      const mode     = v.schedule_mode || 'days';
+      const amount   = v.min_harvest_amount || 3000;
+      if (inp) inp.value = interval;
+      const amtInp = document.getElementById('hv-dp-amount');
+      if (amtInp) amtInp.value = amount;
+      hvSchedMode(mode);
+      // Status label
+      const modeLabels = {
+        days:   `every ${interval} days`,
+        both:   `every ${interval} days OR ₱${amount.toLocaleString()}`,
+        amount: `when TG income ≥ ₱${amount.toLocaleString()}`
+      };
+      if (stat) stat.textContent = modeLabels[mode] || 'global default';
+      // Next due
+      if (v.last_harvest_date && (mode === 'days' || mode === 'both')) {
+        const last  = new Date(v.last_harvest_date);
+        const due   = new Date(last.getTime() + interval * 86400000);
         const dLeft = Math.ceil((due - new Date()) / 86400000);
         const dueFmt = due.toLocaleDateString('en-PH', {month:'short',day:'numeric',year:'numeric'});
-        const cls = dLeft < 0 ? 'color:#dc2626' : dLeft <= 7 ? 'color:#d97706' : 'color:#16a34a';
+        const cls   = dLeft < 0 ? 'color:#dc2626' : dLeft <= 7 ? 'color:#d97706' : 'color:#16a34a';
         const label = dLeft < 0 ? `${Math.abs(dLeft)}d overdue` : dLeft === 0 ? 'Due today' : `${dLeft}d left`;
         if (nextDue) nextDue.innerHTML = `Next harvest due: <b style="${cls}">${dueFmt} (${label})</b>`;
+      } else if (mode === 'amount') {
+        if (nextDue) nextDue.innerHTML = `Trigger: TG income ≥ <b style="color:#16a34a;">₱${amount.toLocaleString()}</b>`;
       }
     }
-  } catch(e) { /* no harvest_interval col yet — silently ignore */ }
+  } catch(e) { /* silently ignore */ }
 }
 
 function hvNoteFromDetail() {
@@ -2530,25 +2560,49 @@ document.addEventListener('click', function(e) {
 });
 
 /* ─── VENDO SCHEDULE (per-detail popup) ─── */
+function hvSchedMode(mode, btn) {
+  const daysRow = document.getElementById('hv-sched-days-row');
+  const amtRow  = document.getElementById('hv-sched-amt-row');
+  const btns    = ['days','both','amount'];
+  btns.forEach(m => {
+    const b = document.getElementById('hv-sched-btn-' + m);
+    if (b) { b.style.background = m === mode ? '#1e3cb8' : '#fff'; b.style.color = m === mode ? '#fff' : '#1e3cb8'; }
+  });
+  if (daysRow) daysRow.style.display = (mode === 'days' || mode === 'both') ? 'flex' : 'none';
+  if (amtRow)  amtRow.style.display  = (mode === 'amount' || mode === 'both') ? 'flex' : 'none';
+  // Store current mode on the element for save
+  const saveBtn = document.querySelector('[onclick="hvSaveSchedule()"]');
+  if (saveBtn) saveBtn.dataset.mode = mode;
+}
+
 async function hvSaveSchedule() {
-  const vid = hvCurrentDetail.id;
+  const vid      = hvCurrentDetail.id;
   const interval = parseInt(document.getElementById('hv-dp-interval')?.value) || 30;
+  const amount   = parseFloat(document.getElementById('hv-dp-amount')?.value) || null;
+  const saveBtn  = document.querySelector('[onclick="hvSaveSchedule()"]');
+  const mode     = saveBtn?.dataset.mode || 'days';
   if (!vid) return;
+  const payload = {
+    harvest_interval:    (mode === 'days' || mode === 'both') ? interval : null,
+    min_harvest_amount:  (mode === 'amount' || mode === 'both') ? amount : null,
+    schedule_mode:       mode
+  };
   try {
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
       method: 'PATCH',
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ harvest_interval: interval })
+      body: JSON.stringify(payload)
     });
     const stat = document.getElementById('hv-dp-sched-status');
     if (r.ok) {
-      if (stat) stat.textContent = `custom: every ${interval} days`;
+      const modeLabels = {
+        days:   `every ${interval} days`,
+        both:   `every ${interval} days OR ₱${(amount||0).toLocaleString()}`,
+        amount: `when TG income ≥ ₱${(amount||0).toLocaleString()}`
+      };
+      if (stat) stat.textContent = modeLabels[mode];
       const toast = document.getElementById('hv-refresh-toast');
-      if (toast) { toast.textContent = `✅ Schedule set: every ${interval} days`; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
-    } else {
-      // harvest_interval column may not exist yet — show friendly message
-      const toast = document.getElementById('hv-refresh-toast');
-      if (toast) { toast.textContent = '⚠ Run update_sheet_names.sql first to enable schedules'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),4000); }
+      if (toast) { toast.textContent = `✅ Schedule saved`; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
     }
   } catch(e) { console.error('Schedule save error:', e); }
 }
@@ -2560,9 +2614,13 @@ async function hvClearSchedule() {
     await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
       method: 'PATCH',
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ harvest_interval: null })
+      body: JSON.stringify({ harvest_interval: null, min_harvest_amount: null, schedule_mode: 'days' })
     });
-    document.getElementById('hv-dp-interval').value = 30;
+    const inp = document.getElementById('hv-dp-interval');
+    const amtInp = document.getElementById('hv-dp-amount');
+    if (inp) inp.value = 30;
+    if (amtInp) amtInp.value = 3000;
+    hvSchedMode('days');
     const stat = document.getElementById('hv-dp-sched-status');
     if (stat) stat.textContent = 'global default (30 days)';
     const toast = document.getElementById('hv-refresh-toast');
@@ -2674,7 +2732,7 @@ async function hvLoadSchedule() {
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--mu);">Loading…</td></tr>';
   try {
     const r = await fetch(
-      `${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area,vlan,last_harvest_date&order=area.asc,sheet_name.asc,tg_name.asc&limit=500`,
+      `${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area,vlan,last_harvest_date,harvest_interval,schedule_mode,min_harvest_amount,name_confirmed&order=area.asc,sheet_name.asc,tg_name.asc&limit=500`,
       { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
     );
     const data = await r.json();
@@ -2685,34 +2743,77 @@ async function hvLoadSchedule() {
     const GC = {'DAPITAN':'Dapitan GC','DIPOLOG':'Dipolog GC','SINDANGAN':'Sindangan GC','ROXAS':'Roxas GC','POLANCO':'Polanco GC','SINAMAN':'Sinaman GC','MINAOG':'Minaog GC','MIX AREAS':'No GC'};
     const today = new Date();
     tbody.innerHTML = data.map(v => {
-      const sheetName = v.sheet_name || '<span style="color:#d97706;font-style:italic;">—</span>';
-      const tgName    = v.tg_name    || '<span style="color:#7c3aed;font-style:italic;">—</span>';
-      const area      = v.area || '—';
-      const gc        = GC[(area).toUpperCase()] || area;
-      const lastDate  = v.last_harvest_date ? new Date(v.last_harvest_date) : null;
-      const lastFmt   = lastDate ? lastDate.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
-      const daysSince = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
-      const nextDue   = lastDate ? new Date(lastDate.getTime() + 30*86400000) : null;
-      const nextFmt   = nextDue ? nextDue.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
-      const daysLeft  = nextDue ? Math.ceil((nextDue - today) / 86400000) : null;
-      let countdownHtml = '—';
-      if (daysLeft !== null) {
-        const cls = daysLeft < 0 ? 'due' : daysLeft <= 7 ? 'soon' : 'ok';
-        const label = daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft}d left`;
-        countdownHtml = `<span class="hv-countdown ${cls}">${label}</span>`;
+      const sheetName  = v.sheet_name || '<span style="color:#d97706;font-style:italic;">—</span>';
+      const tgName     = v.tg_name    || '<span style="color:#7c3aed;font-style:italic;">—</span>';
+      const area       = v.area || '—';
+      const gc         = GC[(area).toUpperCase()] || area;
+      const interval   = v.harvest_interval || 30;
+      const mode       = v.schedule_mode || 'days';
+      const amount     = v.min_harvest_amount;
+      const lastDate   = v.last_harvest_date ? new Date(v.last_harvest_date) : null;
+      const lastFmt    = lastDate ? lastDate.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+
+      // Schedule label
+      let schedLabel;
+      if (mode === 'amount' && amount) {
+        schedLabel = `<span style="color:#16a34a;font-weight:700;">₱${Number(amount).toLocaleString()}</span>`;
+      } else if (mode === 'both' && amount) {
+        schedLabel = `${interval}d <span style="color:#6b7280;">or</span> <span style="color:#16a34a;">₱${Number(amount).toLocaleString()}</span>`;
+      } else if (v.harvest_interval) {
+        schedLabel = `<span style="font-weight:700;">${interval} days</span>`;
+      } else {
+        schedLabel = `<span class="hv-using-global">30d (global)</span>`;
       }
-      return `<tr>
-        <td class="hv-vname-cell">${sheetName}</td>
+
+      // Next due / countdown
+      let countdownHtml = '—';
+      if (mode !== 'amount' && lastDate) {
+        const nextDue  = new Date(lastDate.getTime() + interval * 86400000);
+        const nextFmt  = nextDue.toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+        const daysLeft = Math.ceil((nextDue - today) / 86400000);
+        const cls      = daysLeft < 0 ? 'due' : daysLeft <= 7 ? 'soon' : 'ok';
+        const label    = daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : daysLeft === 0 ? 'Due today' : `${daysLeft}d left`;
+        countdownHtml  = `${nextFmt}<br><span class="hv-countdown ${cls}">${label}</span>`;
+      } else if (mode === 'amount') {
+        countdownHtml = '<span style="font-size:9px;color:#16a34a;">by amount</span>';
+      }
+
+      // Make row clickable — opens same detail popup
+      const vid = v.id;
+      return `<tr style="cursor:pointer;" onclick="hvSchedRowClick(${vid})" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+        <td class="hv-vname-cell">${sheetName}${v.name_confirmed ? ' <span style="font-size:8px;color:#15803d;">✅</span>' : ''}</td>
         <td class="hv-vtg-cell">${tgName}</td>
         <td style="font-size:9px;color:var(--mu);">${gc}</td>
-        <td><span class="hv-using-global">30 days (global)</span></td>
+        <td>${schedLabel}</td>
         <td>${lastFmt}</td>
-        <td>${nextFmt}<br>${countdownHtml}</td>
+        <td>${countdownHtml}</td>
       </tr>`;
     }).join('');
+    // Cache for click handler
+    window._hvSchedData = data;
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:16px;color:#dc2626;">Error: ${e.message}</td></tr>`;
   }
+}
+
+function hvSchedRowClick(vid) {
+  if (!window._hvSchedData) return;
+  const v = window._hvSchedData.find(x => x.id === vid);
+  if (!v) return;
+  const fakeRow = {
+    dataset: {
+      vid:     String(v.id),
+      sheet:   v.sheet_name || '',
+      tg:      v.tg_name || '',
+      gc:      '',
+      area:    v.area || '',
+      vlan:    String(v.vlan || ''),
+      matched: String(!!(v.tg_name && v.sheet_name)),
+      status:  v.last_harvest_date ? 'low' : 'critical',
+      last:    v.last_harvest_date || ''
+    }
+  };
+  hvOpenDetailFromRow(fakeRow);
 }
 
 /* ─── RECORDS TAB ─── */
