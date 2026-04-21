@@ -3056,34 +3056,21 @@ async function hvLoadRecon() {
       if (!windowStartMap[tg]) windowStartMap[tg] = DEFAULT_START;
     });
 
-    // Global window = from earliest start across all vendos to selected date
-    const allStarts = Object.values(windowStartMap).filter(Boolean);
-    const windowStart = allStarts.length ? allStarts.reduce((a,b) => a<b?a:b) : DEFAULT_START;
-
-    // Load TG transactions for the full window — exclude skipped/admin
-    const rt = await fetch(`${_SB}/rest/v1/transactions?date=gte.${windowStart}&date=lte.${date}&is_skipped=eq.false&select=amount,vendo,date&limit=50000`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const txData = await rt.json();
-
-    // Build TG income map — per vendo, only count txs AFTER that vendo's own window start
-    // windowStartMap keys are tg_name values; tx.vendo IS the tg_name (same field)
-    // Build a case-insensitive lookup for safety
-    const windowStartLower = {};
-    Object.entries(windowStartMap).forEach(([k,v]) => { windowStartLower[k.toLowerCase().trim()] = v; });
-
-    console.log('[Recon] windowStartMap:', JSON.stringify(windowStartMap));
-    console.log('[Recon] txData count:', txData.length);
-    console.log('[Recon] windowStart (global):', windowStart);
+    // Fetch TG income per-vendo using exact tg_name — avoids global limit issues
     const tgMap = {};
-    txData.forEach(tx => {
-      const key = (tx.vendo||'').toLowerCase().trim();
-      const vendoStart = windowStartLower[key] || DEFAULT_START;
-      if (tx.date >= vendoStart) {
-        tgMap[tx.vendo] = (tgMap[tx.vendo]||0) + (parseFloat(tx.amount)||0);
+    await Promise.all(tgNames.map(async tgName => {
+      const start = windowStartMap[tgName] || DEFAULT_START;
+      try {
+        const rt = await fetch(
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount&limit=50000`,
+          { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
+        );
+        const txRows = await rt.json();
+        tgMap[tgName] = txRows.reduce((s, tx) => s + (parseFloat(tx.amount)||0), 0);
+      } catch(e) {
+        tgMap[tgName] = 0;
       }
-    });
-    console.log('[Recon] tgMap:', JSON.stringify(tgMap));
+    }));
 
     // Build case-insensitive tgMap lookup
     const tgMapLower = {};
