@@ -3061,9 +3061,10 @@ async function hvLoadRecon() {
     await Promise.all(tgNames.map(async tgName => {
       const start = windowStartMap[tgName] || DEFAULT_START;
       try {
+        // Use Range header to override Supabase's default 1000 row limit
         const rt = await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount&limit=50000`,
-          { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount`,
+          { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Range': '0-49999', 'Prefer': 'count=none' } }
         );
         const txRows = await rt.json();
         tgMap[tgName] = txRows.reduce((s, tx) => s + (parseFloat(tx.amount)||0), 0);
