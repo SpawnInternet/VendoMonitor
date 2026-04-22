@@ -3198,9 +3198,11 @@ async function hvLoadRecon() {
           <td style="padding:6px 8px;font-size:11px;">
             <div style="font-weight:600;">${h.vendo_name||h.tg_name||'—'}</div>
             <div style="font-size:9px;color:#6b7280;">Collector: ${h.collector||'—'}</div>
+            <div style="font-size:9px;color:#9ca3af;">TG: ${h.tg_name||'—'}</div>
             ${noteHtml}
-            <div style="margin-top:4px;">
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
               <button data-hid="${h.id}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}" onclick="hvRecNote(parseInt(this.dataset.hid), this.dataset.note)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;color:#374151;">📝 ${h.admin_notes ? 'Edit note' : 'Add note'}</button>
+              <button data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-win="${h.harvest_window_start||''}" data-date="${date}" data-tgamt="${tgAmt}" data-vname="${(h.vendo_name||'').replace(/"/g,'&quot;')}" data-hid="${h.id}" onclick="hvVerifyTG(this)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #93c5fd;background:#eff6ff;cursor:pointer;color:#1d4ed8;font-weight:700;">🔍 Verify</button>
             </div>
           </td>
           <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#16a34a;">₱${parseFloat(h.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
@@ -3377,6 +3379,141 @@ function ahSourceBadge(routeCode) {
     return '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧 Admin</span>';
   }
   return '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8;">📱 PWA</span>';
+}
+
+/* ─── TG INCOME VERIFICATION ─── */
+let _verifyResult = null;
+
+async function hvVerifyTG(btn) {
+  const storedTg  = btn.dataset.tg;
+  const winStart  = btn.dataset.win || '2026-03-01';
+  const date      = btn.dataset.date;
+  const vname     = btn.dataset.vname;
+  const dashAmt   = parseFloat(btn.dataset.tgamt) || 0;
+
+  const pop     = document.getElementById('hv-verify-pop');
+  const content = document.getElementById('hv-verify-content');
+  const sub     = document.getElementById('hv-verify-sub');
+
+  pop.style.display = 'flex';
+  sub.textContent = vname || storedTg;
+  content.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;font-size:12px;">Looking up confirmed TG name from vendos table...</div>';
+  _verifyResult = null;
+
+  try {
+    const fmt = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:2});
+
+    // Step 1: Get confirmed tg_name + sheet_name from vendos table
+    const rv = await fetch(
+      `${_SB}/rest/v1/vendos?tg_name=eq.${encodeURIComponent(storedTg)}&select=tg_name,sheet_name,name_confirmed&limit=1`,
+      { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
+    );
+    const vendoRows = await rv.json();
+    const vendoRecord  = vendoRows[0] || null;
+    const confirmedTg  = vendoRecord?.tg_name || storedTg;
+    const sheetName    = vendoRecord?.sheet_name || '—';
+    const isConfirmed  = vendoRecord?.name_confirmed || false;
+
+    // Step 2: Fetch amounts using confirmed tg_name
+    const r1 = await fetch(
+      `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(confirmedTg)}&date=gte.${winStart}&date=lte.${date}&is_skipped=eq.false&select=amount,id`,
+      { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Range': '0-49999', 'Prefer': 'count=none' } }
+    );
+    const txns      = await r1.json();
+    const actualSum = txns.reduce((s, t) => s + (parseFloat(t.amount)||0), 0);
+    const txnCount  = txns.length;
+
+    // Step 3: Duplicate ID check
+    const allIds    = txns.map(t => t.id);
+    const uniqueIds = new Set(allIds);
+    const hasDuplicates = allIds.length !== uniqueIds.size;
+
+    // Step 4: Vendo isolation check — confirm only this tg_name exists in results
+    const r3 = await fetch(
+      `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(confirmedTg)}&select=vendo&limit=10`,
+      { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
+    );
+    const distinctVendos = [...new Set((await r3.json()).map(r => r.vendo))];
+
+    // Step 5: Accuracy
+    const match    = Math.abs(actualSum - dashAmt) < 1;
+    const accuracy = dashAmt > 0 ? Math.round((Math.min(actualSum, dashAmt) / Math.max(actualSum, dashAmt)) * 100) : 0;
+    const diff     = actualSum - dashAmt;
+
+    const statusColor = match ? '#15803d' : '#dc2626';
+    const statusIcon  = match ? '✅' : '❌';
+
+    _verifyResult = { vname, confirmedTg, sheetName, winStart, date, txnCount, actualSum, dashAmt, match, accuracy, hasDuplicates, diff };
+
+    content.innerHTML = `
+      <div style="text-align:center;margin-bottom:14px;">
+        <div style="font-size:32px;margin-bottom:4px;">${statusIcon}</div>
+        <div style="font-size:15px;font-weight:700;color:${statusColor};">${match ? 'TG Income Verified!' : 'Amount Mismatch Detected'}</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px;">Window: ${winStart} → ${date}</div>
+      </div>
+
+      <div style="background:#f0fdf4;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:10px;">
+        <div style="font-weight:700;color:#15803d;margin-bottom:4px;">📋 Name basis — from vendos table</div>
+        <div style="display:flex;justify-content:space-between;padding:2px 0;">
+          <span style="color:#6b7280;">Sheet name</span><span style="font-weight:600;">${sheetName}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:2px 0;">
+          <span style="color:#6b7280;">TG name used</span><span style="font-weight:600;color:#1e3cb8;">${confirmedTg}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:2px 0;">
+          <span style="color:#6b7280;">Name match confirmed</span>
+          <span style="font-weight:700;color:${isConfirmed?'#15803d':'#d97706'};">${isConfirmed?'✅ Yes':'⚠️ Not yet confirmed'}</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div style="background:#eef2ff;border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:9px;color:#6366f1;font-weight:700;text-transform:uppercase;">Dashboard</div>
+          <div style="font-size:18px;font-weight:700;color:#1e3cb8;">${fmt(dashAmt)}</div>
+        </div>
+        <div style="background:${match?'#f0fdf4':'#fef2f2'};border-radius:8px;padding:10px;text-align:center;">
+          <div style="font-size:9px;color:${statusColor};font-weight:700;text-transform:uppercase;">SQL verified</div>
+          <div style="font-size:18px;font-weight:700;color:${statusColor};">${fmt(actualSum)}</div>
+        </div>
+      </div>
+
+      <div style="background:#f8faff;border-radius:8px;padding:10px 12px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;">Accuracy</span>
+          <span style="font-weight:700;color:${accuracy>=99?'#15803d':'#dc2626'};">${accuracy}%</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;">Transactions counted</span>
+          <span style="font-weight:700;">${txnCount.toLocaleString()}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;">Duplicate IDs</span>
+          <span style="font-weight:700;color:${hasDuplicates?'#dc2626':'#15803d'};">${hasDuplicates?'⚠️ Found!':'✅ None'}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;">
+          <span style="color:#6b7280;">Vendo isolation</span>
+          <span style="font-weight:700;color:${distinctVendos.length===1?'#15803d':'#dc2626'};">${distinctVendos.length===1?'✅ Single vendo only':'⚠️ Mixed vendos'}</span>
+        </div>
+        ${!match?`<div style="display:flex;justify-content:space-between;padding:4px 0;margin-top:4px;border-top:1px solid #e5e7eb;">
+          <span style="color:#dc2626;">Difference</span>
+          <span style="font-weight:700;color:#dc2626;">${fmt(Math.abs(diff))} ${diff>0?'(SQL higher)':'(Dashboard higher)'}</span>
+        </div>`:''}
+      </div>`;
+  } catch(e) {
+    content.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;
+  }
+}
+
+function hvVerifyCopyNote() {
+  if (!_verifyResult) return;
+  const r   = _verifyResult;
+  const fmt = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:2});
+  const status = r.match ? '✅ Verified' : '❌ Mismatch';
+  const note = `${status} ${new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})} · TG ${fmt(r.actualSum)} SQL vs ${fmt(r.dashAmt)} dashboard · ${r.txnCount} txns · ${r.winStart}→${r.date} · ${r.accuracy}% accuracy · ${r.hasDuplicates?'⚠️ duplicates':'no duplicates'} · Sheet: ${r.sheetName} · TG: ${r.confirmedTg}`;
+  navigator.clipboard.writeText(note).then(() => {
+    const copyBtn = document.getElementById('hv-verify-copy-btn');
+    if (copyBtn) { copyBtn.textContent = '✅ Copied!'; setTimeout(() => { copyBtn.textContent = '📋 Copy short note'; }, 2000); }
+  });
 }
 
 /* ─── RECONCILIATION NOTE ─── */
@@ -6376,6 +6513,26 @@ async function fullBackup() {
     <button onclick="document.getElementById('hv-route-confirm-pop').classList.remove('show')" style="width:100%;padding:9px;background:#f1f5f9;color:#374151;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Close</button>
   </div>
 </div>
+</div>
+
+<!-- VERIFY TG POPUP -->
+<div id="hv-verify-pop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden;">
+    <div style="background:#1e3cb8;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:#fff;">🔍 TG Income Verification</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:2px;" id="hv-verify-sub">Checking...</div>
+      </div>
+      <button onclick="document.getElementById('hv-verify-pop').style.display='none'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;">×</button>
+    </div>
+    <div id="hv-verify-content" style="padding:16px;max-height:70vh;overflow-y:auto;">
+      <div style="text-align:center;padding:20px;color:#9ca3af;">Loading...</div>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px;">
+      <button id="hv-verify-copy-btn" onclick="hvVerifyCopyNote()" style="flex:1;padding:9px;background:#0f766e;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Copy short note</button>
+      <button onclick="document.getElementById('hv-verify-pop').style.display='none'" style="padding:9px 16px;background:#f1f5f9;color:#374151;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Close</button>
+    </div>
+  </div>
 </div>
 
 </body>
