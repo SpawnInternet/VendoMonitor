@@ -1354,6 +1354,7 @@ function hvShowTab(tab, btn) {
     hvLoadRecon();
   }
   if (tab === 'vnames') vnLoad();
+  if (tab === 'addharvest' && (!_vnAll || !_vnAll.length)) vnLoad();
 }
 
 /* ─── AREA / STATUS / SEARCH FILTERS ─── */
@@ -3216,7 +3217,7 @@ function ahSearch(q) {
   }).slice(0, 8);
   if (!matches.length) { res.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:#9ca3af;">No vendos found</div>'; return; }
   res.innerHTML = matches.map(v => `
-    <div onclick='ahSelectVendo(${JSON.stringify(v.id)})'
+    <div onclick="ahSelectVendo('${v.id}')"
       style="padding:8px 10px;font-size:12px;cursor:pointer;border-radius:5px;border-bottom:1px solid #f0f0f0;"
       onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''">
       <div style="font-weight:600;color:#374151;">${v.sheet_name||'<i style="color:#9ca3af;">no sheet name</i>'}</div>
@@ -3225,7 +3226,7 @@ function ahSearch(q) {
 }
 
 function ahSelectVendo(id) {
-  const v = (_vnAll || []).find(x => x.id === id);
+  const v = (_vnAll || []).find(x => String(x.id) === String(id));
   if (!v) return;
   _ahVendo = v;
   document.getElementById('ah-results').innerHTML = '';
@@ -3586,6 +3587,7 @@ function vnAreaTab(area, btn) {
 }
 
 function vnUpdateAreaCounts() {
+  if (!_vnAll || !_vnAll.length) return;
   const base = _vnSubTabMode === 'saved' ? _vnAll.filter(v => v.name_confirmed) : _vnAll;
   const areas = { '':'all', 'DAPITAN':'dapitan','DIPOLOG':'dipolog','SINDANGAN':'sindangan','ROXAS':'roxas','POLANCO':'polanco','SINAMAN':'sinaman','MINAOG':'minaog','MIX AREAS':'mix' };
   Object.entries(areas).forEach(([a, key]) => {
@@ -6152,7 +6154,7 @@ async function fullBackup() {
 
 
 <!-- ADD HARVEST PANEL -->
-<div id="hv-tab-addharvest" class="hv-hidden" style="padding:16px;max-width:560px;margin:0 auto;">
+<div id="hv-tab-addharvest" class="hv-hidden" style="padding:16px;max-width:560px;margin:0 auto;overflow-y:auto;max-height:calc(100vh - 120px);">
   <div style="font-size:15px;font-weight:700;color:#15803d;margin-bottom:4px;">➕ Admin Harvest Entry</div>
   <div style="font-size:11px;color:#6b7280;margin-bottom:16px;">Record a harvest manually without using the collector PWA.</div>
 
