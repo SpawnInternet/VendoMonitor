@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1e3cb8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Spawn Harvest</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --blue:#1e3cb8;--blue-light:#eef2ff;--blue-mid:#c7d2fe;
+  --green:#16a34a;--green-light:#f0fdf4;
+  --red:#dc2626;--red-light:#fef2f2;
+  --amber:#d97706;--amber-light:#fffbeb;
+  --purple:#7c3aed;
+  --gray:#6b7280;--border:#e5e7eb;--bg:#f8fafc;
+  --text:#111827;--muted:#6b7280;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);min-height:100vh;color:var(--text);font-size:16px;-webkit-text-size-adjust:100%;}
+
+/* TOP BAR */
+.topbar{background:var(--blue);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-logo{font-size:16px;font-weight:700;letter-spacing:.01em;}
+.topbar-sub{font-size:10px;opacity:.75;margin-top:1px;}
+.sync-badge{font-size:9px;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.2);display:flex;align-items:center;gap:4px;}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;}
+.sync-dot.off{background:#f87171;}
+
+/* SCREENS */
+.screen{display:none;min-height:calc(100vh - 52px);padding:16px;box-sizing:border-box;max-width:600px;margin:0 auto;}
+.screen.active{display:block;}
+
+/* ENTRY SCREEN */
+.entry-card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:20px 16px;margin-top:16px;}
+.entry-title{font-size:18px;font-weight:700;color:var(--blue);margin-bottom:4px;}
+.entry-sub{font-size:12px;color:var(--muted);margin-bottom:20px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;}
+.field input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:16px;font-family:inherit;outline:none;color:var(--text);box-sizing:border-box;}
+.field input:focus{border-color:var(--blue);}
+.field input.code{text-transform:uppercase;letter-spacing:.1em;font-weight:700;font-size:18px;text-align:center;-webkit-appearance:none;}
+.btn{width:100%;padding:16px;border-radius:10px;border:none;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s;}
+.btn-blue{background:var(--blue);color:#fff;}
+.btn-blue:active{background:#1630a0;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-green:active{background:#15803d;}
+.btn-outline{background:#fff;color:var(--blue);border:1.5px solid var(--blue-mid);}
+.divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted);font-size:11px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ROUTE SCREEN */
+.route-header{background:#fff;border-radius:12px;border:1px solid var(--border);padding:14px 16px;margin-bottom:12px;}
+.route-code{font-size:22px;font-weight:700;color:var(--blue);letter-spacing:.08em;}
+.route-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+.route-progress{margin-top:10px;}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px;}
+.progress-fill{height:100%;background:var(--blue);border-radius:3px;transition:.3s;}
+.progress-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px;}
+
+/* VENDO LIST */
+.vendo-item{background:#fff;border-radius:10px;border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,0.05);}
+.vendo-item:active{background:var(--blue-light);}
+.vendo-item.done{border-color:#86efac;background:var(--green-light);}
+.vendo-item.pending-item{border-color:#fca5a5;background:var(--red-light);}
+.vi-left{flex:1;min-width:0;}
+.vi-name{font-size:15px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vi-tg{font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vi-area{font-size:10px;color:var(--blue);margin-top:1px;}
+.vi-status{flex-shrink:0;margin-left:10px;text-align:right;}
+.status-pill{font-size:9px;font-weight:700;padding:3px 8px;border-radius:8px;white-space:nowrap;}
+.status-pill.pending{background:#f3f4f6;color:var(--muted);}
+.status-pill.harvested{background:#dcfce7;color:#15803d;}
+.status-pill.skipped{background:#fef3c7;color:#92400e;}
+.vi-arrow{color:var(--muted);font-size:16px;margin-left:6px;}
+
+/* HARVEST FORM SCREEN */
+.form-header{background:var(--blue);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:14px;}
+.form-vname{font-size:17px;font-weight:700;}
+.form-vmeta{font-size:10px;opacity:.75;margin-top:2px;}
+.form-card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px;box-sizing:border-box;}
+.form-card-title{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;}
+.coin-field{margin-bottom:12px;}
+.coin-label{font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;justify-content:space-between;}
+.coin-label span{font-size:10px;color:var(--muted);font-weight:400;}
+.coin-input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:18px;font-weight:700;font-family:inherit;outline:none;color:var(--text);text-align:right;}
+.coin-input:focus{border-color:var(--blue);}
+
+/* SUMMARY BOX */
+.summary{background:var(--blue-light);border:1.5px solid var(--blue-mid);border-radius:10px;padding:14px;}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;}
+.summary-row:not(:last-child){border-bottom:1px solid var(--blue-mid);}
+.summary-label{font-size:12px;color:var(--blue);}
+.summary-val{font-size:14px;font-weight:700;color:var(--blue);}
+.summary-row.net .summary-label{font-weight:700;font-size:13px;}
+.summary-row.net .summary-val{font-size:17px;color:var(--blue);}
+.summary-row.spawn{color:var(--green);}
+.summary-row.spawn .summary-label{font-size:12px;color:var(--green);}
+.summary-row.spawn .summary-val{color:var(--green);font-size:15px;}
+.summary-row.customer .summary-label{font-size:12px;color:var(--purple);}
+.summary-row.customer .summary-val{color:var(--purple);font-size:15px;}
+
+/* PENDING FORM */
+.pending-form{background:var(--red-light);border:1.5px solid #fca5a5;border-radius:10px;padding:14px;margin-bottom:12px;}
+.pending-title{font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+textarea{width:100%;padding:10px;border:1.5px solid #fca5a5;border-radius:7px;font-size:13px;font-family:inherit;resize:none;outline:none;color:var(--text);background:#fff;}
+textarea:focus{border-color:var(--red);}
+
+/* ACTION BUTTONS */
+.action-row{display:flex;gap:8px;margin-bottom:10px;}
+.action-row .btn{flex:1;}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e3cb8;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:.3s;white-space:nowrap;pointer-events:none;}
+.toast.show{opacity:1;}
+
+/* RECEIPT SCREEN */
+.receipt-card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:20px;margin-bottom:12px;text-align:center;}
+.receipt-icon{font-size:48px;margin-bottom:10px;}
+.receipt-title{font-size:18px;font-weight:700;color:var(--green);margin-bottom:4px;}
+.receipt-sub{font-size:12px;color:var(--muted);}
+.receipt-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px;}
+.stat-box{background:var(--bg);border-radius:8px;padding:12px;text-align:center;}
+.stat-val{font-size:20px;font-weight:700;color:var(--blue);}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:2px;}
+
+/* LOADING */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;gap:12px;color:var(--muted);}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* OFFLINE BANNER */
+.offline-banner{background:var(--amber);color:#fff;text-align:center;padding:6px;font-size:11px;font-weight:700;display:none;}
+.offline-banner.show{display:block;}
+</style>
+</head>
+<body>
+
+<!-- OFFLINE BANNER -->
+<div class="offline-banner" id="offline-banner">⚡ Offline mode — submissions will sync when connected</div>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <div class="topbar-logo">🌐 Spawn Harvest</div>
+    <div class="topbar-sub" id="topbar-sub">Collector PWA</div>
+  </div>
+  <div class="sync-badge">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-label">Online</span>
+  </div>
+</div>
+
+<!-- SCREEN 1: ENTRY -->
+<div class="screen active" id="screen-entry">
+  <div class="entry-card">
+    <div class="entry-title">Start harvest</div>
+    <div class="entry-sub">Enter your name and route code given by admin</div>
+
+    <div class="field">
+      <label>Your name</label>
+      <input type="text" id="collector-name" placeholder="e.g. Juan dela Cruz" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Route code</label>
+      <input type="text" id="route-code-inp" class="code" placeholder="ABC123" maxlength="8" autocomplete="off"
+        oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <button class="btn btn-blue" onclick="loadRoute()">Load route →</button>
+  </div>
+</div>
+
+<!-- SCREEN 2: ROUTE LIST -->
+<div class="screen" id="screen-route">
+  <div class="route-header">
+    <div class="route-code" id="rt-code">—</div>
+    <div class="route-meta" id="rt-meta">—</div>
+    <div class="route-progress">
+      <div class="progress-bar"><div class="progress-fill" id="rt-progress" style="width:0%"></div></div>
+      <div class="progress-labels">
+        <span id="rt-done-cnt">0 harvested</span>
+        <span id="rt-total-cnt">0 total</span>
+      </div>
+    </div>
+  </div>
+  <div id="vendo-list"></div>
+  <div style="height:20px;"></div>
+  <button class="btn btn-green" id="finish-btn" onclick="showReceipt()" style="display:none;">✅ Finish & submit summary</button>
+</div>
+
+<!-- SCREEN 3: HARVEST FORM -->
+<div class="screen" id="screen-form">
+  <div class="form-header">
+    <div class="form-vname" id="form-vname">Vendo</div>
+    <div class="form-vmeta" id="form-vmeta">—</div>
+  </div>
+
+  <div class="form-card">
+    <div class="form-card-title">💰 Count coins</div>
+    <div class="coin-field">
+      <div class="coin-label">Total coins <span>All coins in the box</span></div>
+      <input type="number" class="coin-input" id="coin-total" placeholder="0" min="0" oninput="calcNet()">
+    </div>
+    <div class="coin-field">
+      <div class="coin-label">Free time coins <span>Given as free/promo</span></div>
+      <input type="number" class="coin-input" id="coin-free" placeholder="0" min="0" oninput="calcNet()">
+    </div>
+    <div class="coin-field">
+      <div class="coin-label">Old coins <span>Leftover from last harvest</span></div>
+      <input type="number" class="coin-input" id="coin-old" placeholder="0" min="0" oninput="calcNet()">
+    </div>
+    <div class="coin-field">
+      <div class="coin-label">Saloy <span>Deducted from collectible</span></div>
+      <input type="number" class="coin-input" id="coin-saloy" placeholder="0" min="0" oninput="calcNet()" style="border-color:#f59e0b;">
+    </div>
+  </div>
+
+  <div class="summary" id="summary-box">
+    <div class="summary-row net">
+      <span class="summary-label">Net collectible</span>
+      <span class="summary-val" id="sum-net">₱0</span>
+    </div>
+    <div class="summary-row spawn">
+      <span class="summary-label">Spawn share (75%)</span>
+      <span class="summary-val" id="sum-spawn">₱0</span>
+    </div>
+    <div class="summary-row customer">
+      <span class="summary-label">Owner share (25%)</span>
+      <span class="summary-val" id="sum-customer">₱0</span>
+    </div>
+  </div>
+
+  <div style="height:12px;"></div>
+
+  <div class="action-row">
+    <button class="btn btn-green" onclick="submitHarvest()">✅ Submit harvest</button>
+    <button class="btn btn-outline" onclick="showPendingForm()">⏳ Mark pending</button>
+  </div>
+  <button class="btn" style="background:#f3f4f6;color:var(--muted);margin-bottom:10px;" onclick="backToRoute()">← Back to list</button>
+
+  <!-- PENDING FORM (hidden by default) -->
+  <div class="pending-form" id="pending-form" style="display:none;">
+    <div class="pending-title">⏳ Mark as pending — reason</div>
+    <textarea id="pending-note" rows="3" placeholder="e.g. No one home, stall locked, coin slot broken..."></textarea>
+    <div style="height:8px;"></div>
+    <button class="btn btn-outline" style="border-color:#fca5a5;color:var(--red);" onclick="submitPending()">Save as pending</button>
+  </div>
+</div>
+
+<!-- SCREEN 4: RECEIPT -->
+<div class="screen" id="screen-receipt">
+  <div class="receipt-card">
+    <div class="receipt-icon">🎉</div>
+    <div class="receipt-title">Route complete!</div>
+    <div class="receipt-sub" id="receipt-sub">—</div>
+    <div class="receipt-stats">
+      <div class="stat-box">
+        <div class="stat-val" id="rec-harvested">0</div>
+        <div class="stat-lbl">Harvested</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" id="rec-pending">0</div>
+        <div class="stat-lbl">Pending</div>
+      </div>
+      <div class="stat-box" style="grid-column:1/-1;background:var(--green-light);">
+        <div class="stat-val" style="color:var(--green);" id="rec-total">₱0</div>
+        <div class="stat-lbl">Total net collectible</div>
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-blue" onclick="goHome()">← Back to home</button>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDR = { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' };
+
+let currentRoute = null;
+let currentVendo = null;
+let currentItem  = null;
+let offlineQueue = JSON.parse(localStorage.getItem('harvest_queue') || '[]');
+
+// ── SERVICE WORKER ──
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// ── ONLINE/OFFLINE ──
+function updateOnlineStatus() {
+  const online = navigator.onLine;
+  document.getElementById('sync-dot').className  = 'sync-dot' + (online ? '' : ' off');
+  document.getElementById('sync-label').textContent = online ? 'Online' : 'Offline';
+  document.getElementById('offline-banner').className = 'offline-banner' + (online ? '' : ' show');
+  if (online && offlineQueue.length) flushQueue();
+}
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// ── SCREENS ──
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ── TOAST ──
+function toast(msg, dur=2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── CHECK URL PARAMS ──
+window.addEventListener('DOMContentLoaded', () => {
+  const p = new URLSearchParams(location.search);
+  const code  = p.get('code');
+  const vendo = p.get('vendo');
+  if (code) {
+    document.getElementById('route-code-inp').value = code.toUpperCase();
+    loadRoute();
+  } else if (vendo) {
+    loadVendoByTG(vendo);
+  } else {
+    // No pre-fill — collector must enter route code manually as passkey
+    // Clear any cached route code to prevent confusion
+    localStorage.removeItem('last_route_code');
+  }
+});
+
+
+
+
+
+
+
+
+
+// ── LOAD ROUTE ──
+async function loadRoute() {
+  const code = document.getElementById('route-code-inp').value.trim().toUpperCase();
+  const name = document.getElementById('collector-name').value.trim();
+  if (!code) { toast('Enter a route code first'); return; }
+  if (!name) { toast('Enter your name first'); document.getElementById('collector-name').focus(); return; }
+
+  showScreen('screen-route');
+  document.getElementById('vendo-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading route…</span></div>';
+
+  try {
+    // Fetch route
+    const r = await fetch(`${SB}/rest/v1/routes?route_code=eq.${code}&limit=1`, { headers: HDR });
+    const routes = await r.json();
+    if (!routes.length) throw new Error('Invalid route code. Please check and try again.');
+
+    const route = routes[0];
+
+    // Validate route is still active
+    if (route.status === 'completed') throw new Error('This route has already been completed.');
+
+    // Validate route is not expired (older than 7 days)
+    const created = new Date(route.created_at);
+    const daysDiff = (new Date() - created) / (1000 * 60 * 60 * 24);
+    if (daysDiff > 7) throw new Error('This route code has expired. Ask admin for a new route.');
+
+    // Validate collector name matches (case-insensitive, partial match)
+    const routeCollector = (route.collector || '').toLowerCase().trim();
+    const enteredName    = name.toLowerCase().trim();
+    const nameMatch = routeCollector.includes(enteredName) || enteredName.includes(routeCollector);
+    if (!nameMatch) {
+      throw new Error('Your name does not match this route. This route is assigned to: ' + route.collector);
+    }
+
+    currentRoute = route;
+    currentRoute.collectorName = name;
+
+    // Fetch route items
+    const r2 = await fetch(`${SB}/rest/v1/route_items?route_id=eq.${currentRoute.id}&order=id.asc`, { headers: HDR });
+    currentRoute.items = await r2.json();
+
+    // Enrich items with last_harvest_date + vlan from vendos table
+    const tgNamesForEnrich = currentRoute.items.map(i => i.tg_name).filter(Boolean);
+    if (tgNamesForEnrich.length) {
+      try {
+        const encoded = tgNamesForEnrich.map(n => '"' + n + '"').join(',');
+        const rv = await fetch(`${SB}/rest/v1/vendos?tg_name=in.(${encoded})&select=tg_name,last_harvest_date,vlan`, { headers: HDR });
+        const vendoData = await rv.json();
+        const vendoMap = {};
+        vendoData.forEach(v => { vendoMap[v.tg_name] = v; });
+        currentRoute.items = currentRoute.items.map(item => ({
+          ...item,
+          last_harvest_date: vendoMap[item.tg_name]?.last_harvest_date || null,
+          vlan: vendoMap[item.tg_name]?.vlan || null
+        }));
+      } catch(e) { console.warn('vendo enrich failed:', e); }
+    }
+
+    document.getElementById('rt-code').textContent = currentRoute.route_code;
+    document.getElementById('rt-meta').textContent =
+      `${currentRoute.collector} · ${currentRoute.route_date||currentRoute.harvest_date||''} · ${currentRoute.area || 'all areas'}`;
+    document.getElementById('topbar-sub').textContent = `Route ${code}`;
+
+    // Save route to localStorage for offline use
+    localStorage.setItem('cached_route_' + code, JSON.stringify(currentRoute));
+    // Not saving last route code — collectors must enter manually
+
+    renderVendoList();
+  } catch(e) {
+    // Try loading from localStorage cache if offline
+    const cached = localStorage.getItem('cached_route_' + code);
+    if (cached) {
+      currentRoute = JSON.parse(cached);
+      if (name) currentRoute.collectorName = name;
+      document.getElementById('rt-code').textContent = currentRoute.route_code;
+      document.getElementById('rt-meta').textContent =
+        `${currentRoute.collector} · ${currentRoute.harvest_date} · ${currentRoute.area || 'all areas'} (offline)`;
+      document.getElementById('topbar-sub').textContent = `Route ${code} (offline)`;
+      toast('⚡ Loaded from offline cache', 3000);
+      renderVendoList();
+    } else {
+      document.getElementById('vendo-list').innerHTML =
+        `<div class="loading"><span style="color:var(--red);">❌ ${e.message}<br><small>No offline cache found for ${code}.<br>Load this route once with signal first.</small></span></div>`;
+    }
+  }
+}
+
+// ── RENDER VENDO LIST ──
+function renderVendoList() {
+  const items = currentRoute.items || [];
+  const done  = items.filter(i => i.status === 'harvested').length;
+  const pend  = items.filter(i => i.status === 'pending' && i.collector_note).length;
+  const total = items.length;
+  const pct   = total ? Math.round(done / total * 100) : 0;
+
+  document.getElementById('rt-progress').style.width = pct + '%';
+  document.getElementById('rt-done-cnt').textContent = done + ' harvested';
+  document.getElementById('rt-total-cnt').textContent = total + ' total';
+
+  const finBtn = document.getElementById('finish-btn');
+  if (done + pend === total && total > 0) finBtn.style.display = '';
+  else finBtn.style.display = 'none';
+
+  if (!items.length) {
+    document.getElementById('vendo-list').innerHTML =
+      '<div class="loading"><span>No vendos in this route.</span></div>';
+    return;
+  }
+
+  document.getElementById('vendo-list').innerHTML = items.map((item, i) => {
+    const cls = item.status === 'harvested' ? 'done' : item.collector_note ? 'pending-item' : '';
+    const pill = item.status === 'harvested'
+      ? '<span class="status-pill harvested">✅ Done</span>'
+      : item.collector_note
+        ? '<span class="status-pill skipped">⏳ Pending</span>'
+        : '<span class="status-pill pending">Tap to harvest</span>';
+    const lastHarv = item.last_harvest_date
+      ? new Date(item.last_harvest_date + 'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
+      : '—';
+    const vlanLbl = item.vlan ? 'VLAN ' + item.vlan : '';
+    return `<div class="vendo-item ${cls}" onclick="openVendo(${i})">
+      <div class="vi-left" style="flex:1;min-width:0;">
+        <div class="vi-name">${item.sheet_name || item.tg_name || 'Unknown'}</div>
+        <div class="vi-tg" style="font-size:10px;color:#6b7280;margin-top:1px;">${item.area || '—'}${vlanLbl ? ' · ' + vlanLbl : ''}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:1px;">Last harvest: <b style="color:${item.last_harvest_date ? '#15803d' : '#9ca3af'};">${lastHarv}</b></div>
+        ${item.status === 'harvested' ? '<div style="font-size:10px;color:#16a34a;margin-top:1px;">Net: ₱' + parseFloat(item.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' : ''}
+      </div>
+      <div class="vi-status">${pill}</div>
+      <div class="vi-arrow">›</div>
+    </div>`;
+  }).join('');
+}
+
+// ── OPEN VENDO HARVEST FORM ──
+function openVendo(idx) {
+  currentItem  = currentRoute.items[idx];
+  currentVendo = { idx };
+  const name = currentItem.sheet_name || currentItem.tg_name || 'Vendo';
+
+  document.getElementById('form-vname').textContent = name;
+  document.getElementById('form-vmeta').textContent =
+    `${currentItem.area || '—'} · TG: ${currentItem.tg_name || '—'}`;
+
+  // Reset form
+  ['coin-total','coin-free','coin-old','coin-saloy'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pending-note').value = '';
+  document.getElementById('pending-form').style.display = 'none';
+  calcNet();
+
+  // Pre-fill if already harvested
+  if (currentItem.status === 'harvested') {
+    if (currentItem.coins_total) document.getElementById('coin-total').value = currentItem.coins_total;
+    if (currentItem.coins_free)  document.getElementById('coin-free').value  = currentItem.coins_free;
+    if (currentItem.coins_old)   document.getElementById('coin-old').value   = currentItem.coins_old;
+    if (currentItem.coins_saloy) document.getElementById('coin-saloy').value = currentItem.coins_saloy;
+    calcNet();
+    toast('Already harvested — tap Submit to update');
+  }
+
+  showScreen('screen-form');
+}
+
+// ── LOAD VENDO BY TG NAME (QR scan) ──
+async function loadVendoByTG(tgName) {
+  showScreen('screen-form');
+  document.getElementById('form-vname').textContent = 'Loading…';
+  document.getElementById('form-vmeta').textContent = tgName;
+
+  try {
+    const r = await fetch(`${SB}/rest/v1/vendos?tg_name=eq.${encodeURIComponent(tgName)}&select=id,sheet_name,tg_name,area,vlan&limit=1`, { headers: HDR });
+    const data = await r.json();
+    if (!data.length) throw new Error('Vendo not found');
+    const v = data[0];
+    currentItem = {
+      id: null, route_id: null,
+      vendo_id: v.id, tg_name: v.tg_name,
+      sheet_name: v.sheet_name, area: v.area,
+      status: 'pending'
+    };
+    document.getElementById('form-vname').textContent = v.sheet_name || v.tg_name;
+    document.getElementById('form-vmeta').textContent = `${v.area || '—'} · VLAN ${v.vlan || '?'}`;
+  } catch(e) {
+    document.getElementById('form-vname').textContent = '❌ ' + e.message;
+  }
+}
+
+// ── CALCULATE NET ──
+function calcNet() {
+  const total    = parseFloat(document.getElementById('coin-total').value) || 0;
+  const free     = parseFloat(document.getElementById('coin-free').value)  || 0;
+  const old      = parseFloat(document.getElementById('coin-old').value)   || 0;
+  const saloy    = parseFloat(document.getElementById('coin-saloy').value) || 0;
+  const net      = Math.max(0, total - free - old - saloy);
+  const spawn    = net * 0.75;
+  const customer = net * 0.25;
+
+  document.getElementById('sum-net').textContent      = '₱' + net.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('sum-spawn').textContent    = '₱' + spawn.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+  document.getElementById('sum-customer').textContent = '₱' + customer.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// ── SUBMIT HARVEST ──
+async function submitHarvest() {
+  // Prevent double submission
+  const submitBtns = document.querySelectorAll('.action-row .btn-green');
+  submitBtns.forEach(function(b){ b.disabled = true; b.textContent = 'Saving...'; });
+  // Re-enable after save attempt (success or fail) handled in finally block
+  const total    = parseFloat(document.getElementById('coin-total').value) || 0;
+  const free     = parseFloat(document.getElementById('coin-free').value)  || 0;
+  const old      = parseFloat(document.getElementById('coin-old').value)   || 0;
+  const saloy    = parseFloat(document.getElementById('coin-saloy').value) || 0;
+  const net      = Math.max(0, total - free - old - saloy);
+  const spawn    = net * 0.75;
+  const customer = net * 0.25;
+
+  if (!total) {
+    toast('Enter total coins first');
+    submitBtns.forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+  const collector = currentRoute?.collectorName || currentRoute?.collector || 'Collector';
+
+  // Store window start = last_harvest_date BEFORE this harvest updates it
+  // This is used by reconciliation to know the correct TG income window
+  const windowStart = currentItem.last_harvest_date || '2026-03-01';
+
+  const harvestRecord = {
+    harvest_date:         today,
+    harvest_window_start: windowStart,
+    vendo_name:           currentItem.sheet_name || currentItem.tg_name || '',
+    tg_name:              currentItem.tg_name    || null,
+    sheet_name:           currentItem.sheet_name || null,
+    area:                 currentItem.area       || null,
+    collector:            collector,
+    route_code:           currentRoute?.route_code || null,
+    coins_total:          total,
+    coins_free:           free,
+    coins_old:            old,
+    coins_saloy:          saloy,
+    net_collectible:      net,
+    spawn_share:          spawn,
+    customer_share:       customer
+  };
+
+  try {
+    if (navigator.onLine) {
+      // Save to harvests table
+      const r1 = await fetch(`${SB}/rest/v1/harvests`, {
+        method: 'POST',
+        headers: { ...HDR, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(harvestRecord)
+      });
+      if (!r1.ok) {
+        const errText = await r1.text();
+        throw new Error('Save failed ' + r1.status + ': ' + errText.substring(0,300));
+      }
+
+      // Update route_item status
+      if (currentItem.id) {
+        await fetch(`${SB}/rest/v1/route_items?id=eq.${currentItem.id}`, {
+          method: 'PATCH',
+          headers: { ...HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            status: 'harvested', harvested_at: now,
+            total_coins: total, free_coins: free, old_coins: old, saloy_coins: saloy,
+            net_collectible: net, spawn_share: spawn, customer_share: customer
+          })
+        });
+      }
+
+      // Update vendos last_harvest_date
+      if (currentItem.vendo_id || currentItem.tg_name) {
+        const filter = currentItem.vendo_id
+          ? `id=eq.${currentItem.vendo_id}`
+          : `tg_name=eq.${encodeURIComponent(currentItem.tg_name)}`;
+        await fetch(`${SB}/rest/v1/vendos?${filter}`, {
+          method: 'PATCH',
+          headers: { ...HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ last_harvest_date: today })
+        });
+      }
+    } else {
+      // Queue for later
+      offlineQueue.push({ type: 'harvest', data: harvestRecord, item: currentItem, timestamp: Date.now() });
+      localStorage.setItem('harvest_queue', JSON.stringify(offlineQueue));
+      toast('⚡ Saved offline — will sync when connected', 3000);
+    }
+
+    // Update local item status
+    if (currentItem) {
+      currentItem.status          = 'harvested';
+      currentItem.coins_total     = total;
+      currentItem.coins_free      = free;
+      currentItem.coins_old       = old;
+      currentItem.coins_saloy     = saloy;
+      currentItem.net_collectible = net;
+    }
+    // Re-enable submit button for next vendo
+    document.querySelectorAll('.action-row .btn-green').forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
+    // Save updated route to localStorage cache
+    if (currentRoute?.route_code) {
+      localStorage.setItem('cached_route_' + currentRoute.route_code, JSON.stringify(currentRoute));
+    }
+
+    toast('✅ Harvest saved!');
+    setTimeout(() => { backToRoute(); }, 1000);
+  } catch(e) {
+    toast('❌ ' + e.message, 4000);
+    // Re-enable button on error
+    const btns = document.querySelectorAll('.action-row .btn-green');
+    btns.forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
+  }
+}
+
+// ── PENDING FORM ──
+function showPendingForm() {
+  const pf = document.getElementById('pending-form');
+  pf.style.display = pf.style.display === 'none' ? '' : 'none';
+  if (pf.style.display !== 'none') {
+    document.getElementById('pending-note').focus();
+  }
+}
+
+async function submitPending() {
+  const note = document.getElementById('pending-note').value.trim();
+  if (!note) { toast('Please enter a reason'); document.getElementById('pending-note').focus(); return; }
+
+  const pendingData = {
+    status: 'pending',
+    collector_note: note,
+    harvested_at: null
+  };
+
+  try {
+    if (navigator.onLine && currentItem.id) {
+      await fetch(`${SB}/rest/v1/route_items?id=eq.${currentItem.id}`, {
+        method: 'PATCH',
+        headers: { ...HDR, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(pendingData)
+      });
+    } else {
+      offlineQueue.push({ type: 'pending', itemId: currentItem.id, data: pendingData, timestamp: Date.now() });
+      localStorage.setItem('harvest_queue', JSON.stringify(offlineQueue));
+    }
+
+    if (currentItem) {
+      currentItem.collector_note = note;
+      currentItem.status = 'pending';
+    }
+    // Re-enable submit buttons for next vendo
+    document.querySelectorAll('.action-row .btn-green').forEach(function(b){ b.disabled = false; b.textContent = '✅ Submit harvest'; });
+    // Save updated route to localStorage cache
+    if (currentRoute?.route_code) {
+      localStorage.setItem('cached_route_' + currentRoute.route_code, JSON.stringify(currentRoute));
+    }
+
+    toast('⏳ Marked as pending');
+    setTimeout(() => backToRoute(), 1000);
+  } catch(e) {
+    toast('❌ ' + e.message, 4000);
+  }
+}
+
+// ── BACK TO ROUTE ──
+function backToRoute() {
+  renderVendoList();
+  showScreen('screen-route');
+}
+
+// ── SHOW RECEIPT ──
+function showReceipt() {
+  const items    = currentRoute?.items || [];
+  const harvested = items.filter(i => i.status === 'harvested');
+  const pending   = items.filter(i => i.collector_note);
+  const totalNet  = harvested.reduce((s, i) => s + (parseFloat(i.net_collectible) || 0), 0);
+
+  document.getElementById('rec-harvested').textContent = harvested.length;
+  document.getElementById('rec-pending').textContent   = pending.length;
+  document.getElementById('rec-total').textContent     = '₱' + totalNet.toLocaleString('en-PH', {minimumFractionDigits:2});
+  document.getElementById('receipt-sub').textContent   =
+    `Route ${currentRoute.route_code} · ${currentRoute.collector} · ${currentRoute.harvest_date}`;
+
+  // Mark route as completed
+  if (navigator.onLine && currentRoute.id) {
+    fetch(`${SB}/rest/v1/routes?id=eq.${currentRoute.id}`, {
+      method: 'PATCH',
+      headers: { ...HDR, 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() })
+    }).catch(() => {});
+  }
+
+  // Load daily summary
+  loadDailySummary();
+  showScreen('screen-receipt');
+}
+
+async function loadDailySummary() {
+  const today = new Date().toISOString().split('T')[0];
+  const collector = currentRoute?.collector || '';
+  const routeCode = currentRoute?.route_code || '';
+  try {
+    const r = await fetch(`${SB}/rest/v1/harvests?route_code=eq.${routeCode}&select=vendo_name,coins_total,coins_free,coins_old,net_collectible,spawn_share,customer_share,collector`, {
+      headers: HDR
+    });
+    const data = await r.json();
+    const totalNet   = data.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+    const totalSpawn = data.reduce((s,h) => s + (parseFloat(h.spawn_share)||0), 0);
+    const totalCust  = data.reduce((s,h) => s + (parseFloat(h.customer_share)||0), 0);
+    const harvested  = data.length;
+
+    // Update receipt
+    document.getElementById('rec-harvested').textContent = harvested;
+    document.getElementById('rec-total').textContent = '₱' + totalNet.toLocaleString('en-PH',{minimumFractionDigits:2});
+
+    // Add breakdown table
+    const existingTable = document.getElementById('summary-breakdown');
+    if (!existingTable && data.length) {
+      const card = document.querySelector('.receipt-card');
+      if (card) {
+        const table = document.createElement('div');
+        table.id = 'summary-breakdown';
+        table.style.cssText = 'margin-top:14px;text-align:left;font-size:11px;';
+        table.innerHTML = '<div style="font-weight:700;color:#1e3cb8;margin-bottom:6px;font-size:12px;">Route summary</div>' +
+          data.map(h => '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0;">' +
+            '<span style="color:#374151;">' + (h.vendo_name||'—') + '</span>' +
+            '<span style="font-weight:700;color:#16a34a;">₱' + parseFloat(h.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+          '</div>').join('') +
+          '<div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:2px solid #1e3cb8;">' +
+            '<span style="font-weight:700;">Spawn total (75%)</span>' +
+            '<span style="font-weight:700;color:#16a34a;">₱' + totalSpawn.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;padding:4px 0;">' +
+            '<span style="font-weight:700;">Owner total (25%)</span>' +
+            '<span style="font-weight:700;color:#7c3aed;">₱' + totalCust.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+          '</div>';
+        card.appendChild(table);
+      }
+    }
+  } catch(e) { console.error('Summary error:', e); }
+}
+
+// ── GO HOME ──
+function goHome() {
+  currentRoute = null;
+  currentVendo = null;
+  currentItem  = null;
+  document.getElementById('route-code-inp').value = '';
+  document.getElementById('collector-name').value = '';
+  document.getElementById('topbar-sub').textContent = 'Collector PWA';
+  showScreen('screen-entry');
+}
+
+// ── QR SCAN (placeholder) ──
+function startQR() {
+  const tg = prompt('Enter vendo TG name (QR scanner coming soon):');
+  if (tg) loadVendoByTG(tg.trim());
+}
+
+// ── FLUSH OFFLINE QUEUE ──
+async function flushQueue() {
+  if (!offlineQueue.length) return;
+  const remaining = [];
+  for (const item of offlineQueue) {
+    try {
+      if (item.type === 'harvest') {
+        await fetch(`${SB}/rest/v1/harvests`, {
+          method: 'POST',
+          headers: { ...HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(item.data)
+        });
+        if (item.item?.id) {
+          await fetch(`${SB}/rest/v1/route_items?id=eq.${item.item.id}`, {
+            method: 'PATCH',
+            headers: { ...HDR, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ status: 'harvested' })
+          });
+        }
+      } else if (item.type === 'pending' && item.itemId) {
+        await fetch(`${SB}/rest/v1/route_items?id=eq.${item.itemId}`, {
+          method: 'PATCH',
+          headers: { ...HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(item.data)
+        });
+      }
+    } catch {
+      remaining.push(item);
+    }
+  }
+  offlineQueue = remaining;
+  localStorage.setItem('harvest_queue', JSON.stringify(offlineQueue));
+  if (!remaining.length) toast('✅ All offline submissions synced!', 3000);
+}
+</script>
+</body>
+</html>
