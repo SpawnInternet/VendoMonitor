@@ -2920,32 +2920,47 @@ async function hvLoadRecordsByDate(date, btn) {
           const coins   = parseFloat(item.total_coins || item.coins_total || harv.coins_total || 0);
           const free    = parseFloat(item.free_coins  || harv.coins_free  || 0);
           const old     = parseFloat(item.old_coins   || harv.coins_old   || 0);
-          const saloy   = parseFloat(item.saloy_coins || harv.coins_saloy || 0);
-          const timeStr = item.harvested_at
-            ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true})
+          const spawn   = parseFloat(harv.spawn_share   || net * 0.75 || 0);
+          const owner   = parseFloat(harv.customer_share || net * 0.25 || 0);
+          const harvestDT = item.harvested_at
+            ? new Date(item.harvested_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
             : '—';
           const name = item.sheet_name || item.tg_name || '—';
           const coinBreakdown = isDone ? `
-            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
-              <span style="font-size:9px;background:#f3f4f6;color:#374151;padding:2px 6px;border-radius:4px;">Total: ₱${coins.toLocaleString()}</span>
-              ${free ? `<span style="font-size:9px;background:#fef2f2;color:#dc2626;padding:2px 6px;border-radius:4px;">− Free: ₱${free.toLocaleString()}</span>` : ''}
-              ${old  ? `<span style="font-size:9px;background:#fffbeb;color:#d97706;padding:2px 6px;border-radius:4px;">− Old: ₱${old.toLocaleString()}</span>` : ''}
-              <span style="font-size:9px;background:#f0fdf4;color:#16a34a;font-weight:700;padding:2px 6px;border-radius:4px;">= ₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-            </div>` : '';
-          return `<div class="hv-rs-row" style="display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid #f0f0f0;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:600;color:#374151;">${name}</div>
-              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-                <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:${isDone?'#dcfce7':'#fef9c3'};color:${isDone?'#15803d':'#92400e'};">${isDone?'✅ Done':'⏳ Pending'}</span>
-                ${timeStr !== '—' ? `<span style="font-size:9px;color:#9ca3af;">${timeStr}</span>` : ''}
+            <div style="margin-top:6px;background:#f8faff;border-radius:7px;padding:7px 10px;font-size:10px;">
+              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;">
+                <span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:4px;">Total: ₱${coins.toLocaleString()}</span>
+                ${free ? `<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:4px;">− Free: ₱${free.toLocaleString()}</span>` : ''}
+                ${old  ? `<span style="background:#fffbeb;color:#d97706;padding:2px 7px;border-radius:4px;">− Old: ₱${old.toLocaleString()}</span>` : ''}
+                <span style="background:#f0fdf4;color:#16a34a;font-weight:700;padding:2px 7px;border-radius:4px;">= Net: ₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
               </div>
-              ${item.collector_note ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;">📝 ${item.collector_note}</div>` : ''}
-              ${coinBreakdown}
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+                <div style="background:#f0fdf4;border-radius:5px;padding:5px 8px;">
+                  <div style="font-size:9px;color:#16a34a;font-weight:700;">Spawn share (75%)</div>
+                  <div style="font-size:13px;font-weight:700;color:#15803d;">₱${spawn.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+                </div>
+                <div style="background:#fdf4ff;border-radius:5px;padding:5px 8px;">
+                  <div style="font-size:9px;color:#7c3aed;font-weight:700;">Owner share (25%)</div>
+                  <div style="font-size:13px;font-weight:700;color:#7c3aed;">₱${owner.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+                </div>
+              </div>
+            </div>` : '';
+          return `<div class="hv-rs-row" style="padding:7px 0;border-bottom:0.5px solid #f0f0f0;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:600;color:#374151;">${name}</div>
+                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                  <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:${isDone?'#dcfce7':'#fef9c3'};color:${isDone?'#15803d':'#92400e'};">${isDone?'✅ Done':'⏳ Pending'}</span>
+                  ${isDone ? `<span style="font-size:9px;color:#9ca3af;">🕐 ${harvestDT}</span>` : ''}
+                </div>
+                ${item.collector_note ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;">📝 ${item.collector_note}</div>` : ''}
+              </div>
+              <div style="text-align:right;flex-shrink:0;margin-left:8px;">
+                ${isDone ? `<div style="font-size:13px;font-weight:700;color:#16a34a;">₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+                <div style="font-size:9px;color:#9ca3af;">net</div>` : '<div style="font-size:11px;color:#9ca3af;">—</div>'}
+              </div>
             </div>
-            <div style="text-align:right;flex-shrink:0;margin-left:8px;">
-              ${isDone ? `<div style="font-size:13px;font-weight:700;color:#16a34a;">₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-              <div style="font-size:9px;color:#9ca3af;">net</div>` : '<div style="font-size:11px;color:#9ca3af;">—</div>'}
-            </div>
+            ${coinBreakdown}
           </div>`;
         }).join('');
 
