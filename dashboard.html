@@ -3171,21 +3171,23 @@ async function hvLoadRecon() {
     const tgMapLower = {};
     Object.entries(tgMap).forEach(([k,v]) => { tgMapLower[k.toLowerCase().trim()] = v; });
 
-    // Group harvests by route
-    const byRoute = {};
+    // Group harvests by collector → then by route inside each collector
+    const byCollector = {};
     harvests.forEach(h => {
+      const col = (h.collector || '—').trim();
+      if (!byCollector[col]) byCollector[col] = {};
       const rc = h.route_code || 'No route';
-      if (!byRoute[rc]) byRoute[rc] = [];
-      byRoute[rc].push(h);
+      if (!byCollector[col][rc]) byCollector[col][rc] = [];
+      byCollector[col][rc].push(h);
     });
 
-    content.innerHTML = Object.entries(byRoute).map(([rc, items]) => {
+    // Helper: render one route block (no collector header — shown at collector level)
+    function renderRouteBlock(rc, items) {
       const coinNet = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
       const tgTotal = items.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
       const diff    = coinNet - tgTotal;
       const diffCls = Math.abs(diff)<100 ? 'color:#16a34a' : diff>0 ? 'color:#d97706' : 'color:#dc2626';
       const diffTxt = Math.abs(diff)<100 ? '✅ Match' : diff>0 ? '⚠ Coins +₱'+Math.abs(diff).toLocaleString() : '🔴 TG +₱'+Math.abs(diff).toLocaleString();
-      const collector = items[0]?.collector || '—';
 
       const rows = items.map(h => {
         const tgAmt = tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0;
@@ -3197,7 +3199,6 @@ async function hvLoadRecon() {
         return `<tr style="${rowCls}">
           <td style="padding:6px 8px;font-size:11px;">
             <div style="font-weight:600;">${h.vendo_name||h.tg_name||'—'}</div>
-            <div style="font-size:9px;color:#6b7280;">Collector: ${h.collector||'—'}</div>
             <div style="font-size:9px;color:#9ca3af;">TG: ${h.tg_name||'—'}</div>
             ${noteHtml}
             <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
@@ -3211,29 +3212,30 @@ async function hvLoadRecon() {
         </tr>`;
       }).join('');
 
-      return `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:13px;font-weight:700;color:#1e3cb8;">Route: ${rc}</span>
-          ${ahSourceBadge(rc)}
+      return `<div style="background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:11px;font-weight:700;color:#1e3cb8;">🧾 Route: ${rc}</span>
+            ${ahSourceBadge(rc)}
+          </span>
           <span style="font-size:11px;font-weight:700;${diffCls};">${diffTxt}</span>
         </div>
-        <div style="font-size:10px;color:#6b7280;margin-bottom:8px;">👤 Collector: <b style="color:#374151;">${collector}</b></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
-          <div style="background:#f0fdf4;border-radius:6px;padding:7px;text-align:center;">
-            <div style="font-size:14px;font-weight:700;color:#16a34a;">₱${coinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
+          <div style="background:#f0fdf4;border-radius:6px;padding:6px;text-align:center;">
+            <div style="font-size:13px;font-weight:700;color:#16a34a;">₱${coinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
             <div style="font-size:9px;color:#6b7280;">Coin net</div>
           </div>
-          <div style="background:#eef2ff;border-radius:6px;padding:7px;text-align:center;">
-            <div style="font-size:14px;font-weight:700;color:#1e3cb8;">₱${tgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+          <div style="background:#eef2ff;border-radius:6px;padding:6px;text-align:center;">
+            <div style="font-size:13px;font-weight:700;color:#1e3cb8;">₱${tgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
             <div style="font-size:9px;color:#6b7280;">TG income</div>
           </div>
-          <div style="background:#fafbff;border-radius:6px;padding:7px;text-align:center;">
-            <div style="font-size:14px;font-weight:700;${diffCls};">₱${Math.abs(diff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+          <div style="background:#fafbff;border-radius:6px;padding:6px;text-align:center;">
+            <div style="font-size:13px;font-weight:700;${diffCls};">₱${Math.abs(diff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
             <div style="font-size:9px;color:#6b7280;">${diff>=0?'Surplus':'Deficit'}</div>
           </div>
         </div>
         <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:#f8faff;">
+          <thead><tr style="background:#eef2ff;">
             <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Vendo</th>
             <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Coin net</th>
             <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">TG income</th>
@@ -3241,6 +3243,122 @@ async function hvLoadRecon() {
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
+      </div>`;
+    }
+
+    // Render: one card per collector, routes as sub-blocks inside
+    content.innerHTML = Object.entries(byCollector).map(([collector, routes]) => {
+      const allItems = Object.values(routes).flat();
+      const colCoinNet = allItems.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+      const colTgTotal = allItems.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
+      const colDiff    = colCoinNet - colTgTotal;
+      const colDiffCls = Math.abs(colDiff)<100 ? 'color:#16a34a' : colDiff>0 ? 'color:#d97706' : 'color:#dc2626';
+      const colDiffTxt = Math.abs(colDiff)<100 ? '✅ Match' : colDiff>0 ? `⚠ Coins +₱${Math.abs(colDiff).toLocaleString()}` : `🔴 TG +₱${Math.abs(colDiff).toLocaleString()}`;
+      const routeCount = Object.keys(routes).length;
+      const vendoCount = allItems.length;
+
+      const routeBlocks = Object.entries(routes).map(([rc, items]) => renderRouteBlock(rc, items)).join('');
+      const safeCol = collector.replace(/\\/g,'\\\\').replace(/`/g,'\\`');
+      const formId  = 'ah-inline-' + collector.replace(/[^a-z0-9]/gi,'_');
+
+      return `<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+        <!-- Collector header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div>
+            <div style="font-size:15px;font-weight:800;color:#111827;">👤 ${collector}</div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px;">${routeCount} route${routeCount!==1?'s':''} · ${vendoCount} vendo${vendoCount!==1?'s':''}</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;${colDiffCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<100?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colDiffTxt}</span>
+        </div>
+        <!-- Collector totals -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;">
+            <div style="font-size:15px;font-weight:800;color:#16a34a;">₱${colCoinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+            <div style="font-size:9px;color:#6b7280;">Total coin net</div>
+          </div>
+          <div style="background:#eef2ff;border-radius:7px;padding:8px;text-align:center;">
+            <div style="font-size:15px;font-weight:800;color:#1e3cb8;">₱${colTgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+            <div style="font-size:9px;color:#6b7280;">Total TG income</div>
+          </div>
+          <div style="background:#fafbff;border-radius:7px;padding:8px;text-align:center;">
+            <div style="font-size:15px;font-weight:800;${colDiffCls};">₱${Math.abs(colDiff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
+            <div style="font-size:9px;color:#6b7280;">${colDiff>=0?'Surplus':'Deficit'}</div>
+          </div>
+        </div>
+        <!-- Route sub-blocks -->
+        ${routeBlocks}
+        <!-- Inline admin add harvest -->
+        <div style="margin-top:8px;">
+          <button onclick="ahiToggle('${formId}')" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add Admin Record</button>
+          <div id="${formId}" style="display:none;margin-top:8px;background:#f9fefb;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px;">
+            <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:8px;">🔧 Admin Harvest Entry — <span style="color:#374151;">${collector}</span></div>
+            <!-- Vendo search -->
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Vendo</div>
+              <input id="${formId}-search" placeholder="Search vendo name..." oninput="ahiSearch(this.value,'${formId}')"
+                style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              <div id="${formId}-results" style="border:1px solid #e5e7eb;border-radius:6px;max-height:120px;overflow-y:auto;background:#fff;margin-top:2px;"></div>
+              <div id="${formId}-selected" style="margin-top:4px;font-size:11px;color:#15803d;font-weight:600;"></div>
+            </div>
+            <!-- Date + window -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Harvest date</div>
+                <input type="date" id="${formId}-date" value="${date}"
+                  style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Window start</div>
+                <input type="date" id="${formId}-window"
+                  style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              </div>
+            </div>
+            <!-- Route -->
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Route code (optional)</div>
+              <input id="${formId}-route" placeholder="Leave blank → ADMIN"
+                style="width:100%;padding:7px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+            </div>
+            <!-- Coins -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Total coins</div>
+                <input type="number" id="${formId}-total" placeholder="0" min="0" oninput="ahiCalc('${formId}')"
+                  style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Free coins</div>
+                <input type="number" id="${formId}-free" placeholder="0" min="0" oninput="ahiCalc('${formId}')"
+                  style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7280;margin-bottom:3px;">Old coins</div>
+                <input type="number" id="${formId}-old" placeholder="0" min="0" oninput="ahiCalc('${formId}')"
+                  style="width:100%;padding:7px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+              </div>
+            </div>
+            <!-- Computed results -->
+            <div id="${formId}-calc" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+              <div style="background:#f0fdf4;border-radius:6px;padding:7px;text-align:center;">
+                <div style="font-size:13px;font-weight:700;color:#16a34a;" id="${formId}-net">₱0</div>
+                <div style="font-size:9px;color:#6b7280;">Net</div>
+              </div>
+              <div style="background:#eef2ff;border-radius:6px;padding:7px;text-align:center;">
+                <div style="font-size:13px;font-weight:700;color:#1e3cb8;" id="${formId}-spawn">₱0</div>
+                <div style="font-size:9px;color:#6b7280;">Spawn 75%</div>
+              </div>
+              <div style="background:#fff7ed;border-radius:6px;padding:7px;text-align:center;">
+                <div style="font-size:13px;font-weight:700;color:#c2410c;" id="${formId}-owner">₱0</div>
+                <div style="font-size:9px;color:#6b7280;">Owner 25%</div>
+              </div>
+            </div>
+            <div id="${formId}-msg" style="min-height:18px;font-size:11px;margin-bottom:6px;"></div>
+            <div style="display:flex;gap:6px;">
+              <button onclick="ahiSubmit('${formId}','${safeCol}')" style="flex:1;padding:9px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Save</button>
+              <button onclick="ahiToggle('${formId}')" style="padding:9px 14px;background:#f3f4f6;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;color:#374151;">Cancel</button>
+            </div>
+          </div>
+        </div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -3369,6 +3487,132 @@ async function ahSubmit() {
     ahClearVendo();
   } catch(e) {
     msg.innerHTML = `<span style="color:#dc2626;">❌ ${e.message}</span>`;
+  }
+}
+
+/* ─── INLINE ADMIN HARVEST (per-collector in Reconciliation) ─── */
+const _ahiVendo = {}; // formId → selected vendo object
+
+function ahiToggle(formId) {
+  const el = document.getElementById(formId);
+  if (!el) return;
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : 'block';
+  if (!visible && (!_vnAll || !_vnAll.length)) vnLoad();
+}
+
+function ahiCalc(formId) {
+  const g = id => parseFloat(document.getElementById(formId + '-' + id)?.value) || 0;
+  const net   = Math.max(0, g('total') - g('free') - g('old'));
+  const spawn = net * 0.75;
+  const owner = net * 0.25;
+  const fmt   = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:2});
+  const set   = (s, v) => { const el = document.getElementById(formId + '-' + s); if (el) el.textContent = fmt(v); };
+  set('net', net); set('spawn', spawn); set('owner', owner);
+}
+
+function ahiSearch(q, formId) {
+  const res = document.getElementById(formId + '-results');
+  if (!res) return;
+  if (!q || q.length < 2) { res.innerHTML = ''; return; }
+  const matches = (_vnAll || []).filter(v => {
+    const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'')).toLowerCase();
+    return n.includes(q.toLowerCase());
+  }).slice(0, 8);
+  if (!matches.length) { res.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:#9ca3af;">No vendos found</div>'; return; }
+  res.innerHTML = matches.map(v =>
+    `<div data-fid="${formId}" data-vid="${v.id}"
+      style="padding:7px 10px;font-size:11px;cursor:pointer;border-bottom:1px solid #f0f0f0;"
+      onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''"
+      onclick="ahiSelectVendo('${formId}','${v.id}')">
+      <span style="font-weight:600;">${v.sheet_name||'<i style="color:#9ca3af;">no sheet name</i>'}</span>
+      <span style="color:#9ca3af;font-size:10px;margin-left:6px;">${v.tg_name||''}</span>
+    </div>`
+  ).join('');
+}
+
+function ahiSelectVendo(formId, vid) {
+  const v = (_vnAll||[]).find(x => String(x.id) === String(vid));
+  if (!v) return;
+  _ahiVendo[formId] = v;
+  const res = document.getElementById(formId + '-results');
+  const sel = document.getElementById(formId + '-selected');
+  const inp = document.getElementById(formId + '-search');
+  if (res) res.innerHTML = '';
+  if (inp) inp.value = v.sheet_name || v.tg_name || '';
+  if (sel) sel.textContent = '✅ ' + (v.sheet_name || v.tg_name) + (v.tg_name ? ' · TG: ' + v.tg_name : '');
+  // Pre-fill window start from last_harvest_date
+  const winEl = document.getElementById(formId + '-window');
+  if (winEl && v.last_harvest_date) winEl.value = v.last_harvest_date;
+}
+
+async function ahiSubmit(formId, collector) {
+  const msg  = document.getElementById(formId + '-msg');
+  const v    = _ahiVendo[formId];
+  if (!v)         { if(msg) msg.innerHTML = '<span style="color:#dc2626;">⚠ Select a vendo first.</span>'; return; }
+  const date   = document.getElementById(formId + '-date')?.value;
+  const window_= document.getElementById(formId + '-window')?.value;
+  const route  = (document.getElementById(formId + '-route')?.value || '').trim() || 'ADMIN';
+  const total  = parseFloat(document.getElementById(formId + '-total')?.value) || 0;
+  const free   = parseFloat(document.getElementById(formId + '-free')?.value)  || 0;
+  const old    = parseFloat(document.getElementById(formId + '-old')?.value)   || 0;
+  const net    = Math.max(0, total - free - old);
+  const spawn  = net * 0.75;
+  const owner  = net * 0.25;
+
+  if (!date)  { if(msg) msg.innerHTML = '<span style="color:#dc2626;">⚠ Select harvest date.</span>'; return; }
+  if (!total) { if(msg) msg.innerHTML = '<span style="color:#dc2626;">⚠ Enter total coins.</span>'; return; }
+
+  if (msg) msg.innerHTML = '<span style="color:#6b7280;">Saving...</span>';
+
+  const record = {
+    harvest_date:         date,
+    harvest_window_start: window_ || '2026-03-01',
+    vendo_name:           v.sheet_name || v.tg_name || '',
+    tg_name:              v.tg_name    || null,
+    sheet_name:           v.sheet_name || null,
+    area:                 v.area       || null,
+    collector:            collector,
+    route_code:           route,
+    coins_total:          total,
+    coins_free:           free,
+    coins_old:            old,
+    net_collectible:      net,
+    spawn_share:          spawn,
+    customer_share:       owner
+  };
+
+  try {
+    const r1 = await fetch(`${_SB}/rest/v1/harvests`, {
+      method: 'POST',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(record)
+    });
+    if (!r1.ok) throw new Error('Save failed: ' + await r1.text());
+
+    const filter = v.tg_name
+      ? `tg_name=eq.${encodeURIComponent(v.tg_name)}`
+      : `id=eq.${v.id}`;
+    await fetch(`${_SB}/rest/v1/vendos?${filter}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ last_harvest_date: date })
+    });
+
+    const fmt = x => '₱' + x.toLocaleString('en-PH',{minimumFractionDigits:2});
+    if (msg) msg.innerHTML = `<span style="color:#15803d;">✅ Saved! Net: ${fmt(net)} · Spawn: ${fmt(spawn)}</span>`;
+    // Reset coin fields only, keep collector/date
+    ['total','free','old'].forEach(k => { const el = document.getElementById(formId+'-'+k); if(el) el.value=''; });
+    ahiCalc(formId);
+    delete _ahiVendo[formId];
+    const inp = document.getElementById(formId + '-search');
+    const sel = document.getElementById(formId + '-selected');
+    if (inp) inp.value = '';
+    if (sel) sel.textContent = '';
+    // Reload reconciliation after short delay
+    setTimeout(() => hvLoadRecon(), 1500);
+  } catch(e) {
+    if (msg) msg.innerHTML = `<span style="color:#dc2626;">❌ ${e.message}</span>`;
   }
 }
 
