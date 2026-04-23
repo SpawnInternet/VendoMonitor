@@ -6,6 +6,7 @@
 <title>Spawn Internetan — Vendo Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -3348,7 +3349,15 @@ async function hvLoadRecon() {
             <div style="font-size:15px;font-weight:800;color:#111827;">👤 ${collector}</div>
             <div style="font-size:10px;color:#6b7280;margin-top:2px;">${routeCount} route${routeCount!==1?'s':''} · ${vendoCount} vendo${vendoCount!==1?'s':''}</div>
           </div>
-          <span style="font-size:11px;font-weight:700;${colDiffCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<100?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colDiffTxt}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button class="hv-xls-btn"
+              data-collector="${collector.replace(/"/g,'&quot;')}"
+              data-date="${date}"
+              style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
+              📥 Export Excel
+            </button>
+            <span style="font-size:11px;font-weight:700;${colDiffCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<100?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colDiffTxt}</span>
+          </div>
         </div>
         <!-- Collector totals -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
@@ -3369,7 +3378,7 @@ async function hvLoadRecon() {
         ${routeBlocks}
         <!-- Inline admin add harvest -->
         <div style="margin-top:8px;">
-          <button onclick="hvAhOpen(${JSON.stringify(collector)})" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add Admin Record</button>
+          <button class="hv-ah-open-btn" data-collector="${collector.replace(/"/g,'&quot;')}" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add Admin Record</button>
         </div>
       </div>`;
     }).join('');
@@ -3503,6 +3512,13 @@ async function ahSubmit() {
 }
 
 /* ─── ADMIN HARVEST POPUP (Reconciliation tab) ─── */
+// Delegation for dynamically-rendered "Add Admin Record" buttons
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.hv-ah-open-btn');
+  if (!btn) return;
+  hvAhOpen(btn.dataset.collector || '');
+});
+
 let _hvAhVendo  = null;  // selected vendo for the popup
 let _hvAhCollector = ''; // collector name set when popup opens
 
@@ -3695,6 +3711,144 @@ async function hvAhSubmit() {
     setTimeout(() => { document.getElementById('hv-ah-pop').classList.remove('show'); hvLoadRecon(); }, 1200);
   } catch(e) {
     if (msg) msg.innerHTML = `<span style="color:#dc2626;">❌ ${e.message}</span>`;
+  }
+}
+
+/* ─── EXCEL EXPORT (Reconciliation per collector) ─── */
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.hv-xls-btn');
+  if (!btn) return;
+  hvExportCollector(btn.dataset.collector || '', btn.dataset.date || '');
+});
+
+async function hvExportCollector(collector, date) {
+  if (!collector || !date) return;
+
+  // Notify user export started
+  const toast = document.getElementById('hv-refresh-toast');
+  const showToast = msg => { if (toast) { toast.textContent = msg; toast.classList.add('show'); } };
+  const hideToast = () => { if (toast) toast.classList.remove('show'); };
+  showToast('📥 Preparing export…');
+
+  try {
+    // Fetch all harvest records for this collector + date
+    const r = await fetch(
+      `${_SB}/rest/v1/harvests?harvest_date=eq.${date}&collector=eq.${encodeURIComponent(collector)}&select=id,vendo_name,tg_name,sheet_name,area,vlan,route_code,harvest_date,harvest_window_start,coins_total,coins_free,coins_old,net_collectible,spawn_share,customer_share,admin_notes&order=route_code.asc,vendo_name.asc&limit=500`,
+      { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
+    );
+    const harvests = await r.json();
+    if (!harvests.length) { showToast('⚠ No records found for export'); setTimeout(hideToast, 2500); return; }
+
+    // Fetch TG income for each vendo (reuse window logic)
+    const DEFAULT_START = '2026-03-01';
+    const tgNames = [...new Set(harvests.map(h => h.tg_name).filter(Boolean))];
+    const windowMap = {};
+    harvests.forEach(h => { if (h.tg_name && h.harvest_window_start) windowMap[h.tg_name] = h.harvest_window_start; });
+    tgNames.filter(tg => !windowMap[tg]).forEach(tg => { windowMap[tg] = DEFAULT_START; });
+
+    const tgMap = {};
+    await Promise.all(tgNames.map(async tg => {
+      const start = windowMap[tg] || DEFAULT_START;
+      try {
+        const rt = await fetch(
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount`,
+          { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Range': '0-49999', 'Prefer': 'count=none' } }
+        );
+        const rows = await rt.json();
+        tgMap[tg] = rows.reduce((s, tx) => s + (parseFloat(tx.amount)||0), 0);
+      } catch(e) { tgMap[tg] = 0; }
+    }));
+
+    // Build rows grouped by route
+    const byRoute = {};
+    harvests.forEach(h => {
+      const rc = h.route_code || 'ADMIN';
+      if (!byRoute[rc]) byRoute[rc] = [];
+      byRoute[rc].push(h);
+    });
+
+    const fmt2 = v => parseFloat(v || 0).toFixed(2);
+    const ws_data = [];
+
+    // Title rows
+    ws_data.push([`Harvest Report — ${collector}`]);
+    ws_data.push([`Date: ${date}`]);
+    ws_data.push([`Exported: ${new Date().toLocaleString('en-PH')}`]);
+    ws_data.push([]); // blank
+
+    let grandCoin = 0, grandTG = 0;
+
+    Object.entries(byRoute).forEach(([rc, items]) => {
+      const routeCoin = items.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+      const routeTG   = items.reduce((s,h) => s + (tgMap[h.tg_name]||0), 0);
+      const routeDiff = routeCoin - routeTG;
+      grandCoin += routeCoin;
+      grandTG   += routeTG;
+
+      // Route header
+      ws_data.push([`Route: ${rc}`, '', '', '', '', '', '', '', `Coin net: ₱${routeCoin.toLocaleString('en-PH')}`, `TG income: ₱${routeTG.toLocaleString('en-PH')}`, `Diff: ₱${routeDiff.toLocaleString('en-PH')}`]);
+
+      // Column headers
+      ws_data.push([
+        'Vendo Name', 'TG Name', 'Sheet Name', 'Area', 'VLAN',
+        'Total Coins', 'Free Coins', 'Old Coins',
+        'Net Collectible', 'Spawn Share (75%)', 'Owner Share (25%)',
+        'TG Income', 'Difference', 'Window Start', 'Harvest Date', 'Notes'
+      ]);
+
+      // Data rows
+      items.forEach(h => {
+        const tgAmt = tgMap[h.tg_name] || 0;
+        const diff  = (parseFloat(h.net_collectible)||0) - tgAmt;
+        ws_data.push([
+          h.vendo_name || h.tg_name || '—',
+          h.tg_name || '',
+          h.sheet_name || '',
+          h.area || '',
+          h.vlan || '',
+          fmt2(h.coins_total),
+          fmt2(h.coins_free),
+          fmt2(h.coins_old),
+          fmt2(h.net_collectible),
+          fmt2(h.spawn_share),
+          fmt2(h.customer_share),
+          tgAmt.toFixed(2),
+          diff.toFixed(2),
+          h.harvest_window_start || DEFAULT_START,
+          h.harvest_date || date,
+          h.admin_notes || ''
+        ]);
+      });
+
+      ws_data.push([]); // blank between routes
+    });
+
+    // Grand total row
+    ws_data.push(['GRAND TOTAL', '', '', '', '', '', '', '',
+      fmt2(grandCoin), '', '', fmt2(grandTG), fmt2(grandCoin - grandTG)]);
+
+    // Build workbook
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+
+    // Column widths
+    ws['!cols'] = [
+      {wch:30},{wch:30},{wch:25},{wch:12},{wch:8},
+      {wch:12},{wch:12},{wch:12},
+      {wch:16},{wch:16},{wch:16},
+      {wch:14},{wch:14},{wch:14},{wch:14},{wch:40}
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Harvest');
+
+    const filename = `harvest_${collector.replace(/[^a-z0-9]/gi,'_')}_${date}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    showToast(`✅ Exported: ${filename}`);
+    setTimeout(hideToast, 3000);
+  } catch(e) {
+    showToast(`❌ Export failed: ${e.message}`);
+    setTimeout(hideToast, 3000);
   }
 }
 
