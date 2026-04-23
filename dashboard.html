@@ -3517,63 +3517,40 @@ async function ahSubmit() {
 }
 
 /* ─── AUDITED VENDOS TAB ─── */
-const _auditReports = {};  // cache loaded reports
+const _auditUrls = {
+  denzel: 'https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html',
+  island: 'https://spawninternet.github.io/VendoMonitor/island_audit_report.html'
+};
 
-async function auditShowVendo(key, btn) {
-  // Update active tab style
+function auditShowVendo(key, btn) {
   document.querySelectorAll('.audit-stab').forEach(b => {
     b.style.background = '#fff';
-    b.style.color = '#dc2626';
+    b.style.color = b.dataset.audit === 'island' ? '#7f1d1d' : '#dc2626';
     b.classList.remove('on');
   });
-  if (btn) { btn.style.background = '#dc2626'; btn.style.color = '#fff'; btn.classList.add('on'); }
-
+  if (btn) {
+    btn.style.background = btn.dataset.audit === 'island' ? '#7f1d1d' : '#dc2626';
+    btn.style.color = '#fff';
+    btn.classList.add('on');
+  }
   const iframe = document.getElementById('audit-iframe');
-  if (!iframe) return;
-
-  // Show loading
-  iframe.srcdoc = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#6b7280;font-size:14px;">Loading audit report...</div>';
-
-  if (key === 'island') {
-    if (_auditReports['island']) { iframe.srcdoc = _auditReports['island']; return; }
-    try {
-      const r = await fetch('https://spawninternet.github.io/VendoMonitor/island_audit_report.html');
-      if (r.ok) { const html = await r.text(); _auditReports['island'] = html; iframe.srcdoc = html; }
-      else { iframe.srcdoc = _auditFallback('Island VLAN 32', 'Upload island_audit_report.html to GitHub Pages root.'); }
-    } catch(e) { iframe.srcdoc = _auditFallback('Island VLAN 32', 'Network error: ' + e.message); }
-  } else if (key === 'denzel') {
-    // Fetch the denzel report from GitHub Pages
-    if (_auditReports['denzel']) {
-      iframe.srcdoc = _auditReports['denzel'];
-      return;
-    }
-    try {
-      const r = await fetch('https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html');
-      if (r.ok) {
-        const html = await r.text();
-        _auditReports['denzel'] = html;
-        iframe.srcdoc = html;
-      } else {
-        iframe.srcdoc = _auditFallback('Denzel VLAN 44', 'Could not load report. Make sure denzel_vlan44.html is uploaded to GitHub Pages under /audits/ folder.');
-      }
-    } catch(e) {
-      iframe.srcdoc = _auditFallback('Denzel VLAN 44', 'Network error: ' + e.message);
-    }
+  if (!iframe) { console.error('audit-iframe not found'); return; }
+  const url = _auditUrls[key];
+  if (url) {
+    console.log('Loading audit:', url);
+    iframe.src = url + '?t=' + Date.now();
   }
 }
 
-function _auditFallback(name, msg) {
-  return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;text-align:center;padding:40px;">
-    <div style="font-size:40px;margin-bottom:16px;">📄</div>
-    <div style="font-size:16px;font-weight:700;color:#1e3a8a;margin-bottom:8px;">${name} — Audit Report</div>
-    <div style="font-size:13px;color:#6b7280;max-width:400px;line-height:1.7;">${msg}</div>
-    <div style="margin-top:20px;padding:12px 20px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d;font-weight:600;">
-      Upload path: SpawnInternet/VendoMonitor → audits/denzel_vlan44.html
-    </div>
-  </div>`;
-}
 
 /* ─── ADMIN HARVEST POPUP (Reconciliation tab) ─── */
+// Delegation for audit-stab clicks
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.audit-stab');
+  if (!btn) return;
+  auditShowVendo(btn.dataset.audit || '', btn);
+});
+
 // Delegation for dynamically-rendered "Add Admin Record" buttons
 document.addEventListener('click', function(e) {
   const btn = e.target.closest('.hv-ah-open-btn');
@@ -4367,26 +4344,21 @@ async function hvLoadRecords() { hvLoadRecordDates(); }
 <div class="hv-hidden" id="hv-tab-audited" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
     <div style="font-size:13px;font-weight:800;color:#dc2626;">🤖 Claude Audited Vendos</div>
-    <div style="font-size:11px;color:#6b7280;">Click a vendo tab to view its full audit report</div>
+    <div style="font-size:11px;color:#6b7280;">Click a vendo to view its audit report</div>
   </div>
-  <!-- Vendo audit sub-tabs -->
-  <div id="audit-sub-tabs" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
-    <button class="audit-stab on" data-audit="denzel" onclick="auditShowVendo('denzel',this)"
+  <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="audit-stab on" data-audit="denzel"
       style="padding:6px 14px;border-radius:8px;border:2px solid #dc2626;background:#dc2626;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
       🔴 Denzel VLAN 44
     </button>
-    <button class="audit-stab" data-audit="island" onclick="auditShowVendo('island',this)"
+    <button class="audit-stab" data-audit="island"
       style="padding:6px 14px;border-radius:8px;border:2px solid #7f1d1d;background:#fff;color:#7f1d1d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
       🏝️ Island VLAN 32
     </button>
-    <!-- Future audited vendos will be added here -->
-    <div style="padding:6px 14px;border-radius:8px;border:2px dashed #d1d5db;color:#9ca3af;font-size:12px;font-style:italic;">
-      + More audits coming...
-    </div>
+    <div style="padding:6px 14px;border-radius:8px;border:2px dashed #d1d5db;color:#9ca3af;font-size:12px;font-style:italic;">+ More audits coming...</div>
   </div>
-  <!-- Audit report frame -->
   <div id="audit-frame-container" style="background:#fff;border-radius:12px;border:1.5px solid #e5e7eb;overflow:hidden;height:calc(100vh - 160px);">
-    <iframe id="audit-iframe" style="width:100%;height:100%;border:none;" srcdoc=""></iframe>
+    <iframe id="audit-iframe" style="width:100%;height:100%;border:none;" src=""></iframe>
   </div>
 </div>
 
