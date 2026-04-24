@@ -470,7 +470,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 /* HEAD */
 .hv-head{background:#fff;border-bottom:1px solid var(--bd);flex-shrink:0;}
-.hv-toprow{padding:5px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--bd);overflow:hidden;}
+.hv-toprow{padding:5px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid var(--bd);}
 .hv-title{font-size:13px;font-weight:700;color:var(--blue);}
 .hv-tabs{display:flex;gap:4px;align-items:center;overflow-x:auto;scrollbar-width:none;flex-wrap:nowrap;min-width:0;}
 .hv-tabs::-webkit-scrollbar{display:none;}
@@ -513,7 +513,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-search:focus{border-color:var(--blue);}
 
 /* 3-COL LAYOUT */
-.hv-page{display:grid;grid-template-columns:210px 1fr 195px;flex:1;min-height:0;height:calc(100vh - 156px);min-height:400px;overflow:hidden;}
+.hv-page{display:grid;grid-template-columns:210px 1fr 195px;flex:1;min-height:0;overflow:hidden;}
 
 /* COL 1 — ROUTE BUILDER */
 .hv-rc{display:flex;flex-direction:column;overflow:hidden;background:#fff;border-right:1px solid var(--bd);}
@@ -650,7 +650,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 /* SCHEDULE / RECORDS TABS */
 .hv-tab{}
 #hv-tab-schedule{padding:12px;overflow-y:auto;height:calc(100vh - 72px);}
-#hv-tab-records{padding:10px;overflow-y:auto;height:calc(100vh - 72px);}
+#hv-tab-records{padding:12px;overflow-y:auto;height:calc(100vh - 72px);}
 .hv-section{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:12px;margin-bottom:10px;}
 .hv-section-title{font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .hv-stag{font-size:9px;padding:1px 7px;border-radius:8px;background:#dbeafe;color:var(--blue);font-weight:500;text-transform:none;letter-spacing:0;}
@@ -773,16 +773,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab" id="hbtn-audited" onclick="hvShowTab('audited',this)" style="background:#fef2f2;border-color:#fca5a5;color:#dc2626;font-size:11px;">🤖 Claude Audited Vendos</button>
     </div>
   </div>
-  <!-- Step guide — compact single line -->
-  <div class="hv-guide" id="hv-guide-bar">
-    <div class="hv-step"><span class="hv-step-n">1</span> Filter by area &amp; select vendos</div>
-    <span class="hv-step-arr">→</span>
-    <div class="hv-step"><span class="hv-step-n">2</span> Click row for details · click <b>+ add</b> to add to route</div>
-    <span class="hv-step-arr">→</span>
-    <div class="hv-step"><span class="hv-step-n">3</span> Fill collector + date on the left</div>
-    <span class="hv-step-arr">→</span>
-    <div class="hv-step"><span class="hv-step-n">4</span> Confirm route</div>
-  </div>
+  <div id="hv-guide-bar" style="display:none;"></div>
 </div>
 
 <!-- AREA TABS -->
@@ -976,121 +967,50 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <div class="hv-hidden" id="hv-tab-records" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
 <style>
 .hv-rec-empty{text-align:center;padding:40px;color:#9ca3af;font-size:12px;line-height:1.8;}
-/* Date color palette — alternating per date group */
-.hrec-date-block{border-radius:10px;margin-bottom:14px;overflow:hidden;border:1.5px solid transparent;}
-.hrec-date-block:nth-child(1){border-color:#c7d2fe;}.hrec-date-block:nth-child(2){border-color:#bbf7d0;}
-.hrec-date-block:nth-child(3){border-color:#fde68a;}.hrec-date-block:nth-child(4){border-color:#ddd6fe;}
-.hrec-date-block:nth-child(5){border-color:#fed7aa;}.hrec-date-block:nth-child(6){border-color:#bfdbfe;}
-.hrec-date-block:nth-child(n+7){border-color:#e5e7eb;}
-.hrec-date-hdr{padding:9px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
-.hrec-date-block:nth-child(1) .hrec-date-hdr{background:#eef2ff;}
-.hrec-date-block:nth-child(2) .hrec-date-hdr{background:#f0fdf4;}
-.hrec-date-block:nth-child(3) .hrec-date-hdr{background:#fffbeb;}
-.hrec-date-block:nth-child(4) .hrec-date-hdr{background:#f5f3ff;}
-.hrec-date-block:nth-child(5) .hrec-date-hdr{background:#fff7ed;}
-.hrec-date-block:nth-child(6) .hrec-date-hdr{background:#eff6ff;}
-.hrec-date-block:nth-child(n+7) .hrec-date-hdr{background:#f9fafb;}
-.hrec-date-lbl{font-size:14px;font-weight:800;color:#1a1d2e;}
-.hrec-date-meta{font-size:10px;color:#6b7280;margin-top:2px;}
-.hrec-date-totals{display:flex;gap:12px;align-items:center;}
-.hrec-date-net{font-size:14px;font-weight:700;color:#16a34a;}
-.hrec-date-body{background:#fff;padding:10px 14px;}
-.hrec-row{display:grid;grid-template-columns:1fr 80px 80px 80px 70px 60px;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;transition:background .1s;border-bottom:1px solid #f0f0f8;}
-.hrec-row:last-child{border-bottom:none;}
-.hrec-row:hover{background:#f0f4ff;}
-.hrec-vname{font-size:12px;font-weight:700;color:#1e3cb8;}
-.hrec-tg{font-size:10px;color:#6b7280;margin-top:1px;}
-.hrec-col{font-size:10px;color:#374151;}
-.hrec-amt{font-size:12px;font-weight:700;}
-.hrec-src{font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;}
-/* Harvest detail popup */
 .hrd-pop-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;align-items:center;justify-content:center;}
 .hrd-pop-bg.show{display:flex;}
-.hrd-pop{background:#fff;border-radius:12px;width:min(520px,96vw);max-height:88vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.2);}
-.hrd-hdr{padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;}
-.hrd-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 14px;}
+.hrd-pop{background:#fff;border-radius:12px;width:min(500px,96vw);max-height:88vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.2);}
+.hrd-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 16px 0;}
 .hrd-box{border-radius:8px;padding:10px 12px;}
 .hrd-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;}
-.hrd-val{font-size:15px;font-weight:700;}
-.hrd-sub{font-size:9px;margin-top:2px;opacity:.7;}
-.hrd-coins{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:0 16px 14px;}
+.hrd-val{font-size:16px;font-weight:700;}
+.hrd-coins{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px 16px;}
 .hrd-coin-box{border-radius:7px;padding:8px;text-align:center;}
-.hrd-coin-v{font-size:16px;font-weight:700;}
+.hrd-coin-v{font-size:15px;font-weight:700;}
 .hrd-coin-l{font-size:9px;color:#6b7280;margin-top:2px;}
-.hrec-col-hdr{display:grid;grid-template-columns:1fr 80px 80px 80px 70px 60px;gap:8px;padding:4px 10px 6px;border-bottom:2px solid #e5e7eb;margin-bottom:4px;}
-.hrec-col-hdr span{font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;}
 </style>
-<!-- Harvest Records content -->
-<div id="hv-rec-content">
-  <div class="hv-rec-empty">Loading harvest records…</div>
-</div>
-<!-- Harvest Detail Popup -->
+<div id="hv-rec-content"><div class="hv-rec-empty">Loading…</div></div>
+
+<!-- Harvest detail popup -->
 <div class="hrd-pop-bg" id="hrd-pop-bg" onclick="if(event.target===this)this.classList.remove('show')">
   <div class="hrd-pop">
-    <div class="hrd-hdr" id="hrd-hdr-bg" style="background:#1e3cb8;border-radius:12px 12px 0 0;">
+    <div id="hrd-hdr" style="padding:14px 16px;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:flex-start;background:#1e3cb8;">
       <div>
         <div style="font-size:15px;font-weight:700;color:#fff;" id="hrd-title">—</div>
         <div style="font-size:10px;color:rgba(255,255,255,.7);margin-top:3px;" id="hrd-sub">—</div>
       </div>
-      <button onclick="document.getElementById('hrd-pop-bg').classList.remove('show')"
-        style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+      <button onclick="document.getElementById('hrd-pop-bg').classList.remove('show')" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
     </div>
     <div class="hrd-grid">
-      <div class="hrd-box" style="background:#f0fdf4;border-left:3px solid #16a34a;">
-        <div class="hrd-lbl" style="color:#16a34a;">Net Collectible</div>
-        <div class="hrd-val" style="color:#15803d;" id="hrd-net">—</div>
-      </div>
-      <div class="hrd-box" style="background:#eef2ff;border-left:3px solid #1e3cb8;">
-        <div class="hrd-lbl" style="color:#1e3cb8;">Spawn 75%</div>
-        <div class="hrd-val" style="color:#1e3cb8;" id="hrd-spawn">—</div>
-      </div>
-      <div class="hrd-box" style="background:#f5f3ff;border-left:3px solid #7c3aed;">
-        <div class="hrd-lbl" style="color:#7c3aed;">Owner 25%</div>
-        <div class="hrd-val" style="color:#7c3aed;" id="hrd-owner">—</div>
-      </div>
-      <div class="hrd-box" style="background:#fafbff;border-left:3px solid #6366f1;">
-        <div class="hrd-lbl" style="color:#6366f1;">Route</div>
-        <div class="hrd-val" style="color:#4338ca;font-size:13px;letter-spacing:.1em;" id="hrd-route">—</div>
-        <div class="hrd-sub" style="color:#6b7280;" id="hrd-src-lbl">—</div>
-      </div>
+      <div class="hrd-box" style="background:#f0fdf4;border-left:3px solid #16a34a;"><div class="hrd-lbl" style="color:#16a34a;">Net Collectible</div><div class="hrd-val" style="color:#15803d;" id="hrd-net">—</div></div>
+      <div class="hrd-box" style="background:#eef2ff;border-left:3px solid #1e3cb8;"><div class="hrd-lbl" style="color:#1e3cb8;">Spawn 75%</div><div class="hrd-val" style="color:#1e3cb8;" id="hrd-spawn">—</div></div>
+      <div class="hrd-box" style="background:#f5f3ff;border-left:3px solid #7c3aed;"><div class="hrd-lbl" style="color:#7c3aed;">Owner 25%</div><div class="hrd-val" style="color:#7c3aed;" id="hrd-owner">—</div></div>
+      <div class="hrd-box" style="background:#fafbff;border-left:3px solid #6366f1;"><div class="hrd-lbl" style="color:#6366f1;">Route</div><div class="hrd-val" style="color:#4338ca;font-size:12px;letter-spacing:.1em;" id="hrd-route">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px;" id="hrd-src-lbl">—</div></div>
     </div>
     <div class="hrd-coins">
-      <div class="hrd-coin-box" style="background:#f3f4f6;">
-        <div class="hrd-coin-v" style="color:#374151;" id="hrd-total">—</div>
-        <div class="hrd-coin-l">Total coins</div>
-      </div>
-      <div class="hrd-coin-box" style="background:#fef2f2;">
-        <div class="hrd-coin-v" style="color:#dc2626;" id="hrd-free">—</div>
-        <div class="hrd-coin-l">Free time</div>
-      </div>
-      <div class="hrd-coin-box" style="background:#fffbeb;">
-        <div class="hrd-coin-v" style="color:#d97706;" id="hrd-old">—</div>
-        <div class="hrd-coin-l">Old coins</div>
-      </div>
+      <div class="hrd-coin-box" style="background:#f3f4f6;"><div class="hrd-coin-v" style="color:#374151;" id="hrd-total">—</div><div class="hrd-coin-l">Total coins</div></div>
+      <div class="hrd-coin-box" style="background:#fef2f2;"><div class="hrd-coin-v" style="color:#dc2626;" id="hrd-free">—</div><div class="hrd-coin-l">Free time</div></div>
+      <div class="hrd-coin-box" style="background:#fffbeb;"><div class="hrd-coin-v" style="color:#d97706;" id="hrd-old">—</div><div class="hrd-coin-l">Old coins</div></div>
     </div>
-    <div style="padding:0 16px;margin-bottom:10px;">
+    <div style="padding:0 16px 10px;">
       <div style="background:#f8faff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-size:11px;">
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
-          <span style="color:#6b7280;">Collector</span><span style="font-weight:600;" id="hrd-collector">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
-          <span style="color:#6b7280;">Harvest date</span><span style="font-weight:600;" id="hrd-date">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
-          <span style="color:#6b7280;">Window start</span><span style="font-weight:600;" id="hrd-window">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;">
-          <span style="color:#6b7280;">TG name</span><span style="font-weight:600;font-size:10px;" id="hrd-tgname">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:3px 0;" id="hrd-note-row" style="display:none;">
-          <span style="color:#92400e;">📝 Note</span><span style="font-size:10px;color:#92400e;" id="hrd-note-txt"></span>
-        </div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Collector</span><span style="font-weight:600;" id="hrd-collector">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Harvest date</span><span style="font-weight:600;" id="hrd-date">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Window start</span><span style="font-weight:600;" id="hrd-window">—</span></div>
+        <div style="display:flex;justify-content:space-between;padding:3px 0;" id="hrd-note-row"><span style="color:#92400e;">📝 Note</span><span style="font-size:10px;color:#92400e;" id="hrd-note-txt"></span></div>
       </div>
     </div>
-    <div style="padding:0 16px 14px;display:flex;gap:7px;">
-      <button onclick="document.getElementById('hrd-pop-bg').classList.remove('show')"
-        style="flex:1;padding:9px;background:#f1f5f9;color:#374151;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Close</button>
-    </div>
+    <div style="padding:0 16px 14px;"><button onclick="document.getElementById('hrd-pop-bg').classList.remove('show')" style="width:100%;padding:9px;background:#f1f5f9;color:#374151;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Close</button></div>
   </div>
 </div>
 </div>
@@ -1548,20 +1468,24 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- RECONCILIATION TAB -->
 <div class="hv-hidden" id="hv-tab-recon" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+<style>
+.rc-dtab{padding:5px 12px;border-radius:20px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.12s;}
+.rc-dtab.on{background:#1e3cb8;border-color:#1e3cb8;color:#fff;}
+.rc-dtab:hover:not(.on){border-color:#1e3cb8;color:#1e3cb8;}
+.rc-box{border-radius:7px;padding:8px;text-align:center;}
+.rc-box .rv{font-size:15px;font-weight:700;}
+.rc-box .rl{font-size:9px;color:#6b7280;margin-top:2px;}
+</style>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
   <div>
     <div style="font-size:13px;font-weight:700;color:#1e3cb8;">⚖️ Harvest Reconciliation</div>
-    <div style="font-size:10px;color:#6b7280;">Compare collector coin report vs Telegram system income per route</div>
+    <div style="font-size:10px;color:#6b7280;">Coin net collected vs Telegram income (skipped transactions excluded)</div>
   </div>
-  <button onclick="hvLoadReconDates()" style="padding:5px 14px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
+  <button onclick="rcLoad()" style="padding:5px 14px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
 </div>
-<!-- Date tabs -->
-<div id="hv-recon-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
-<!-- Hidden date input kept for backward compat -->
+<div id="rc-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
 <input type="hidden" id="hv-recon-date">
-<div id="hv-recon-content">
-  <div class="hv-rec-empty">Loading harvest dates...</div>
-</div>
+<div id="rc-content"><div class="hv-rec-empty">Click Reconcile tab to load data</div></div>
 </div>
 
 
@@ -1653,9 +1577,7 @@ function hvShowTab(tab, btn) {
   }
   if (tab === 'records') hvLoadRecordDates();
   if (tab === 'schedule') hvLoadSchedule();
-  if (tab === 'recon') {
-    hvLoadReconDates();
-  }
+  if (tab === 'recon') { rcLoad(); }
   if (tab === 'vnames') vnLoad();
   if (tab === 'addharvest' && (!_vnAll || !_vnAll.length)) vnLoad();
   if (tab === 'audited') auditShowVendo('denzel', document.querySelector('.audit-stab.on'));
@@ -3133,99 +3055,80 @@ function hvSchedRowClick(vid) {
 }
 
 /* ─── RECORDS TAB ─── */
-const _HREC_DATE_COLORS = [
-  {bg:'#eef2ff',bd:'#c7d2fe',hdr:'#1e3cb8'},
-  {bg:'#f0fdf4',bd:'#bbf7d0',hdr:'#15803d'},
-  {bg:'#fffbeb',bd:'#fde68a',hdr:'#92400e'},
-  {bg:'#f5f3ff',bd:'#ddd6fe',hdr:'#5b21b6'},
-  {bg:'#fff7ed',bd:'#fed7aa',hdr:'#c2410c'},
-  {bg:'#eff6ff',bd:'#bfdbfe',hdr:'#1d4ed8'},
+const _HREC_COLORS = [
+  {bd:'#c7d2fe',bg:'#eef2ff',hdr:'#1e3cb8'},
+  {bd:'#bbf7d0',bg:'#f0fdf4',hdr:'#15803d'},
+  {bd:'#fde68a',bg:'#fffbeb',hdr:'#92400e'},
+  {bd:'#ddd6fe',bg:'#f5f3ff',hdr:'#5b21b6'},
+  {bd:'#fed7aa',bg:'#fff7ed',hdr:'#c2410c'},
+  {bd:'#bfdbfe',bg:'#eff6ff',hdr:'#1d4ed8'},
 ];
 let _hrecAll = [], _hrecLoaded = false;
 
 async function hvLoadRecordDates() {
-  const content = document.getElementById('hv-rec-content');
-  if (!content) return;
-  if (_hrecLoaded) { hvRenderRecords(); return; }
-  content.innerHTML = '<div class="hv-rec-empty">Loading harvest records…</div>';
+  const el = document.getElementById('hv-rec-content');
+  if (!el) return;
+  if (_hrecLoaded) { _hvRenderRec(); return; }
+  el.innerHTML = '<div class="hv-rec-empty">Loading harvest records…</div>';
   try {
-    const r = await fetch(`${_SB}/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
+    const r = await fetch(`${_SB}/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000`,
+      { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
     _hrecAll = await r.json();
     _hrecLoaded = true;
-    hvRenderRecords();
-  } catch(e) {
-    content.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
+    _hvRenderRec();
+  } catch(e2) {
+    el.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e2.message}</div>`;
   }
 }
 
-function hvRenderRecords() {
-  const content = document.getElementById('hv-rec-content');
-  if (!content || !_hrecAll.length) {
-    if (content) content.innerHTML = '<div class="hv-rec-empty">No harvest records yet</div>';
-    return;
-  }
-  // Group by harvest_date
+function _hvRenderRec() {
+  const el = document.getElementById('hv-rec-content');
+  if (!el) return;
+  if (!_hrecAll.length) { el.innerHTML = '<div class="hv-rec-empty">No harvest records yet</div>'; return; }
+  const fmtP = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+  const fmtD = d => { try { return new Date(d+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'}); } catch { return d; } };
   const byDate = {};
-  _hrecAll.forEach(h => {
-    const d = h.harvest_date || '—';
-    if (!byDate[d]) byDate[d] = [];
-    byDate[d].push(h);
-  });
+  _hrecAll.forEach(h => { const d=h.harvest_date||'—'; if(!byDate[d])byDate[d]=[]; byDate[d].push(h); });
   const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
-  const fmtP  = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
-  const fmtD  = d => { try { return new Date(d+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'}); } catch { return d; } };
-
-  let html = '';
+  let out = '';
   dates.forEach((date, di) => {
-    const rows    = byDate[date];
-    const col     = _HREC_DATE_COLORS[di % _HREC_DATE_COLORS.length];
-    const totalNet = rows.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+    const rows = byDate[date];
+    const c = _HREC_COLORS[di % _HREC_COLORS.length];
+    const totalNet   = rows.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
     const totalSpawn = rows.reduce((s,h) => s+(parseFloat(h.spawn_share)||0), 0);
-    const cols    = [...new Set(rows.map(h => h.collector).filter(Boolean))].join(', ');
-
-    html += `<div style="border-radius:10px;margin-bottom:14px;overflow:hidden;border:1.5px solid ${col.bd};">
-      <!-- Date header -->
-      <div style="padding:10px 14px;background:${col.bg};display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="hvToggleDateBlock(this)">
+    const cols = [...new Set(rows.map(h=>h.collector).filter(Boolean))].join(', ');
+    out += `<div style="border-radius:10px;margin-bottom:14px;overflow:hidden;border:1.5px solid ${c.bd};">
+      <div style="padding:10px 14px;background:${c.bg};display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="(()=>{const b=this.nextElementSibling;const ch=this.querySelector('.hrc-ch');b.style.display=b.style.display==='none'?'':'none';ch.style.transform=b.style.display==='none'?'rotate(-90deg)':'';})()" >
         <div>
-          <div style="font-size:14px;font-weight:800;color:${col.hdr};">📅 ${fmtD(date)}</div>
+          <div style="font-size:14px;font-weight:800;color:${c.hdr};">📅 ${fmtD(date)}</div>
           <div style="font-size:10px;color:#6b7280;margin-top:2px;">${rows.length} record${rows.length!==1?'s':''} · ${cols||'—'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
           <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:700;color:#16a34a;">${fmtP(totalNet)}</div>
-            <div style="font-size:10px;color:#6b7280;">net · Spawn ${fmtP(totalSpawn)}</div>
+            <div style="font-size:14px;font-weight:700;color:#16a34a;">${fmtP(totalNet)} net</div>
+            <div style="font-size:10px;color:#6b7280;">Spawn ${fmtP(totalSpawn)}</div>
           </div>
-          <span style="font-size:16px;color:${col.hdr};transition:.2s;" class="hrec-chevron">▾</span>
+          <span class="hrc-ch" style="font-size:16px;color:${c.hdr};transition:.2s;">▾</span>
         </div>
       </div>
-      <!-- Rows -->
-      <div style="background:#fff;padding:8px 14px;" class="hrec-body">
-        <div style="display:grid;grid-template-columns:1fr 85px 85px 80px 55px;gap:8px;padding:4px 10px 8px;border-bottom:2px solid #e5e7eb;margin-bottom:4px;">
-          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Vendo</span>
-          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Net</span>
-          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Spawn 75%</span>
-          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Collector</span>
-          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Source</span>
+      <div style="background:#fff;padding:6px 14px 10px;">
+        <div style="display:grid;grid-template-columns:1fr 90px 90px 75px 55px;gap:8px;padding:4px 10px 7px;border-bottom:2px solid #e5e7eb;margin-bottom:4px;">
+          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Vendo</span>
+          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Net</span>
+          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Spawn 75%</span>
+          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Collector</span>
+          <span style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;">Src</span>
         </div>
         ${rows.map(h => {
-          const net   = parseFloat(h.net_collectible||0);
-          const spawn = parseFloat(h.spawn_share||0);
-          const rc    = (h.route_code||'').toUpperCase();
-          const isAdm = !rc||rc==='ADMIN'||rc==='MANUAL';
-          const src   = isAdm
-            ? `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧 Admin</span>`
-            : `<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8;">📱 PWA</span>`;
-          const dataAttrs = `data-hid="${h.id}" data-vname="${(h.vendo_name||h.tg_name||'').replace(/"/g,'&quot;')}" data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-date="${h.harvest_date||''}" data-window="${h.harvest_window_start||''}" data-net="${net}" data-spawn="${spawn}" data-owner="${parseFloat(h.customer_share||0)}" data-total="${parseFloat(h.coins_total||0)}" data-free="${parseFloat(h.coins_free||0)}" data-old="${parseFloat(h.coins_old||0)}" data-collector="${(h.collector||'').replace(/"/g,'&quot;')}" data-route="${rc}" data-admin="${isAdm}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}"`;
-          const noteFlag = h.admin_notes ? ' 📝' : '';
-          return `<div ${dataAttrs} onclick="hvOpenHrecDetail(this)"
-            style="display:grid;grid-template-columns:1fr 85px 85px 80px 55px;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;border-bottom:1px solid #f0f0f8;transition:background .1s;"
-            onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
-            <div>
-              <div style="font-size:12px;font-weight:700;color:#1e3cb8;">${h.vendo_name||h.tg_name||'—'}${noteFlag}</div>
-              <div style="font-size:10px;color:#6b7280;">${h.tg_name||'—'}</div>
-            </div>
+          const net=parseFloat(h.net_collectible||0), spawn=parseFloat(h.spawn_share||0);
+          const rc=(h.route_code||'').toUpperCase();
+          const isAdm=!rc||rc==='ADMIN'||rc==='MANUAL';
+          const src=isAdm
+            ?'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧</span>'
+            :'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8;">📱</span>';
+          const da=`data-vname="${(h.vendo_name||h.tg_name||'').replace(/"/g,'&quot;')}" data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-date="${h.harvest_date||''}" data-window="${h.harvest_window_start||''}" data-net="${net}" data-spawn="${spawn}" data-owner="${parseFloat(h.customer_share||0)}" data-total="${parseFloat(h.coins_total||0)}" data-free="${parseFloat(h.coins_free||0)}" data-old="${parseFloat(h.coins_old||0)}" data-collector="${(h.collector||'').replace(/"/g,'&quot;')}" data-route="${rc}" data-admin="${isAdm}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}"`;
+          return `<div ${da} onclick="hvOpenHrecDetail(this)" style="display:grid;grid-template-columns:1fr 90px 90px 75px 55px;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border-bottom:1px solid #f0f0f8;" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+            <div><div style="font-size:12px;font-weight:700;color:#1e3cb8;">${h.vendo_name||h.tg_name||'—'}${h.admin_notes?' 📝':''}</div><div style="font-size:10px;color:#6b7280;">${h.tg_name||'—'}</div></div>
             <div style="font-size:12px;font-weight:700;color:#16a34a;">${fmtP(net)}</div>
             <div style="font-size:12px;font-weight:600;color:#1e3cb8;">${fmtP(spawn)}</div>
             <div style="font-size:11px;color:#374151;">${h.collector||'—'}</div>
@@ -3235,305 +3138,191 @@ function hvRenderRecords() {
       </div>
     </div>`;
   });
-  content.innerHTML = html;
-}
-
-function hvToggleDateBlock(hdr) {
-  const body    = hdr.nextElementSibling;
-  const chevron = hdr.querySelector('.hrec-chevron');
-  const isOpen  = body.style.display !== 'none';
-  body.style.display = isOpen ? 'none' : '';
-  if (chevron) chevron.style.transform = isOpen ? 'rotate(-90deg)' : '';
+  el.innerHTML = out;
+  // Fix onclick for collapse (inline arrow fn has 'this' issue) - use event delegation
+  el.querySelectorAll('[data-collapse-hdr]').forEach(h => h.addEventListener('click', function(){
+    const b=this.nextElementSibling, ch=this.querySelector('.hrc-ch');
+    b.style.display=b.style.display==='none'?'':'none';
+    if(ch)ch.style.transform=b.style.display==='none'?'rotate(-90deg)':'';
+  }));
 }
 
 function hvOpenHrecDetail(row) {
-  const d = row.dataset;
-  const fmtP = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
-  const isAdmin = d.admin === 'true';
-  document.getElementById('hrd-title').textContent  = d.vname || d.tg || '—';
-  document.getElementById('hrd-sub').textContent    = (d.date||'—') + ' · ' + (d.collector||'—');
+  const d=row.dataset;
+  const fmtP=v=>'₱'+Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+  document.getElementById('hrd-title').textContent  = d.vname||d.tg||'—';
+  document.getElementById('hrd-sub').textContent    = (d.date||'—')+' · '+(d.collector||'—');
   document.getElementById('hrd-net').textContent    = fmtP(d.net);
   document.getElementById('hrd-spawn').textContent  = fmtP(d.spawn);
   document.getElementById('hrd-owner').textContent  = fmtP(d.owner);
   document.getElementById('hrd-total').textContent  = fmtP(d.total);
   document.getElementById('hrd-free').textContent   = fmtP(d.free);
   document.getElementById('hrd-old').textContent    = fmtP(d.old);
-  document.getElementById('hrd-collector').textContent = d.collector || '—';
-  document.getElementById('hrd-date').textContent   = d.date || '—';
-  document.getElementById('hrd-window').textContent = d.window || '2026-03-01';
-  document.getElementById('hrd-tgname').textContent = d.tg || '—';
-  document.getElementById('hrd-route').textContent  = d.route || '—';
-  document.getElementById('hrd-src-lbl').textContent = isAdmin ? '🔧 Admin entry' : '📱 PWA harvest';
-  const noteRow = document.getElementById('hrd-note-row');
-  const noteTxt = document.getElementById('hrd-note-txt');
-  if (d.note) {
-    noteRow.style.display = 'flex';
-    noteTxt.textContent = d.note;
-  } else {
-    noteRow.style.display = 'none';
-  }
+  document.getElementById('hrd-collector').textContent = d.collector||'—';
+  document.getElementById('hrd-date').textContent   = d.date||'—';
+  document.getElementById('hrd-window').textContent = d.window||'2026-03-01';
+  document.getElementById('hrd-route').textContent  = d.route||'—';
+  document.getElementById('hrd-src-lbl').textContent = d.admin==='true'?'🔧 Admin entry':'📱 PWA harvest';
+  const nr=document.getElementById('hrd-note-row'),nt=document.getElementById('hrd-note-txt');
+  if(nr&&nt){nr.style.display=d.note?'flex':'none';nt.textContent=d.note||'';}
   document.getElementById('hrd-pop-bg').classList.add('show');
 }
 
-async function hvLoadRecordsByDate() {}  /* compat stub */
+async function hvLoadRecordsByDate() {}
 async function hvLoadRecords() { hvLoadRecordDates(); }
 
+/* ─── RECONCILIATION TAB ─── */
+let _rcH=[], _rcTG={}, _rcWin={}, _rcReady=false;
+const _RC_DEF='2026-03-01';
 
-/* ─── RECONCILIATION DATE TABS ─── */
-async function hvLoadReconDates() {
-  const tabBar = document.getElementById('hv-recon-date-tabs');
-  const content = document.getElementById('hv-recon-content');
-  if (!tabBar) return;
-  tabBar.innerHTML = '<span style="font-size:11px;color:#9ca3af;">Loading dates...</span>';
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading...</div>';
-
+async function rcLoad() {
+  _rcReady=false;
+  const ct=document.getElementById('rc-content'), tb=document.getElementById('rc-date-tabs');
+  if(ct) ct.innerHTML='<div class="hv-rec-empty">Loading harvest records…</div>';
+  if(tb) tb.innerHTML='';
   try {
-    // Get distinct harvest dates from last 60 days
-    const r = await fetch(`${_SB}/rest/v1/harvests?select=harvest_date&order=harvest_date.desc&limit=500`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const rows = await r.json();
-    const dates = [...new Set(rows.map(r => r.harvest_date))].sort((a,b) => b.localeCompare(a));
-
-    if (!dates.length) {
-      tabBar.innerHTML = '<span style="font-size:11px;color:#9ca3af;">No harvest records yet</span>';
-      content.innerHTML = '<div class="hv-rec-empty">No harvest records found</div>';
-      return;
-    }
-
-    tabBar.innerHTML = dates.map((d, i) => {
-      const label = new Date(d + 'T12:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
-      return `<button class="hv-recon-dtab${i===0?' on':''}" data-date="${d}" onclick="hvReconSelectDate('${d}',this)"
-        style="padding:5px 12px;border-radius:20px;border:1.5px solid ${i===0?'#1e3cb8':'#e5e7eb'};background:${i===0?'#1e3cb8':'#fff'};color:${i===0?'#fff':'#374151'};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">${label}</button>`;
+    const r=await fetch(`${_SB}/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000`,
+      {headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY}});
+    _rcH=await r.json();
+    if(!_rcH.length){if(ct)ct.innerHTML='<div class="hv-rec-empty">No harvest records yet</div>';return;}
+    _rcWin={};
+    _rcH.forEach(h=>{if(h.tg_name&&h.harvest_window_start)_rcWin[h.tg_name]=h.harvest_window_start;});
+    const dates=[...new Set(_rcH.map(h=>h.harvest_date))].sort((a,b)=>b.localeCompare(a));
+    if(tb) tb.innerHTML=dates.map((d,i)=>{
+      const lbl=new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+      return `<button class="rc-dtab${i===0?' on':''}" data-date="${d}" onclick="rcSelDate('${d}',this)">${lbl}</button>`;
     }).join('');
-
-    // Auto-load the most recent date
-    const di = document.getElementById('hv-recon-date');
-    if (di) di.value = dates[0];
-    hvLoadRecon();
-  } catch(e) {
-    tabBar.innerHTML = `<span style="font-size:11px;color:#dc2626;">Error: ${e.message}</span>`;
-  }
-}
-
-function hvReconSelectDate(date, btn) {
-  document.querySelectorAll('.hv-recon-dtab').forEach(b => {
-    b.style.background = '#fff';
-    b.style.borderColor = '#e5e7eb';
-    b.style.color = '#374151';
-    b.classList.remove('on');
-  });
-  btn.style.background = '#1e3cb8';
-  btn.style.borderColor = '#1e3cb8';
-  btn.style.color = '#fff';
-  btn.classList.add('on');
-  const di = document.getElementById('hv-recon-date');
-  if (di) di.value = date;
-  hvLoadRecon();
-}
-
-async function hvLoadRecon() {
-  const content = document.getElementById('hv-recon-content');
-  const date = document.getElementById('hv-recon-date')?.value;
-  if (!content) return;
-  if (!date) { content.innerHTML = '<div class="hv-rec-empty">Select a date first</div>'; return; }
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading reconciliation...</div>';
-
-  try {
-    // Load harvests for selected date
-    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,vendo_name,tg_name,net_collectible,route_code,collector,harvest_window_start,admin_notes&limit=500`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const harvests = await rh.json();
-    if (!harvests.length) { content.innerHTML = '<div class="hv-rec-empty">No harvest records for ' + date + '</div>'; return; }
-
-    // Window START = the previous harvest date for each vendo (before current harvest_date)
-    // We look in the harvests table itself for the most recent record BEFORE this date
-    // This avoids using vendos.last_harvest_date which is already updated to today
-    const DEFAULT_START = '2026-03-01';
-    const tgNames = [...new Set(harvests.map(h => h.tg_name).filter(Boolean))];
-    const windowStartMap = {}; // tg_name → window start date
-
-    // Priority 1: use harvest_window_start stored IN harvest record (most accurate)
-    harvests.forEach(h => {
-      if (h.tg_name && h.harvest_window_start) {
-        windowStartMap[h.tg_name] = h.harvest_window_start;
-      }
-    });
-
-    // Priority 2: look for previous harvest before this date
-    const missingTgs = tgNames.filter(tg => !windowStartMap[tg]);
-    if (missingTgs.length) {
-      try {
-        const prevUrl = `${_SB}/rest/v1/harvests?tg_name=in.(${missingTgs.map(n=>'"'+n+'"').join(',')})&harvest_date=lt.${date}&select=tg_name,harvest_date,harvest_window_start&order=harvest_date.desc&limit=500`;
-        const rp = await fetch(prevUrl, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
-        const prevHarvests = await rp.json();
-        missingTgs.forEach(tg => {
-          const prev = prevHarvests.find(h => h.tg_name === tg);
-          if (prev) windowStartMap[tg] = prev.harvest_window_start || prev.harvest_date;
-        });
-      } catch(e) { console.warn('prev harvest lookup failed:', e); }
-    }
-
-    // Priority 3: fallback to DEFAULT_START for first-ever harvest
-    // DO NOT use vendos.last_harvest_date — already updated by PWA to today
-    tgNames.forEach(tg => {
-      if (!windowStartMap[tg]) windowStartMap[tg] = DEFAULT_START;
-    });
-
-    // Fetch TG income per-vendo using exact tg_name — avoids global limit issues
-    const tgMap = {};
-    await Promise.all(tgNames.map(async tgName => {
-      const start = windowStartMap[tgName] || DEFAULT_START;
-      try {
-        // Use Range header to override Supabase's default 1000 row limit
-        const rt = await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount`,
-          { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Range': '0-49999', 'Prefer': 'count=none' } }
-        );
-        const txRows = await rt.json();
-        tgMap[tgName] = txRows.reduce((s, tx) => s + (parseFloat(tx.amount)||0), 0);
-      } catch(e) {
-        tgMap[tgName] = 0;
-      }
+    const tgNames=[...new Set(_rcH.map(h=>h.tg_name).filter(Boolean))];
+    if(ct)ct.innerHTML=`<div class="hv-rec-empty">Fetching TG income for ${tgNames.length} vendos… (skipped excluded)</div>`;
+    _rcTG={};
+    await Promise.all(tgNames.map(async tg=>{
+      const win=_rcWin[tg]||_RC_DEF;
+      const latest=_rcH.filter(h=>h.tg_name===tg).map(h=>h.harvest_date).sort().pop();
+      if(!latest)return;
+      try{
+        // is_skipped=eq.false ensures skipped transactions are excluded
+        const rt=await fetch(`${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&date=gte.${win}&date=lte.${latest}&is_skipped=eq.false&select=amount,date`,
+          {headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Range':'0-49999','Prefer':'count=none'}});
+        const tx=await rt.json();
+        _rcTG[tg]={};
+        tx.forEach(t=>{if(!_rcTG[tg][t.date])_rcTG[tg][t.date]=0;_rcTG[tg][t.date]+=parseFloat(t.amount)||0;});
+      }catch(e){_rcTG[tg]={};}
     }));
+    _rcReady=true;
+    if(dates.length)rcRenderDate(dates[0]);
+  }catch(e){if(ct)ct.innerHTML=`<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;}
+}
 
-    // Build case-insensitive tgMap lookup
-    const tgMapLower = {};
-    Object.entries(tgMap).forEach(([k,v]) => { tgMapLower[k.toLowerCase().trim()] = v; });
+function rcSelDate(date,btn){
+  document.querySelectorAll('.rc-dtab').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  rcRenderDate(date);
+}
 
-    // Group harvests by collector → then by route inside each collector
-    const byCollector = {};
-    harvests.forEach(h => {
-      const col = (h.collector || '—').trim();
-      if (!byCollector[col]) byCollector[col] = {};
-      const rc = h.route_code || 'No route';
-      if (!byCollector[col][rc]) byCollector[col][rc] = [];
-      byCollector[col][rc].push(h);
-    });
+function rcTgAmt(tg,win,upTo){
+  if(!tg||!_rcTG[tg])return 0;
+  const w=win||_rcWin[tg]||_RC_DEF;
+  return Object.entries(_rcTG[tg]).filter(([d])=>d>=w&&d<=upTo).reduce((s,[,v])=>s+v,0);
+}
 
-    // Helper: render one route block (no collector header — shown at collector level)
-    function renderRouteBlock(rc, items) {
-      const coinNet = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-      const tgTotal = items.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
-      const diff    = coinNet - tgTotal;
-      const diffCls = Math.abs(diff)<100 ? 'color:#16a34a' : diff>0 ? 'color:#d97706' : 'color:#dc2626';
-      const diffTxt = diff===0 ? '✅ Match' : Math.abs(diff)<100 ? (diff>0?'✅ Coins +₱':'✅ TG +₱')+Math.abs(diff).toLocaleString() : diff>0 ? '⚠ Coins +₱'+Math.abs(diff).toLocaleString() : '🔴 TG +₱'+Math.abs(diff).toLocaleString();
+function rcRenderDate(date){
+  const ct=document.getElementById('rc-content');
+  if(!ct||!_rcReady)return;
+  const harvests=_rcH.filter(h=>h.harvest_date===date);
+  if(!harvests.length){ct.innerHTML='<div class="hv-rec-empty">No records for this date</div>';return;}
+  const fmtP=v=>'₱'+Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+  const byCol={};
+  harvests.forEach(h=>{const c=(h.collector||'—').trim();if(!byCol[c])byCol[c]={};const rc=h.route_code||'No route';if(!byCol[c][rc])byCol[c][rc]=[];byCol[c][rc].push(h);});
+  const gCoin=harvests.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+  const gTg=harvests.reduce((s,h)=>s+rcTgAmt(h.tg_name,h.harvest_window_start,date),0);
+  const gDiff=gCoin-gTg;
+  const diffCls=v=>Math.abs(v)<200?'color:#16a34a':v>0?'color:#d97706':'color:#dc2626';
+  const diffTxt=v=>Math.abs(v)<200?'✅ Match':v>0?`⚠ Coins +${fmtP(Math.abs(v))}`:`🔴 TG +${fmtP(Math.abs(v))}`;
 
-      const rows = items.map(h => {
-        const tgAmt = tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0;
-        const gap   = (parseFloat(h.net_collectible)||0) - tgAmt;
-        const rowCls = Math.abs(gap)<50 ? '' : gap>0 ? 'background:#fffbeb' : 'background:#fef2f2';
-        const noteHtml = h.admin_notes
-          ? `<div style="font-size:10px;color:#92400e;background:#fffbeb;border-radius:4px;padding:3px 6px;margin-top:3px;">📝 ${h.admin_notes}</div>`
-          : '';
-        return `<tr style="${rowCls}">
-          <td style="padding:6px 8px;font-size:11px;">
-            <div style="font-weight:600;">${h.vendo_name||h.tg_name||'—'}</div>
-            <div style="font-size:9px;color:#9ca3af;">TG: ${h.tg_name||'—'}</div>
-            ${noteHtml}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
-              <button data-hid="${h.id}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}" onclick="hvRecNote(parseInt(this.dataset.hid), this.dataset.note)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;color:#374151;">📝 ${h.admin_notes ? 'Edit note' : 'Add note'}</button>
-              <button data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-win="${h.harvest_window_start||''}" data-date="${date}" data-tgamt="${tgAmt}" data-vname="${(h.vendo_name||'').replace(/"/g,'&quot;')}" data-hid="${h.id}" onclick="hvVerifyTG(this)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #93c5fd;background:#eff6ff;cursor:pointer;color:#1d4ed8;font-weight:700;">🔍 Verify</button>
-            </div>
-          </td>
-          <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#16a34a;">₱${parseFloat(h.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-          <td style="padding:6px 8px;font-size:11px;color:${tgAmt>0?'#374151':'#9ca3af'};">₱${tgAmt.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-          <td style="padding:6px 8px;font-size:11px;font-weight:700;${Math.abs(gap)<50?'color:#16a34a':gap>0?'color:#d97706':'color:#dc2626'};">${Math.abs(gap)<50?(gap===0?'✅ Match':'✅ ₱'+Math.abs(gap).toLocaleString()):'₱'+Math.abs(gap).toLocaleString()+(gap>0?' surplus':' deficit')}</td>
-        </tr>`;
-      }).join('');
+  let html=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:14px;">
+    <div class="rc-box" style="background:#f0fdf4;border-left:3px solid #16a34a;"><div class="rv" style="color:#16a34a;">${fmtP(gCoin)}</div><div class="rl">Grand Coin Net</div></div>
+    <div class="rc-box" style="background:#eef2ff;border-left:3px solid #1e3cb8;"><div class="rv" style="color:#1e3cb8;">${fmtP(gTg)}</div><div class="rl">Grand TG Income</div></div>
+    <div class="rc-box" style="background:#fafbff;"><div class="rv" style="${diffCls(gDiff)}">${fmtP(Math.abs(gDiff))}</div><div class="rl">${gDiff>=0?'Surplus':'Deficit'}</div></div>
+    <div class="rc-box" style="background:#f8faff;"><div class="rv" style="${diffCls(gDiff)};font-size:13px;">${diffTxt(gDiff)}</div><div class="rl">${harvests.length} vendos</div></div>
+  </div>`;
 
-      return `<div style="background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+  Object.entries(byCol).forEach(([col,routes])=>{
+    const ai=Object.values(routes).flat();
+    const cCoin=ai.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+    const cTg=ai.reduce((s,h)=>s+rcTgAmt(h.tg_name,h.harvest_window_start,date),0);
+    const cDiff=cCoin-cTg;
+    html+=`<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div><div style="font-size:15px;font-weight:800;color:#111;">👤 ${col}</div><div style="font-size:10px;color:#6b7280;margin-top:2px;">${Object.keys(routes).length} route(s) · ${ai.length} vendo(s)</div></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="hv-xls-btn" data-collector="${col.replace(/"/g,'&quot;')}" data-date="${date}" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📥 Export</button>
+          <span style="font-size:12px;font-weight:700;${diffCls(cDiff)};padding:4px 10px;border-radius:20px;background:${Math.abs(cDiff)<200?'#f0fdf4':cDiff>0?'#fffbeb':'#fef2f2'};">${diffTxt(cDiff)}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+        <div class="rc-box" style="background:#f0fdf4;"><div class="rv" style="color:#16a34a;">${fmtP(cCoin)}</div><div class="rl">Coin net</div></div>
+        <div class="rc-box" style="background:#eef2ff;"><div class="rv" style="color:#1e3cb8;">${fmtP(cTg)}</div><div class="rl">TG income</div></div>
+        <div class="rc-box" style="background:#fafbff;"><div class="rv" style="${diffCls(cDiff)}">${fmtP(Math.abs(cDiff))}</div><div class="rl">${cDiff>=0?'Surplus':'Deficit'}</div></div>
+      </div>`;
+    Object.entries(routes).forEach(([rc,items])=>{
+      const rCoin=items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+      const rTg=items.reduce((s,h)=>s+rcTgAmt(h.tg_name,h.harvest_window_start,date),0);
+      const rDiff=rCoin-rTg;
+      const isAdm=!rc||rc==='No route'||rc.toUpperCase()==='ADMIN';
+      const srcBadge=isAdm?'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧 Admin</span>':'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8;">📱 PWA</span>';
+      html+=`<div style="background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:700;color:#1e3cb8;">🧾 Route: ${rc}</span>
-            ${ahSourceBadge(rc)}
-          </span>
-          <span style="font-size:11px;font-weight:700;${diffCls};">${diffTxt}</span>
+          <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;font-weight:700;color:#1e3cb8;">🧾 ${rc}</span>${srcBadge}</span>
+          <span style="font-size:11px;font-weight:700;${diffCls(rDiff)}">${diffTxt(rDiff)}</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
-          <div style="background:#f0fdf4;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;color:#16a34a;">₱${coinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Coin net</div>
-          </div>
-          <div style="background:#eef2ff;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;color:#1e3cb8;">₱${tgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">TG income</div>
-          </div>
-          <div style="background:#fafbff;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;${diffCls};">₱${Math.abs(diff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">${diff>=0?'Surplus':'Deficit'}</div>
-          </div>
+          <div class="rc-box" style="background:#f0fdf4;"><div class="rv" style="color:#16a34a;font-size:13px;">${fmtP(rCoin)}</div><div class="rl">Coin net</div></div>
+          <div class="rc-box" style="background:#eef2ff;"><div class="rv" style="color:#1e3cb8;font-size:13px;">${fmtP(rTg)}</div><div class="rl">TG income</div></div>
+          <div class="rc-box" style="background:#fafbff;"><div class="rv" style="${diffCls(rDiff)};font-size:13px;">${fmtP(Math.abs(rDiff))}</div><div class="rl">${rDiff>=0?'Surplus':'Deficit'}</div></div>
         </div>
-        <table style="width:100%;border-collapse:collapse;">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
           <thead><tr style="background:#eef2ff;">
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Vendo</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Coin net</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">TG income</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Diff</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">Vendo</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">TG name</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">Window</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">Coin Net</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">TG Income</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">Diff</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;font-weight:700;">Actions</th>
           </tr></thead>
-          <tbody>${rows}</tbody>
+          <tbody>${items.map(h=>{
+            const coin=parseFloat(h.net_collectible||0);
+            const tg=rcTgAmt(h.tg_name,h.harvest_window_start,date);
+            const gap=coin-tg;
+            const note=h.admin_notes?`<div style="font-size:9px;color:#92400e;margin-top:2px;">📝 ${h.admin_notes}</div>`:'';
+            return `<tr style="${Math.abs(gap)<50?'':gap>0?'background:#fffbeb':'background:#fef2f2'}">
+              <td style="padding:6px 8px;"><b>${h.vendo_name||h.tg_name||'—'}</b>${note}</td>
+              <td style="padding:6px 8px;color:#6b7280;font-size:10px;">${h.tg_name||'—'}</td>
+              <td style="padding:6px 8px;color:#6b7280;font-size:10px;">${h.harvest_window_start||_RC_DEF} → ${date}</td>
+              <td style="padding:6px 8px;font-weight:700;color:#16a34a;">${fmtP(coin)}</td>
+              <td style="padding:6px 8px;color:${tg>0?'#374151':'#9ca3af'};">${fmtP(tg)}</td>
+              <td style="padding:6px 8px;font-weight:700;${diffCls(gap)};">${Math.abs(gap)<50?'✅':fmtP(Math.abs(gap))+(gap>0?' surplus':' deficit')}</td>
+              <td style="padding:6px 8px;">
+                <button data-hid="${h.id}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}" onclick="hvRecNote(parseInt(this.dataset.hid),this.dataset.note)" style="font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;margin-right:3px;">📝</button>
+                <button data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-win="${h.harvest_window_start||''}" data-date="${date}" data-tgamt="${tg}" data-vname="${(h.vendo_name||'').replace(/"/g,'&quot;')}" data-hid="${h.id}" onclick="hvVerifyTG(this)" style="font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid #93c5fd;background:#eff6ff;cursor:pointer;color:#1d4ed8;font-weight:700;">🔍</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
         </table>
-      </div>`;
-    }
-
-    // Render: one card per collector, routes as sub-blocks inside
-    content.innerHTML = Object.entries(byCollector).map(([collector, routes]) => {
-      const allItems = Object.values(routes).flat();
-      const colCoinNet = allItems.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-      const colTgTotal = allItems.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
-      const colDiff    = colCoinNet - colTgTotal;
-      const colDiffCls = Math.abs(colDiff)<100 ? 'color:#16a34a' : colDiff>0 ? 'color:#d97706' : 'color:#dc2626';
-      const colDiffTxt = Math.abs(colDiff)<100 ? '✅ Match' : colDiff>0 ? `⚠ Coins +₱${Math.abs(colDiff).toLocaleString()}` : `🔴 TG +₱${Math.abs(colDiff).toLocaleString()}`;
-      const routeCount = Object.keys(routes).length;
-      const vendoCount = allItems.length;
-
-      const routeBlocks = Object.entries(routes).map(([rc, items]) => renderRouteBlock(rc, items)).join('');
-
-      return `<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:14px;">
-        <!-- Collector header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-          <div>
-            <div style="font-size:15px;font-weight:800;color:#111827;">👤 ${collector}</div>
-            <div style="font-size:10px;color:#6b7280;margin-top:2px;">${routeCount} route${routeCount!==1?'s':''} · ${vendoCount} vendo${vendoCount!==1?'s':''}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="hv-xls-btn"
-              data-collector="${collector.replace(/"/g,'&quot;')}"
-              data-date="${date}"
-              style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
-              📥 Export Excel
-            </button>
-            <span style="font-size:11px;font-weight:700;${colDiffCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<100?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colDiffTxt}</span>
-          </div>
-        </div>
-        <!-- Collector totals -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
-          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;color:#16a34a;">₱${colCoinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Total coin net</div>
-          </div>
-          <div style="background:#eef2ff;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;color:#1e3cb8;">₱${colTgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Total TG income</div>
-          </div>
-          <div style="background:#fafbff;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;${colDiffCls};">₱${Math.abs(colDiff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">${colDiff>=0?'Surplus':'Deficit'}</div>
-          </div>
-        </div>
-        <!-- Route sub-blocks -->
-        ${routeBlocks}
-        <!-- Inline admin add harvest -->
         <div style="margin-top:8px;">
-          <button class="hv-ah-open-btn" data-collector="${collector.replace(/"/g,'&quot;')}" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add Admin Record</button>
+          <button onclick="hvAhOpen('${col.replace(/'/g,"\\'")}');setTimeout(()=>{var d=document.getElementById('hv-ah-date');if(d)d.value='${date}';},50)" style="padding:4px 10px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:6px;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add record</button>
         </div>
       </div>`;
-    }).join('');
-  } catch(e) {
-    content.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
-  }
+    });
+    html+='</div>';
+  });
+  ct.innerHTML=html;
 }
+
+/* backward compat */
+async function hvLoadReconDates(){await rcLoad();}
+function hvReconSelectDate(d,b){rcSelDate(d,b);}
+async function hvLoadRecon(){if(_rcReady){const b=document.querySelector('.rc-dtab.on');if(b)rcRenderDate(b.dataset.date||'');}}
 
 
 /* ─── ADMIN HARVEST ENTRY ─── */
@@ -5933,38 +5722,28 @@ refreshRecentTxns();
 async function loadAnalytics() {
   try {
     const rows = await sbAll('transactions','select=date,amount&is_skipped=eq.false&order=date.asc');
-    const mmap = {};
-    rows.forEach(r => { const m=(r.date||'').slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
-    const labels = Object.keys(mmap).sort();
-    const data   = labels.map(m => mmap[m]);
-    const colors = labels.map(l => l.startsWith('2026')?'#16a34a':l.startsWith('2025')?'#1565c0':'#94a3b8');
-    const dLabels = labels.map(k => { try { return new Date(k+'-01').toLocaleDateString('en-PH',{month:'short',year:'2-digit'}); } catch { return k; } });
-    if (monthlyChart) monthlyChart.destroy();
-    const mCtx = document.getElementById('monthly-chart');
-    if (mCtx) monthlyChart = new Chart(mCtx, {
-      type:'bar', data:{labels:dLabels,datasets:[{label:'Sales',data,backgroundColor:colors,borderRadius:3}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'₱'+c.raw.toLocaleString()}}},scales:{y:{ticks:{callback:v=>'₱'+(v/1000).toFixed(0)+'K'}}}}
-    });
-    const tableEl = document.getElementById('monthly-table');
-    if (tableEl) {
-      const sorted = [...labels].sort((a,b)=>b.localeCompare(a));
-      tableEl.innerHTML = sorted.map(m => {
-        const disp = (()=>{ try{return new Date(m+'-01').toLocaleDateString('en-PH',{month:'long',year:'numeric'});}catch{return m;} })();
-        return `<div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--bd);font-size:12px;"><span style="color:var(--mu)">${disp}</span><span style="font-weight:700;color:#1565c0;">₱${mmap[m].toLocaleString('en-PH',{minimumFractionDigits:2})}</span></div>`;
-      }).join('');
-    }
-  } catch(e) { console.error('Analytics monthly error:',e); }
+    const mmap={};
+    rows.forEach(r=>{const m=(r.date||'').slice(0,7);if(m)mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0);});
+    const labels=Object.keys(mmap).sort();
+    const data=labels.map(m=>mmap[m]);
+    const colors=labels.map(l=>l.startsWith('2026')?'#16a34a':l.startsWith('2025')?'#1565c0':'#94a3b8');
+    const dl=labels.map(k=>{try{return new Date(k+'-01').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});}catch{return k;}});
+    if(monthlyChart)monthlyChart.destroy();
+    const mCtx=document.getElementById('monthly-chart');
+    if(mCtx)monthlyChart=new Chart(mCtx,{type:'bar',data:{labels:dl,datasets:[{label:'Sales',data,backgroundColor:colors,borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'₱'+c.raw.toLocaleString()}}},scales:{y:{ticks:{callback:v=>'₱'+(v/1000).toFixed(0)+'K'}}}}});
+    const tableEl=document.getElementById('monthly-table');
+    if(tableEl)tableEl.innerHTML=[...labels].sort((a,b)=>b.localeCompare(a)).map(m=>{
+      const disp=(()=>{try{return new Date(m+'-01').toLocaleDateString('en-PH',{month:'long',year:'numeric'});}catch{return m;}})();
+      return `<div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--bd);font-size:12px;"><span style="color:var(--mu)">${disp}</span><span style="font-weight:700;color:#1565c0;">₱${mmap[m].toLocaleString('en-PH',{minimumFractionDigits:2})}</span></div>`;
+    }).join('');
+  } catch(e){console.error('Analytics monthly:',e);}
   try {
-    const areas = await sb('area_summary','',20);
-    const colors8=['#1565c0','#1D9E75','#F5C518','#7B5EA7','#E85D24','#4A90D9','#d97706','#dc2626'];
-    if (analyticsAreaChart) analyticsAreaChart.destroy();
-    const aCtx = document.getElementById('analytics-area-chart');
-    if (aCtx) analyticsAreaChart = new Chart(aCtx, {
-      type:'doughnut',
-      data:{labels:areas.map(a=>a.area),datasets:[{data:areas.map(a=>parseFloat(a.total_sales||0)),backgroundColor:colors8}]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:10}}},tooltip:{callbacks:{label:c=>c.label+': ₱'+c.raw.toLocaleString()}}}}
-    });
-  } catch(e) { console.error('Analytics area error:',e); }
+    const areas=await sb('area_summary','',20);
+    const c8=['#1565c0','#1D9E75','#F5C518','#7B5EA7','#E85D24','#4A90D9','#d97706','#dc2626'];
+    if(analyticsAreaChart)analyticsAreaChart.destroy();
+    const aCtx=document.getElementById('analytics-area-chart');
+    if(aCtx)analyticsAreaChart=new Chart(aCtx,{type:'doughnut',data:{labels:areas.map(a=>a.area),datasets:[{data:areas.map(a=>parseFloat(a.total_sales||0)),backgroundColor:c8}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:10}}},tooltip:{callbacks:{label:c=>c.label+': ₱'+c.raw.toLocaleString()}}}}});
+  } catch(e){console.error('Analytics area:',e);}
 }
 
 window.addEventListener('load', () => { setTimeout(() => loadDashboard(), 500); });
