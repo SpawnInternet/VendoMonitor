@@ -648,9 +648,9 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-nsb{padding:3px 10px;background:var(--blue);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;}
 
 /* SCHEDULE / RECORDS TABS */
-.hv-tab{display:none;}
-#hv-tab-schedule{display:none;padding:12px;overflow-y:auto;height:calc(100vh - 72px);}
-#hv-tab-records{display:none;padding:10px;overflow-y:auto;height:calc(100vh - 72px);}
+.hv-tab{}
+#hv-tab-schedule{padding:12px;overflow-y:auto;height:calc(100vh - 72px);}
+#hv-tab-records{padding:10px;overflow-y:auto;height:calc(100vh - 72px);}
 .hv-section{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:12px;margin-bottom:10px;}
 .hv-section-title{font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .hv-stag{font-size:9px;padding:1px 7px;border-radius:8px;background:#dbeafe;color:var(--blue);font-weight:500;text-transform:none;letter-spacing:0;}
@@ -919,7 +919,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div><!-- end hv-page -->
 
 <!-- SCHEDULE TAB -->
-<div class="hv-tab" id="hv-tab-schedule">
+<div class="hv-hidden" id="hv-tab-schedule" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
   <div class="hv-section">
     <div class="hv-section-title">Global thresholds <span class="hv-stag">applies to all vendos without a custom schedule</span></div>
     <div class="hv-thresh-grid">
@@ -972,41 +972,32 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 
-<!-- RECORDS TAB -->
+<!-- RECORDS TAB — Harvest Records -->
 <div class="hv-hidden" id="hv-tab-records" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
 <style>
-.hv-date-tabs{display:flex;gap:0;overflow-x:auto;border-bottom:2px solid #e5e7eb;margin-bottom:12px;scrollbar-width:none;}
-.hv-date-tabs::-webkit-scrollbar{display:none;}
-.hv-dtab{padding:7px 14px;border:none;background:none;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer;font-family:inherit;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;}
-.hv-dtab.on{color:#1e3cb8;border-bottom-color:#1e3cb8;}
-.hv-dtab:hover{color:#1e3cb8;background:#f8faff;}
-.hv-col-card{background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;}
-.hv-col-name{font-size:14px;font-weight:700;color:#1e3cb8;margin-bottom:2px;}
-.hv-col-total{font-size:12px;color:#16a34a;font-weight:700;}
-.hv-route-section{background:#f8faff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 12px;margin-top:8px;}
-.hv-rs-code{font-size:12px;font-weight:700;color:#1e3cb8;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;}
-.hv-rs-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eef2ff;font-size:11px;}
-.hv-rs-row:last-child{border-bottom:none;}
-.hv-rs-status{font-size:8px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:6px;}
-.hv-rs-status.done{background:#dcfce7;color:#15803d;}
-.hv-rs-status.pending{background:#fef3c7;color:#92400e;}
-.hv-rs-note{font-size:9px;color:#d97706;font-style:italic;margin-top:1px;}
-.hv-rs-actions{display:flex;gap:4px;margin-top:6px;}
-.hv-rs-btn{padding:3px 8px;border-radius:4px;border:1px solid #e5e7eb;background:#fff;font-size:9px;font-weight:600;cursor:pointer;font-family:inherit;}
-.hv-rs-btn.blue{background:#1e3cb8;color:#fff;border-color:#1e3cb8;}
-.hv-rs-btn.red{color:#dc2626;border-color:#fca5a5;}
 .hv-rec-empty{text-align:center;padding:40px;color:#9ca3af;font-size:12px;line-height:1.8;}
+.hr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;margin-bottom:12px;}
+.hr-stat{background:#fff;border:1px solid rgba(30,60,200,.1);border-radius:8px;padding:9px 11px;}
+.hr-sl{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+.hr-sv{font-size:18px;font-weight:700;}
+.hr-tbl{width:100%;border-collapse:collapse;font-size:11px;}
+.hr-tbl th{padding:6px 9px;text-align:left;background:#eef2ff;color:#1e3cb8;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;white-space:nowrap;}
+.hr-tbl td{padding:7px 9px;border-bottom:1px solid #f0f0f8;vertical-align:middle;}
+.hr-tbl tr:hover td{background:#f8faff;}
+.hr-chip{padding:3px 10px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:3px;}
 </style>
-
-<!-- Date tab bar -->
-<div class="hv-date-tabs" id="hv-date-tabs">
-  <div style="padding:7px 14px;font-size:11px;color:#9ca3af;">Loading dates...</div>
+<div id="hr-stats-bar" class="hr-stats"></div>
+<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+  <input type="date" id="hr-from" onchange="hrRender()" style="padding:5px 9px;border:1.5px solid rgba(30,60,200,.15);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
+  <span style="font-size:10px;color:#6b7280">to</span>
+  <input type="date" id="hr-to" onchange="hrRender()" style="padding:5px 9px;border:1.5px solid rgba(30,60,200,.15);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
+  <input type="text" id="hr-q" placeholder="🔍 Search vendo, collector…" oninput="hrRender()" style="flex:1;min-width:160px;padding:5px 9px;border:1.5px solid rgba(30,60,200,.15);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
+  <select id="hr-col" onchange="hrRender()" style="padding:5px 9px;border:1.5px solid rgba(30,60,200,.15);border-radius:7px;font-size:11px;font-family:inherit;outline:none;"><option value="">All collectors</option></select>
+  <button onclick="hrClear()" style="padding:5px 10px;border:1.5px solid rgba(30,60,200,.15);border-radius:7px;font-size:11px;cursor:pointer;background:#fff;font-family:inherit;">✕</button>
+  <button onclick="hrLoad(true)" style="padding:5px 10px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
 </div>
-
-<!-- Records content -->
-<div id="hv-rec-content">
-  <div class="hv-rec-empty">Click Records tab to load harvest data</div>
-</div>
+<div id="hr-summary" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
+<div id="hr-table"><div class="hv-rec-empty">Loading harvest records…</div></div>
 </div>
 
 <!-- REFRESH FAB -->
@@ -1335,20 +1326,21 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- RECONCILIATION TAB -->
 <div class="hv-hidden" id="hv-tab-recon" style="padding:12px;overflow-y:auto;height:calc(100vh - 72px);">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+<style>
+.rc-dtab{padding:5px 12px;border-radius:20px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.12s;}
+.rc-dtab.on{background:#1e3cb8;border-color:#1e3cb8;color:#fff;}
+.rc-dtab:hover:not(.on){border-color:#1e3cb8;color:#1e3cb8;}
+</style>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
   <div>
     <div style="font-size:13px;font-weight:700;color:#1e3cb8;">⚖️ Harvest Reconciliation</div>
-    <div style="font-size:10px;color:#6b7280;">Compare collector coin report vs Telegram system income per route</div>
+    <div style="font-size:10px;color:#6b7280;">Coin net collected vs Telegram system income per route</div>
   </div>
-  <button onclick="hvLoadReconDates()" style="padding:5px 14px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
+  <button onclick="rcLoad()" style="padding:5px 14px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
 </div>
-<!-- Date tabs -->
-<div id="hv-recon-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
-<!-- Hidden date input kept for backward compat -->
+<div id="rc-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
 <input type="hidden" id="hv-recon-date">
-<div id="hv-recon-content">
-  <div class="hv-rec-empty">Loading harvest dates...</div>
-</div>
+<div id="rc-content"><div class="hv-rec-empty">Click Reconcile tab to load data</div></div>
 </div>
 
 
@@ -1438,11 +1430,9 @@ function hvShowTab(tab, btn) {
     const ael = document.getElementById('hv-tab-audited');
     if (ael) ael.style.display = 'block';
   }
-  if (tab === 'records') hvLoadRecordDates();
+  if (tab === 'records') hrLoad();
   if (tab === 'schedule') hvLoadSchedule();
-  if (tab === 'recon') {
-    hvLoadReconDates();
-  }
+  if (tab === 'recon') { rcLoad(); }
   if (tab === 'vnames') vnLoad();
   if (tab === 'addharvest' && (!_vnAll || !_vnAll.length)) vnLoad();
   if (tab === 'audited') auditShowVendo('denzel', document.querySelector('.audit-stab.on'));
@@ -2919,479 +2909,304 @@ function hvSchedRowClick(vid) {
   hvOpenDetailFromRow(fakeRow);
 }
 
-/* ─── RECORDS TAB ─── */
-async function hvLoadRecordDates() {
-  const tabBar = document.getElementById('hv-date-tabs');
-  const content = document.getElementById('hv-rec-content');
-  if (!tabBar) return;
-  tabBar.innerHTML = '<div style="padding:7px 14px;font-size:11px;color:#9ca3af;">Loading...</div>';
-  if (content) content.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Select a date to view routes</div>';
+/* ─── HARVEST RECORDS TAB ─── */
+let _hrAll = [], _hrLoaded = false;
+const HR_DEFAULT_START = '2026-03-01';
 
-  try {
-    // Load from ROUTES table — source of truth for route progress
-    const r = await fetch(`${_SB}/rest/v1/routes?select=route_date&order=route_date.desc&limit=200`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const data = await r.json();
-    if (!data.length) {
-      tabBar.innerHTML = '<div style="padding:7px 14px;font-size:11px;color:#9ca3af;">No routes yet — build a route first</div>';
-      return;
-    }
-    const dates = [...new Set(data.map(h => h.route_date))].sort((a,b) => b.localeCompare(a));
-    tabBar.innerHTML = dates.map((d,i) =>
-      `<button class="hv-dtab${i===0?' on':''}" data-date="${d}" onclick="hvLoadRecordsByDate('${d}',this)">${new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</button>`
-    ).join('');
-    if (dates.length) hvLoadRecordsByDate(dates[0], tabBar.querySelector('.hv-dtab'));
-  } catch(e) {
-    tabBar.innerHTML = `<div style="padding:7px 14px;font-size:11px;color:#dc2626;">Error: ${e.message}</div>`;
-  }
-}
-
-async function hvLoadRecordsByDate(date, btn) {
-  document.querySelectorAll('.hv-dtab').forEach(b => b.classList.remove('on'));
-  if (btn) { btn.classList.add('on'); btn.dataset.date = date; }
-  const content = document.getElementById('hv-rec-content');
-  if (!content) return;
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading...</div>';
-
-  try {
-    // Load routes for this date
-    const rr = await fetch(`${_SB}/rest/v1/routes?route_date=eq.${date}&order=created_at.asc`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const routes = await rr.json();
-    if (!routes.length) {
-      content.innerHTML = '<div class="hv-rec-empty">No routes for this date</div>';
-      return;
-    }
-
-    // For each route load its route_items
-    const routeIds = routes.map(r => r.id);
-    const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=in.(${routeIds.join(',')})&order=id.asc`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const allItems = await ri.json();
-
-    // Also load harvests for this date for coin data
-    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=tg_name,net_collectible,spawn_share,customer_share,coins_total,coins_free,coins_old,coins_saloy,created_at,collector_note,status`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const harvests = await rh.json();
-    const harvestMap = {};
-    harvests.forEach(h => { harvestMap[h.tg_name] = h; });
-
-    // Group routes by collector
-    const byCollector = {};
-    routes.forEach(route => {
-      const col = route.collector || 'Unknown';
-      if (!byCollector[col]) byCollector[col] = [];
-      byCollector[col].push(route);
-    });
-
-    content.innerHTML = Object.entries(byCollector).map(([collector, collRoutes]) => {
-      const collItems = allItems.filter(i => collRoutes.some(r => r.id === i.route_id));
-      const doneItems = collItems.filter(i => i.status === 'harvested');
-      const totalNet  = collItems.reduce((s,i) => s+(parseFloat(i.net_collectible)||0), 0);
-      const totalSpawn = totalNet * 0.75;
-
-      const routeSections = collRoutes.map(route => {
-        const items = allItems.filter(i => i.route_id === route.id);
-        const done  = items.filter(i => i.status === 'harvested').length;
-        const routeNet = items.reduce((s,i) => s+(parseFloat(i.net_collectible)||0), 0);
-        const statusBadge = route.status === 'completed'
-          ? '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:8px;background:#dcfce7;color:#15803d;">✅ Done</span>'
-          : '<span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fef3c7;color:#92400e;">⏳ Active</span>';
-
-        // Progress bar
-        const pct = items.length ? Math.round(done/items.length*100) : 0;
-        const progressBar = `<div style="background:#e5e7eb;border-radius:99px;height:4px;margin:6px 0;">
-          <div style="background:#16a34a;border-radius:99px;height:4px;width:${pct}%;transition:width .3s;"></div>
-        </div>
-        <div style="font-size:9px;color:#6b7280;margin-bottom:8px;">${done}/${items.length} vendos harvested (${pct}%)</div>`;
-
-        const rows = items.map(item => {
-          const isDone  = item.status === 'harvested';
-          const harv    = harvestMap[item.tg_name] || {};
-          const net     = parseFloat(item.net_collectible || harv.net_collectible || 0);
-          const coins   = parseFloat(item.total_coins || item.coins_total || harv.coins_total || 0);
-          const free    = parseFloat(item.free_coins  || harv.coins_free  || 0);
-          const old     = parseFloat(item.old_coins   || harv.coins_old   || 0);
-          const spawn   = parseFloat(harv.spawn_share   || net * 0.75 || 0);
-          const owner   = parseFloat(harv.customer_share || net * 0.25 || 0);
-          const harvestDT = item.harvested_at
-            ? new Date(item.harvested_at).toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
-            : '—';
-          const name = item.sheet_name || item.tg_name || '—';
-          const coinBreakdown = isDone ? `
-            <div style="margin-top:6px;background:#f8faff;border-radius:7px;padding:7px 10px;font-size:10px;">
-              <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;">
-                <span style="background:#f3f4f6;color:#374151;padding:2px 7px;border-radius:4px;">Total: ₱${coins.toLocaleString()}</span>
-                ${free ? `<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:4px;">− Free: ₱${free.toLocaleString()}</span>` : ''}
-                ${old  ? `<span style="background:#fffbeb;color:#d97706;padding:2px 7px;border-radius:4px;">− Old: ₱${old.toLocaleString()}</span>` : ''}
-                <span style="background:#f0fdf4;color:#16a34a;font-weight:700;padding:2px 7px;border-radius:4px;">= Net: ₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-                <div style="background:#f0fdf4;border-radius:5px;padding:5px 8px;">
-                  <div style="font-size:9px;color:#16a34a;font-weight:700;">Spawn share (75%)</div>
-                  <div style="font-size:13px;font-weight:700;color:#15803d;">₱${spawn.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-                </div>
-                <div style="background:#fdf4ff;border-radius:5px;padding:5px 8px;">
-                  <div style="font-size:9px;color:#7c3aed;font-weight:700;">Owner share (25%)</div>
-                  <div style="font-size:13px;font-weight:700;color:#7c3aed;">₱${owner.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-                </div>
-              </div>
-            </div>` : '';
-          return `<div class="hv-rs-row" style="padding:7px 0;border-bottom:0.5px solid #f0f0f0;">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:600;color:#374151;">${name}</div>
-                <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-                  <span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:6px;background:${isDone?'#dcfce7':'#fef9c3'};color:${isDone?'#15803d':'#92400e'};">${isDone?'✅ Done':'⏳ Pending'}</span>
-                  ${isDone ? `<span style="font-size:9px;color:#9ca3af;">🕐 ${harvestDT}</span>` : ''}
-                </div>
-                ${item.collector_note ? `<div style="font-size:9px;color:#6b7280;margin-top:2px;">📝 ${item.collector_note}</div>` : ''}
-              </div>
-              <div style="text-align:right;flex-shrink:0;margin-left:8px;">
-                ${isDone ? `<div style="font-size:13px;font-weight:700;color:#16a34a;">₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-                <div style="font-size:9px;color:#9ca3af;">net</div>` : '<div style="font-size:11px;color:#9ca3af;">—</div>'}
-              </div>
-            </div>
-            ${coinBreakdown}
-          </div>`;
-        }).join('');
-
-        return `<div class="hv-route-section" style="background:#f8faff;border-radius:10px;padding:10px 12px;margin-bottom:8px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:13px;font-weight:700;color:#1e3cb8;letter-spacing:.05em;">${route.route_code}</span>
-              ${statusBadge}
-            </div>
-            <span style="font-size:13px;font-weight:700;color:#16a34a;">₱${routeNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
-          </div>
-          <div style="font-size:10px;color:#9ca3af;margin-bottom:4px;">${route.area||'All areas'} · ${items.length} vendos</div>
-          ${progressBar}
-          ${rows}
-          <div style="display:flex;gap:6px;margin-top:8px;">
-            <button class="hv-rs-btn" onclick="hvMarkRouteDone('${route.route_code}')">✅ Mark done</button>
-            <button class="hv-rs-btn red" onclick="hvDeleteRoute('${route.route_code}')">🗑 Delete</button>
-          </div>
-        </div>`;
-      }).join('');
-
-      return `<div class="hv-col-card" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:700;color:#374151;">👤 ${collector}</div>
-          <div style="text-align:right;">
-            <div style="font-size:12px;font-weight:700;color:#16a34a;">₱${totalNet.toLocaleString('en-PH',{minimumFractionDigits:2})} net</div>
-            <div style="font-size:10px;color:#6b7280;">${doneItems.length}/${collItems.length} done</div>
-          </div>
-        </div>
-        ${routeSections}
-      </div>`;
-    }).join('');
-  } catch(e) {
-    content.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
-  }
-}
-
-function hvAddToRoute(routeCode) {
-  hvShowTab('route', document.getElementById('hbtn-route'));
-  const colInp = document.getElementById('hv-collector');
-  if (colInp) colInp.placeholder = 'Adding to ' + routeCode;
-  toast('Switch to Route builder to add vendos. Route code: ' + routeCode, 3000);
-}
-
-async function hvMarkRouteDone(routeCode) {
-  if (!confirm('Mark route ' + routeCode + ' as completed?')) return;
-  try {
-    await fetch(_SB + '/rest/v1/routes?route_code=eq.' + routeCode, {
-      method: 'PATCH',
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ status: 'completed' })
-    });
-    const toast = document.getElementById('hv-refresh-toast');
-    if (toast) { toast.textContent = '✅ Route ' + routeCode + ' marked done'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
-    hvLoadRecordsByDate(document.querySelector('.hv-dtab.on')?.textContent, null);
-  } catch(e) { alert('Error: ' + e.message); }
-}
-
-async function hvDeleteRoute(routeCode) {
-  if (!confirm('Delete route ' + routeCode + '? All route items will be deleted.')) return;
-  try {
-    // Get route id first
-    const r = await fetch(_SB + '/rest/v1/routes?route_code=eq.' + routeCode + '&select=id', {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const data = await r.json();
-    if (data[0]?.id) {
-      await fetch(_SB + '/rest/v1/route_items?route_id=eq.' + data[0].id, {
-        method: 'DELETE', headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+async function hrLoad(force) {
+  if (!_hrLoaded || force) {
+    const el = document.getElementById('hr-table');
+    if (el) el.innerHTML = '<div class="hv-rec-empty">Loading…</div>';
+    try {
+      const r = await fetch(`${_SB}/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000`, {
+        headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
       });
-      await fetch(_SB + '/rest/v1/routes?id=eq.' + data[0].id, {
-        method: 'DELETE', headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-      });
-    }
-    const dateBtn = document.querySelector('.hv-dtab.on');
-    if (dateBtn) hvLoadRecordsByDate(dateBtn.dataset.date || '', dateBtn);
-    else hvLoadRecordDates();
-  } catch(e) { alert('Error: ' + e.message); }
-}
-
-/* ─── RECONCILIATION DATE TABS ─── */
-async function hvLoadReconDates() {
-  const tabBar = document.getElementById('hv-recon-date-tabs');
-  const content = document.getElementById('hv-recon-content');
-  if (!tabBar) return;
-  tabBar.innerHTML = '<span style="font-size:11px;color:#9ca3af;">Loading dates...</span>';
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading...</div>';
-
-  try {
-    // Get distinct harvest dates from last 60 days
-    const r = await fetch(`${_SB}/rest/v1/harvests?select=harvest_date&order=harvest_date.desc&limit=500`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const rows = await r.json();
-    const dates = [...new Set(rows.map(r => r.harvest_date))].sort((a,b) => b.localeCompare(a));
-
-    if (!dates.length) {
-      tabBar.innerHTML = '<span style="font-size:11px;color:#9ca3af;">No harvest records yet</span>';
-      content.innerHTML = '<div class="hv-rec-empty">No harvest records found</div>';
-      return;
-    }
-
-    tabBar.innerHTML = dates.map((d, i) => {
-      const label = new Date(d + 'T12:00:00').toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
-      return `<button class="hv-recon-dtab${i===0?' on':''}" data-date="${d}" onclick="hvReconSelectDate('${d}',this)"
-        style="padding:5px 12px;border-radius:20px;border:1.5px solid ${i===0?'#1e3cb8':'#e5e7eb'};background:${i===0?'#1e3cb8':'#fff'};color:${i===0?'#fff':'#374151'};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">${label}</button>`;
-    }).join('');
-
-    // Auto-load the most recent date
-    const di = document.getElementById('hv-recon-date');
-    if (di) di.value = dates[0];
-    hvLoadRecon();
-  } catch(e) {
-    tabBar.innerHTML = `<span style="font-size:11px;color:#dc2626;">Error: ${e.message}</span>`;
-  }
-}
-
-function hvReconSelectDate(date, btn) {
-  document.querySelectorAll('.hv-recon-dtab').forEach(b => {
-    b.style.background = '#fff';
-    b.style.borderColor = '#e5e7eb';
-    b.style.color = '#374151';
-    b.classList.remove('on');
-  });
-  btn.style.background = '#1e3cb8';
-  btn.style.borderColor = '#1e3cb8';
-  btn.style.color = '#fff';
-  btn.classList.add('on');
-  const di = document.getElementById('hv-recon-date');
-  if (di) di.value = date;
-  hvLoadRecon();
-}
-
-async function hvLoadRecon() {
-  const content = document.getElementById('hv-recon-content');
-  const date = document.getElementById('hv-recon-date')?.value;
-  if (!content) return;
-  if (!date) { content.innerHTML = '<div class="hv-rec-empty">Select a date first</div>'; return; }
-  content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading reconciliation...</div>';
-
-  try {
-    // Load harvests for selected date
-    const rh = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,vendo_name,tg_name,net_collectible,route_code,collector,harvest_window_start,admin_notes&limit=500`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const harvests = await rh.json();
-    if (!harvests.length) { content.innerHTML = '<div class="hv-rec-empty">No harvest records for ' + date + '</div>'; return; }
-
-    // Window START = the previous harvest date for each vendo (before current harvest_date)
-    // We look in the harvests table itself for the most recent record BEFORE this date
-    // This avoids using vendos.last_harvest_date which is already updated to today
-    const DEFAULT_START = '2026-03-01';
-    const tgNames = [...new Set(harvests.map(h => h.tg_name).filter(Boolean))];
-    const windowStartMap = {}; // tg_name → window start date
-
-    // Priority 1: use harvest_window_start stored IN harvest record (most accurate)
-    harvests.forEach(h => {
-      if (h.tg_name && h.harvest_window_start) {
-        windowStartMap[h.tg_name] = h.harvest_window_start;
+      _hrAll = await r.json();
+      _hrLoaded = true;
+      const sel = document.getElementById('hr-col');
+      if (sel) {
+        const cols = [...new Set(_hrAll.map(h => h.collector).filter(Boolean))].sort();
+        sel.innerHTML = '<option value="">All collectors</option>' +
+          cols.map(c => `<option value="${c}">${c}</option>`).join('');
       }
-    });
-
-    // Priority 2: look for previous harvest before this date
-    const missingTgs = tgNames.filter(tg => !windowStartMap[tg]);
-    if (missingTgs.length) {
-      try {
-        const prevUrl = `${_SB}/rest/v1/harvests?tg_name=in.(${missingTgs.map(n=>'"'+n+'"').join(',')})&harvest_date=lt.${date}&select=tg_name,harvest_date,harvest_window_start&order=harvest_date.desc&limit=500`;
-        const rp = await fetch(prevUrl, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
-        const prevHarvests = await rp.json();
-        missingTgs.forEach(tg => {
-          const prev = prevHarvests.find(h => h.tg_name === tg);
-          if (prev) windowStartMap[tg] = prev.harvest_window_start || prev.harvest_date;
-        });
-      } catch(e) { console.warn('prev harvest lookup failed:', e); }
+      hrStats();
+      hrRender();
+    } catch(e) {
+      const el = document.getElementById('hr-table');
+      if (el) el.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
     }
+  } else {
+    hrStats();
+    hrRender();
+  }
+}
 
-    // Priority 3: fallback to DEFAULT_START for first-ever harvest
-    // DO NOT use vendos.last_harvest_date — already updated by PWA to today
-    tgNames.forEach(tg => {
-      if (!windowStartMap[tg]) windowStartMap[tg] = DEFAULT_START;
+function hrStats() {
+  const totalNet   = _hrAll.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+  const totalSpawn = _hrAll.reduce((s,h) => s+(parseFloat(h.spawn_share)||0), 0);
+  const totalOwner = _hrAll.reduce((s,h) => s+(parseFloat(h.customer_share)||0), 0);
+  const dates = new Set(_hrAll.map(h => h.harvest_date)).size;
+  const el = document.getElementById('hr-stats-bar');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="hr-stat"><div class="hr-sl">Records</div><div class="hr-sv" style="color:#1e3cb8">${_hrAll.length}</div></div>
+    <div class="hr-stat"><div class="hr-sl">Harvest Dates</div><div class="hr-sv" style="color:#1e3cb8">${dates}</div></div>
+    <div class="hr-stat"><div class="hr-sl">Total Net</div><div class="hr-sv" style="color:#16a34a">${_fmtHR(totalNet)}</div></div>
+    <div class="hr-stat"><div class="hr-sl">Spawn 75%</div><div class="hr-sv" style="color:#1e3cb8">${_fmtHR(totalSpawn)}</div></div>
+    <div class="hr-stat"><div class="hr-sl">Owner 25%</div><div class="hr-sv" style="color:#d97706">${_fmtHR(totalOwner)}</div></div>`;
+}
+
+function _fmtHR(v) { return '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2}); }
+
+function hrGetFiltered() {
+  const from = document.getElementById('hr-from')?.value;
+  const to   = document.getElementById('hr-to')?.value;
+  const q    = (document.getElementById('hr-q')?.value || '').toLowerCase();
+  const col  = document.getElementById('hr-col')?.value || '';
+  return _hrAll.filter(h => {
+    if (from && h.harvest_date < from) return false;
+    if (to   && h.harvest_date > to)   return false;
+    if (col  && h.collector !== col)   return false;
+    if (q && !((h.vendo_name||'')+(h.tg_name||'')+(h.collector||'')+(h.route_code||'')).toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function hrClear() {
+  ['hr-from','hr-to','hr-q'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const sel=document.getElementById('hr-col'); if(sel) sel.value='';
+  hrRender();
+}
+
+function hrRender() {
+  const rows = hrGetFiltered();
+  const totalNet = rows.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+  const sumEl = document.getElementById('hr-summary');
+  if (sumEl) sumEl.innerHTML = `
+    <span class="hr-chip">📋 ${rows.length} records</span>
+    <span class="hr-chip" style="background:#f0fdf4;color:#15803d;">💰 Net: ${_fmtHR(totalNet)}</span>
+    <span class="hr-chip" style="background:#eef2ff;color:#1e3cb8;">🏢 Spawn: ${_fmtHR(totalNet*0.75)}</span>
+    <span class="hr-chip" style="background:#fff7ed;color:#c2410c;">👤 Owner: ${_fmtHR(totalNet*0.25)}</span>`;
+  const el = document.getElementById('hr-table');
+  if (!el) return;
+  if (!rows.length) { el.innerHTML = '<div class="hv-rec-empty">No records found</div>'; return; }
+  el.innerHTML = `<div style="overflow-x:auto"><table class="hr-tbl">
+    <thead><tr>
+      <th>#</th><th>Date</th><th>Window Start</th><th>Vendo</th><th>TG Name</th>
+      <th>Collector</th><th>Route</th><th>Total</th><th>Free</th><th>Old</th>
+      <th>Net</th><th>Spawn 75%</th><th>Owner 25%</th><th>Src</th>
+    </tr></thead>
+    <tbody>${rows.map((h,i) => {
+      const net   = parseFloat(h.net_collectible||0);
+      const spawn = parseFloat(h.spawn_share||0);
+      const owner = parseFloat(h.customer_share||0);
+      const total = parseFloat(h.coins_total||0);
+      const free  = parseFloat(h.coins_free||0);
+      const oldc  = parseFloat(h.coins_old||0);
+      const rc    = (h.route_code||'').toUpperCase();
+      const isAdm = !rc||rc==='ADMIN'||rc==='MANUAL'||rc==='NO ROUTE';
+      const src   = isAdm
+        ? '<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧 Admin</span>'
+        : '<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8;">📱 PWA</span>';
+      const note = h.admin_notes ? `<div style="font-size:9px;color:#92400e;margin-top:2px;">📝 ${h.admin_notes}</div>` : '';
+      return `<tr>
+        <td style="color:#9ca3af">${i+1}</td>
+        <td><b>${h.harvest_date||'—'}</b></td>
+        <td style="color:#9ca3af;font-size:10px">${h.harvest_window_start||HR_DEFAULT_START}</td>
+        <td><b style="color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}</b>${note}</td>
+        <td style="color:#6b7280;font-size:10px">${h.tg_name||'—'}</td>
+        <td>${h.collector||'—'}</td>
+        <td><span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:#f3f4f6;color:#374151;letter-spacing:.08em">${rc||'—'}</span></td>
+        <td style="font-weight:600">${_fmtHR(total)}</td>
+        <td style="color:#dc2626">${free?_fmtHR(free):'—'}</td>
+        <td style="color:#d97706">${oldc?_fmtHR(oldc):'—'}</td>
+        <td style="font-weight:700;color:#16a34a">${_fmtHR(net)}</td>
+        <td style="font-weight:700;color:#1e3cb8">${_fmtHR(spawn)}</td>
+        <td style="font-weight:700;color:#7c3aed">${_fmtHR(owner)}</td>
+        <td>${src}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+/* ─── RECONCILIATION TAB ─── */
+let _rcHarvests = [], _rcTgMap = {}, _rcWindowMap = {}, _rcLoaded = false;
+
+async function rcLoad() {
+  _rcLoaded = false;
+  const content = document.getElementById('rc-content');
+  const tabBar  = document.getElementById('rc-date-tabs');
+  if (content) content.innerHTML = '<div class="hv-rec-empty">Loading harvest records…</div>';
+  if (tabBar)  tabBar.innerHTML  = '';
+
+  try {
+    const r = await fetch(`${_SB}/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
-
-    // Fetch TG income per-vendo using exact tg_name — avoids global limit issues
-    const tgMap = {};
-    await Promise.all(tgNames.map(async tgName => {
-      const start = windowStartMap[tgName] || DEFAULT_START;
+    _rcHarvests = await r.json();
+    if (!_rcHarvests.length) {
+      if (content) content.innerHTML = '<div class="hv-rec-empty">No harvest records yet</div>';
+      return;
+    }
+    _rcWindowMap = {};
+    _rcHarvests.forEach(h => { if (h.tg_name && h.harvest_window_start) _rcWindowMap[h.tg_name] = h.harvest_window_start; });
+    const dates = [...new Set(_rcHarvests.map(h => h.harvest_date))].sort((a,b) => b.localeCompare(a));
+    if (tabBar) {
+      tabBar.innerHTML = dates.map((d,i) => {
+        const lbl = new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+        return `<button class="rc-dtab${i===0?' on':''}" data-date="${d}" onclick="rcSelectDate('${d}',this)">${lbl}</button>`;
+      }).join('');
+    }
+    const allTgNames = [...new Set(_rcHarvests.map(h => h.tg_name).filter(Boolean))];
+    if (content) content.innerHTML = `<div class="hv-rec-empty">Fetching TG income for ${allTgNames.length} vendos…</div>`;
+    _rcTgMap = {};
+    await Promise.all(allTgNames.map(async tgName => {
+      const start = _rcWindowMap[tgName] || HR_DEFAULT_START;
+      const latestDate = _rcHarvests.filter(h => h.tg_name === tgName).map(h => h.harvest_date).sort().pop();
+      if (!latestDate) return;
       try {
-        // Use Range header to override Supabase's default 1000 row limit
         const rt = await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${date}&is_skipped=eq.false&select=amount`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${latestDate}&is_skipped=eq.false&select=amount,date`,
           { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Range': '0-49999', 'Prefer': 'count=none' } }
         );
         const txRows = await rt.json();
-        tgMap[tgName] = txRows.reduce((s, tx) => s + (parseFloat(tx.amount)||0), 0);
-      } catch(e) {
-        tgMap[tgName] = 0;
-      }
+        _rcTgMap[tgName] = {};
+        txRows.forEach(tx => { if(!_rcTgMap[tgName][tx.date]) _rcTgMap[tgName][tx.date]=0; _rcTgMap[tgName][tx.date]+=parseFloat(tx.amount)||0; });
+        _rcTgMap[tgName]._total = txRows.reduce((s,tx) => s+(parseFloat(tx.amount)||0), 0);
+      } catch(e) { _rcTgMap[tgName] = { _total: 0 }; }
     }));
-
-    // Build case-insensitive tgMap lookup
-    const tgMapLower = {};
-    Object.entries(tgMap).forEach(([k,v]) => { tgMapLower[k.toLowerCase().trim()] = v; });
-
-    // Group harvests by collector → then by route inside each collector
-    const byCollector = {};
-    harvests.forEach(h => {
-      const col = (h.collector || '—').trim();
-      if (!byCollector[col]) byCollector[col] = {};
-      const rc = h.route_code || 'No route';
-      if (!byCollector[col][rc]) byCollector[col][rc] = [];
-      byCollector[col][rc].push(h);
-    });
-
-    // Helper: render one route block (no collector header — shown at collector level)
-    function renderRouteBlock(rc, items) {
-      const coinNet = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-      const tgTotal = items.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
-      const diff    = coinNet - tgTotal;
-      const diffCls = Math.abs(diff)<100 ? 'color:#16a34a' : diff>0 ? 'color:#d97706' : 'color:#dc2626';
-      const diffTxt = diff===0 ? '✅ Match' : Math.abs(diff)<100 ? (diff>0?'✅ Coins +₱':'✅ TG +₱')+Math.abs(diff).toLocaleString() : diff>0 ? '⚠ Coins +₱'+Math.abs(diff).toLocaleString() : '🔴 TG +₱'+Math.abs(diff).toLocaleString();
-
-      const rows = items.map(h => {
-        const tgAmt = tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0;
-        const gap   = (parseFloat(h.net_collectible)||0) - tgAmt;
-        const rowCls = Math.abs(gap)<50 ? '' : gap>0 ? 'background:#fffbeb' : 'background:#fef2f2';
-        const noteHtml = h.admin_notes
-          ? `<div style="font-size:10px;color:#92400e;background:#fffbeb;border-radius:4px;padding:3px 6px;margin-top:3px;">📝 ${h.admin_notes}</div>`
-          : '';
-        return `<tr style="${rowCls}">
-          <td style="padding:6px 8px;font-size:11px;">
-            <div style="font-weight:600;">${h.vendo_name||h.tg_name||'—'}</div>
-            <div style="font-size:9px;color:#9ca3af;">TG: ${h.tg_name||'—'}</div>
-            ${noteHtml}
-            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
-              <button data-hid="${h.id}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}" onclick="hvRecNote(parseInt(this.dataset.hid), this.dataset.note)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;color:#374151;">📝 ${h.admin_notes ? 'Edit note' : 'Add note'}</button>
-              <button data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-win="${h.harvest_window_start||''}" data-date="${date}" data-tgamt="${tgAmt}" data-vname="${(h.vendo_name||'').replace(/"/g,'&quot;')}" data-hid="${h.id}" onclick="hvVerifyTG(this)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #93c5fd;background:#eff6ff;cursor:pointer;color:#1d4ed8;font-weight:700;">🔍 Verify</button>
-            </div>
-          </td>
-          <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#16a34a;">₱${parseFloat(h.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-          <td style="padding:6px 8px;font-size:11px;color:${tgAmt>0?'#374151':'#9ca3af'};">₱${tgAmt.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
-          <td style="padding:6px 8px;font-size:11px;font-weight:700;${Math.abs(gap)<50?'color:#16a34a':gap>0?'color:#d97706':'color:#dc2626'};">${Math.abs(gap)<50?(gap===0?'✅ Match':'✅ ₱'+Math.abs(gap).toLocaleString()):'₱'+Math.abs(gap).toLocaleString()+(gap>0?' surplus':' deficit')}</td>
-        </tr>`;
-      }).join('');
-
-      return `<div style="background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:11px;font-weight:700;color:#1e3cb8;">🧾 Route: ${rc}</span>
-            ${ahSourceBadge(rc)}
-          </span>
-          <span style="font-size:11px;font-weight:700;${diffCls};">${diffTxt}</span>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
-          <div style="background:#f0fdf4;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;color:#16a34a;">₱${coinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Coin net</div>
-          </div>
-          <div style="background:#eef2ff;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;color:#1e3cb8;">₱${tgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">TG income</div>
-          </div>
-          <div style="background:#fafbff;border-radius:6px;padding:6px;text-align:center;">
-            <div style="font-size:13px;font-weight:700;${diffCls};">₱${Math.abs(diff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">${diff>=0?'Surplus':'Deficit'}</div>
-          </div>
-        </div>
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr style="background:#eef2ff;">
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Vendo</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Coin net</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">TG income</th>
-            <th style="padding:5px 8px;font-size:9px;text-align:left;color:#6b7280;">Diff</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
-    }
-
-    // Render: one card per collector, routes as sub-blocks inside
-    content.innerHTML = Object.entries(byCollector).map(([collector, routes]) => {
-      const allItems = Object.values(routes).flat();
-      const colCoinNet = allItems.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
-      const colTgTotal = allItems.reduce((s,h) => s+(tgMap[h.tg_name] || tgMapLower[(h.tg_name||'').toLowerCase().trim()] || 0), 0);
-      const colDiff    = colCoinNet - colTgTotal;
-      const colDiffCls = Math.abs(colDiff)<100 ? 'color:#16a34a' : colDiff>0 ? 'color:#d97706' : 'color:#dc2626';
-      const colDiffTxt = Math.abs(colDiff)<100 ? '✅ Match' : colDiff>0 ? `⚠ Coins +₱${Math.abs(colDiff).toLocaleString()}` : `🔴 TG +₱${Math.abs(colDiff).toLocaleString()}`;
-      const routeCount = Object.keys(routes).length;
-      const vendoCount = allItems.length;
-
-      const routeBlocks = Object.entries(routes).map(([rc, items]) => renderRouteBlock(rc, items)).join('');
-
-      return `<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:14px;">
-        <!-- Collector header -->
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
-          <div>
-            <div style="font-size:15px;font-weight:800;color:#111827;">👤 ${collector}</div>
-            <div style="font-size:10px;color:#6b7280;margin-top:2px;">${routeCount} route${routeCount!==1?'s':''} · ${vendoCount} vendo${vendoCount!==1?'s':''}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button class="hv-xls-btn"
-              data-collector="${collector.replace(/"/g,'&quot;')}"
-              data-date="${date}"
-              style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;">
-              📥 Export Excel
-            </button>
-            <span style="font-size:11px;font-weight:700;${colDiffCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<100?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colDiffTxt}</span>
-          </div>
-        </div>
-        <!-- Collector totals -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
-          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;color:#16a34a;">₱${colCoinNet.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Total coin net</div>
-          </div>
-          <div style="background:#eef2ff;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;color:#1e3cb8;">₱${colTgTotal.toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">Total TG income</div>
-          </div>
-          <div style="background:#fafbff;border-radius:7px;padding:8px;text-align:center;">
-            <div style="font-size:15px;font-weight:800;${colDiffCls};">₱${Math.abs(colDiff).toLocaleString('en-PH',{minimumFractionDigits:2})}</div>
-            <div style="font-size:9px;color:#6b7280;">${colDiff>=0?'Surplus':'Deficit'}</div>
-          </div>
-        </div>
-        <!-- Route sub-blocks -->
-        ${routeBlocks}
-        <!-- Inline admin add harvest -->
-        <div style="margin-top:8px;">
-          <button class="hv-ah-open-btn" data-collector="${collector.replace(/"/g,'&quot;')}" style="width:100%;padding:8px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:8px;color:#15803d;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add Admin Record</button>
-        </div>
-      </div>`;
-    }).join('');
+    _rcLoaded = true;
+    if (dates.length) rcRenderDate(dates[0]);
   } catch(e) {
-    content.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
+    if (content) content.innerHTML = `<div class="hv-rec-empty" style="color:#dc2626;">Error: ${e.message}</div>`;
   }
 }
+
+function rcSelectDate(date, btn) {
+  document.querySelectorAll('.rc-dtab').forEach(b => b.classList.remove('on'));
+  if (btn) btn.classList.add('on');
+  rcRenderDate(date);
+}
+
+function rcGetTgAmt(tgName, windowStart, upToDate) {
+  if (!tgName || !_rcTgMap[tgName]) return 0;
+  const win = windowStart || _rcWindowMap[tgName] || HR_DEFAULT_START;
+  let amt = 0;
+  Object.entries(_rcTgMap[tgName]).forEach(([d,v]) => { if (d >= win && d <= upToDate) amt += v; });
+  return amt;
+}
+
+function rcRenderDate(date) {
+  const content = document.getElementById('rc-content');
+  if (!content || !_rcLoaded) return;
+  const harvests = _rcHarvests.filter(h => h.harvest_date === date);
+  if (!harvests.length) { content.innerHTML = '<div class="hv-rec-empty">No harvest records for this date</div>'; return; }
+  const byCollector = {};
+  harvests.forEach(h => {
+    const col = (h.collector||'—').trim();
+    if (!byCollector[col]) byCollector[col] = {};
+    const rc = h.route_code || 'No route';
+    if (!byCollector[col][rc]) byCollector[col][rc] = [];
+    byCollector[col][rc].push(h);
+  });
+  const grandCoin = harvests.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+  const grandTg   = harvests.reduce((s,h) => s+rcGetTgAmt(h.tg_name, h.harvest_window_start, date), 0);
+  const grandDiff = grandCoin - grandTg;
+  const grandCls  = Math.abs(grandDiff)<200?'color:#16a34a':grandDiff>0?'color:#d97706':'color:#dc2626';
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:14px;">
+    <div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center;border-left:3px solid #16a34a;"><div style="font-size:16px;font-weight:700;color:#16a34a;">${_fmtHR(grandCoin)}</div><div style="font-size:9px;color:#6b7280;">Grand Coin Net</div></div>
+    <div style="background:#eef2ff;border-radius:8px;padding:10px;text-align:center;border-left:3px solid #1e3cb8;"><div style="font-size:16px;font-weight:700;color:#1e3cb8;">${_fmtHR(grandTg)}</div><div style="font-size:9px;color:#6b7280;">Grand TG Income</div></div>
+    <div style="background:#fafbff;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:16px;font-weight:700;${grandCls};">${_fmtHR(Math.abs(grandDiff))}</div><div style="font-size:9px;color:#6b7280;">${grandDiff>=0?'Surplus':'Deficit'}</div></div>
+    <div style="background:#f8faff;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:14px;font-weight:700;${grandCls};">${Math.abs(grandDiff)<200?'✅ Match':grandDiff>0?'⚠ Coins high':'🔴 TG high'}</div><div style="font-size:9px;color:#6b7280;">${harvests.length} vendos</div></div>
+  </div>`;
+  Object.entries(byCollector).forEach(([collector, routes]) => {
+    const allItems = Object.values(routes).flat();
+    const colCoin  = allItems.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+    const colTg    = allItems.reduce((s,h) => s+rcGetTgAmt(h.tg_name, h.harvest_window_start, date), 0);
+    const colDiff  = colCoin - colTg;
+    const colCls   = Math.abs(colDiff)<200?'color:#16a34a':colDiff>0?'color:#d97706':'color:#dc2626';
+    const colTxt   = Math.abs(colDiff)<200?'✅ Match':colDiff>0?`⚠ Coins +${_fmtHR(Math.abs(colDiff))}`:`🔴 TG +${_fmtHR(Math.abs(colDiff))}`;
+    html += `<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+        <div><div style="font-size:15px;font-weight:800;color:#111827;">👤 ${collector}</div><div style="font-size:10px;color:#6b7280;margin-top:2px;">${Object.keys(routes).length} route(s) · ${allItems.length} vendo(s)</div></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="hv-xls-btn" data-collector="${collector.replace(/"/g,'&quot;')}" data-date="${date}" style="padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">📥 Export</button>
+          <span style="font-size:12px;font-weight:700;${colCls};padding:4px 10px;border-radius:20px;background:${Math.abs(colDiff)<200?'#f0fdf4':colDiff>0?'#fffbeb':'#fef2f2'};">${colTxt}</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px;">
+        <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#16a34a;">${_fmtHR(colCoin)}</div><div style="font-size:9px;color:#6b7280;">Total coin net</div></div>
+        <div style="background:#eef2ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#1e3cb8;">${_fmtHR(colTg)}</div><div style="font-size:9px;color:#6b7280;">Total TG income</div></div>
+        <div style="background:#fafbff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;${colCls};">${_fmtHR(Math.abs(colDiff))}</div><div style="font-size:9px;color:#6b7280;">${colDiff>=0?'Surplus':'Deficit'}</div></div>
+      </div>`;
+    Object.entries(routes).forEach(([rc, items]) => {
+      const routeCoin = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+      const routeTg   = items.reduce((s,h) => s+rcGetTgAmt(h.tg_name, h.harvest_window_start, date), 0);
+      const routeDiff = routeCoin - routeTg;
+      const rdCls     = Math.abs(routeDiff)<100?'color:#16a34a':routeDiff>0?'color:#d97706':'color:#dc2626';
+      const rdTxt     = Math.abs(routeDiff)<100?'✅ Match':routeDiff>0?`⚠ Coins +${_fmtHR(Math.abs(routeDiff))}`:`🔴 TG +${_fmtHR(Math.abs(routeDiff))}`;
+      const isAdmin   = !rc||rc==='No route'||rc.toUpperCase()==='ADMIN';
+      const srcBadge  = isAdmin
+        ? '<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;">🔧 Admin</span>'
+        : '<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8;">📱 PWA</span>';
+      html += `<div style="background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="display:flex;align-items:center;gap:6px;"><span style="font-size:12px;font-weight:700;color:#1e3cb8;">🧾 ${rc}</span>${srcBadge}</span>
+          <span style="font-size:11px;font-weight:700;${rdCls};">${rdTxt}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;">
+          <div style="background:#f0fdf4;border-radius:6px;padding:6px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#16a34a;">${_fmtHR(routeCoin)}</div><div style="font-size:9px;color:#6b7280;">Coin net</div></div>
+          <div style="background:#eef2ff;border-radius:6px;padding:6px;text-align:center;"><div style="font-size:14px;font-weight:700;color:#1e3cb8;">${_fmtHR(routeTg)}</div><div style="font-size:9px;color:#6b7280;">TG income</div></div>
+          <div style="background:#fafbff;border-radius:6px;padding:6px;text-align:center;"><div style="font-size:14px;font-weight:700;${rdCls};">${_fmtHR(Math.abs(routeDiff))}</div><div style="font-size:9px;color:#6b7280;">${routeDiff>=0?'Surplus':'Deficit'}</div></div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead><tr style="background:#eef2ff;">
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">Vendo</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">TG Name</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">Window</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">Coin Net</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">TG Income</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">Diff</th>
+            <th style="padding:5px 8px;text-align:left;font-size:9px;color:#6b7280;">Actions</th>
+          </tr></thead>
+          <tbody>${items.map(h => {
+            const coin  = parseFloat(h.net_collectible||0);
+            const tgAmt = rcGetTgAmt(h.tg_name, h.harvest_window_start, date);
+            const gap   = coin - tgAmt;
+            const gCls  = Math.abs(gap)<50?'color:#16a34a':gap>0?'color:#d97706':'color:#dc2626';
+            const rowBg = Math.abs(gap)<50?'':'background:'+(gap>0?'#fffbeb':'#fef2f2');
+            const note  = h.admin_notes?`<div style="font-size:9px;color:#92400e;margin-top:2px;">📝 ${h.admin_notes}</div>`:'';
+            return `<tr style="${rowBg}">
+              <td style="padding:6px 8px;"><b>${h.vendo_name||h.tg_name||'—'}</b>${note}</td>
+              <td style="padding:6px 8px;color:#6b7280;font-size:10px;">${h.tg_name||'—'}</td>
+              <td style="padding:6px 8px;color:#6b7280;font-size:10px;">${h.harvest_window_start||HR_DEFAULT_START} → ${date}</td>
+              <td style="padding:6px 8px;font-weight:700;color:#16a34a;">${_fmtHR(coin)}</td>
+              <td style="padding:6px 8px;color:${tgAmt>0?'#374151':'#9ca3af'};">${_fmtHR(tgAmt)}</td>
+              <td style="padding:6px 8px;font-weight:700;${gCls};">${Math.abs(gap)<50?(gap===0?'✅ Match':'✅ ₱'+Math.abs(gap).toLocaleString()):_fmtHR(Math.abs(gap))+(gap>0?' surplus':' deficit')}</td>
+              <td style="padding:6px 8px;">
+                <button data-hid="${h.id}" data-note="${(h.admin_notes||'').replace(/"/g,'&quot;')}" onclick="hvRecNote(parseInt(this.dataset.hid),this.dataset.note)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #d1d5db;background:#f9fafb;cursor:pointer;margin-right:3px;">📝 Note</button>
+                <button data-tg="${(h.tg_name||'').replace(/"/g,'&quot;')}" data-win="${h.harvest_window_start||''}" data-date="${date}" data-tgamt="${tgAmt}" data-vname="${(h.vendo_name||'').replace(/"/g,'&quot;')}" data-hid="${h.id}" onclick="hvVerifyTG(this)" style="font-size:9px;padding:2px 7px;border-radius:4px;border:1px solid #93c5fd;background:#eff6ff;cursor:pointer;color:#1d4ed8;font-weight:700;">🔍 Verify</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+        <div style="margin-top:8px;">
+          <button onclick="hvAhOpen('${collector.replace(/'/g,"\\'")}');setTimeout(()=>{var d=document.getElementById('hv-ah-date');if(d)d.value='${date}';},50)" style="padding:4px 10px;background:#f0fdf4;border:1.5px dashed #86efac;border-radius:6px;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add record</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  content.innerHTML = html;
+}
+
+/* backward compat aliases */
+async function hvLoadReconDates() { await rcLoad(); }
+function hvReconSelectDate(d,b) { rcSelectDate(d,b); }
+async function hvLoadRecon() { if(_rcLoaded){ const b=document.querySelector('.rc-dtab.on'); if(b)rcRenderDate(b.dataset.date||''); } }
+async function hvLoadRecordDates() { await hrLoad(); }
+async function hvLoadRecordsByDate() {}
+async function hvLoadRecords() { hrLoad(); }
 
 
 /* ─── ADMIN HARVEST ENTRY ─── */
@@ -5784,6 +5599,73 @@ function clearAnalyticsVendo() {
 // Refresh recent transactions every 10 seconds
 setInterval(()=>{ if(document.getElementById("panel-dash").classList.contains("active")) refreshRecentTxns(); }, 10000);
 refreshRecentTxns();
+
+
+/* ─── ANALYTICS TAB ─── */
+async function loadAnalytics() {
+  // Monthly sales chart
+  try {
+    const rows = await sbAll('transactions',
+      'select=date,amount&is_skipped=eq.false&order=date.asc'
+    );
+    // Monthly totals
+    const mmap = {};
+    rows.forEach(r => {
+      const m = (r.date||'').slice(0,7);
+      if (m) mmap[m] = (mmap[m]||0) + parseFloat(r.amount||0);
+    });
+    const labels = Object.keys(mmap).sort();
+    const data   = labels.map(m => mmap[m]);
+    const colors = labels.map(l => l.startsWith('2026') ? '#16a34a' : l.startsWith('2025') ? '#1565c0' : '#94a3b8');
+    const displayLabels = labels.map(k => {
+      try { return new Date(k+'-01').toLocaleDateString('en-PH',{month:'short',year:'2-digit'}); } catch { return k; }
+    });
+    if (monthlyChart) monthlyChart.destroy();
+    const mCtx = document.getElementById('monthly-chart');
+    if (mCtx) {
+      monthlyChart = new Chart(mCtx, {
+        type: 'bar',
+        data: { labels: displayLabels, datasets: [{ label: 'Monthly Sales', data, backgroundColor: colors, borderRadius: 3 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '₱'+c.raw.toLocaleString() } } },
+          scales: { y: { ticks: { callback: v => '₱'+(v/1000).toFixed(0)+'K' } } } }
+      });
+    }
+    // Monthly breakdown table
+    const tableEl = document.getElementById('monthly-table');
+    if (tableEl) {
+      const sorted = [...labels].sort((a,b) => b.localeCompare(a));
+      tableEl.innerHTML = sorted.map(m => {
+        const amt = mmap[m];
+        const disp = (() => { try { return new Date(m+'-01').toLocaleDateString('en-PH',{month:'long',year:'numeric'}); } catch { return m; } })();
+        return `<div style="display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--bd);font-size:12px;">
+          <span style="color:var(--mu)">${disp}</span>
+          <span style="font-weight:700;color:#1565c0">₱${amt.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>
+        </div>`;
+      }).join('');
+    }
+  } catch(e) { console.error('Analytics monthly error:', e); }
+
+  // Area chart
+  try {
+    const areas = await sb('area_summary','',20);
+    const colors8 = ['#1565c0','#1D9E75','#F5C518','#7B5EA7','#E85D24','#4A90D9','#d97706','#dc2626'];
+    if (analyticsAreaChart) analyticsAreaChart.destroy();
+    const aCtx = document.getElementById('analytics-area-chart');
+    if (aCtx) {
+      analyticsAreaChart = new Chart(aCtx, {
+        type: 'doughnut',
+        data: {
+          labels: areas.map(a => a.area),
+          datasets: [{ data: areas.map(a => parseFloat(a.total_sales||0)), backgroundColor: colors8 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'right', labels: { font: { size: 10 } } },
+            tooltip: { callbacks: { label: c => c.label + ': ₱' + c.raw.toLocaleString() } } } }
+      });
+    }
+  } catch(e) { console.error('Analytics area error:', e); }
+}
 
 // ── Auto-load dashboard on first open ────────────────────
 window.addEventListener('load', () => { setTimeout(() => loadDashboard(), 500); });
