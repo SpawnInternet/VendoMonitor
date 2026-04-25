@@ -497,7 +497,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <!-- ══ HARVEST ══ -->
 <style>
 /* ══ HARVEST PANEL v6 ══ */
-#panel-harvest.active{display:flex!important;flex-direction:column;height:calc(100vh - 88px);position:relative;overflow:hidden;}
+#panel-harvest.active{display:block!important;position:fixed!important;top:88px;left:0;width:100%;height:calc(100vh - 88px);overflow:hidden;z-index:40;}
 
 /* HEAD */
 .hv-head{background:#fff;border-bottom:1px solid var(--bd);flex-shrink:0;}
@@ -544,7 +544,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-search:focus{border-color:var(--blue);}
 
 /* 3-COL LAYOUT */
-.hv-page{display:grid;grid-template-columns:210px 1fr 195px;flex:1;min-height:0;overflow:hidden;}
+.hv-page{display:grid;grid-template-columns:210px 1fr 195px;height:calc(100vh - 88px - 44px - 32px - 30px);overflow:hidden;}
 
 /* COL 1 — ROUTE BUILDER */
 .hv-rc{display:flex;flex-direction:column;overflow:hidden;background:#fff;border-right:1px solid var(--bd);}
@@ -943,7 +943,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div><!-- end hv-page -->
 
 <!-- SCHEDULE TAB -->
-<div class="hv-hidden" id="hv-tab-schedule" style="padding:12px;overflow-y:auto;flex:1;min-height:0;">
+<div class="hv-hidden" id="hv-tab-schedule" style="padding:12px;overflow-y:auto;height:calc(100vh - 132px);">
   <div class="hv-section">
     <div class="hv-section-title">Global thresholds <span class="hv-stag">applies to all vendos without a custom schedule</span></div>
     <div class="hv-thresh-grid">
@@ -997,7 +997,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- RECORDS TAB -->
-<div class="hv-hidden" id="hv-tab-records" style="padding:12px;overflow-y:auto;flex:1;min-height:0;">
+<div class="hv-hidden" id="hv-tab-records" style="padding:12px;overflow-y:auto;height:calc(100vh - 132px);">
 <style>.hv-rec-empty{text-align:center;padding:40px;color:#9ca3af;font-size:12px;line-height:1.8;}.hrd-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;}.hrd-bg.open{display:flex!important;}.hrd-pop{background:#fff;border-radius:12px;width:min(480px,95vw);max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);}</style>
 <div id="hv-rec-content"><div class="hv-rec-empty">Loading…</div></div>
 <div class="hrd-bg" id="hrd-bg" onclick="if(event.target===this)this.classList.remove('open')"><div class="hrd-pop">
@@ -1119,7 +1119,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- VENDO NAMES PANEL -->
-<div id="hv-tab-vnames" class="hv-hidden" style="padding:14px 16px;overflow-y:auto;flex:1;min-height:0;">
+<div id="hv-tab-vnames" class="hv-hidden" style="padding:14px 16px;overflow-y:auto;height:calc(100vh - 132px);">
   <!-- Sub-tabs: All vendos / Saved by me -->
   <div style="display:flex;gap:0;margin-bottom:10px;border-bottom:2px solid #e5e7eb;">
     <button id="vn-subtab-all" onclick="vnSubTab('all',this)" style="padding:7px 18px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;font-family:inherit;color:#0f766e;border-bottom:2px solid #0f766e;margin-bottom:-2px;">All vendos</button>
@@ -1478,7 +1478,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- RECONCILIATION TAB -->
-<div class="hv-hidden" id="hv-tab-recon" style="padding:12px;overflow-y:auto;flex:1;min-height:0;">
+<div class="hv-hidden" id="hv-tab-recon" style="padding:12px;overflow-y:auto;height:calc(100vh - 132px);">
 <style>.rc-dtab{padding:5px 14px;border-radius:20px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.15s;}.rc-dtab.on{background:#1e3cb8;border-color:#1e3cb8;color:#fff;}.rc-dtab:hover:not(.on){border-color:#1e3cb8;color:#1e3cb8;}.rc-st{border-radius:8px;padding:10px 12px;text-align:center;}.rc-st .rv{font-size:15px;font-weight:700;}.rc-st .rl{font-size:9px;color:#6b7280;margin-top:3px;}</style>
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
   <div><div style="font-size:14px;font-weight:700;color:#1e3cb8;">⚖️ Harvest Reconciliation</div><div style="font-size:10px;color:#6b7280;margin-top:2px;">Coin net vs Telegram income · skipped excluded</div></div>
@@ -1558,22 +1558,33 @@ function hvShowTab(tab, btn) {
   // Use classList to force display:none (overcomes !important in CSS)
   const hide = el => { if (!el) return; el.classList.add('hv-hidden'); el.style.display = ''; };
   const show = (el, disp) => { if (!el) return; el.classList.remove('hv-hidden'); el.style.setProperty('display', disp || 'block', 'important'); };
-  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, guide].forEach(hide); const _aeld = document.getElementById('hv-tab-audited'); if(_aeld) _aeld.style.display='none';
+  // Hide all fixed overlays first
+  const _reco = document.getElementById('hv-overlay-records');
+  const _aeld = document.getElementById('hv-tab-audited');
+  const _rov  = document.getElementById('hv-overlay-recon');
+  if (_reco) _reco.style.display = 'none';
+  if (_aeld) _aeld.style.display = 'none';
+  if (_rov)  _rov.style.display  = 'none';
+  // Hide/show flex container elements
+  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, guide].forEach(hide);
   if (isRoute) {
     show(guide, ''); show(els.page, 'grid'); show(els.area, 'flex'); show(els.filt, 'flex');
   } else if (tab === 'schedule') {
     show(els.sched, 'block');
   } else if (tab === 'records') {
-    show(els.rec, 'block');
+    // Records uses fixed overlay - show it
+    if (_reco) { _reco.style.display = 'block'; hvRecordsLoad(); }
   } else if (tab === 'recon') {
-    show(els.recon, 'block');
+    // Recon uses fixed overlay
+    const _rov = document.getElementById('hv-overlay-recon');
+    if (_rov) { _rov.style.display = 'block'; if (!_rov._loaded) { _rov._loaded=true; hvoRenderReconOverlay(); } }
   } else if (tab === 'vnames') {
     show(els.vnames, 'block');
   } else if (tab === 'addharvest') {
     show(els.addharvest, 'block');
   } else if (tab === 'audited') {
-    const ael = document.getElementById('hv-tab-audited');
-    if (ael) ael.style.display = 'block';
+    // Audited uses fixed overlay - show it directly
+    if (_aeld) _aeld.style.display = 'block';
   }
   if (tab === 'records') hvLoadRecordDates();
   if (tab === 'schedule') hvLoadSchedule();
@@ -1736,6 +1747,8 @@ function buildVendoRow(v, scroll) {
   div.dataset.vlan   = vlanTxt;
   div.dataset.last   = lastFmt;
   div.dataset.note   = v.admin_notes || '';
+  div.dataset.excel  = v.excel_name  || '';
+  div.dataset.addr   = v.address     || '';
 
   // Click row → open detail popup (reads from dataset, no string args)
   div.addEventListener('click', function() {
@@ -1752,8 +1765,12 @@ function buildVendoRow(v, scroll) {
     addBtn  = `<button class="hv-ab reg" data-action="register">Register</button>`;
   } else {
     const vlanBadge = v.vlan ? `<div style="font-size:8px;color:#9ca3af;margin-top:1px;">VLAN ${v.vlan}</div>` : '';
-    sheetCell = v.sheet_name
-      ? `<div><div class="hv-vsname">${v.sheet_name}</div>${vlanBadge}</div>`
+    const displayName = v.excel_name || v.sheet_name || '';
+    const addrHtml = v.address
+      ? `<div style="font-size:8px;color:#6b7280;margin-top:1px;">📍 <a href="https://maps.google.com/?q=${encodeURIComponent(v.address + ', Zamboanga del Norte, Philippines')}" target="_blank" onclick="event.stopPropagation()" style="color:#1e3cb8;text-decoration:none;">${v.address}</a></div>`
+      : '';
+    sheetCell = displayName
+      ? `<div><div class="hv-vsname">${displayName}</div>${addrHtml}${vlanBadge}</div>`
       : `<div><button class="hv-addname-btn" data-action="add-sheet-name">+ add sheet name</button><button class="hv-vmatch-btn" data-action="match-sheet" style="margin-top:2px;">💡 suggest match</button>${vlanBadge}</div>`;
     const badge = matched
       ? '<span class="matched-badge">✓ matched</span>'
@@ -1831,7 +1848,7 @@ async function hvLoadVendos() {
   const _ef = document.getElementById('hv-filter-empty'); if (_ef) _ef.style.display='none';
 
   const headers = { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY };
-  const base = `${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area,vlan,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc`;
+  const base = `${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,excel_name,address,area,vlan,last_harvest_date,admin_notes&order=area.asc,sheet_name.asc,tg_name.asc`;
   const allData = [];
 
   try {
@@ -2459,11 +2476,13 @@ async function hvConfirmMatch() {
 /* ─── ADD TO ROUTE ─── */
 function hvToggleAdd(btn, row) {
   const wasAdded = btn.classList.contains('dn');
-  const sheet = row.dataset.sheet || '';
-  const tg    = row.dataset.tg    || '';
-  const area  = row.dataset.area  || '';
+  const sheet   = row.dataset.sheet || '';
+  const tg      = row.dataset.tg    || '';
+  const area    = row.dataset.area  || '';
+  const excel   = row.dataset.excel || '';
+  const addr    = row.dataset.addr  || '';
   const matched = row.dataset.matched === 'true';
-  const display = sheet || tg || 'Unknown';
+  const display = excel || sheet || tg || 'Unknown';
 
   if (wasAdded) {
     btn.classList.remove('dn');
@@ -2472,11 +2491,11 @@ function hvToggleAdd(btn, row) {
   } else {
     btn.classList.add('dn');
     btn.textContent = '✓ added';
-    hvAddToRoutePanel(row.dataset.vid, display, sheet, tg, area, matched);
+    hvAddToRoutePanel(row.dataset.vid, display, sheet, tg, area, matched, excel, addr);
   }
 }
 
-function hvAddToRoutePanel(vid, display, sheet, tg, area, matched) {
+function hvAddToRoutePanel(vid, display, sheet, tg, area, matched, excel, addr) {
   const scroll = document.getElementById('hv-rv-scroll');
   const empty  = document.getElementById('hv-rv-empty');
   if (empty) empty.style.display = 'none';
@@ -2485,15 +2504,20 @@ function hvAddToRoutePanel(vid, display, sheet, tg, area, matched) {
   const div = document.createElement('div');
   div.className   = 'hv-rv';
   div.dataset.rvid = vid;
+  const primaryName = excel || sheet || tg || display;
   const tgLine = matched
     ? `<div class="hv-rv-tg-ok">TG: ${tg||'—'} ✓</div>`
     : `<div class="hv-rv-tg-no">TG: ${tg||'untraced ⚠'}</div>`;
+  const addrLine = addr
+    ? `<div style="font-size:8px;margin-top:2px;">📍 <a href="https://maps.google.com/?q=${encodeURIComponent(addr + ', Zamboanga del Norte, Philippines')}" target="_blank" style="color:#1e3cb8;text-decoration:none;">${addr}</a></div>`
+    : '';
   div.innerHTML = `
     <span class="hv-rv-num">${num}</span>
     <div>
-      <div class="hv-rv-sheet">${sheet||tg||display}</div>
+      <div class="hv-rv-sheet">${primaryName}</div>
       ${tgLine}
       <div class="hv-rv-area">${area}</div>
+      ${addrLine}
       <div class="hv-rv-btns">
         <button class="hv-done-btn" onclick="hvMarkDone(this)">Mark done</button>
         <button class="hv-del-btn" data-rvid="${vid}" onclick="hvRemoveRv(this)">×</button>
@@ -3338,14 +3362,14 @@ async function ahSubmit() {
 (function() {
   const div = document.createElement('div');
   div.id = 'hv-tab-audited';
-  div.style.cssText = 'display:none;position:fixed;top:170px;left:0;width:100%;height:calc(100vh - 170px);background:#f0f4fa;z-index:9999;padding:16px 24px;overflow-y:auto;box-sizing:border-box;';
+  div.style.cssText = 'display:none;position:fixed;top:132px;left:0;width:100%;height:calc(100vh - 132px);background:#f0f4fa;z-index:9999;padding:16px 24px;overflow-y:auto;box-sizing:border-box;';
   div.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
       <span style="font-size:13px;font-weight:800;color:#dc2626;">🤖 Claude Audited Vendos</span>
       <button id="abtn-denzel" style="padding:5px 14px;border-radius:8px;border:2px solid #dc2626;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔴 Denzel VLAN 44</button>
       <button id="abtn-island" style="padding:5px 14px;border-radius:8px;border:2px solid #7f1d1d;background:#fff;color:#7f1d1d;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🏝️ Island VLAN 32</button>
     </div>
-    <iframe id="audit-report-frame" src="https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html" style="width:100%;height:calc(100vh - 185px);border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;display:block;"></iframe>
+    <iframe id="audit-report-frame" src="https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html" style="width:100%;height:calc(100vh - 148px);border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;display:block;"></iframe>
   `;
   // Use event delegation instead of direct listeners since buttons are in innerHTML
   div.addEventListener('click', function(e) {
@@ -3356,6 +3380,690 @@ async function ahSubmit() {
 })();
 
 function auditShowVendo(key,btn){}
+
+
+/* ─── RECONCILE OVERLAY ─── */
+(function() {
+  const ov = document.createElement('div');
+  ov.id = 'hv-overlay-recon';
+  ov.style.cssText = 'display:none;position:fixed;top:132px;left:0;width:100%;height:calc(100vh - 132px);background:#f0f4ff;z-index:9999;overflow-y:auto;box-sizing:border-box;font-family:system-ui,sans-serif;font-size:13px;color:#1a1d2e;';
+  ov.innerHTML = `
+    <style>
+      #hv-overlay-recon{--blue:#1e3cb8;--green:#15803d;--red:#dc2626;--amber:#d97706;--bd:rgba(30,60,200,.12);--mu:#6b7280;}
+      #hv-overlay-recon .hvo-rhead{background:#1e3cb8;color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:10;}
+      #hv-overlay-recon .hvo-rbtn{padding:5px 12px;border:1.5px solid rgba(255,255,255,.4);border-radius:7px;background:rgba(255,255,255,.15);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+      #hv-overlay-recon .hvo-rbody{padding:14px;}
+      #hv-overlay-recon .hvo-rstat{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;}
+      #hv-overlay-recon .hvo-rst{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;}
+      #hv-overlay-recon .hvo-rsl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+      #hv-overlay-recon .hvo-rsv{font-size:18px;font-weight:700;}
+      #hv-overlay-recon table{width:100%;border-collapse:collapse;font-size:11px;}
+      #hv-overlay-recon th{padding:7px 10px;text-align:left;background:#eef2ff;color:var(--blue);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;white-space:nowrap;}
+      #hv-overlay-recon td{padding:8px 10px;border-bottom:1px solid #f0f0f8;vertical-align:middle;}
+      #hv-overlay-recon tr:hover td{background:#f8faff;}
+      #hv-overlay-recon .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
+      #hv-overlay-recon .pill.green{background:#dcfce7;color:#15803d;}
+      #hv-overlay-recon .pill.amber{background:#fef3c7;color:#92400e;}
+      #hv-overlay-recon .pill.blue{background:#dbeafe;color:#1e3cb8;}
+      #hv-overlay-recon .diff-ok{color:#15803d;}
+      #hv-overlay-recon .diff-warn{color:#d97706;}
+      #hv-overlay-recon .diff-bad{color:#dc2626;}
+    </style>
+    <div class="hvo-rhead">
+      <span style="font-size:13px;font-weight:700;">⚖️ Harvest Reconciliation</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="hvo-recon-status" style="font-size:10px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.2);">Click Refresh</span>
+        <button class="hvo-rbtn" onclick="hvoRenderReconOverlay(true)">⟳ Refresh</button>
+      </div>
+    </div>
+    <div class="hvo-rbody">
+      <div id="hvo-recon-body"><div style="text-align:center;padding:40px;color:#6b7280;">⏳ Loading…</div></div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+})();
+
+async function hvoRenderReconOverlay(force) {
+  const body   = document.getElementById('hvo-recon-body');
+  const status = document.getElementById('hvo-recon-status');
+  if (!body) return;
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">⏳ Loading harvest records…</div>';
+  const SBK = SB_KEY;
+  const H2  = { apikey: SBK, Authorization: 'Bearer ' + SBK };
+  const fmt2 = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+  const DS  = RC_DEFAULT_START;
+
+  try {
+    const rh = await fetch(SB_URL + '/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000', { headers: H2 });
+    const allH = await rh.json() || [];
+    if (!allH.length) { body.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;">No harvest records yet.</div>'; return; }
+
+    // Window map
+    const winMap = {};
+    allH.forEach(h => { if (h.tg_name && h.harvest_window_start) winMap[h.tg_name] = h.harvest_window_start; });
+
+    // Fetch TG income per vendo
+    const tgNames = [...new Set(allH.map(h => h.tg_name).filter(Boolean))];
+    if (status) status.textContent = `Fetching ${tgNames.length} vendos…`;
+    const tgMap = {};
+    await Promise.all(tgNames.map(async tgName => {
+      const start = winMap[tgName] || DS;
+      const vh = allH.filter(h => h.tg_name === tgName);
+      const latest = vh.map(h => h.harvest_date).sort().pop();
+      if (!latest) return;
+      let rows = [], page = 0;
+      while (true) {
+        const r = await fetch(
+          SB_URL + `/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${latest}&is_skipped=eq.false&select=amount,date`,
+          { headers: { ...H2, Range: `${page*1000}-${(page+1)*1000-1}`, Prefer: 'count=none' } }
+        );
+        const d = await r.json() || [];
+        rows = rows.concat(d);
+        if (d.length < 1000) break;
+        page++;
+      }
+      tgMap[tgName] = {};
+      rows.forEach(tx => { tgMap[tgName][tx.date] = (tgMap[tgName][tx.date]||0) + (parseFloat(tx.amount)||0); });
+    }));
+
+    // Group by date
+    const byDate = {};
+    allH.forEach(h => { if (!byDate[h.harvest_date]) byDate[h.harvest_date]=[]; byDate[h.harvest_date].push(h); });
+    const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+
+    const getTg = (h, date) => {
+      if (!h.tg_name || !tgMap[h.tg_name]) return 0;
+      const win = winMap[h.tg_name] || DS;
+      return Object.entries(tgMap[h.tg_name]).reduce((s,[d,v])=> d>=win&&d<=date ? s+v : s, 0);
+    };
+
+    let grandCoin=0, grandTg=0, html='';
+    dates.forEach(date => {
+      const harv = byDate[date];
+      const byColl = {};
+      harv.forEach(h => {
+        const col = h.collector||'—', rc = h.route_code||'No route';
+        if (!byColl[col]) byColl[col]={};
+        if (!byColl[col][rc]) byColl[col][rc]=[];
+        byColl[col][rc].push(h);
+      });
+      const dateCoin = harv.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+      const dateTg   = harv.reduce((s,h)=>s+getTg(h,date),0);
+      grandCoin+=dateCoin; grandTg+=dateTg;
+      const diff=dateCoin-dateTg, dCls=Math.abs(diff)<200?'diff-ok':diff>0?'diff-warn':'diff-bad';
+      const dTxt=Math.abs(diff)<200?'✅ Match':diff>0?`⚠ Coins +${fmt2(Math.abs(diff))}`:`🔴 TG +${fmt2(Math.abs(diff))}`;
+
+      html+=`<div style="background:#fff;border:2px solid rgba(30,60,200,.12);border-radius:12px;padding:14px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div><div style="font-size:15px;font-weight:700;">📅 ${date}</div>
+            <div style="font-size:10px;color:#6b7280;margin-top:2px;">${harv.length} records · ${Object.keys(byColl).length} collectors</div></div>
+          <div style="text-align:right;"><div class="${dCls}" style="font-size:13px;font-weight:700;">${dTxt}</div>
+            <div style="font-size:10px;color:#6b7280;">Coin ${fmt2(dateCoin)} vs TG ${fmt2(dateTg)}</div></div>
+        </div>`;
+
+      Object.entries(byColl).forEach(([col,routes])=>{
+        const cItems=Object.values(routes).flat();
+        const cCoin=cItems.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+        const cTg=cItems.reduce((s,h)=>s+getTg(h,date),0);
+        const cDiff=cCoin-cTg, cCls=Math.abs(cDiff)<200?'diff-ok':cDiff>0?'diff-warn':'diff-bad';
+        html+=`<div style="background:#f8faff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1.5px solid rgba(30,60,200,.1);">
+            <div style="font-size:14px;font-weight:700;">👤 ${col}</div>
+            <div class="${cCls}" style="font-weight:700;font-size:12px;">Coin ${fmt2(cCoin)} · TG ${fmt2(cTg)} · ${Math.abs(cDiff)<200?'✅ Match':cDiff>0?'⚠ +'+fmt2(Math.abs(cDiff)):'🔴 -'+fmt2(Math.abs(cDiff))}</div>
+          </div>`;
+
+        Object.entries(routes).forEach(([rc,items])=>{
+          const rCoin=items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+          const rTg=items.reduce((s,h)=>s+getTg(h,date),0);
+          const rDiff=rCoin-rTg, rCls=Math.abs(rDiff)<100?'diff-ok':rDiff>0?'diff-warn':'diff-bad';
+          html+=`<div style="background:#f0f4ff;border:1px solid #dde3f5;border-radius:8px;padding:10px;margin-bottom:6px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+              <span style="font-size:12px;font-weight:700;color:#1e3cb8;letter-spacing:.08em;">🧾 ${rc}</span>
+              <span class="${rCls}" style="font-weight:700;font-size:11px;">${Math.abs(rDiff)<100?'✅ Match':rDiff>0?'⚠ +'+fmt2(Math.abs(rDiff)):'🔴 TG +'+fmt2(Math.abs(rDiff))}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+              <div style="background:#f0fdf4;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:700;color:#15803d;">${fmt2(rCoin)}</div><div style="font-size:9px;color:#6b7280;">Coin net</div></div>
+              <div style="background:#eef2ff;border-radius:6px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:700;color:#1e3cb8;">${fmt2(rTg)}</div><div style="font-size:9px;color:#6b7280;">TG income</div></div>
+              <div style="background:#fafbff;border-radius:6px;padding:8px;text-align:center;"><div class="${rCls}" style="font-size:13px;font-weight:700;">${fmt2(Math.abs(rDiff))}</div><div style="font-size:9px;color:#6b7280;">${rDiff>=0?'Surplus':'Deficit'}</div></div>
+            </div>
+            <div style="overflow-x:auto;"><table>
+              <thead><tr><th>Vendo</th><th>TG Name</th><th>Window</th><th>Coin Net</th><th>TG Income</th><th>Diff</th></tr></thead>
+              <tbody>${items.map(h=>{
+                const coin=parseFloat(h.net_collectible||0), tgAmt=getTg(h,date);
+                const gap=coin-tgAmt, gCls=Math.abs(gap)<50?'diff-ok':gap>0?'diff-warn':'diff-bad';
+                const rowBg=Math.abs(gap)<50?'':gap>0?'background:#fffbeb':'background:#fef2f2';
+                return `<tr style="${rowBg}"><td><b>${h.vendo_name||h.tg_name||'—'}</b></td>
+                  <td style="color:#6b7280;font-size:10px;">${h.tg_name||'—'}</td>
+                  <td style="color:#6b7280;font-size:10px;">${h.harvest_window_start||DS} → ${date}</td>
+                  <td style="font-weight:700;color:#15803d;">${fmt2(coin)}</td>
+                  <td style="color:${tgAmt>0?'#1a1d2e':'#9ca3af'};">${fmt2(tgAmt)}</td>
+                  <td class="${gCls}" style="font-weight:700;">${Math.abs(gap)<50?'✅':gap>0?'+'+fmt2(Math.abs(gap)):'-'+fmt2(Math.abs(gap))}</td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>
+          </div>`;
+        });
+        html+='</div>';
+      });
+      html+='</div>';
+    });
+
+    const gDiff=grandCoin-grandTg, gCls=Math.abs(gDiff)<500?'diff-ok':gDiff>0?'diff-warn':'diff-bad';
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;">
+        <div class="hvo-rst"><div class="hvo-rsl">Harvest Dates</div><div class="hvo-rsv" style="color:#1e3cb8;">${dates.length}</div></div>
+        <div class="hvo-rst"><div class="hvo-rsl">Grand Coin Net</div><div class="hvo-rsv" style="color:#15803d;">${fmt2(grandCoin)}</div></div>
+        <div class="hvo-rst"><div class="hvo-rsl">Grand TG Total</div><div class="hvo-rsv" style="color:#1e3cb8;">${fmt2(grandTg)}</div></div>
+        <div class="hvo-rst"><div class="hvo-rsl">Net Difference</div><div class="hvo-rsv ${gCls}">${fmt2(Math.abs(gDiff))}</div></div>
+      </div>` + html;
+
+    if (status) status.textContent = `✅ ${allH.length} harvests · ${dates.length} dates`;
+  } catch(e) {
+    body.innerHTML = `<div style="text-align:center;padding:40px;color:#dc2626;">❌ Error: ${e.message}</div>`;
+    if (status) status.textContent = '❌ Error';
+  }
+}
+
+
+
+/* ─── RECORDS TAB (fixed overlay) ─── */
+(function() {
+  const ov = document.createElement('div');
+  ov.id = 'hv-overlay-records';
+  ov.style.cssText = 'display:none;position:fixed;top:132px;left:0;width:100%;height:calc(100vh - 132px);background:#f0f4ff;z-index:9999;overflow-y:auto;box-sizing:border-box;font-family:system-ui,sans-serif;font-size:13px;';
+  ov.innerHTML = `
+    <style>
+      #hv-overlay-records{--blue:#1e3cb8;--green:#15803d;--red:#dc2626;--amber:#d97706;--bg:#f0f4ff;--bd:rgba(30,60,200,.12);--mu:#6b7280;--t:#1a1d2e;}
+      #hv-overlay-records .hvo-tabs{display:flex;gap:3px;background:#e8eeff;border-radius:8px;padding:3px;width:fit-content;}
+      #hv-overlay-records .hvo-tab{padding:6px 16px;border:none;border-radius:6px;background:transparent;color:var(--mu);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap;}
+      #hv-overlay-records .hvo-tab.on{background:var(--blue);color:#fff;}
+      #hv-overlay-records .hvo-panel{display:none;padding:14px;}
+      #hv-overlay-records .hvo-panel.on{display:block;}
+      #hv-overlay-records .hvo-topbar{background:var(--blue);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:10;}
+      #hv-overlay-records .hvo-card{background:#fff;border:1.5px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px;}
+      #hv-overlay-records .hvo-card-title{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+      #hv-overlay-records .hvo-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;}
+      #hv-overlay-records .hvo-stat{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;}
+      #hv-overlay-records .hvo-sl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;}
+      #hv-overlay-records .hvo-sv{font-size:20px;font-weight:700;}
+      #hv-overlay-records .hvo-sv.blue{color:var(--blue);}
+      #hv-overlay-records .hvo-sv.green{color:var(--green);}
+      #hv-overlay-records .hvo-sv.amber{color:var(--amber);}
+      #hv-overlay-records table{width:100%;border-collapse:collapse;font-size:11px;}
+      #hv-overlay-records th{padding:7px 10px;text-align:left;background:#eef2ff;color:var(--blue);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;white-space:nowrap;}
+      #hv-overlay-records td{padding:8px 10px;border-bottom:1px solid #f0f0f8;vertical-align:middle;}
+      #hv-overlay-records tr:hover td{background:#f8faff;}
+      #hv-overlay-records .hvo-pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;}
+      #hv-overlay-records .hvo-pill.green{background:#dcfce7;color:#15803d;}
+      #hv-overlay-records .hvo-pill.amber{background:#fef3c7;color:#92400e;}
+      #hv-overlay-records .hvo-pill.blue{background:#dbeafe;color:#1e3cb8;}
+      #hv-overlay-records .hvo-pill.gray{background:#f3f4f6;color:#6b7280;}
+      #hv-overlay-records .hvo-btn{padding:5px 12px;border:1.5px solid var(--bd);border-radius:7px;background:#fff;color:var(--t);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+      #hv-overlay-records .hvo-btn.primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+      #hv-overlay-records .hvo-loader{text-align:center;padding:40px;color:var(--mu);font-size:12px;}
+      #hv-overlay-records .hvo-filter-row{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+      #hv-overlay-records .hvo-filter-row input,#hv-overlay-records .hvo-filter-row select{padding:6px 10px;border:1.5px solid var(--bd);border-radius:7px;font-size:11px;font-family:inherit;outline:none;background:#fff;}
+      #hv-overlay-records .hvo-summary-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+      #hv-overlay-records .hvo-chip{padding:4px 12px;border-radius:20px;background:#eef2ff;color:var(--blue);font-size:11px;font-weight:700;}
+      #hv-overlay-records .hvo-route-block{background:#f8faff;border:1px solid #dde3f5;border-radius:8px;padding:12px;margin-bottom:8px;}
+      #hv-overlay-records .hvo-recon-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;}
+      #hv-overlay-records .hvo-recon-box{border-radius:6px;padding:8px;text-align:center;}
+      #hv-overlay-records .hvo-recon-box .val{font-size:14px;font-weight:700;}
+      #hv-overlay-records .hvo-recon-box .lbl{font-size:9px;color:var(--mu);margin-top:2px;}
+      #hv-overlay-records .diff-ok{color:var(--green);}
+      #hv-overlay-records .diff-warn{color:var(--amber);}
+      #hv-overlay-records .diff-bad{color:var(--red);}
+    </style>
+    <div class="hvo-topbar">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:13px;font-weight:700;">📋 Records &amp; Reconciliation</span>
+        <div class="hvo-tabs">
+          <button class="hvo-tab on" onclick="hvoSwitchTab('harvests',this)">📋 Harvest Records</button>
+          <button class="hvo-tab" onclick="hvoSwitchTab('recon',this)">⚖️ Reconciliation</button>
+          <button class="hvo-tab" onclick="hvoSwitchTab('routes',this)">🗺 Routes</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="hvo-status-pill" style="font-size:10px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.2);color:#fff;">Loading…</span>
+        <button class="hvo-btn primary" onclick="hvoLoadAll()" style="font-size:11px;padding:5px 12px;">⟳ Refresh</button>
+      </div>
+    </div>
+
+    <!-- HARVESTS PANEL -->
+    <div class="hvo-panel on" id="hvo-panel-harvests">
+      <div class="hvo-stats" id="hvo-harvest-stats"></div>
+      <div class="hvo-card">
+        <div class="hvo-card-title">All Harvest Records <span id="hvo-harvest-count" style="font-size:10px;font-weight:500;color:var(--mu)"></span></div>
+        <div class="hvo-filter-row">
+          <input type="date" id="hvo-hf-from" onchange="hvoRenderHarvests()">
+          <input type="date" id="hvo-hf-to" onchange="hvoRenderHarvests()">
+          <input type="text" id="hvo-hf-q" placeholder="🔍 Search vendo, collector..." oninput="hvoRenderHarvests()" style="flex:1;min-width:180px">
+          <select id="hvo-hf-collector" onchange="hvoRenderHarvests()"><option value="">All collectors</option></select>
+          <button class="hvo-btn" onclick="hvoClearFilters()">✕ Clear</button>
+        </div>
+        <div id="hvo-harvest-table"><div class="hvo-loader">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- RECON PANEL -->
+    <div class="hvo-panel" id="hvo-panel-recon">
+      <div id="hvo-recon-content"><div class="hvo-loader">Loading…</div></div>
+    </div>
+
+    <!-- ROUTES PANEL -->
+    <div class="hvo-panel" id="hvo-panel-routes">
+      <div class="hvo-stats" id="hvo-route-stats"></div>
+      <div class="hvo-card">
+        <div class="hvo-card-title">All Routes</div>
+        <div id="hvo-route-table"><div class="hvo-loader">Loading…</div></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+})();
+
+let _hvoLoaded = false;
+function hvRecordsLoad() {
+  if (!_hvoLoaded) { hvoLoadAll(); _hvoLoaded = true; }
+}
+
+
+// SB from dashboard
+// KEY from dashboard
+const H_hvo = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+// fmt from dashboard
+// RC_DEFAULT_START from dashboard (RC_RC_DEFAULT_START)
+
+let hvoHarvests = [], hvoRoutes = [], hvoRouteItems = [];
+
+async function hvoSbGet(path) {
+  const r = await fetch(SB_URL + path, { headers: H_hvo });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function hvoLoadAll() {
+  document.getElementById('hvo-status-pill').textContent = 'Loading…';
+  try {
+    [hvoHarvests, hvoRoutes, hvoRouteItems] = await Promise.all([
+      hvoSbGet('/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000'),
+      hvoSbGet('/rest/v1/routes?select=*&order=created_at.desc&limit=200'),
+      hvoSbGet('/rest/v1/route_items?select=*&limit=2000')
+    ]);
+    document.getElementById('hvo-status-pill').textContent = `✅ ${hvoHarvests.length} harvests · ${hvoRoutes.length} routes`;
+    hvoPopCollector();
+    hvoRenderHarvests();
+    hvoRenderStats();
+    hvoRenderRoutes();
+    hvoRenderRecon();
+  } catch(e) {
+    document.getElementById('hvo-status-pill').textContent = '❌ Error: ' + e.message;
+    document.getElementById('hvo-status-pill').style.background = 'rgba(220,38,38,.3)';
+  }
+}
+
+function hvoSwitchTab(tab, btn) {
+  document.querySelectorAll('#hv-overlay-records .hvo-tab').forEach(b => b.classList.remove('on'));
+  document.querySelectorAll('#hv-overlay-records .hvo-panel').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('panel-' + tab).classList.add('on');
+}
+
+function hvoPopCollector() {
+  const sel = document.getElementById('hvo-hf-collector');
+  const collectors = [...new Set(hvoHarvests.map(h => h.collector).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All collectors</option>' +
+    collectors.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+function hvoClearFilters() {
+  document.getElementById('hvo-hf-from').value = '';
+  document.getElementById('hvo-hf-to').value = '';
+  document.getElementById('hvo-hf-q').value = '';
+  document.getElementById('hvo-hf-collector').value = '';
+  hvoRenderHarvests();
+}
+
+function hvoGetFiltered() {
+  const from = document.getElementById('hvo-hf-from').value;
+  const to   = document.getElementById('hvo-hf-to').value;
+  const q    = (document.getElementById('hvo-hf-q').value || '').toLowerCase();
+  const col  = document.getElementById('hvo-hf-collector').value;
+  return hvoHarvests.filter(h => {
+    if (from && h.harvest_date < from) return false;
+    if (to   && h.harvest_date > to)   return false;
+    if (col  && h.collector !== col)    return false;
+    if (q) {
+      const txt = ((h.vendo_name||'')+(h.tg_name||'')+(h.collector||'')+(h.route_code||'')).toLowerCase();
+      if (!txt.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function hvoRenderStats() {
+  const totalNet   = hvoHarvests.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+  const totalSpawn = hvoHarvests.reduce((s,h) => s+(parseFloat(h.spawn_share)||0), 0);
+  const totalOwner = hvoHarvests.reduce((s,h) => s+(parseFloat(h.customer_share)||0), 0);
+  const dates = [...new Set(hvoHarvests.map(h => h.harvest_date))].length;
+  document.getElementById('hvo-harvest-stats').innerHTML = `
+    <div class="stat"><div class="sl">Total Records</div><div class="sv blue">${hvoHarvests.length}</div></div>
+    <div class="stat"><div class="sl">Harvest Dates</div><div class="sv blue">${dates}</div></div>
+    <div class="stat"><div class="sl">Total Net Collectible</div><div class="sv green">${fmt(totalNet)}</div></div>
+    <div class="stat"><div class="sl">Spawn Share (75%)</div><div class="sv blue">${fmt(totalSpawn)}</div></div>
+    <div class="stat"><div class="sl">Owner Share (25%)</div><div class="sv amber">${fmt(totalOwner)}</div></div>
+  `;
+}
+
+function hvoRenderHarvests() {
+  const rows = hvoGetFiltered();
+  document.getElementById('hvo-harvest-count').textContent = `${rows.length} records`;
+  if (!rows.length) {
+    document.getElementById('hvo-harvest-table').innerHTML = '<div class="empty">No harvest records found</div>';
+    return;
+  }
+  const totalNet = rows.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+  document.getElementById('hvo-harvest-table').innerHTML = `
+    <div class="summary-bar">
+      <div class="summary-chip">📋 ${rows.length} records</div>
+      <div class="summary-chip" style="background:#f0fdf4;color:#15803d;">💰 Net: ${fmt(totalNet)}</div>
+      <div class="summary-chip" style="background:#eef2ff;color:#1e3cb8;">🏢 Spawn: ${fmt(totalNet*0.75)}</div>
+      <div class="summary-chip" style="background:#fff7ed;color:#c2410c;">👤 Owner: ${fmt(totalNet*0.25)}</div>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Harvest Date</th><th>Window Start</th><th>Vendo Name</th><th>TG Name</th>
+        <th>Collector</th><th>Route</th><th>Total Coins</th><th>Free</th><th>Old</th>
+        <th>Net</th><th>Spawn 75%</th><th>Owner 25%</th><th>Source</th>
+      </tr></thead>
+      <tbody>${rows.map((h,i) => {
+        const net   = parseFloat(h.net_collectible||0);
+        const spawn = parseFloat(h.spawn_share||0);
+        const owner = parseFloat(h.customer_share||0);
+        const total = parseFloat(h.coins_total||0);
+        const free  = parseFloat(h.coins_free||0);
+        const old   = parseFloat(h.coins_old||0);
+        const rc    = (h.route_code||'').toUpperCase();
+        const isAdmin = !rc || rc === 'ADMIN' || rc === 'MANUAL';
+        const srcBadge = isAdmin
+          ? '<span class="pill amber">🔧 Admin</span>'
+          : '<span class="pill blue">📱 PWA</span>';
+        const noteHtml = h.admin_notes
+          ? `<div style="font-size:9px;color:#92400e;margin-top:2px;">📝 ${h.admin_notes}</div>` : '';
+        return `<tr>
+          <td style="color:var(--mu)">${i+1}</td>
+          <td><b>${h.harvest_date||'—'}</b></td>
+          <td style="color:var(--mu);font-size:10px">${h.harvest_window_start||RC_DEFAULT_START}</td>
+          <td><b style="color:var(--blue)">${h.vendo_name||h.tg_name||'—'}</b>${noteHtml}</td>
+          <td style="color:var(--mu);font-size:10px">${h.tg_name||'—'}</td>
+          <td>${h.collector||'—'}</td>
+          <td><span class="pill gray" style="letter-spacing:.1em">${rc||'—'}</span></td>
+          <td style="font-weight:600">${fmt(total)}</td>
+          <td style="color:var(--red)">${free ? fmt(free) : '—'}</td>
+          <td style="color:var(--amber)">${old ? fmt(old) : '—'}</td>
+          <td style="font-weight:700;color:var(--green)">${fmt(net)}</td>
+          <td style="font-weight:700;color:var(--blue)">${fmt(spawn)}</td>
+          <td style="font-weight:700;color:#7c3aed">${fmt(owner)}</td>
+          <td>${srcBadge}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    </div>`;
+}
+
+async function hvoRenderRecon() {
+  const content = document.getElementById('hvo-recon-content');
+  if (!hvoHarvests.length) { content.innerHTML = '<div class="empty">No harvest records to reconcile</div>'; return; }
+  content.innerHTML = '<div class="loader">Computing reconciliation…</div>';
+
+  // Group by harvest_date
+  const byDate = {};
+  hvoHarvests.forEach(h => {
+    const d = h.harvest_date;
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(h);
+  });
+
+  const dates = Object.keys(byDate).sort((a,b) => b.localeCompare(a));
+
+  // Build window map for TG income fetching
+  const windowMap = {};
+  hvoHarvests.forEach(h => {
+    if (h.tg_name && h.harvest_window_start) windowMap[h.tg_name] = h.harvest_window_start;
+  });
+
+  // Fetch TG income for all unique tg_names across all dates
+  const allTgNames = [...new Set(hvoHarvests.map(h => h.tg_name).filter(Boolean))];
+  const tgMap = {};
+  content.innerHTML = `<div class="loader">Fetching TG income for ${allTgNames.length} vendos…</div>`;
+
+  await Promise.all(allTgNames.map(async tgName => {
+    const start = windowMap[tgName] || RC_DEFAULT_START;
+    // Get the latest harvest date for this vendo to bound the query
+    const vendoHarvests = hvoHarvests.filter(h => h.tg_name === tgName);
+    const latestDate = vendoHarvests.map(h => h.harvest_date).sort().pop();
+    if (!latestDate) return;
+    try {
+      const r = await fetch(
+        `${SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${latestDate}&is_skipped=eq.false&select=amount,date`,
+        { headers: { ...H_hvo, 'Range': '0-49999', 'Prefer': 'count=none' } }
+      );
+      const rows = await r.json();
+      // Group by date for per-harvest-date matching
+      tgMap[tgName] = {};
+      rows.forEach(tx => {
+        if (!tgMap[tgName][tx.date]) tgMap[tgName][tx.date] = 0;
+        tgMap[tgName][tx.date] += parseFloat(tx.amount)||0;
+      });
+      // Also store total
+      tgMap[tgName]._total = rows.reduce((s,tx) => s+(parseFloat(tx.amount)||0), 0);
+    } catch(e) {
+      tgMap[tgName] = { _total: 0 };
+    }
+  }));
+
+  // Render by date
+  let html = '';
+  let grandCoinNet = 0, grandTgTotal = 0;
+
+  dates.forEach(date => {
+    const harvests = byDate[date];
+    const byCollector = {};
+    harvests.forEach(h => {
+      const col = h.collector || '—';
+      if (!byCollector[col]) byCollector[col] = {};
+      const rc = h.route_code || 'No route';
+      if (!byCollector[col][rc]) byCollector[col][rc] = [];
+      byCollector[col][rc].push(h);
+    });
+
+    const dateCoinNet = harvests.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+    // TG income = sum from window_start to harvest_date
+    const dateTgTotal = harvests.reduce((s,h) => {
+      if (!h.tg_name || !tgMap[h.tg_name]) return s;
+      // Sum TG income up to this harvest date from window start
+      const win = windowMap[h.tg_name] || RC_DEFAULT_START;
+      const txByDate = tgMap[h.tg_name];
+      let tgAmt = 0;
+      Object.entries(txByDate).forEach(([d, amt]) => {
+        if (d >= win && d <= date) tgAmt += amt;
+      });
+      return s + tgAmt;
+    }, 0);
+    grandCoinNet += dateCoinNet;
+    grandTgTotal += dateTgTotal;
+
+    const diff = dateCoinNet - dateTgTotal;
+    const diffCls = Math.abs(diff)<200 ? 'diff-ok' : diff>0 ? 'diff-warn' : 'diff-bad';
+    const diffTxt = Math.abs(diff)<200 ? '✅ Match'
+      : diff>0 ? `⚠ Coins +${fmt(Math.abs(diff))}` : `🔴 TG +${fmt(Math.abs(diff))}`;
+
+    html += `
+    <div style="background:#fff;border:2px solid var(--bd);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--t)">📅 ${date}</div>
+          <div style="font-size:10px;color:var(--mu);margin-top:2px">${harvests.length} harvest record${harvests.length!==1?'s':''} · ${Object.keys(byCollector).length} collector${Object.keys(byCollector).length!==1?'s':''}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="${diffCls}" style="font-size:14px;font-weight:700">${diffTxt}</div>
+          <div style="font-size:10px;color:var(--mu)">Coin ${fmt(dateCoinNet)} vs TG ${fmt(dateTgTotal)}</div>
+        </div>
+      </div>`;
+
+    Object.entries(byCollector).forEach(([collector, routes]) => {
+      const allItems = Object.values(routes).flat();
+      const colCoin = allItems.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+      const colTg   = allItems.reduce((s,h) => {
+        if (!h.tg_name || !tgMap[h.tg_name]) return s;
+        const win = windowMap[h.tg_name] || RC_DEFAULT_START;
+        const txByDate = tgMap[h.tg_name];
+        let amt = 0;
+        Object.entries(txByDate).forEach(([d, v]) => { if (d >= win && d <= date) amt += v; });
+        return s + amt;
+      }, 0);
+      const colDiff = colCoin - colTg;
+      const colDiffCls = Math.abs(colDiff)<200 ? 'diff-ok' : colDiff>0 ? 'diff-warn' : 'diff-bad';
+
+      html += `
+      <div style="background:#f8faff;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px;margin-bottom:8px;">
+        <div class="collector-hdr">
+          <div class="collector-name">👤 ${collector}</div>
+          <div class="${colDiffCls}" style="font-weight:700;font-size:13px">Coin ${fmt(colCoin)} · TG ${fmt(colTg)} · ${Math.abs(colDiff)<200?'✅ Match':colDiff>0?'⚠ +'+fmt(Math.abs(colDiff)):'🔴 -'+fmt(Math.abs(colDiff))}</div>
+        </div>`;
+
+      Object.entries(routes).forEach(([rc, items]) => {
+        const routeCoin = items.reduce((s,h) => s+(parseFloat(h.net_collectible)||0), 0);
+        const routeTg   = items.reduce((s,h) => {
+          if (!h.tg_name || !tgMap[h.tg_name]) return s;
+          const win = windowMap[h.tg_name] || RC_DEFAULT_START;
+          const txByDate = tgMap[h.tg_name];
+          let amt = 0;
+          Object.entries(txByDate).forEach(([d, v]) => { if (d >= win && d <= date) amt += v; });
+          return s + amt;
+        }, 0);
+        const routeDiff = routeCoin - routeTg;
+        const rdCls = Math.abs(routeDiff)<100 ? 'diff-ok' : routeDiff>0 ? 'diff-warn' : 'diff-bad';
+        const isAdmin = !rc || rc === 'No route' || rc.toUpperCase() === 'ADMIN';
+        const srcBadge = isAdmin
+          ? '<span class="pill amber" style="font-size:8px">🔧 Admin</span>'
+          : '<span class="pill blue" style="font-size:8px">📱 PWA</span>';
+
+        html += `
+        <div class="route-block">
+          <div class="route-hdr">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="route-code">🧾 ${rc}</span>${srcBadge}
+            </div>
+            <div class="${rdCls}" style="font-weight:700;font-size:12px">${Math.abs(routeDiff)<100?'✅ Match':routeDiff>0?'⚠ Coins +'+fmt(Math.abs(routeDiff)):'🔴 TG +'+fmt(Math.abs(routeDiff))}</div>
+          </div>
+          <div class="recon-grid">
+            <div class="recon-box" style="background:#f0fdf4">
+              <div class="val" style="color:var(--green)">${fmt(routeCoin)}</div>
+              <div class="lbl">Coin net</div>
+            </div>
+            <div class="recon-box" style="background:#eef2ff">
+              <div class="val" style="color:var(--blue)">${fmt(routeTg)}</div>
+              <div class="lbl">TG income</div>
+            </div>
+            <div class="recon-box" style="background:#fafbff">
+              <div class="val ${rdCls}">${fmt(Math.abs(routeDiff))}</div>
+              <div class="lbl">${routeDiff>=0?'Surplus':'Deficit'}</div>
+            </div>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Vendo</th><th>TG Name</th><th>Window</th>
+              <th>Coin Net</th><th>TG Income</th><th>Diff</th><th>Notes</th>
+            </tr></thead>
+            <tbody>${items.map(h => {
+              const coin = parseFloat(h.net_collectible||0);
+              let tgAmt = 0;
+              if (h.tg_name && tgMap[h.tg_name]) {
+                const win = windowMap[h.tg_name] || RC_DEFAULT_START;
+                Object.entries(tgMap[h.tg_name]).forEach(([d, v]) => { if (d >= win && d <= date) tgAmt += v; });
+              }
+              const gap = coin - tgAmt;
+              const gapCls = Math.abs(gap)<50 ? 'diff-ok' : gap>0 ? 'diff-warn' : 'diff-bad';
+              const rowBg = Math.abs(gap)<50 ? '' : gap>0 ? 'background:#fffbeb' : 'background:#fef2f2';
+              return `<tr style="${rowBg}">
+                <td><b>${h.vendo_name||h.tg_name||'—'}</b></td>
+                <td style="color:var(--mu);font-size:10px">${h.tg_name||'—'}</td>
+                <td style="color:var(--mu);font-size:10px">${h.harvest_window_start||RC_DEFAULT_START} → ${date}</td>
+                <td style="font-weight:700;color:var(--green)">${fmt(coin)}</td>
+                <td style="color:${tgAmt>0?'var(--t)':'var(--mu)'}">${fmt(tgAmt)}</td>
+                <td class="${gapCls}" style="font-weight:700">${Math.abs(gap)<50?'✅ Match':gap>0?'+'+fmt(Math.abs(gap)):'-'+fmt(Math.abs(gap))}</td>
+                <td style="font-size:10px;color:#92400e">${h.admin_notes||''}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>`;
+      });
+      html += '</div>'; // end collector block
+    });
+    html += '</div>'; // end date block
+  });
+
+  // Grand totals
+  const grandDiff = grandCoinNet - grandTgTotal;
+  const grandCls = Math.abs(grandDiff)<500 ? 'diff-ok' : grandDiff>0 ? 'diff-warn' : 'diff-bad';
+  html = `
+    <div class="stats">
+      <div class="stat"><div class="sl">Harvest Dates</div><div class="sv blue">${dates.length}</div></div>
+      <div class="stat"><div class="sl">Grand Coin Net</div><div class="sv green">${fmt(grandCoinNet)}</div></div>
+      <div class="stat"><div class="sl">Grand TG Total</div><div class="sv blue">${fmt(grandTgTotal)}</div></div>
+      <div class="stat"><div class="sl">Net Difference</div><div class="sv ${grandCls.replace('diff-','')}">${fmt(Math.abs(grandDiff))}</div></div>
+    </div>` + html;
+
+  content.innerHTML = html;
+}
+
+function hvoRenderRoutes() {
+  const active = hvoRoutes.filter(r => r.status === 'active').length;
+  const done   = hvoRoutes.filter(r => r.status === 'completed').length;
+  document.getElementById('hvo-route-stats').innerHTML = `
+    <div class="stat"><div class="sl">Total Routes</div><div class="sv blue">${hvoRoutes.length}</div></div>
+    <div class="stat"><div class="sl">Active</div><div class="sv amber">${active}</div></div>
+    <div class="stat"><div class="sl">Completed</div><div class="sv green">${done}</div></div>
+    <div class="stat"><div class="sl">Route Items</div><div class="sv blue">${hvoRouteItems.length}</div></div>
+  `;
+  if (!hvoRoutes.length) {
+    document.getElementById('hvo-route-table').innerHTML = '<div class="empty">No routes found</div>';
+    return;
+  }
+  document.getElementById('hvo-route-table').innerHTML = `
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Route Code</th><th>Collector</th><th>Date</th>
+        <th>Area</th><th>Status</th><th>Items</th><th>Created</th>
+      </tr></thead>
+      <tbody>${hvoRoutes.map((r,i) => {
+        const items = hvoRouteItems.filter(x => x.route_id === r.id);
+        const done  = items.filter(x => x.status === 'harvested').length;
+        const created = r.created_at
+          ? new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
+          : '—';
+        const statusPill = r.status === 'completed'
+          ? '<span class="pill green">✅ Done</span>'
+          : '<span class="pill amber">⏳ Active</span>';
+        return `<tr>
+          <td style="color:var(--mu)">${i+1}</td>
+          <td><b style="color:var(--blue);letter-spacing:.1em;font-size:13px">${r.route_code}</b></td>
+          <td><b>${r.collector}</b></td>
+          <td>${r.route_date||r.harvest_date||'—'}</td>
+          <td><span class="pill gray">${r.area||'All areas'}</span></td>
+          <td>${statusPill}</td>
+          <td><span style="font-weight:700">${done}/${items.length}</span> <span style="color:var(--mu);font-size:10px">harvested</span></td>
+          <td style="color:var(--mu);font-size:10px">${created}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+    </div>`;
+}
+
+// hvoLoadAll called on tab open
 function auditLoad(key) {
   const urls = {
     denzel: 'https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html',
@@ -4170,7 +4878,6 @@ function toast(msg, dur) {
   setTimeout(() => { t.classList.remove('show'); }, dur||2500);
 }
 
-async function hvLoadRecords() { hvLoadRecordDates(); }
 
 </script>
 
@@ -5352,11 +6059,18 @@ async function loadHarvests() {
   forceShow('hv-route-page', 'grid');
 
   // Hide all non-route sub-tabs
-  ['hv-tab-schedule','hv-tab-records','hv-tab-recon',
-   'hv-tab-vnames','hv-tab-addharvest','hv-tab-audited'].forEach(id => {
+  ['hv-tab-schedule','hv-tab-recon',
+   'hv-tab-vnames','hv-tab-addharvest'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.classList.add('hv-hidden'); el.style.display = 'none'; }
   });
+  // Hide fixed overlays
+  const _reco = document.getElementById('hv-overlay-records');
+  const _aud  = document.getElementById('hv-tab-audited');
+  const _rov2 = document.getElementById('hv-overlay-recon');
+  if (_reco) _reco.style.display = 'none';
+  if (_aud)  _aud.style.display  = 'none';
+  if (_rov2) _rov2.style.display = 'none';
 
   // Mark route button active
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b => b.classList.remove('on'));
