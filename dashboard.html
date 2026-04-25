@@ -795,7 +795,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <div class="hv-head">
   <div class="hv-toprow">
     <div class="hv-title">🌾 Harvest</div>
-    <button onclick="loadHarvests()" style="padding:3px 10px;font-size:10px;border:1px solid #1e3cb8;border-radius:5px;background:#1e3cb8;color:#fff;cursor:pointer;font-family:inherit;font-weight:700;">⟳ Force show</button>
     <div class="hv-tabs">
       <button class="hv-hvtab on" id="hbtn-route" onclick="hvShowTab('route',this)">📋 Route builder</button>
       <button class="hv-hvtab" id="hbtn-schedule" onclick="hvShowTab('schedule',this)">⏰ Schedule</button>
@@ -1573,18 +1572,18 @@ function hvShowTab(tab, btn) {
     show(els.sched, 'block');
   } else if (tab === 'records') {
     // Records uses fixed overlay - show it
-    if (_reco) { _reco.style.display = 'block'; hvRecordsLoad(); }
+    if (_reco) { _showOverlay('hv-overlay-records'); hvRecordsLoad(); }
   } else if (tab === 'recon') {
     // Recon uses fixed overlay
     const _rov = document.getElementById('hv-overlay-recon');
-    if (_rov) { _rov.style.display = 'block'; if (!_rov._loaded) { _rov._loaded=true; hvoRenderReconOverlay(); } }
+    if (_rov) { _showOverlay('hv-overlay-recon'); if (!_rov._loaded) { _rov._loaded=true; hvoRenderReconOverlay(); } }
   } else if (tab === 'vnames') {
     show(els.vnames, 'block');
   } else if (tab === 'addharvest') {
     show(els.addharvest, 'block');
   } else if (tab === 'audited') {
     // Audited uses fixed overlay - show it directly
-    if (_aeld) _aeld.style.display = 'block';
+    _showOverlay('hv-tab-audited');
   }
   if (tab === 'records') hvLoadRecordDates();
   if (tab === 'schedule') hvLoadSchedule();
@@ -3368,8 +3367,9 @@ async function ahSubmit() {
       <span style="font-size:13px;font-weight:800;color:#dc2626;">🤖 Claude Audited Vendos</span>
       <button id="abtn-denzel" style="padding:5px 14px;border-radius:8px;border:2px solid #dc2626;background:#dc2626;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔴 Denzel VLAN 44</button>
       <button id="abtn-island" style="padding:5px 14px;border-radius:8px;border:2px solid #7f1d1d;background:#fff;color:#7f1d1d;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🏝️ Island VLAN 32</button>
+      <button onclick="document.getElementById('hv-tab-audited').style.display='none';document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));document.getElementById('hbtn-route')&&document.getElementById('hbtn-route').classList.add('on');" style="margin-left:auto;padding:4px 10px;border-radius:7px;border:1px solid #fca5a5;background:#fff;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ Close</button>
     </div>
-    <iframe id="audit-report-frame" src="https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html" style="width:100%;height:calc(100vh - 148px);border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;display:block;"></iframe>
+    <iframe id="audit-report-frame" src="https://spawninternet.github.io/VendoMonitor/denzel_audit_report.html" style="width:100%;height:calc(100% - 60px);border:1.5px solid #e5e7eb;border-radius:12px;background:#fff;display:block;"></iframe>
   `;
   // Use event delegation instead of direct listeners since buttons are in innerHTML
   div.addEventListener('click', function(e) {
@@ -3414,6 +3414,7 @@ function auditShowVendo(key,btn){}
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="hvo-recon-status" style="font-size:10px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.2);">Click Refresh</span>
         <button class="hvo-rbtn" onclick="hvoRenderReconOverlay(true)">⟳ Refresh</button>
+        <button class="hvo-rbtn" onclick="document.getElementById('hv-overlay-recon').style.display='none';document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));document.getElementById('hbtn-route')&&document.getElementById('hbtn-route').classList.add('on');" style="background:rgba(255,255,255,.15);padding:5px 10px;">✕ Close</button>
       </div>
     </div>
     <div class="hvo-rbody">
@@ -3422,6 +3423,21 @@ function auditShowVendo(key,btn){}
   `;
   document.body.appendChild(ov);
 })();
+
+
+function _getOverlayTop() {
+  var hd = document.getElementById('hv-head-row') || document.querySelector('.hv-head');
+  if (!hd) return '132px';
+  var rect = hd.getBoundingClientRect();
+  return Math.round(rect.bottom) + 'px';
+}
+function _showOverlay(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.top = _getOverlayTop();
+  el.style.height = 'calc(100vh - ' + _getOverlayTop() + ')';
+  el.style.display = 'block';
+}
 
 async function hvoRenderReconOverlay(force) {
   const body   = document.getElementById('hvo-recon-body');
@@ -3626,6 +3642,7 @@ async function hvoRenderReconOverlay(force) {
       <div style="display:flex;gap:8px;align-items:center;">
         <span id="hvo-status-pill" style="font-size:10px;padding:3px 10px;border-radius:10px;background:rgba(255,255,255,.2);color:#fff;">Loading…</span>
         <button class="hvo-btn primary" onclick="hvoLoadAll()" style="font-size:11px;padding:5px 12px;">⟳ Refresh</button>
+        <button onclick="document.getElementById('hv-overlay-records').style.display='none';document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));document.getElementById('hbtn-route')&&document.getElementById('hbtn-route').classList.add('on');" style="padding:5px 10px;border:1.5px solid rgba(255,255,255,.4);border-radius:7px;background:rgba(255,255,255,.15);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ Close</button>
       </div>
     </div>
 
@@ -5438,8 +5455,7 @@ function showP(id, btn) {
   if (_navHistory.length > 10) _navHistory.shift();
   gUpdateBackBtn(id);
   hideBread();
-  console.log('[showP] id='+id);
-  if(id==="harvest") { console.log('[showP] calling loadHarvests'); try { loadHarvests(); } catch(e) { console.error('[loadHarvests ERROR]', e); } }
+  if(id==="harvest")   loadHarvests();
   if(id==="devices")   loadReconciliation();
   if(id==="analytics") loadAnalytics();
   if(id==="vendos")    loadVendos();
@@ -6021,46 +6037,18 @@ function closeVendo() {
 // ══════════════════════════════════════════════════════════
 // HARVEST
 // ══════════════════════════════════════════════════════════
-// DEBUG: catch who hides hv-route-page
-(function() {
-  const _watch = () => {
-    const el = document.getElementById('hv-route-page');
-    if (!el) return;
-    const obs = new MutationObserver(muts => {
-      muts.forEach(m => {
-        if (m.type === 'attributes' && m.attributeName === 'style') {
-          const d = el.style.display;
-          if (d === 'none' || d === '') {
-            console.warn('hv-route-page hidden! display="' + d + '" stack:', new Error().stack);
-          }
-        }
-        if (m.type === 'attributes' && m.attributeName === 'class') {
-          if (el.classList.contains('hv-hidden')) {
-            console.warn('hv-hidden added to hv-route-page! stack:', new Error().stack);
-          }
-        }
-      });
-    });
-    obs.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
-    console.log('[DEBUG] MutationObserver watching hv-route-page');
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _watch);
-  else _watch();
-})();
+
 
 async function loadHarvests() {
-  console.log('[loadHarvests] STARTED');
   window._hvLoading = false;
 
   // Ensure route-tab elements are visible — remove any hv-hidden class and set display directly
   [['hv-area-tabs','flex'],['hv-filters','flex'],['hv-route-page','grid']].forEach(function(pair) {
     var el = document.getElementById(pair[0]);
-    console.log('[HARVEST] forceShow', pair[0], 'found:', !!el, 'display before:', el ? el.style.display : 'N/A');
     if (!el) return;
     el.classList.remove('hv-hidden');
     el.style.removeProperty('display');
     el.style.setProperty('display', pair[1], 'important');
-    console.log('[HARVEST] display after:', el.style.display, 'computed:', window.getComputedStyle(el).display);
   });
 
   // Hide all non-route sub-tabs
