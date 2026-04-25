@@ -1145,6 +1145,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <input id="vn-search" placeholder="🔍 Search vendo..." style="padding:5px 10px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:11px;font-family:inherit;outline:none;width:180px;" oninput="vnApplyFilter()"/>
       <input id="vn-area" type="hidden" value="">
       <button onclick="vnLoad()" style="padding:5px 12px;background:#0f766e;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
+      <button onclick="vnCopyAll()" style="padding:5px 12px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Copy All</button>
+      <div id="vn-copy-msg" style="font-size:10px;color:#15803d;"></div>
     </div>
   </div>
   <div id="vn-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;"></div>
@@ -4834,6 +4836,7 @@ function vnApplyFilter() {
         <div style="font-size:11px;font-weight:700;color:${v.last_harvest_date?'#15803d':'#9ca3af'};">${v.last_harvest_date||'—'}</div>
         <div style="font-size:9px;color:#9ca3af;">last harvest</div>
       </div>
+      <button onclick="event.stopPropagation();vnCopyRow(this,'${v.sheet_name||''}','${v.tg_name||''}','${v.area||''}','${v.vlan||''}')" style="padding:3px 8px;border-radius:5px;border:1px solid #c7d2fe;background:#fff;font-size:10px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;" title="Copy">📋</button>
       <div style="color:#9ca3af;font-size:16px;flex-shrink:0;">›</div>
     </div>`;
   }).join('');
@@ -4909,6 +4912,45 @@ function vnUpdateAreaCounts() {
   Object.entries(areas).forEach(([a, key]) => {
     const el = document.getElementById('vnat-' + key);
     if (el) el.textContent = a === '' ? base.length : base.filter(v => v.area === a).length;
+  });
+}
+
+
+/* ─── VENDO NAMES COPY ─── */
+function vnCopyRow(btn, sheet, tg, area, vlan) {
+  var text = [sheet, tg, area, vlan].filter(Boolean).join(' | ');
+  navigator.clipboard.writeText(text).then(function() {
+    var orig = btn.textContent;
+    btn.textContent = 'OK';
+    btn.style.background = '#dcfce7';
+    setTimeout(function() { btn.textContent = orig; btn.style.background = '#fff'; }, 1500);
+  });
+}
+
+function vnCopyAll() {
+  var rows = (_vnFiltered && _vnFiltered.length) ? _vnFiltered : _vnAll;
+  if (!rows || !rows.length) { alert('Load vendos first.'); return; }
+  var NL = String.fromCharCode(10), TAB = String.fromCharCode(9);
+  var cols = ['Sheet Name','TG Name','Area','VLAN','Address','GPS','Saved'];
+  var lines = [cols.join(TAB)].concat(rows.map(function(v) {
+    return [
+      v.sheet_name||'', v.tg_name||'', v.area||'', String(v.vlan||''),
+      v.address||'',
+      (v.lat && v.lng) ? v.lat+','+v.lng : '',
+      v.name_confirmed ? 'YES' : ''
+    ].join(TAB);
+  }));
+  navigator.clipboard.writeText(lines.join(NL)).then(function() {
+    var msg = document.getElementById('vn-copy-msg');
+    if (msg) { msg.textContent = 'Copied '+rows.length+' vendos'; setTimeout(function(){msg.textContent='';},2500); }
+  });
+}
+
+function vnCopyRow(btn, sheet, tg, area, vlan) {
+  var text = [sheet,tg,area,vlan].filter(Boolean).join(' | ');
+  navigator.clipboard.writeText(text).then(function() {
+    var o = btn.textContent; btn.textContent='OK'; btn.style.background='#dcfce7';
+    setTimeout(function(){btn.textContent=o;btn.style.background='#fff';},1500);
   });
 }
 
