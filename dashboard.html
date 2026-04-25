@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Spawn Internetan — Vendo Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -492,7 +495,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- ══ HARVEST ══ -->
-<div id="panel-harvest" class="panel">
 <style>
 /* ══ HARVEST PANEL v6 ══ */
 #panel-harvest.active{display:flex!important;flex-direction:column;height:calc(100vh - 88px);position:relative;overflow:hidden;}
@@ -787,6 +789,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 .hv-hidden{display:none!important;}
 </style>
+<div id="panel-harvest" class="panel">
 
 <!-- ══ HARVEST HEAD ══ -->
 <div class="hv-head">
@@ -5304,6 +5307,33 @@ function closeVendo() {
 // ══════════════════════════════════════════════════════════
 // HARVEST
 // ══════════════════════════════════════════════════════════
+// DEBUG: catch who hides hv-route-page
+(function() {
+  const _watch = () => {
+    const el = document.getElementById('hv-route-page');
+    if (!el) return;
+    const obs = new MutationObserver(muts => {
+      muts.forEach(m => {
+        if (m.type === 'attributes' && m.attributeName === 'style') {
+          const d = el.style.display;
+          if (d === 'none' || d === '') {
+            console.warn('hv-route-page hidden! display="' + d + '" stack:', new Error().stack);
+          }
+        }
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          if (el.classList.contains('hv-hidden')) {
+            console.warn('hv-hidden added to hv-route-page! stack:', new Error().stack);
+          }
+        }
+      });
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
+    console.log('[DEBUG] MutationObserver watching hv-route-page');
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _watch);
+  else _watch();
+})();
+
 async function loadHarvests() {
   window._hvLoading = false;
 
