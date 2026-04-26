@@ -1010,10 +1010,11 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div style="background:#f5f3ff;border-left:3px solid #7c3aed;border-radius:8px;padding:10px 12px;"><div style="font-size:9px;font-weight:700;color:#7c3aed;text-transform:uppercase;margin-bottom:3px;">Owner 25%</div><div style="font-size:16px;font-weight:700;color:#7c3aed" id="hrd-owner">—</div></div>
     <div style="background:#fafbff;border-left:3px solid #6366f1;border-radius:8px;padding:10px 12px;"><div style="font-size:9px;font-weight:700;color:#6366f1;text-transform:uppercase;margin-bottom:3px;">Route</div><div style="font-size:13px;font-weight:700;color:#4338ca;letter-spacing:.08em" id="hrd-rc">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px" id="hrd-src">—</div></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:10px 16px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;padding:10px 16px;">
     <div style="background:#f3f4f6;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:700;color:#374151" id="hrd-tot">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px;">Total coins</div></div>
     <div style="background:#fef2f2;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:700;color:#dc2626" id="hrd-fr">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px;">Free time</div></div>
     <div style="background:#fffbeb;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:700;color:#d97706" id="hrd-ol">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px;">Old coins</div></div>
+    <div style="background:#fff7ed;border-radius:7px;padding:8px;text-align:center;display:none;"><div style="font-size:15px;font-weight:700;color:#ea580c" id="hrd-sl">—</div><div style="font-size:9px;color:#6b7280;margin-top:2px;">Saloy</div></div>
   </div>
   <div style="padding:0 16px 10px;"><div style="background:#f8faff;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;font-size:11px;">
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Collector</span><b id="hrd-col">—</b></div>
@@ -3157,7 +3158,7 @@ function _hrRender(){
       const row=document.createElement('div');row.style.cssText='display:grid;grid-template-columns:1fr 85px 85px 70px 44px;align-items:center;gap:6px;padding:7px 8px;border-radius:6px;cursor:pointer;border-bottom:1px solid #f0f0f8;transition:background .1s;';
       row.innerHTML=`<div><div style="font-size:12px;font-weight:700;color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}${h.admin_notes?' 📝':''}</div><div style="font-size:10px;color:#6b7280">${h.tg_name||'—'}</div></div><div style="font-size:12px;font-weight:700;color:#16a34a">${_fP(net)}</div><div style="font-size:12px;font-weight:600;color:#1e3cb8">${_fP(spawn)}</div><div style="font-size:11px;color:#374151">${h.collector||'—'}</div><div>${isAdm?'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">🔧</span>':'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8">📱</span>'}</div>`;
       row.addEventListener('mouseover',function(){this.style.background='#f0f4ff';});row.addEventListener('mouseout',function(){this.style.background='';});
-      Object.assign(row.dataset,{vn:h.vendo_name||'',tg:h.tg_name||'',dt:h.harvest_date||'',win:h.harvest_window_start||'',net,spawn,own:parseFloat(h.customer_share||0),tot:parseFloat(h.coins_total||0),fr:parseFloat(h.coins_free||0),ol:parseFloat(h.coins_old||0),col:h.collector||'',rc,note:h.admin_notes||'',adm:isAdm});
+      Object.assign(row.dataset,{vn:h.vendo_name||'',tg:h.tg_name||'',dt:h.harvest_date||'',win:h.harvest_window_start||'',net,spawn,own:parseFloat(h.customer_share||0),tot:parseFloat(h.coins_total||0),fr:parseFloat(h.coins_free||0),ol:parseFloat(h.coins_old||0),sl:parseFloat(h.coins_saloy||0),col:h.collector||'',rc,note:h.admin_notes||'',adm:isAdm});
       row.addEventListener('click',()=>_hrDetail(row));body.appendChild(row);
     });
     blk.appendChild(body);frag.appendChild(blk);
@@ -3168,7 +3169,7 @@ function _hrDetail(row){
   const d=row.dataset,set=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
   set('hrd-t',d.vn||d.tg||'—');set('hrd-s',(d.dt||'—')+' · '+(d.col||'—'));
   set('hrd-net',_fP(d.net));set('hrd-spawn',_fP(d.spawn));set('hrd-owner',_fP(d.own));
-  set('hrd-tot',_fP(d.tot));set('hrd-fr',_fP(d.fr));set('hrd-ol',_fP(d.ol));
+  set('hrd-tot',_fP(d.tot));set('hrd-fr',_fP(d.fr));set('hrd-ol',_fP(d.ol));if(d.sl>0){const hrdSl=document.getElementById('hrd-sl');if(hrdSl){hrdSl.parentElement.style.display='';hrdSl.textContent=_fP(d.sl);}}else{const hrdSlP=document.getElementById('hrd-sl');if(hrdSlP)hrdSlP.parentElement.style.display='none';}
   set('hrd-col',d.col||'—');set('hrd-dt',d.dt||'—');set('hrd-win',d.win||'2026-03-01');
   set('hrd-rc',(d.rc||'').toUpperCase()||'—');set('hrd-src',d.adm==='true'?'🔧 Admin entry':'📱 PWA harvest');
   const nr=document.getElementById('hrd-nr'),nt=document.getElementById('hrd-nt');
