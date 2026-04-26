@@ -210,6 +210,10 @@ textarea:focus{border-color:var(--red);}
     <div class="form-vmeta" id="form-vmeta">—</div>
   </div>
 
+  <!-- GPS + Note — shown when available -->
+  <div id="form-gps" style="display:none;background:#e0f2fe;border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center;"></div>
+  <div id="form-admin-note" style="display:none;margin-bottom:12px;"></div>
+
   <div class="form-card">
     <div class="form-card-title">💰 Count coins</div>
     <div class="coin-field">
@@ -383,14 +387,17 @@ async function loadRoute() {
     if (tgNamesForEnrich.length) {
       try {
         const encoded = tgNamesForEnrich.map(n => '"' + n + '"').join(',');
-        const rv = await fetch(`${SB}/rest/v1/vendos?tg_name=in.(${encoded})&select=tg_name,last_harvest_date,vlan`, { headers: HDR });
+        const rv = await fetch(`${SB}/rest/v1/vendos?tg_name=in.(${encoded})&select=tg_name,last_harvest_date,vlan,lat,lng,address`, { headers: HDR });
         const vendoData = await rv.json();
         const vendoMap = {};
         vendoData.forEach(v => { vendoMap[v.tg_name] = v; });
         currentRoute.items = currentRoute.items.map(item => ({
           ...item,
           last_harvest_date: vendoMap[item.tg_name]?.last_harvest_date || null,
-          vlan: vendoMap[item.tg_name]?.vlan || null
+          vlan: vendoMap[item.tg_name]?.vlan || null,
+          lat: vendoMap[item.tg_name]?.lat || null,
+          lng: vendoMap[item.tg_name]?.lng || null,
+          address: vendoMap[item.tg_name]?.address || null
         }));
       } catch(e) { console.warn('vendo enrich failed:', e); }
     }
@@ -462,14 +469,39 @@ function renderVendoList() {
       ? new Date(item.last_harvest_date + 'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
       : '—';
     const vlanLbl = item.vlan ? 'VLAN ' + item.vlan : '';
+
+    // GPS directions button
+    let mapsUrl = '';
+    if (item.lat && item.lng) {
+      mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + item.lat + ',' + item.lng;
+    } else if (item.address) {
+      mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(item.address + ', Zamboanga del Norte, Philippines');
+    }
+    const gpsBtn = mapsUrl
+      ? `<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()"
+           style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#0284c7;color:#fff;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;margin-top:5px;">
+           📍 Directions
+         </a>`
+      : '';
+
+    // Admin note from route_items (collector_note set by admin from dashboard)
+    const noteHtml = item.collector_note && item.status !== 'harvested'
+      ? `<div style="margin-top:5px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;padding:5px 8px;font-size:11px;color:#92400e;line-height:1.4;">
+           📝 <b>Note:</b> ${item.collector_note}
+         </div>`
+      : '';
+
     return `<div class="vendo-item ${cls}" onclick="openVendo(${i})">
       <div class="vi-left" style="flex:1;min-width:0;">
         <div class="vi-name">${item.sheet_name || item.tg_name || 'Unknown'}</div>
         <div class="vi-tg" style="font-size:10px;color:#6b7280;margin-top:1px;">${item.area || '—'}${vlanLbl ? ' · ' + vlanLbl : ''}</div>
         <div style="font-size:10px;color:#9ca3af;margin-top:1px;">Last harvest: <b style="color:${item.last_harvest_date ? '#15803d' : '#9ca3af'};">${lastHarv}</b></div>
+        ${item.address ? '<div style="font-size:10px;color:#6b7280;margin-top:1px;">📍 ' + item.address + '</div>' : ''}
         ${item.status === 'harvested' ? '<div style="font-size:10px;color:#16a34a;margin-top:1px;">Net: ₱' + parseFloat(item.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' : ''}
+        ${noteHtml}
+        ${gpsBtn}
       </div>
-      <div class="vi-status">${pill}</div>
+      <div class="vi-status" style="flex-shrink:0;margin-left:8px;">${pill}</div>
       <div class="vi-arrow">›</div>
     </div>`;
   }).join('');
@@ -483,6 +515,42 @@ function openVendo(idx) {
   document.getElementById('form-vname').textContent = name;
   document.getElementById('form-vmeta').textContent =
     `${currentItem.area || '—'} · TG: ${currentItem.tg_name || '—'}`;
+
+  // GPS + address
+  const gpsEl = document.getElementById('form-gps');
+  if (gpsEl) {
+    const lat = currentItem.lat, lng = currentItem.lng, addr = currentItem.address;
+    if (lat && lng) {
+      const mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lng;
+      gpsEl.innerHTML = `<div style="font-size:11px;color:#0369a1;margin-bottom:4px;">📍 ${addr || lat + ', ' + lng}</div>
+        <a href="${mapsUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#0284c7;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
+          📍 Open Directions in Google Maps
+        </a>`;
+      gpsEl.style.display = '';
+    } else if (addr) {
+      const mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(addr + ', Zamboanga del Norte, Philippines');
+      gpsEl.innerHTML = `<div style="font-size:11px;color:#0369a1;margin-bottom:4px;">📍 ${addr}</div>
+        <a href="${mapsUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#0284c7;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
+          📍 Open Directions in Google Maps
+        </a>`;
+      gpsEl.style.display = '';
+    } else {
+      gpsEl.style.display = 'none';
+    }
+  }
+
+  // Admin/collector note
+  const noteEl = document.getElementById('form-admin-note');
+  if (noteEl) {
+    if (currentItem.collector_note) {
+      noteEl.innerHTML = `<div style="background:#fef3c7;border-left:3px solid #d97706;border-radius:0 8px 8px 0;padding:8px 12px;font-size:12px;color:#92400e;line-height:1.5;">
+        📝 <b>Note from admin:</b> ${currentItem.collector_note}
+      </div>`;
+      noteEl.style.display = '';
+    } else {
+      noteEl.style.display = 'none';
+    }
+  }
 
   ['coin-total','coin-free','coin-old','coin-saloy'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('pending-note').value = '';
