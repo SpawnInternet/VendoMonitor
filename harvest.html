@@ -925,7 +925,25 @@ async function flushQueue() {
           await fetch(`${SB}/rest/v1/route_items?id=eq.${item.item.id}`, {
             method: 'PATCH',
             headers: { ...HDR, 'Prefer': 'return=minimal' },
-            body: JSON.stringify({ status: 'harvested' })
+            body: JSON.stringify({
+              status: 'harvested',
+              harvested_at: item.data.harvest_date,
+              total_coins: item.data.coins_total,
+              free_coins: item.data.coins_free,
+              old_coins: item.data.coins_old,
+              net_collectible: item.data.net_collectible,
+              spawn_share: item.data.spawn_share,
+              customer_share: item.data.customer_share,
+              collector_note: item.data.collector_note || null
+            })
+          });
+        }
+        // Update last_harvest_date on vendo
+        if (item.item?.tg_name) {
+          await fetch(`${SB}/rest/v1/vendos?tg_name=eq.${encodeURIComponent(item.item.tg_name)}`, {
+            method: 'PATCH',
+            headers: { ...HDR, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ last_harvest_date: item.data.harvest_date })
           });
         }
       } else if (item.type === 'pending' && item.itemId) {
