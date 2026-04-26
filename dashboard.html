@@ -4210,6 +4210,10 @@ function hvoSwitchTab(tab, btn) {
   if (panel) panel.style.display = 'block';
   // Load recon if needed
   if (tab === 'recon') hvoRenderRecon();
+  // Load vendos for add-search if routes tab
+  if (tab === 'routes') {
+    if (!_vnAll || !_vnAll.length) vnLoad();
+  }
 }
 
 function hvoPopCollector() {
@@ -4532,7 +4536,7 @@ function hvoRenderRoutes() {
           '<span style="font-size:12px;color:#374151;font-weight:600;">' + r.collector + '</span>' +
           '<span style="font-size:11px;color:#6b7280;">· ' + (r.route_date||r.harvest_date||'—') + '</span>' +
           '<span style="font-size:11px;font-weight:700;color:' + barColor + ';">' + doneN + '/' + items.length + ' done</span>' +
-          '<span style="font-size:16px;color:#9ca3af;transition:.2s;" class="hvo-rt-arr">▾</span>' +
+          '<span style="font-size:16px;color:#9ca3af;transition:.2s;transform:rotate(180deg);display:inline-block;" class="hvo-rt-arr">▾</span>' +
         '</div>' +
       '</div>' +
       // Progress bar
@@ -4544,9 +4548,9 @@ function hvoRenderRoutes() {
         (r.admin_notes ? ' · <span style="color:#1e3cb8;">📝 ' + r.admin_notes + '</span>' : '') +
       '</div>';
 
-    // Vendo items body — hidden by default
+    // Vendo items body — visible by default
     const body = document.createElement('div');
-    body.style.cssText = 'display:none;border-top:1px solid ' + bdColor + ';';
+    body.style.cssText = 'display:block;border-top:1px solid ' + bdColor + ';';
 
     // Build body content
     const routeId = r.id;
@@ -4611,6 +4615,8 @@ function hvoRenderRoutes() {
       const arr = hdr.querySelector('.hvo-rt-arr');
       if (arr) arr.style.transform = isOpen ? '' : 'rotate(180deg)';
     });
+    // Ensure events are bound on initial render
+    hvoBindBodyEvents(body, routeId);
 
     card.appendChild(hdr);
     card.appendChild(body);
