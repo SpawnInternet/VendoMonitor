@@ -1020,7 +1020,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Collector</span><b id="hrd-col">—</b></div>
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Harvest date</span><b id="hrd-dt">—</b></div>
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f0f0f0;"><span style="color:#6b7280;">Window start</span><b id="hrd-win">—</b></div>
-    <div id="hrd-nr" style="display:none;justify-content:space-between;padding:3px 0;"><span style="color:#92400e;">📝 Note</span><span style="font-size:10px;color:#92400e;" id="hrd-nt"></span></div>
+    <div id="hrd-nr" style="display:none;justify-content:space-between;padding:3px 0;"><span style="color:#92400e;">📝 Admin note</span><span style="font-size:10px;color:#92400e;" id="hrd-nt"></span></div>
+    <div id="hrd-cnr" style="display:none;justify-content:space-between;padding:3px 0;border-top:1px solid #fde68a;margin-top:2px;"><span style="color:#0369a1;">💬 Collector note</span><span style="font-size:10px;color:#0369a1;" id="hrd-cnt"></span></div>
   </div></div>
   <div style="padding:0 16px 14px;"><button onclick="document.getElementById('hrd-bg').classList.remove('open')" style="width:100%;padding:9px;background:#f1f5f9;color:#374151;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Close</button></div>
 </div></div>
@@ -3412,7 +3413,7 @@ function _hrRender(){
       const row=document.createElement('div');row.style.cssText='display:grid;grid-template-columns:1fr 85px 85px 70px 44px;align-items:center;gap:6px;padding:7px 8px;border-radius:6px;cursor:pointer;border-bottom:1px solid #f0f0f8;transition:background .1s;';
       row.innerHTML=`<div><div style="font-size:12px;font-weight:700;color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}${h.admin_notes?' 📝':''}</div><div style="font-size:10px;color:#6b7280">${h.tg_name||'—'}</div></div><div style="font-size:12px;font-weight:700;color:#16a34a">${_fP(net)}</div><div style="font-size:12px;font-weight:600;color:#1e3cb8">${_fP(spawn)}</div><div style="font-size:11px;color:#374151">${h.collector||'—'}</div><div>${isAdm?'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">🔧</span>':'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8">📱</span>'}</div>`;
       row.addEventListener('mouseover',function(){this.style.background='#f0f4ff';});row.addEventListener('mouseout',function(){this.style.background='';});
-      Object.assign(row.dataset,{vn:h.vendo_name||'',tg:h.tg_name||'',dt:h.harvest_date||'',win:h.harvest_window_start||'',net,spawn,own:parseFloat(h.customer_share||0),tot:parseFloat(h.coins_total||0),fr:parseFloat(h.coins_free||0),ol:parseFloat(h.coins_old||0),sl:parseFloat(h.coins_saloy||0),col:h.collector||'',rc,note:h.admin_notes||'',adm:isAdm});
+      Object.assign(row.dataset,{vn:h.vendo_name||'',tg:h.tg_name||'',dt:h.harvest_date||'',win:h.harvest_window_start||'',net,spawn,own:parseFloat(h.customer_share||0),tot:parseFloat(h.coins_total||0),fr:parseFloat(h.coins_free||0),ol:parseFloat(h.coins_old||0),sl:parseFloat(h.coins_saloy||0),col:h.collector||'',rc,note:h.admin_notes||'',cn:h.collector_note||'',adm:isAdm});
       row.addEventListener('click',()=>_hrDetail(row));body.appendChild(row);
     });
     blk.appendChild(body);frag.appendChild(blk);
@@ -3428,6 +3429,9 @@ function _hrDetail(row){
   set('hrd-rc',(d.rc||'').toUpperCase()||'—');set('hrd-src',d.adm==='true'?'🔧 Admin entry':'📱 PWA harvest');
   const nr=document.getElementById('hrd-nr'),nt=document.getElementById('hrd-nt');
   if(nr&&nt){nr.style.display=d.note?'flex':'none';nt.textContent=d.note||'';}
+  // Show collector note
+  const cnr=document.getElementById('hrd-cnr'),cnt=document.getElementById('hrd-cnt');
+  if(cnr&&cnt){cnr.style.display=d.cn?'flex':'none';cnt.textContent=d.cn||'';}
   document.getElementById('hrd-bg').classList.add('open');
 }
 async function hvLoadRecordsByDate(){}
@@ -4360,45 +4364,110 @@ async function hvoRenderRecon() {
 function hvoRenderRoutes() {
   const active = hvoRoutes.filter(r => r.status === 'active').length;
   const done   = hvoRoutes.filter(r => r.status === 'completed').length;
-  document.getElementById('hvo-route-stats').innerHTML = `
-    <div class="stat"><div class="sl">Total Routes</div><div class="sv blue">${hvoRoutes.length}</div></div>
-    <div class="stat"><div class="sl">Active</div><div class="sv amber">${active}</div></div>
-    <div class="stat"><div class="sl">Completed</div><div class="sv green">${done}</div></div>
-    <div class="stat"><div class="sl">Route Items</div><div class="sv blue">${hvoRouteItems.length}</div></div>
-  `;
+  document.getElementById('hvo-route-stats').innerHTML =
+    '<div class="stat"><div class="sl">Total Routes</div><div class="sv blue">' + hvoRoutes.length + '</div></div>' +
+    '<div class="stat"><div class="sl">Active</div><div class="sv amber">' + active + '</div></div>' +
+    '<div class="stat"><div class="sl">Completed</div><div class="sv green">' + done + '</div></div>' +
+    '<div class="stat"><div class="sl">Route Items</div><div class="sv blue">' + hvoRouteItems.length + '</div></div>';
+
   if (!hvoRoutes.length) {
-    document.getElementById('hvo-route-table').innerHTML = '<div class="empty">No routes found</div>';
+    document.getElementById('hvo-route-table').innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">No routes found</div>';
     return;
   }
-  document.getElementById('hvo-route-table').innerHTML = `
-    <div style="overflow-x:auto">
-    <table>
-      <thead><tr>
-        <th>#</th><th>Route Code</th><th>Collector</th><th>Date</th>
-        <th>Area</th><th>Status</th><th>Items</th><th>Created</th>
-      </tr></thead>
-      <tbody>${hvoRoutes.map((r,i) => {
-        const items = hvoRouteItems.filter(x => x.route_id === r.id);
-        const done  = items.filter(x => x.status === 'harvested').length;
-        const created = r.created_at
-          ? new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
-          : '—';
-        const statusPill = r.status === 'completed'
-          ? '<span class="pill green">✅ Done</span>'
-          : '<span class="pill amber">⏳ Active</span>';
-        return `<tr>
-          <td style="color:var(--mu)">${i+1}</td>
-          <td><b style="color:var(--blue);letter-spacing:.1em;font-size:13px">${r.route_code}</b></td>
-          <td><b>${r.collector}</b></td>
-          <td>${r.route_date||r.harvest_date||'—'}</td>
-          <td><span class="pill gray">${r.area||'All areas'}</span></td>
-          <td>${statusPill}</td>
-          <td><span style="font-weight:700">${done}/${items.length}</span> <span style="color:var(--mu);font-size:10px">harvested</span></td>
-          <td style="color:var(--mu);font-size:10px">${created}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>
-    </div>`;
+
+  const container = document.getElementById('hvo-route-table');
+  container.innerHTML = '';
+
+  hvoRoutes.forEach((r, i) => {
+    const items   = hvoRouteItems.filter(x => x.route_id === r.id);
+    const doneN   = items.filter(x => x.status === 'harvested').length;
+    const pendN   = items.filter(x => x.status !== 'harvested').length;
+    const pct     = items.length ? Math.round(doneN / items.length * 100) : 0;
+    const created = r.created_at
+      ? new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
+      : '—';
+    const isComp  = r.status === 'completed';
+    const bdColor = isComp ? '#bbf7d0' : '#fde68a';
+    const bgColor = isComp ? '#f0fdf4' : '#fffbeb';
+    const barColor= isComp ? '#16a34a' : '#d97706';
+
+    // Route card
+    const card = document.createElement('div');
+    card.style.cssText = 'border:2px solid ' + bdColor + ';border-radius:12px;margin-bottom:10px;overflow:hidden;';
+
+    // Header row — clickable to expand
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'background:' + bgColor + ';padding:12px 16px;cursor:pointer;user-select:none;';
+    hdr.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
+        '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span style="font-size:16px;font-weight:800;color:#1e3cb8;letter-spacing:.1em;">' + r.route_code + '</span>' +
+          (isComp ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#15803d;">✅ Completed</span>'
+                  : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e;">⏳ Active</span>') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<span style="font-size:12px;color:#374151;font-weight:600;">' + r.collector + '</span>' +
+          '<span style="font-size:11px;color:#6b7280;">· ' + (r.route_date||r.harvest_date||'—') + '</span>' +
+          '<span style="font-size:11px;font-weight:700;color:' + barColor + ';">' + doneN + '/' + items.length + ' done</span>' +
+          '<span style="font-size:16px;color:#9ca3af;transition:.2s;" class="hvo-rt-arr">▾</span>' +
+        '</div>' +
+      '</div>' +
+      // Progress bar
+      '<div style="margin-top:8px;background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden;">' +
+        '<div style="background:' + barColor + ';height:5px;width:' + pct + '%;border-radius:4px;transition:.4s;"></div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#6b7280;margin-top:3px;">' +
+        (r.area||'All areas') + ' · ' + created +
+        (r.admin_notes ? ' · <span style="color:#1e3cb8;">📝 ' + r.admin_notes + '</span>' : '') +
+      '</div>';
+
+    // Vendo items body — hidden by default
+    const body = document.createElement('div');
+    body.style.cssText = 'display:none;border-top:1px solid ' + bdColor + ';';
+
+    if (!items.length) {
+      body.innerHTML = '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>';
+    } else {
+      body.innerHTML = items.map(item => {
+        const isDone = item.status === 'harvested';
+        const net    = parseFloat(item.net_collectible || 0);
+        const hasCN  = !!item.collector_note;
+        return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone ? '#f0fdf4' : '#fff') + ';">' +
+          '<div style="margin-top:2px;font-size:16px;">' + (isDone ? '✅' : '⏳') + '</div>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name || item.tg_name || '—') + '</div>' +
+            '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name || '—') + ' · ' + (item.area || '—') + '</div>' +
+            (isDone
+              ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
+              : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
+            (hasCN ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
+          '</div>' +
+          '<div style="text-align:right;flex-shrink:0;">' +
+            (isDone
+              ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>'
+              : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
+          '</div>' +
+        '</div>';
+      }).join('') +
+      // Summary footer
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#f8faff;font-size:12px;">' +
+        '<span style="color:#6b7280;">' + doneN + ' harvested · ' + pendN + ' pending</span>' +
+        '<span style="font-weight:700;color:#15803d;">Total net: ₱' + items.reduce((s,x)=>s+(parseFloat(x.net_collectible)||0),0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+      '</div>';
+    }
+
+    // Toggle expand on click
+    hdr.addEventListener('click', function() {
+      const isOpen = body.style.display !== 'none';
+      body.style.display = isOpen ? 'none' : 'block';
+      const arr = hdr.querySelector('.hvo-rt-arr');
+      if (arr) arr.style.transform = isOpen ? '' : 'rotate(180deg)';
+    });
+
+    card.appendChild(hdr);
+    card.appendChild(body);
+    container.appendChild(card);
+  });
 }
 
 // hvoLoadAll called on tab open
