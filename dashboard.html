@@ -1580,6 +1580,13 @@ function hvShowTab(tab, btn) {
   [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, guide].forEach(hide);
   if (isRoute) {
     show(guide, ''); show(els.page, 'grid'); show(els.area, 'flex'); show(els.filt, 'flex');
+    // Reset loading flag and reload vendos when switching back to route tab
+    window._hvLoading = false;
+    const _vcScroll = document.getElementById('vc-scroll');
+    const _hasRows = _vcScroll && _vcScroll.querySelectorAll('.hv-vr').length > 0;
+    if (!_hasRows) {
+      setTimeout(() => { if (typeof hvLoadVendos === 'function') hvLoadVendos(); }, 50);
+    }
   } else if (tab === 'schedule') {
     show(els.sched, 'block');
   } else if (tab === 'records') {
@@ -4848,7 +4855,7 @@ function vnApplyFilter() {
     if (_vnSubTabMode === 'saved') {
       const gpsTag = v.lat && v.lng ? '<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;background:#e0f2fe;color:#0284c7;margin-left:4px;">📍 GPS</span>' : '';
       const addrLine = v.address ? '<div style="font-size:10px;color:#0369a1;margin-top:2px;">📍 ' + v.address + '</div>' : '';
-      return '<div data-vnid="' + v.id + '" onclick="vnClickRow(this)" style="background:#fff;border:2px solid #bbf7d0;border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;position:relative;" onmouseover="this.style.borderColor='#0f766e';this.style.background='#f0fdf4'" onmouseout="this.style.borderColor='#bbf7d0';this.style.background='#fff'">'
+      return '<div data-vnid="' + v.id + '" onclick="vnClickRow(this)" style="background:#fff;border:2px solid #bbf7d0;border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s;position:relative;" onmouseover="this.style.borderColor=&apos;#0f766e&apos;;this.style.background=&apos;#f0fdf4&apos;" onmouseout="this.style.borderColor=&apos;#bbf7d0&apos;;this.style.background=&apos;#fff&apos;">'
         + '<div style="position:absolute;top:10px;right:12px;font-size:9px;font-weight:700;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#0f766e;">✅ Confirmed</div>'
         + '<div style="display:flex;gap:10px;align-items:flex-start;">'
         + '<div style="width:10px;height:10px;border-radius:50%;background:#0f766e;flex-shrink:0;margin-top:3px;"></div>'
@@ -4862,7 +4869,7 @@ function vnApplyFilter() {
     }
 
     // Normal tab — standard card
-    return '<div data-vnid="' + v.id + '" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:border-color .15s,background .15s;" onmouseover="this.style.borderColor='#93c5fd';this.style.background='#f8faff'" onmouseout="this.style.borderColor='#e5e7eb';this.style.background='#fff'" onclick="vnClickRow(this)">'
+    return '<div data-vnid="' + v.id + '" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:border-color .15s,background .15s;" onmouseover="this.style.borderColor=&apos;#93c5fd&apos;;this.style.background=&apos;#f8faff&apos;" onmouseout="this.style.borderColor=&apos;#e5e7eb&apos;;this.style.background=&apos;#fff&apos;" onclick="vnClickRow(this)">'
       + '<div style="width:9px;height:9px;border-radius:50%;background:' + dotClr + ';flex-shrink:0;"></div>'
       + '<div style="flex:1;min-width:0;">'
       + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
@@ -4877,7 +4884,7 @@ function vnApplyFilter() {
       + '<div style="font-size:11px;font-weight:700;color:' + (v.last_harvest_date?'#15803d':'#9ca3af') + ';">' + (v.last_harvest_date||'—') + '</div>'
       + '<div style="font-size:9px;color:#9ca3af;">last harvest</div>'
       + '</div>'
-      + '<button onclick="event.stopPropagation();vnCopyRow(this,'' + (v.sheet_name||'') + '','' + (v.tg_name||'') + '','' + (v.area||'') + '','' + (v.vlan||'') + '')" style="padding:3px 8px;border-radius:5px;border:1px solid #c7d2fe;background:#fff;font-size:10px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;" title="Copy">📋</button>'
+      + '<button onclick="event.stopPropagation();vnCopyRow(this,' + JSON.stringify(v.sheet_name||'') + ',' + JSON.stringify(v.tg_name||'') + ',' + JSON.stringify(v.area||'') + ',' + JSON.stringify(v.vlan||'') + ')" style="padding:3px 8px;border-radius:5px;border:1px solid #c7d2fe;background:#fff;font-size:10px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;" title="Copy">📋</button>'
       + '<div style="color:#9ca3af;font-size:16px;flex-shrink:0;">›</div>'
       + '</div>';
   }).join('');
@@ -6463,7 +6470,11 @@ async function loadHarvests() {
   const elFab = document.getElementById('hv-refresh-fab');
   if (elFab) elFab.classList.add('visible');
 
-  // Load vendos
+  // Reset loading flag and clear stale content to force fresh load
+  window._hvLoading = false;
+  const _vcScroll = document.getElementById('vc-scroll');
+  if (_vcScroll) _vcScroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
+
   setTimeout(() => {
     if (typeof hvLoadVendos === 'function') hvLoadVendos();
     setTimeout(() => {
