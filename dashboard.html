@@ -4463,11 +4463,19 @@ function hvoBindBodyEvents(body, routeId) {
   });
 }
 
-function hvoRouteSearch(inp, routeId) {
+async function hvoRouteSearch(inp, routeId) {
   const q = inp.value.trim().toLowerCase();
   const box = document.getElementById('hvo-add-results-' + routeId);
   if (!box) return;
   if (!q || q.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+
+  // Load vendos if not yet loaded
+  if (!_vnAll || !_vnAll.length) {
+    box.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:#6b7280;">⏳ Loading vendos...</div>';
+    box.style.display = '';
+    await vnLoad();
+  }
+
   const matches = (_vnAll || []).filter(v => {
     const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'')).toLowerCase();
     return n.includes(q);
