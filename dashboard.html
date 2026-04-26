@@ -2588,6 +2588,7 @@ function hvAddToRoutePanel(vid, display, sheet, tg, area, matched, excel, addr, 
           <input type="date" class="hv-rv-last-date" value="${last||''}"
             style="font-size:10px;border:1px solid #bae6fd;border-radius:4px;padding:2px 4px;font-family:inherit;outline:none;color:#0369a1;background:#fff;flex:1;"
             onchange="hvUpdateLastHarvest(this, '${vid}')">
+          <button onclick="hvClearLastHarvest(this, '${vid}')" title="Clear date" style="padding:1px 5px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;flex-shrink:0;">✕</button>
           <span class="hv-rv-last-lbl" style="font-size:9px;color:${lastColor};font-weight:600;white-space:nowrap;">${lastFmt}</span>
         </div>
       </div>
@@ -2599,6 +2600,34 @@ function hvAddToRoutePanel(vid, display, sheet, tg, area, matched, excel, addr, 
   scroll.appendChild(div);
   hvUpdateRouteCnt();
   if (!matched && tg) { const w = document.getElementById('hv-warn'); if (w) w.style.display = 'block'; }
+}
+
+// Clear last_harvest_date in Supabase from route builder
+async function hvClearLastHarvest(btn, vid) {
+  if (!confirm('Reset last harvest date to null for this vendo?')) return;
+  const wrapper = btn.closest('div[style*="background:#f0f9ff"]');
+  const lbl = wrapper ? wrapper.querySelector('.hv-rv-last-lbl') : null;
+  const inp = wrapper ? wrapper.querySelector('.hv-rv-last-date') : null;
+  if (lbl) { lbl.textContent = 'Clearing...'; lbl.style.color = '#6b7280'; }
+  try {
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ last_harvest_date: null })
+    });
+    if (r.ok) {
+      if (inp) inp.value = '';
+      if (lbl) { lbl.textContent = 'No harvest yet'; lbl.style.color = '#dc2626'; }
+      const mainRow = document.querySelector('#vc-scroll .hv-vr[data-vid="' + vid + '"]');
+      if (mainRow) mainRow.dataset.last = '';
+      const toast = document.getElementById('hv-refresh-toast');
+      if (toast) { toast.textContent = '✅ Last harvest date cleared'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 2000); }
+    } else {
+      if (lbl) { lbl.textContent = '❌ Failed'; lbl.style.color = '#dc2626'; }
+    }
+  } catch(e) {
+    if (lbl) { lbl.textContent = '❌ Error'; lbl.style.color = '#dc2626'; }
+  }
 }
 
 // Update last_harvest_date in Supabase from route builder
@@ -2782,18 +2811,190 @@ async function hvRefreshPendingRoutes() {
       panel.innerHTML = '<div style="padding:16px;font-size:10px;color:#9ca3af;text-align:center;">No active routes</div>';
       return;
     }
-    panel.innerHTML = data.map(rt => `
-      <div style="padding:7px 8px;border-bottom:1px solid #f0f0f0;cursor:pointer;" onclick="hvShowRouteDetail('${rt.route_code}')">
-        <div style="font-size:11px;font-weight:700;color:#1e3cb8;">${rt.route_code}</div>
-        <div style="font-size:9px;color:#6b7280;">${rt.collector} · ${rt.harvest_date}</div>
-        <div style="font-size:9px;color:#6b7280;">${Array.isArray(rt.vendos)?rt.vendos.length:0} vendos · ${rt.area||'all areas'}</div>
-        <span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#fef9c3;color:#854d0e;font-weight:700;">${rt.status}</span>
-      </div>`).join('');
+    panel.innerHTML = data.map(rt => {
+      const notesBadge = rt.admin_notes ? '<span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#dbeafe;color:#1e3cb8;font-weight:700;margin-left:3px;">📝</span>' : '';
+      return '<div style="padding:7px 8px;border-bottom:1px solid #f0f0f0;cursor:pointer;" onclick="hvShowRouteDetail(this.dataset.code)" data-code="' + rt.route_code + '">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+          '<div style="font-size:11px;font-weight:700;color:#1e3cb8;">' + rt.route_code + notesBadge + '</div>' +
+          '<span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#fef9c3;color:#854d0e;font-weight:700;">✏️ Edit</span>' +
+        '</div>' +
+        '<div style="font-size:9px;color:#6b7280;">' + rt.collector + ' · ' + (rt.route_date||rt.harvest_date||'') + '</div>' +
+        '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'all areas') + '</div>' +
+        (rt.admin_notes ? '<div style="font-size:9px;color:#1e3cb8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 ' + rt.admin_notes + '</div>' : '') +
+      '</div>';
+    }).join('');
   } catch(e) { console.error('Pending routes error:', e); }
 }
 
-function hvShowRouteDetail(code) {
-  alert('Route: ' + code + '\nOpen https://spawninternet.github.io/VendoMonitor/harvest.html');
+async function hvShowRouteDetail(code) {
+  const pop = document.getElementById('hv-route-edit-pop');
+  if (!pop) return;
+  pop.style.display = 'flex';
+  document.getElementById('hrep-code').textContent = code;
+  document.getElementById('hrep-collector-inp').value = '';
+  document.getElementById('hrep-notes-inp').value = '';
+  document.getElementById('hrep-vendos').innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:11px;">Loading...</div>';
+  document.getElementById('hrep-add-search').value = '';
+  document.getElementById('hrep-add-results').innerHTML = '';
+  document.getElementById('hrep-msg').textContent = '';
+
+  try {
+    // Load route + route_items
+    const [rr, ri] = await Promise.all([
+      fetch(`${_SB}/rest/v1/routes?route_code=eq.${code}&limit=1`, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }),
+      fetch(`${_SB}/rest/v1/route_items?route_id=in.(select id from routes where route_code=eq.${code})&select=*&order=id.asc`, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } })
+    ]);
+
+    const routes = await rr.json();
+    const route = routes[0];
+    if (!route) { document.getElementById('hrep-vendos').innerHTML = '<div style="color:#dc2626;font-size:11px;">Route not found</div>'; return; }
+
+    // Store route id for save operations
+    pop.dataset.routeId = route.id;
+    pop.dataset.routeCode = code;
+
+    document.getElementById('hrep-collector-inp').value = route.collector || '';
+    document.getElementById('hrep-notes-inp').value = route.notes && typeof route.notes === 'string' && !route.notes.startsWith('[') ? route.notes : (route.admin_notes || '');
+    document.getElementById('hrep-area').textContent = route.area || 'All areas';
+    document.getElementById('hrep-date').textContent = route.route_date || route.harvest_date || '—';
+
+    // Load items
+    let items = [];
+    try {
+      // Try direct route_items fetch
+      const ri2 = await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${route.id}&order=id.asc`, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
+      items = await ri2.json();
+    } catch(e) {}
+
+    hrepRenderItems(items, route.id);
+  } catch(e) {
+    document.getElementById('hrep-vendos').innerHTML = '<div style="color:#dc2626;font-size:11px;">Error: ' + e.message + '</div>';
+  }
+}
+
+function hrepRenderItems(items, routeId) {
+  const el = document.getElementById('hrep-vendos');
+  if (!items.length) {
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:11px;">No vendos in this route</div>';
+    return;
+  }
+  el.innerHTML = items.map(item => {
+    const isDone = item.status === 'harvested';
+    const net = parseFloat(item.net_collectible || 0);
+    return '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;margin-bottom:6px;background:' + (isDone ? '#f0fdf4' : '#fff') + ';">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:12px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name || item.tg_name || '—') + '</div>' +
+          '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name || '—') + ' · ' + (item.area || '—') + '</div>' +
+          (isDone ? '<div style="font-size:10px;color:#15803d;font-weight:700;">✅ Harvested · Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' :
+            '<div style="font-size:10px;color:#d97706;">' + (item.collector_note ? '⏳ Pending: ' + item.collector_note : 'Not yet harvested') + '</div>') +
+        '</div>' +
+        (!isDone ? '<button onclick="hrepRemoveItem(' + item.id + ', this)" style="padding:2px 8px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;font-size:10px;cursor:pointer;font-family:inherit;flex-shrink:0;">Remove</button>' : '') +
+      '</div>' +
+      '<div style="margin-top:6px;">' +
+        '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">📝 Collector note</div>' +
+        '<div style="display:flex;gap:4px;">' +
+          '<input type="text" value="' + (item.collector_note || '').replace(/"/g, '&quot;') + '" placeholder="Add note for collector..." data-item-id="' + item.id + '"' +
+          ' style="flex:1;padding:5px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;"' +
+          ' onkeydown="if(event.key===&apos;Enter&apos;)hrepSaveItemNote(this)">' +
+          '<button onclick="hrepSaveItemNote(this.previousElementSibling)" style="padding:4px 9px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">Save</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function hrepSaveItemNote(inp) {
+  const itemId = inp.dataset.itemId;
+  const note = inp.value.trim();
+  if (!itemId) return;
+  inp.disabled = true;
+  try {
+    const r = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ collector_note: note || null })
+    });
+    inp.style.borderColor = r.ok ? '#86efac' : '#fca5a5';
+    setTimeout(() => { inp.style.borderColor = ''; inp.disabled = false; }, 1500);
+  } catch(e) { inp.disabled = false; }
+}
+
+async function hrepRemoveItem(itemId, btn) {
+  if (!confirm('Remove this vendo from the route?')) return;
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const r = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    if (r.ok) { btn.closest('div[style*="border:1px solid #e5e7eb"]').remove(); }
+    else { btn.textContent = 'Remove'; btn.disabled = false; }
+  } catch(e) { btn.textContent = 'Remove'; btn.disabled = false; }
+}
+
+async function hrepSaveRoute() {
+  const pop = document.getElementById('hv-route-edit-pop');
+  const routeId = pop.dataset.routeId;
+  const collector = document.getElementById('hrep-collector-inp').value.trim();
+  const notes = document.getElementById('hrep-notes-inp').value.trim();
+  const msg = document.getElementById('hrep-msg');
+  if (!collector) { msg.textContent = '⚠ Collector name required'; msg.style.color = '#dc2626'; return; }
+  msg.textContent = 'Saving...'; msg.style.color = '#6b7280';
+  try {
+    const r = await fetch(`${_SB}/rest/v1/routes?id=eq.${routeId}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ collector, admin_notes: notes || null })
+    });
+    if (r.ok) {
+      msg.textContent = '✅ Saved!'; msg.style.color = '#15803d';
+      hvRefreshPendingRoutes();
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+    } else { msg.textContent = '❌ Save failed'; msg.style.color = '#dc2626'; }
+  } catch(e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+}
+
+function hrepSearchVendo(q) {
+  const box = document.getElementById('hrep-add-results');
+  if (!q || q.length < 2) { box.innerHTML = ''; return; }
+  const matches = (_vnAll || []).filter(v => {
+    const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'')).toLowerCase();
+    return n.includes(q.toLowerCase());
+  }).slice(0, 8);
+  if (!matches.length) { box.innerHTML = '<div style="padding:8px;font-size:11px;color:#9ca3af;">No vendos found</div>'; return; }
+  box.innerHTML = matches.map(v =>
+    '<div onclick="hrepAddVendo(' + v.id + ')" style="padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;" onmouseover="this.style.background=&apos;#f0f9ff&apos;" onmouseout="this.style.background=&apos;&apos;">' +
+      '<div style="font-weight:600;color:#1e3cb8;">' + (v.sheet_name || v.tg_name || '—') + '</div>' +
+      '<div style="font-size:9px;color:#6b7280;">' + (v.tg_name || '—') + ' · ' + (v.area || '—') + ' · VLAN ' + (v.vlan || '—') + '</div>' +
+    '</div>'
+  ).join('');
+}
+
+async function hrepAddVendo(vid) {
+  const pop = document.getElementById('hv-route-edit-pop');
+  const routeId = pop.dataset.routeId;
+  const v = (_vnAll || []).find(x => x.id === vid);
+  if (!v || !routeId) return;
+  document.getElementById('hrep-add-search').value = '';
+  document.getElementById('hrep-add-results').innerHTML = '';
+  const msg = document.getElementById('hrep-msg');
+  msg.textContent = 'Adding...'; msg.style.color = '#6b7280';
+  try {
+    const r = await fetch(`${_SB}/rest/v1/route_items`, {
+      method: 'POST',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ route_id: parseInt(routeId), tg_name: v.tg_name || null, sheet_name: v.sheet_name || null, area: v.area || null, status: 'pending' })
+    });
+    if (r.ok) {
+      msg.textContent = '✅ Vendo added!'; msg.style.color = '#15803d';
+      // Reload items
+      const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}&order=id.asc`, { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } });
+      const items = await ri.json();
+      hrepRenderItems(items, routeId);
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+    } else { msg.textContent = '❌ Add failed'; msg.style.color = '#dc2626'; }
+  } catch(e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
 }
 
 function hvClearRoute() {
@@ -8185,6 +8386,61 @@ async function fullBackup() {
     <div>
       <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Harvest records</div>
       <div id="vn-cp-harvests" style="font-size:11px;color:#9ca3af;">Loading...</div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+
+<!-- ROUTE EDIT POPUP -->
+<div id="hv-route-edit-pop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8000;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;">
+<div style="background:#fff;border-radius:14px;width:min(560px,96vw);margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.3);">
+
+  <!-- Header -->
+  <div style="background:#1e3cb8;padding:13px 16px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:2;">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.05em;">Edit Route</div>
+      <div style="font-size:16px;font-weight:700;color:#fff;letter-spacing:.08em;" id="hrep-code">—</div>
+      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;"><span id="hrep-area">—</span> · <span id="hrep-date">—</span></div>
+    </div>
+    <button onclick="document.getElementById('hv-route-edit-pop').style.display='none'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+  </div>
+
+  <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
+
+    <!-- Collector + Notes -->
+    <div style="background:#f8faff;border:1.5px solid #c7d2fe;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:10px;font-weight:700;color:#1e3cb8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">👤 Route details</div>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">Collector name</div>
+        <input id="hrep-collector-inp" type="text" placeholder="e.g. Juan dela Cruz"
+          style="width:100%;padding:8px 10px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;">
+      </div>
+      <div>
+        <div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">📝 Admin notes for collector</div>
+        <textarea id="hrep-notes-inp" rows="3" placeholder="e.g. Collect from stall only, avoid Brgy X road..."
+          style="width:100%;padding:8px 10px;border:1.5px solid #c7d2fe;border-radius:7px;font-size:12px;font-family:inherit;outline:none;resize:none;box-sizing:border-box;"></textarea>
+        <div style="font-size:9px;color:#818cf8;margin-top:3px;">This note will appear in the collector's harvest app</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+        <button onclick="hrepSaveRoute()" style="flex:1;padding:8px;background:#1e3cb8;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Save changes</button>
+        <span id="hrep-msg" style="font-size:11px;"></span>
+      </div>
+    </div>
+
+    <!-- Add vendo -->
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;">
+      <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">➕ Add vendo to route</div>
+      <input id="hrep-add-search" type="text" placeholder="🔍 Search vendo name..." oninput="hrepSearchVendo(this.value)"
+        style="width:100%;padding:8px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">
+      <div id="hrep-add-results" style="border:1px solid #e5e7eb;border-radius:6px;max-height:160px;overflow-y:auto;background:#fff;margin-top:4px;"></div>
+    </div>
+
+    <!-- Vendo list -->
+    <div>
+      <div style="font-size:10px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Vendos in this route</div>
+      <div id="hrep-vendos"></div>
     </div>
 
   </div>
