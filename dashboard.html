@@ -2814,10 +2814,11 @@ async function hvRefreshPendingRoutes() {
     }
     panel.innerHTML = data.map(rt => {
       const notesBadge = rt.admin_notes ? '<span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#dbeafe;color:#1e3cb8;font-weight:700;margin-left:3px;">📝</span>' : '';
-      return '<div style="padding:7px 8px;border-bottom:1px solid #f0f0f0;cursor:pointer;" onclick="hvShowRouteDetail(this.dataset.code)" data-code="' + rt.route_code + '">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-          '<div style="font-size:11px;font-weight:700;color:#1e3cb8;">' + rt.route_code + notesBadge + '</div>' +
-          '<span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#fef9c3;color:#854d0e;font-weight:700;">✏️ Edit</span>' +
+      return '<div style="padding:7px 8px;border-bottom:1px solid #f0f0f0;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:4px;">' +
+          '<div style="font-size:11px;font-weight:700;color:#1e3cb8;cursor:pointer;flex:1;" onclick="hvShowRouteDetail(\'' + rt.route_code + '\')">' + rt.route_code + notesBadge + '</div>' +
+          '<button onclick="hvDeleteRoute(' + JSON.stringify(rt.id) + ',' + JSON.stringify(rt.route_code) + ')" style="padding:2px 6px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;flex-shrink:0;">🗑</button>' +
+          '<span style="font-size:8px;padding:1px 5px;border-radius:6px;background:#fef9c3;color:#854d0e;font-weight:700;cursor:pointer;" onclick="hvShowRouteDetail(' + JSON.stringify(rt.route_code) + ')">✏️ Edit</span>' +
         '</div>' +
         '<div style="font-size:9px;color:#6b7280;">' + rt.collector + ' · ' + (rt.route_date||rt.harvest_date||'') + '</div>' +
         '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'all areas') + '</div>' +
@@ -2932,6 +2933,48 @@ async function hrepRemoveItem(itemId, btn) {
     if (r.ok) { btn.closest('div[style*="border:1px solid #e5e7eb"]').remove(); }
     else { btn.textContent = 'Remove'; btn.disabled = false; }
   } catch(e) { btn.textContent = 'Remove'; btn.disabled = false; }
+}
+
+async function hvDeleteRoute(routeId, code) {
+  if (!confirm('Delete route ' + code + '?')) return;
+  try {
+    await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}`, { method:'DELETE', headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY} });
+    await fetch(`${_SB}/rest/v1/routes?id=eq.${routeId}`, { method:'DELETE', headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY} });
+    hvRefreshPendingRoutes();
+    const toast = document.getElementById('hv-refresh-toast');
+    if (toast) { toast.textContent = '🗑 Route ' + code + ' deleted'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 2000); }
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+async function hrepDeleteRoute() {
+  const pop = document.getElementById('hv-route-edit-pop');
+  const routeId = pop.dataset.routeId;
+  const code = pop.dataset.routeCode;
+  if (!confirm('Delete route ' + code + '? This will also delete all route items. Harvest records are kept.')) return;
+  const msg = document.getElementById('hrep-msg');
+  if (msg) { msg.textContent = 'Deleting...'; msg.style.color = '#dc2626'; }
+  try {
+    // Delete route_items first
+    await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    // Delete route
+    const r = await fetch(`${_SB}/rest/v1/routes?id=eq.${routeId}`, {
+      method: 'DELETE',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    if (r.ok) {
+      pop.style.display = 'none';
+      hvRefreshPendingRoutes();
+      const toast = document.getElementById('hv-refresh-toast');
+      if (toast) { toast.textContent = '🗑 Route ' + code + ' deleted'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'), 2500); }
+    } else {
+      if (msg) { msg.textContent = '❌ Delete failed'; }
+    }
+  } catch(e) {
+    if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+  }
 }
 
 async function hrepSaveRoute() {
@@ -3920,8 +3963,8 @@ async function hvoRenderReconOverlay(force) {
         const popId  = 'hrp_' + date.replace(/-/g,'') + '_' + col.replace(/[^a-z0-9]/gi,'');
         // Store data for popup in global dict
         _hvrReconData = _hvrReconData || {};
-        _hvrReconData[popId] = {col, date, cItems, cCoin, cTg, cDiff, routes, winMap, DS};
-        html += '<div data-reconpop="' + popId + '" style="background:#fff;border:1.5px solid #dde3f5;border-radius:12px;padding:14px;cursor:pointer;transition:.15s;text-align:center;" onmouseover="this.style.borderColor=\'#1e3cb8\';this.style.background=\'#f0f4ff\'" onmouseout="this.style.borderColor=\'#dde3f5\';this.style.background=\'#fff\'">' 
+        _hvrReconData[popId] = {col, date, cItems, cCoin, cTg, cDiff, routes, winMap, DS, getTgFn: getTg};
+        html += '<div data-reconpop="' + popId + '" style="background:#fff;border:1.5px solid #dde3f5;border-radius:12px;padding:14px;cursor:pointer;transition:.15s;text-align:center;">' 
           + '<div style="margin-bottom:8px;">' + icon + '</div>'
           + '<div style="font-size:13px;font-weight:700;color:#1a1d2e;margin-bottom:2px;">' + col + '</div>'
           + '<div style="font-size:10px;color:#6b7280;margin-bottom:8px;">' + cItems.length + ' vendo' + (cItems.length!==1?'s':'') + '</div>'
@@ -3958,68 +4001,75 @@ function hvoReconShowDate(date, btn) {
 var _hvrReconData = {};
 function hvoOpenReconPopup(popId) {
   const d = _hvrReconData[popId];
-  if (!d) return;
+  if (!d) { console.warn('No recon data for', popId); return; }
   const fmt2 = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
   const existing = document.getElementById('hvo-recon-popup');
   if (existing) existing.remove();
-  const getTg2 = (h) => {
-    if (!d.winMap || !d.winMap[h.tg_name]) return 0;
-    // tg income stored in h directly if available
-    return h._tgAmt || 0;
-  };
 
+  const cDiffCls = Math.abs(d.cDiff)<200?'#15803d':d.cDiff>0?'#d97706':'#dc2626';
+  const cEmoji   = Math.abs(d.cDiff)<200?'✅':d.cDiff>0?'⚠️':'🔴';
+
+  // Build per-route vendo rows
   let routeHtml = '';
   Object.entries(d.routes).forEach(([rc, items]) => {
     const rCoin = items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
-    const rTg   = d.cTg; // approximate — full calc needs tgMap
+    // Calculate TG per item using stored getTgFn if available
+    const getTg = d.getTgFn || (() => 0);
+    const rTg   = items.reduce((s,h)=>s+getTg(h,d.date),0);
+    const rDiff = rCoin - rTg;
+    const rCls  = Math.abs(rDiff)<100?'#15803d':rDiff>0?'#d97706':'#dc2626';
+    const isAdmin = !rc||rc==='No route'||rc.toUpperCase()==='ADMIN';
+
     routeHtml += '<div style="margin-bottom:12px;">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:6px 10px;background:#f0f4ff;border-radius:8px;">'
-      + '<span style="font-size:12px;font-weight:700;color:#1e3cb8;">🧾 ' + rc + '</span>'
-      + '<span style="font-size:11px;font-weight:700;color:#15803d;">Coin: ' + fmt2(rCoin) + '</span>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#eef2ff;border-radius:8px;margin-bottom:8px;">'
+      + '<span style="font-size:13px;font-weight:700;color:#1e3cb8;">🧾 ' + rc + '</span>'
+      + (isAdmin ? '<span style="font-size:9px;padding:2px 7px;border-radius:8px;background:#fef3c7;color:#92400e;">🔧 Admin</span>'
+                 : '<span style="font-size:9px;padding:2px 7px;border-radius:8px;background:#dbeafe;color:#1e3cb8;">📱 PWA</span>')
       + '</div>'
-      + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;">'
-      + '<thead><tr style="background:#eef2ff;">'
-      + '<th style="padding:7px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">Vendo</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">TG Name</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">Window</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">Coin Net</th>'
-      + '<th style="padding:7px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">Source</th>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px;">'
+      + '<thead><tr style="background:#f8faff;">'
+      + '<th style="padding:6px 10px;text-align:left;color:#6b7280;font-size:9px;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Vendo</th>'
+      + '<th style="padding:6px 10px;text-align:right;color:#6b7280;font-size:9px;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Coin Net</th>'
+      + '<th style="padding:6px 10px;text-align:right;color:#6b7280;font-size:9px;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Window</th>'
       + '</tr></thead><tbody>'
-      + items.map((h,i) => {
-          const net=parseFloat(h.net_collectible||0);
-          const isAdmin=!h.route_code||h.route_code.toUpperCase()==='ADMIN';
-          return '<tr style="border-bottom:1px solid #f0f0f8;">'
-            + '<td style="padding:7px 10px;font-weight:600;color:#1e3cb8;">' + (h.vendo_name||h.tg_name||'—') + '</td>'
-            + '<td style="padding:7px 10px;color:#6b7280;font-size:10px;">' + (h.tg_name||'—') + '</td>'
-            + '<td style="padding:7px 10px;color:#6b7280;font-size:10px;">' + (h.harvest_window_start||d.DS) + ' → ' + d.date + '</td>'
-            + '<td style="padding:7px 10px;font-weight:700;color:#15803d;">' + fmt2(net) + '</td>'
-            + '<td style="padding:7px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;background:' + (isAdmin?'#fef3c7':'#dbeafe') + ';color:' + (isAdmin?'#92400e':'#1e3cb8') + ';">' + (isAdmin?'🔧 Admin':'📱 PWA') + '</span></td>'
+      + items.map(h => {
+          const net = parseFloat(h.net_collectible||0);
+          return '<tr style="border-bottom:1px solid #f5f5f5;">'
+            + '<td style="padding:7px 10px;"><div style="font-weight:600;color:#1e3cb8;font-size:12px;">' + (h.vendo_name||h.tg_name||'—') + '</div>'
+            + '<div style="font-size:9px;color:#9ca3af;">' + (h.tg_name||'—') + '</div>'
+            + (h.collector_note ? '<div style="font-size:10px;color:#0369a1;margin-top:2px;">💬 ' + h.collector_note + '</div>' : '')
+            + '</td>'
+            + '<td style="padding:7px 10px;text-align:right;font-weight:700;color:#15803d;">' + fmt2(net) + '</td>'
+            + '<td style="padding:7px 10px;text-align:right;font-size:10px;color:#9ca3af;">' + (h.harvest_window_start||d.DS||'—') + '</td>'
             + '</tr>';
         }).join('')
-      + '<tr style="background:#f8faff;font-weight:700;border-top:2px solid #dde3f5;">'
-      + '<td colspan="3" style="padding:7px 10px;color:#374151;">TOTAL</td>'
-      + '<td style="padding:7px 10px;color:#15803d;">' + fmt2(rCoin) + '</td>'
+      + '<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #dde3f5;">'
+      + '<td style="padding:7px 10px;color:#374151;">Route total</td>'
+      + '<td style="padding:7px 10px;text-align:right;color:#15803d;">' + fmt2(rCoin) + '</td>'
       + '<td></td></tr>'
-      + '</tbody></table></div></div>';
+      + '</tbody></table></div>';
   });
 
-  const cDiffCls = Math.abs(d.cDiff)<200?'#15803d':d.cDiff>0?'#d97706':'#dc2626';
-  const cEmoji = Math.abs(d.cDiff)<200?'✅':d.cDiff>0?'⚠️':'🔴';
   const pop = document.createElement('div');
   pop.id = 'hvo-recon-popup';
-  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19999;display:flex;align-items:center;justify-content:center;padding:16px;';
-  pop.innerHTML = '<div style="background:#fff;border-radius:14px;width:min(900px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);">'
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
+  pop.innerHTML = '<div style="background:#fff;border-radius:14px;width:min(640px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto;">'
     + '<div style="background:#1e3cb8;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">'
-    + '<div><div style="font-size:15px;font-weight:700;">' + cIcon(d.col) + ' ' + d.col + ' — ' + d.date + '</div>'
-    + '<div style="font-size:11px;opacity:.8;margin-top:2px;">Coin ' + fmt2(d.cCoin) + ' · TG ' + fmt2(d.cTg) + ' · ' + cEmoji + ' ' + fmt2(Math.abs(d.cDiff)) + ' ' + (d.cDiff>=0?'Surplus':'Deficit') + '</div></div>'
-    + '<button data-closepop="hvo-recon-popup" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;cursor:pointer;border-radius:6px;padding:2px 10px;font-family:inherit;">✕</button>'
+    + '<div>'
+    + '<div style="font-size:15px;font-weight:700;">' + collSvg(d.col).replace('<svg','<svg style="width:32px;height:32px;margin-right:8px;vertical-align:middle;"') + d.col + '</div>'
+    + '<div style="font-size:11px;opacity:.8;margin-top:2px;">📅 ' + d.date + ' · ' + d.cItems.length + ' vendo' + (d.cItems.length!==1?'s':'') + '</div>'
     + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px;">'
-    + '<div style="background:#f0fdf4;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#15803d;">' + fmt2(d.cCoin) + '</div><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">Coin Net</div></div>'
-    + '<div style="background:#eef2ff;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#1e3cb8;">' + fmt2(d.cTg) + '</div><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">TG Income</div></div>'
-    + '<div style="background:#fafbff;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:18px;font-weight:800;color:' + cDiffCls + ';">' + fmt2(Math.abs(d.cDiff)) + '</div><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">' + (d.cDiff>=0?'Surplus':'Deficit') + '</div></div>'
+    + '<button onclick="document.getElementById(&apos;hvo-recon-popup&apos;).remove()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;">×</button>'
     + '</div>'
-    + '<div style="padding:0 14px 14px;">' + routeHtml + '</div>'
+    // Summary stats
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 16px;">'
+    + '<div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center;border-left:3px solid #16a34a;"><div style="font-size:18px;font-weight:700;color:#15803d;">' + fmt2(d.cCoin) + '</div><div style="font-size:9px;color:#6b7280;">Coin Net</div></div>'
+    + '<div style="background:#eef2ff;border-radius:8px;padding:10px;text-align:center;border-left:3px solid #1e3cb8;"><div style="font-size:18px;font-weight:700;color:#1e3cb8;">' + fmt2(d.cTg) + '</div><div style="font-size:9px;color:#6b7280;">TG Income</div></div>'
+    + '<div style="background:#fafbff;border-radius:8px;padding:10px;text-align:center;"><div style="font-size:18px;font-weight:700;color:' + cDiffCls + ';">' + cEmoji + ' ' + fmt2(Math.abs(d.cDiff)) + '</div><div style="font-size:9px;color:#6b7280;">' + (d.cDiff>=0?'Surplus':'Deficit') + '</div></div>'
+    + '</div>'
+    // Routes breakdown
+    + '<div style="padding:0 16px 16px;">' + routeHtml + '</div>'
+    + '<div style="padding:0 16px 16px;"><button onclick="document.getElementById(&apos;hvo-recon-popup&apos;).remove()" style="width:100%;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151;">Close</button></div>'
     + '</div>';
 
   pop.addEventListener('click', e => { if (e.target === pop) pop.remove(); });
@@ -4361,6 +4411,79 @@ async function hvoRenderRecon() {
 }
 
 
+// ── ROUTE TAB: ADD/REMOVE VENDO HELPERS ──
+function hvoBindBodyEvents(body, routeId) {
+  // Remove buttons
+  body.querySelectorAll('[data-rmitem]').forEach(btn => {
+    btn.onclick = async function() {
+      const itemId = this.dataset.rmitem;
+      if (!confirm('Remove this vendo from the route?')) return;
+      this.textContent = '...'; this.disabled = true;
+      try {
+        const r = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+          method: 'DELETE', headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+        });
+        if (r.ok) {
+          // Remove from local cache
+          const idx = hvoRouteItems.findIndex(x => String(x.id) === String(itemId));
+          if (idx > -1) hvoRouteItems.splice(idx, 1);
+          if (body._refresh) body._refresh();
+          const toast = document.getElementById('hv-refresh-toast');
+          if (toast) { toast.textContent = '✅ Vendo removed'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2000); }
+        }
+      } catch(e) { this.textContent = '✕ Remove'; this.disabled = false; }
+    };
+  });
+}
+
+function hvoRouteSearch(inp, routeId) {
+  const q = inp.value.trim().toLowerCase();
+  const box = document.getElementById('hvo-add-results-' + routeId);
+  if (!box) return;
+  if (!q || q.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const matches = (_vnAll || []).filter(v => {
+    const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'')).toLowerCase();
+    return n.includes(q);
+  }).slice(0, 8);
+  if (!matches.length) { box.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:#9ca3af;">No vendos found</div>'; box.style.display = ''; return; }
+  box.innerHTML = matches.map(v =>
+    '<div data-addvid="' + v.id + '" style="padding:8px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;">' +
+      '<div style="font-weight:600;color:#1e3cb8;">' + (v.sheet_name || v.tg_name || '—') + '</div>' +
+      '<div style="font-size:9px;color:#6b7280;">' + (v.tg_name||'—') + ' · ' + (v.area||'—') + ' · VLAN ' + (v.vlan||'—') + '</div>' +
+    '</div>'
+  ).join('');
+  box.style.display = '';
+  // Bind click
+  box.querySelectorAll('[data-addvid]').forEach(el => {
+    el.onmouseover = function() { this.style.background = '#f0fdf4'; };
+    el.onmouseout  = function() { this.style.background = ''; };
+    el.onclick = async function() {
+      const vid = this.dataset.addvid;
+      const v = (_vnAll||[]).find(x => String(x.id) === String(vid));
+      if (!v) return;
+      inp.value = ''; box.style.display = 'none'; box.innerHTML = '';
+      this.textContent = 'Adding...';
+      try {
+        const r = await fetch(`${_SB}/rest/v1/route_items`, {
+          method: 'POST',
+          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+          body: JSON.stringify({ route_id: routeId, tg_name: v.tg_name||null, sheet_name: v.sheet_name||null, area: v.area||null, status: 'pending' })
+        });
+        if (r.ok) {
+          const newItems = await r.json();
+          if (newItems && newItems[0]) hvoRouteItems.push(newItems[0]);
+          // Find the body and refresh
+          const bodyEl = document.querySelector('[data-addsearch="' + routeId + '"]')?.closest('div[style*="background:#f0fdf4"]')?.previousElementSibling?.previousElementSibling;
+          // Simpler: re-render whole routes tab
+          hvoRenderRoutes();
+          const toast = document.getElementById('hv-refresh-toast');
+          if (toast) { toast.textContent = '✅ Vendo added to route'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2000); }
+        }
+      } catch(e) { console.error(e); }
+    };
+  });
+}
+
 function hvoRenderRoutes() {
   const active = hvoRoutes.filter(r => r.status === 'active').length;
   const done   = hvoRoutes.filter(r => r.status === 'completed').length;
@@ -4425,36 +4548,61 @@ function hvoRenderRoutes() {
     const body = document.createElement('div');
     body.style.cssText = 'display:none;border-top:1px solid ' + bdColor + ';';
 
-    if (!items.length) {
-      body.innerHTML = '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>';
-    } else {
-      body.innerHTML = items.map(item => {
-        const isDone = item.status === 'harvested';
-        const net    = parseFloat(item.net_collectible || 0);
-        const hasCN  = !!item.collector_note;
-        return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone ? '#f0fdf4' : '#fff') + ';">' +
-          '<div style="margin-top:2px;font-size:16px;">' + (isDone ? '✅' : '⏳') + '</div>' +
-          '<div>' +
-            '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name || item.tg_name || '—') + '</div>' +
-            '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name || '—') + ' · ' + (item.area || '—') + '</div>' +
-            (isDone
-              ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
-              : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
-            (hasCN ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
-          '</div>' +
-          '<div style="text-align:right;flex-shrink:0;">' +
-            (isDone
-              ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>'
-              : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
-          '</div>' +
-        '</div>';
-      }).join('') +
-      // Summary footer
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#f8faff;font-size:12px;">' +
-        '<span style="color:#6b7280;">' + doneN + ' harvested · ' + pendN + ' pending</span>' +
-        '<span style="font-weight:700;color:#15803d;">Total net: ₱' + items.reduce((s,x)=>s+(parseFloat(x.net_collectible)||0),0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+    // Build body content
+    const routeId = r.id;
+
+    const renderItems = () => {
+      const curItems = hvoRouteItems.filter(x => x.route_id === routeId);
+      const curDone  = curItems.filter(x => x.status === 'harvested').length;
+      const curPend  = curItems.filter(x => x.status !== 'harvested').length;
+      const totalNet = curItems.reduce((s,x)=>s+(parseFloat(x.net_collectible)||0),0);
+
+      let html = curItems.length === 0
+        ? '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>'
+        : curItems.map(item => {
+            const isDone = item.status === 'harvested';
+            const net    = parseFloat(item.net_collectible || 0);
+            const hasCN  = !!item.collector_note;
+            return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone ? '#f0fdf4' : '#fff') + ';">' +
+              '<div style="margin-top:2px;font-size:16px;">' + (isDone ? '✅' : '⏳') + '</div>' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name || item.tg_name || '—') + '</div>' +
+                '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name || '—') + ' · ' + (item.area || '—') + '</div>' +
+                (isDone
+                  ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
+                  : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
+                (hasCN ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
+              '</div>' +
+              '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">' +
+                (isDone
+                  ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>'
+                  : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
+                (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + routeId + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
+              '</div>' +
+            '</div>';
+          }).join('');
+
+      // Add vendo section + summary
+      html += '<div style="padding:10px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;">' +
+        '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;">➕ Add vendo</div>' +
+        '<div style="display:flex;gap:6px;">' +
+          '<input type="text" placeholder="Search vendo name..." data-addsearch="' + routeId + '" style="flex:1;padding:6px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;" oninput="hvoRouteSearch(this,' + routeId + ')">' +
+        '</div>' +
+        '<div id="hvo-add-results-' + routeId + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#f8faff;border-top:1px solid #e5e7eb;font-size:12px;">' +
+        '<span style="color:#6b7280;">' + curDone + ' harvested · ' + curPend + ' pending</span>' +
+        '<span style="font-weight:700;color:#15803d;">Total net: ₱' + totalNet.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
       '</div>';
-    }
+
+      return html;
+    };
+
+    body.innerHTML = renderItems();
+
+    // Store render fn on body for refresh after add/remove
+    body._refresh = () => { body.innerHTML = renderItems(); hvoBindBodyEvents(body, routeId); };
+    hvoBindBodyEvents(body, routeId);
 
     // Toggle expand on click
     hdr.addEventListener('click', function() {
@@ -8473,7 +8621,10 @@ async function fullBackup() {
       <div style="font-size:16px;font-weight:700;color:#fff;letter-spacing:.08em;" id="hrep-code">—</div>
       <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;"><span id="hrep-area">—</span> · <span id="hrep-date">—</span></div>
     </div>
-    <button onclick="document.getElementById('hv-route-edit-pop').style.display='none'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button onclick="hrepDeleteRoute()" style="padding:5px 12px;border:1.5px solid rgba(220,38,38,.5);background:rgba(220,38,38,.2);color:#fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Delete route</button>
+      <button onclick="document.getElementById('hv-route-edit-pop').style.display='none'" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>
   </div>
 
   <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;">
