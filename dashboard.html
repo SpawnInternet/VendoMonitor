@@ -670,7 +670,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .hv-done-btn.done{background:#dcfce7;border-color:#86efac;color:#15803d;cursor:default;}
 .hv-del-btn{background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;padding:0 2px;line-height:1;}
 /* Bottom actions */
-.hv-rc-bottom{padding:6px 8px;border-top:2px solid var(--blue);flex-shrink:0;background:#fff;display:flex;flex-direction:column;gap:4px;}
+.hv-rc-bottom{padding:6px 8px;border-top:2px solid var(--blue);flex-shrink:0;background:#fff;display:flex;flex-direction:column;gap:4px;position:sticky;bottom:0;z-index:2;}
 .hv-confirm-btn{width:100%;padding:7px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;}
 .hv-confirm-btn:hover{background:#15803d;}
 .hv-clear-btn{width:100%;padding:3px;background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:5px;font-size:10px;cursor:pointer;font-family:inherit;}
@@ -979,20 +979,20 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <div>Select vendos from the list and click <b style="color:var(--blue);">+ add</b></div>
       </div>
     </div>
-    <!-- ADD UNNAMED VENDO FORM (inline, hidden by default) -->
-    <div class="hv-unnamed-form" id="hv-unnamed-form" style="display:none;">
-      <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
-      <input id="hv-unnamed-label" placeholder="Description e.g. Cogon area, Near Jollibee Dipolog" maxlength="80" autocomplete="off">
-      <input id="hv-unnamed-area" placeholder="Area (e.g. DIPOLOG)" autocomplete="off">
-      <input id="hv-unnamed-last" type="date" title="Last harvest date (optional)">
-      <div style="display:flex;gap:4px;margin-top:2px;">
-        <button onclick="hvAddUnnamed()" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
-        <button onclick="hvToggleUnnamedForm(false)" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>
-      </div>
-    </div>
     <div class="hv-rc-bottom">
       <button class="hv-confirm-btn" onclick="hvConfirmRoute()">✅ Confirm route →</button>
       <button class="hv-add-unnamed-btn" onclick="hvToggleUnnamedForm(true)">➕ Add vendo (TG name TBF)</button>
+      <!-- ADD UNNAMED VENDO FORM (inline, hidden by default) -->
+      <div class="hv-unnamed-form" id="hv-unnamed-form" style="display:none;">
+        <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
+        <input id="hv-unnamed-label" placeholder="Description e.g. Cogon area, Near Jollibee Dipolog" maxlength="80" autocomplete="off">
+        <input id="hv-unnamed-area" placeholder="Area (e.g. DIPOLOG)" autocomplete="off">
+        <input id="hv-unnamed-last" type="date" title="Last harvest date (optional)">
+        <div style="display:flex;gap:4px;margin-top:2px;">
+          <button onclick="hvAddUnnamed()" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
+          <button onclick="hvToggleUnnamedForm(false)" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>
+        </div>
+      </div>
       <button class="hv-clear-btn" onclick="hvClearRoute()">🗑 Clear route</button>
       <div class="hv-warn" id="hv-warn" style="display:none;">⚠ Some vendos have no TG name — route will be partial</div>
     </div>
@@ -5461,6 +5461,40 @@ function hvoBindBodyEvents(body, routeId) {
     };
   });
 
+  // Add unnamed TBF vendo buttons
+  body.querySelectorAll('[data-addtbf]').forEach(btn => {
+    btn.onclick = async function() {
+      const rId    = this.dataset.addtbf;
+      const label  = (document.getElementById('hvo-tbf-label-' + rId)?.value || '').trim();
+      const area   = (document.getElementById('hvo-tbf-area-' + rId)?.value || '').trim().toUpperCase() || null;
+      const labelInp = document.getElementById('hvo-tbf-label-' + rId);
+      if (!label) { if (labelInp) { labelInp.style.borderColor = '#dc2626'; labelInp.focus(); } return; }
+      if (labelInp) labelInp.style.borderColor = '';
+      this.textContent = '…'; this.disabled = true;
+      try {
+        const r2 = await fetch(`${_SB}/rest/v1/route_items`, {
+          method: 'POST',
+          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+          body: JSON.stringify({ route_id: parseInt(rId), tg_name: null, sheet_name: label, area: area, status: 'pending', collector_note: '🔴 TG name TBF' })
+        });
+        if (r2.ok) {
+          const newItems = await r2.json();
+          if (newItems && newItems[0]) hvoRouteItems.push(newItems[0]);
+          // Clear form + hide
+          if (labelInp) labelInp.value = '';
+          const areaInp = document.getElementById('hvo-tbf-area-' + rId);
+          if (areaInp) areaInp.value = '';
+          const form = document.getElementById('hvo-tbf-form-' + rId);
+          if (form) form.style.display = 'none';
+          if (body._refresh) body._refresh();
+          const toast = document.getElementById('hv-refresh-toast');
+          if (toast) { toast.textContent = '✅ Unnamed vendo added!'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+        } else { alert('Failed to add vendo'); }
+      } catch(e) { alert('Error: ' + e.message); }
+      this.textContent = 'Add to route'; this.disabled = false;
+    };
+  });
+
   // Complete route buttons
   body.querySelectorAll('[data-completeroute]').forEach(btn => {
     btn.onclick = async function() {
@@ -5729,13 +5763,13 @@ function hvoRenderRoutes() {
         (r.admin_notes ? ' · <span style="color:#1e3cb8;">📝 ' + r.admin_notes + '</span>' : '') +
       '</div>';
 
+    // Build body content
+    const routeId = r.id;
+
     // Vendo items body — visible by default
     const body = document.createElement('div');
     body.style.cssText = 'display:block;border-top:1px solid ' + bdColor + ';';
     body.dataset.routebody = routeId;
-
-    // Build body content
-    const routeId = r.id;
 
     const renderItems = () => {
       const curItems = hvoRouteItems.filter(x => x.route_id === routeId);
@@ -5778,6 +5812,18 @@ function hvoRenderRoutes() {
         '</div>' +
         '<div id="hvo-add-results-' + routeId + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
         '<div id="hvo-add-confirm-' + routeId + '" style="display:none;"></div>' +
+        '<div style="margin-top:6px;">' +
+          '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=f.style.display===&quot;none&quot;?&quot;block&quot;:&quot;none&quot;" style="width:100%;padding:5px;background:#fff7ed;color:#ea580c;border:1.5px dashed #fb923c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add vendo (TG name TBF)</button>' +
+          '<div id="hvo-tbf-form-' + routeId + '" style="display:none;margin-top:6px;background:#fff7ed;border:1.5px dashed #fb923c;border-radius:7px;padding:8px 10px;">' +
+            '<div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;">➕ Add unnamed vendo</div>' +
+            '<input id="hvo-tbf-label-' + routeId + '" placeholder="Description / sheet name e.g. Cogon area vendo" maxlength="80" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<input id="hvo-tbf-area-' + routeId + '" placeholder="Area (e.g. DIPOLOG)" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<div style="display:flex;gap:4px;">' +
+              '<button data-addtbf="' + routeId + '" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>' +
+              '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=&quot;none&quot;" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
       '<div style="padding:8px 14px;background:#f0f4ff;border-top:1px solid #dde3f5;display:flex;flex-direction:column;gap:6px;">' +
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' +
