@@ -6544,10 +6544,11 @@ function toast(msg, dur) {
       <div style="background:#fff;border:1px solid rgba(217,119,6,.15);border-radius:8px;padding:10px 12px;">
         <div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">🐍 app.py (Railway)</div>
         <div style="font-size:11px;color:var(--mu);margin-bottom:8px;">Telethon listener — Railway cloud code</div>
-        <a href="https://github.com/SpawnInternet/VendoMonitor-Cloud/archive/refs/heads/main.zip" target="_blank"
-          style="display:block;width:100%;padding:6px;background:#d97706;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;box-sizing:border-box;">
-          ⬇ Download ZIP
-        </a>
+        <button onclick="backupAppPy()"
+          style="width:100%;padding:6px;background:#d97706;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          ⬇ Download app.py
+        </button>
+        <div id="apypy-msg" style="font-size:10px;color:#d97706;margin-top:4px;text-align:center;"></div>
       </div>
 
     </div>
@@ -8658,6 +8659,37 @@ async function backupData() {
     if (btn) { btn.textContent = "❌ Failed"; btn.disabled = false; }
     alert("Backup error: " + e.message);
     return 0;
+  }
+}
+
+async function backupAppPy() {
+  const msg = document.getElementById('apypy-msg');
+  if (msg) msg.textContent = '⏳ Fetching…';
+  try {
+    // Try raw GitHub (public) first
+    const urls = [
+      'https://raw.githubusercontent.com/SpawnInternet/VendoMonitor-Cloud/main/app.py',
+      'https://raw.githubusercontent.com/SpawnInternet/VendoMonitor-Cloud/master/app.py',
+    ];
+    let text = null;
+    for (const url of urls) {
+      try {
+        const r = await fetch(url);
+        if (r.ok) { text = await r.text(); break; }
+      } catch(e) {}
+    }
+    if (!text) throw new Error('Repo is private or app.py not found. Make repo public to enable this download.');
+    const blob = new Blob([text], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'app.py';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    if (msg) { msg.textContent = '✅ Downloaded!'; setTimeout(()=>msg.textContent='', 3000); }
+  } catch(e) {
+    if (msg) msg.textContent = '❌ ' + e.message;
+    // Fallback: open GitHub page
+    window.open('https://github.com/SpawnInternet/VendoMonitor-Cloud', '_blank');
   }
 }
 
