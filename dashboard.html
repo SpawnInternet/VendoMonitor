@@ -2971,15 +2971,88 @@ function hvUnnamedGetFields() {
     area:  (document.getElementById('hv-unnamed-area')?.value || '').trim() || null,
     vlan:  parseInt(document.getElementById('hv-unnamed-vlan')?.value) || null,
     addr:  (document.getElementById('hv-unnamed-addr')?.value || '').trim() || null,
-    last:  document.getElementById('hv-unnamed-last')?.value || null
+    last:  document.getElementById('hv-unnamed-last')?.value || null,
+    lat:   parseFloat(document.getElementById('hv-unnamed-lat')?.value) || null,
+    lng:   parseFloat(document.getElementById('hv-unnamed-lng')?.value) || null
   };
 }
 
+function hvTbfParseGPS(inp, rId) {
+  const parts = inp.value.replace(/\s+/g,' ').trim().split(/[,\s]+/);
+  if (parts.length >= 2) {
+    const lat = parseFloat(parts[0]), lng = parseFloat(parts[1]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const li = document.getElementById('hvo-tbf-lat-' + rId); if(li) li.value = lat;
+      const lo = document.getElementById('hvo-tbf-lng-' + rId); if(lo) lo.value = lng;
+      inp.style.borderColor = '#86efac'; return;
+    }
+  }
+  const li = document.getElementById('hvo-tbf-lat-' + rId); if(li) li.value = '';
+  const lo = document.getElementById('hvo-tbf-lng-' + rId); if(lo) lo.value = '';
+  inp.style.borderColor = '';
+}
+
+function hvHrepParseGPS(inp) {
+  const parts = inp.value.replace(/\s+/g,' ').trim().split(/[,\s]+/);
+  if (parts.length >= 2) {
+    const lat = parseFloat(parts[0]), lng = parseFloat(parts[1]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      const li = document.getElementById('hrep-tbf-lat'); if(li) li.value = lat;
+      const lo = document.getElementById('hrep-tbf-lng'); if(lo) lo.value = lng;
+      inp.style.borderColor = '#86efac'; return;
+    }
+  }
+  const li = document.getElementById('hrep-tbf-lat'); if(li) li.value = '';
+  const lo = document.getElementById('hrep-tbf-lng'); if(lo) lo.value = '';
+  inp.style.borderColor = '';
+}
+
+function hvUnnamedParseGPS(val) {
+  // Accept formats: "8.591, 123.353" or "8.591 123.353" or just lat,lng
+  const msg = document.getElementById('hv-unnamed-gps-msg');
+  const parts = val.replace(/\s+/g,' ').trim().split(/[,\s]+/);
+  if (parts.length >= 2) {
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      document.getElementById('hv-unnamed-lat').value = lat;
+      document.getElementById('hv-unnamed-lng').value = lng;
+      if(msg){msg.textContent='✅ ' + lat.toFixed(6) + ', ' + lng.toFixed(6);msg.style.color='#15803d';msg.style.display='';}
+      return;
+    }
+  }
+  document.getElementById('hv-unnamed-lat').value = '';
+  document.getElementById('hv-unnamed-lng').value = '';
+  if(msg) msg.style.display='none';
+}
+
+function hvUnnamedGetGPS() {
+  const msg = document.getElementById('hv-unnamed-gps-msg');
+  if (!navigator.geolocation) { if(msg){msg.textContent='GPS not supported on this device';msg.style.color='#dc2626';msg.style.display='';} return; }
+  if(msg){msg.textContent='Getting location…';msg.style.color='#0284c7';msg.style.display='';}
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude.toFixed(7);
+      const lng = pos.coords.longitude.toFixed(7);
+      const gpsInp = document.getElementById('hv-unnamed-gps');
+      if(gpsInp) gpsInp.value = lat + ', ' + lng;
+      document.getElementById('hv-unnamed-lat').value = lat;
+      document.getElementById('hv-unnamed-lng').value = lng;
+      if(msg){msg.textContent='✅ Location captured: '+lat+', '+lng;msg.style.color='#15803d';msg.style.display='';}
+    },
+    err => {
+      if(msg){msg.textContent='❌ Could not get location: '+err.message;msg.style.color='#dc2626';msg.style.display='';}
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
 function hvUnnamedClearFields() {
-  ['hv-unnamed-label','hv-unnamed-addr','hv-unnamed-vlan','hv-unnamed-last'].forEach(id => {
+  ['hv-unnamed-label','hv-unnamed-addr','hv-unnamed-vlan','hv-unnamed-last','hv-unnamed-lat','hv-unnamed-lng','hv-unnamed-gps'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const area = document.getElementById('hv-unnamed-area'); if (area) area.value = '';
+  const gpsMsg = document.getElementById('hv-unnamed-gps-msg'); if(gpsMsg) gpsMsg.style.display='none';
 }
 
 function hvUnnamedShowMsg(text, ok) {
@@ -3009,7 +3082,7 @@ function hvAddUnnamed() {
 }
 
 async function hvAddUnnamedAndSave() {
-  const { label, area, vlan, addr, last } = hvUnnamedGetFields();
+  const { label, area, vlan, addr, last, lat, lng } = hvUnnamedGetFields();
   if (!label) {
     const inp = document.getElementById('hv-unnamed-label');
     if (inp) { inp.style.borderColor = '#dc2626'; inp.focus(); }
@@ -3033,7 +3106,9 @@ async function hvAddUnnamedAndSave() {
         area: area || null,
         vlan: vlan || null,
         address: addr || null,
-        last_harvest_date: last || null
+        last_harvest_date: last || null,
+        lat: lat || null,
+        lng: lng || null
       })
     });
     if (!r.ok) {
@@ -3611,6 +3686,8 @@ async function hrepAddTBF() {
   const vlan  = parseInt(document.getElementById('hrep-tbf-vlan')?.value) || null;
   const addr  = (document.getElementById('hrep-tbf-addr')?.value || '').trim() || null;
   const last  = document.getElementById('hrep-tbf-last')?.value || null;
+  const lat   = parseFloat(document.getElementById('hrep-tbf-lat')?.value) || null;
+  const lng   = parseFloat(document.getElementById('hrep-tbf-lng')?.value) || null;
   const labelInp = document.getElementById('hrep-tbf-label');
   if (!label) {
     if (labelInp) { labelInp.style.borderColor = '#dc2626'; labelInp.focus(); }
@@ -3634,7 +3711,7 @@ async function hrepAddTBF() {
         sheet_name: label,
         area: area,
         status: 'pending',
-        collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '')
+        collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '') + (lat ? ' · GPS:' + lat + ',' + lng : '')
       })
     });
     if (r.ok) {
@@ -3645,6 +3722,9 @@ async function hrepAddTBF() {
       const _hv = document.getElementById('hrep-tbf-vlan'); if(_hv) _hv.value = '';
       const _hd = document.getElementById('hrep-tbf-addr'); if(_hd) _hd.value = '';
       const _hl = document.getElementById('hrep-tbf-last'); if(_hl) _hl.value = '';
+      const _hg = document.getElementById('hrep-tbf-gps'); if(_hg) { _hg.value=''; _hg.style.borderColor=''; }
+      const _hla = document.getElementById('hrep-tbf-lat'); if(_hla) _hla.value = '';
+      const _hlo = document.getElementById('hrep-tbf-lng'); if(_hlo) _hlo.value = '';
       hrepToggleTBF();
       // Reload items
       const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}&order=id.asc`, { headers: H });
@@ -5545,6 +5625,8 @@ function hvoBindBodyEvents(body, routeId) {
       const vlan   = parseInt(document.getElementById('hvo-tbf-vlan-' + rId)?.value) || null;
       const addr   = (document.getElementById('hvo-tbf-addr-' + rId)?.value || '').trim() || null;
       const last   = document.getElementById('hvo-tbf-last-' + rId)?.value || null;
+      const lat    = parseFloat(document.getElementById('hvo-tbf-lat-' + rId)?.value) || null;
+      const lng    = parseFloat(document.getElementById('hvo-tbf-lng-' + rId)?.value) || null;
       const labelInp = document.getElementById('hvo-tbf-label-' + rId);
       if (!label) { if (labelInp) { labelInp.style.borderColor = '#dc2626'; labelInp.focus(); } return; }
       if (labelInp) labelInp.style.borderColor = '';
@@ -5553,7 +5635,7 @@ function hvoBindBodyEvents(body, routeId) {
         const r2 = await fetch(`${_SB}/rest/v1/route_items`, {
           method: 'POST',
           headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-          body: JSON.stringify({ route_id: parseInt(rId), tg_name: null, sheet_name: label, area: area, status: 'pending', collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '') })
+          body: JSON.stringify({ route_id: parseInt(rId), tg_name: null, sheet_name: label, area: area, status: 'pending', collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '') + (lat ? ' · GPS:' + lat + ',' + lng : '') })
         });
         if (r2.ok) {
           const newItems = await r2.json();
@@ -5564,6 +5646,9 @@ function hvoBindBodyEvents(body, routeId) {
           const vlanInp = document.getElementById('hvo-tbf-vlan-' + rId); if (vlanInp) vlanInp.value = '';
           const addrInp = document.getElementById('hvo-tbf-addr-' + rId); if (addrInp) addrInp.value = '';
           const lastInp = document.getElementById('hvo-tbf-last-' + rId); if (lastInp) lastInp.value = '';
+          const gpsInp  = document.getElementById('hvo-tbf-gps-' + rId); if (gpsInp) { gpsInp.value=''; gpsInp.style.borderColor=''; }
+          const latInp  = document.getElementById('hvo-tbf-lat-' + rId); if (latInp) latInp.value = '';
+          const lngInp  = document.getElementById('hvo-tbf-lng-' + rId); if (lngInp) lngInp.value = '';
           const form = document.getElementById('hvo-tbf-form-' + rId);
           if (form) form.style.display = 'none';
           if (body._refresh) body._refresh();
@@ -5912,6 +5997,10 @@ function hvoRenderRoutes() {
             '</div>' +
             '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">LAST HARVEST DATE</div>' +
             '<input id="hvo-tbf-last-' + routeId + '" type="date" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">GPS (paste lat, lng)</div>' +
+            '<input id="hvo-tbf-gps-' + routeId + '" type="text" placeholder="e.g. 8.5912285, 123.3539253" oninput="hvTbfParseGPS(this,' + JSON.stringify(routeId) + ')" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<input id="hvo-tbf-lat-' + routeId + '" type="hidden">' +
+            '<input id="hvo-tbf-lng-' + routeId + '" type="hidden">' +
             '<div style="display:flex;gap:4px;">' +
               '<button data-addtbf="' + routeId + '" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>' +
               '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=&quot;none&quot;" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>' +
@@ -10789,7 +10878,12 @@ async function fullBackup() {
           </div>
           <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">LAST HARVEST DATE</div>
           <input id="hrep-tbf-last" type="date" title="Last harvest date — used as TG income window start"
+            style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:5px;">
+          <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">GPS (paste lat, lng)</div>
+          <input id="hrep-tbf-gps" type="text" placeholder="e.g. 8.5912285, 123.3539253" oninput="hvHrepParseGPS(this)"
             style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:6px;">
+          <input id="hrep-tbf-lat" type="hidden">
+          <input id="hrep-tbf-lng" type="hidden">
           <div style="display:flex;gap:5px;">
             <button onclick="hrepAddTBF()" style="flex:1;padding:6px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
             <button onclick="hrepToggleTBF()" style="padding:6px 12px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>
@@ -10859,6 +10953,23 @@ async function fullBackup() {
         <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px;">Last harvest date <span style="font-size:10px;font-weight:400;color:#6b7280;">(used as TG income window start)</span></div>
         <input id="hv-unnamed-last" type="date"
           style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;">
+      </div>
+
+      <!-- GPS -->
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-size:11px;font-weight:700;color:#374151;">GPS Coordinates <span style="font-size:10px;font-weight:400;color:#6b7280;">(paste lat,lng or use button)</span></div>
+          <button onclick="hvUnnamedGetGPS()" type="button"
+            style="padding:4px 10px;background:#0284c7;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">
+            📍 Get my location
+          </button>
+        </div>
+        <input id="hv-unnamed-gps" type="text" placeholder="e.g. 8.5912285, 123.3539253"
+          oninput="hvUnnamedParseGPS(this.value)"
+          style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;">
+        <input id="hv-unnamed-lat" type="hidden">
+        <input id="hv-unnamed-lng" type="hidden">
+        <div id="hv-unnamed-gps-msg" style="font-size:10px;color:#0284c7;margin-top:4px;display:none;"></div>
       </div>
 
       <!-- Status message -->
