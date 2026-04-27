@@ -4372,6 +4372,7 @@ function hvoOpenCollectorPopup(id) {
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Total Coins</th>
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Free</th>
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Old</th>
+            <th style="padding:8px 10px;text-align:left;color:#ea580c;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Saloy</th>
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Net</th>
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Spawn 75%</th>
             <th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;">Owner 25%</th>
@@ -4383,6 +4384,7 @@ function hvoOpenCollectorPopup(id) {
             const total=parseFloat(h.coins_total||0);
             const free=parseFloat(h.coins_free||0);
             const old2=parseFloat(h.coins_old||0);
+            const saloy2=parseFloat(h.coins_saloy||0);
             return `<tr style="border-bottom:1px solid #f0f0f8;">
               <td style="padding:8px 10px;color:#9ca3af;">${i+1}</td>
               <td style="padding:8px 10px;font-weight:600;color:#1e3cb8;">${h.vendo_name||h.tg_name||'—'}</td>
@@ -4392,13 +4394,14 @@ function hvoOpenCollectorPopup(id) {
               <td style="padding:8px 10px;font-weight:600;">${fmt(total)}</td>
               <td style="padding:8px 10px;color:#dc2626;">${free?fmt(free):'—'}</td>
               <td style="padding:8px 10px;color:#d97706;">${old2?fmt(old2):'—'}</td>
+              <td style="padding:8px 10px;color:#ea580c;font-weight:600;">${saloy2?fmt(saloy2):'—'}</td>
               <td style="padding:8px 10px;font-weight:700;color:#15803d;">${fmt(net)}</td>
               <td style="padding:8px 10px;font-weight:700;color:#1e3cb8;">${fmt(spawn)}</td>
               <td style="padding:8px 10px;font-weight:700;color:#7c3aed;">${fmt(owner)}</td>
             </tr>`;
           }).join('')}</tbody>
           <tfoot><tr style="background:#f8faff;font-weight:700;">
-            <td colspan="8" style="padding:8px 10px;color:#374151;">TOTAL</td>
+            <td colspan="9" style="padding:8px 10px;color:#374151;">TOTAL</td>
             <td style="padding:8px 10px;color:#15803d;">${fmt(totalNet)}</td>
             <td style="padding:8px 10px;color:#1e3cb8;">${fmt(totalNet*0.75)}</td>
             <td style="padding:8px 10px;color:#7c3aed;">${fmt(totalNet*0.25)}</td>
@@ -4973,7 +4976,7 @@ async function hvExportCollector(collector, date) {
   try {
     // Fetch all harvest records for this collector + date
     const r = await fetch(
-      `${_SB}/rest/v1/harvests?harvest_date=eq.${date}&collector=eq.${encodeURIComponent(collector)}&select=id,vendo_name,tg_name,sheet_name,area,route_code,harvest_date,harvest_window_start,coins_total,coins_free,coins_old,net_collectible,spawn_share,customer_share,admin_notes&order=route_code.asc,vendo_name.asc&limit=500`,
+      `${_SB}/rest/v1/harvests?harvest_date=eq.${date}&collector=eq.${encodeURIComponent(collector)}&select=id,vendo_name,tg_name,sheet_name,area,route_code,harvest_date,harvest_window_start,coins_total,coins_free,coins_old,coins_saloy,net_collectible,spawn_share,customer_share,admin_notes&order=route_code.asc,vendo_name.asc&limit=500`,
       { headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY } }
     );
     const harvests = await r.json();
