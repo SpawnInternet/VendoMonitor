@@ -984,11 +984,28 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-add-unnamed-btn" onclick="hvToggleUnnamedForm(true)">➕ Add vendo (TG name TBF)</button>
       <!-- ADD UNNAMED VENDO FORM (inline, hidden by default) -->
       <div class="hv-unnamed-form" id="hv-unnamed-form" style="display:none;">
-        <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
-        <input id="hv-unnamed-label" placeholder="Description e.g. Cogon area, Near Jollibee Dipolog" maxlength="80" autocomplete="off">
-        <input id="hv-unnamed-area" placeholder="Area (e.g. DIPOLOG)" autocomplete="off">
-        <input id="hv-unnamed-last" type="date" title="Last harvest date (optional)">
-        <div style="display:flex;gap:4px;margin-top:2px;">
+        <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
+        <div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;text-transform:uppercase;">Name *</div>
+        <input id="hv-unnamed-label" placeholder="Owner name e.g. Juan dela Cruz" maxlength="80" autocomplete="off">
+        <div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;text-transform:uppercase;">Address</div>
+        <input id="hv-unnamed-addr" placeholder="e.g. Purok 3 Cogon, Dipolog City" maxlength="120" autocomplete="off">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          <div>
+            <div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;text-transform:uppercase;">Area</div>
+            <select id="hv-unnamed-area" style="width:100%;padding:5px 7px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;background:#fff;color:#374151;">
+              <option value="">— select —</option>
+              <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+              <option>ROXAS</option><option>POLANCO</option><option>SINAMAN</option><option>MINAOG</option><option>MIX AREAS</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;text-transform:uppercase;">VLAN</div>
+            <input id="hv-unnamed-vlan" type="number" placeholder="e.g. 116" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;">
+          </div>
+        </div>
+        <div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;text-transform:uppercase;">Last harvest date</div>
+        <input id="hv-unnamed-last" type="date" title="Last harvest date — used as TG income window start">
+        <div style="display:flex;gap:4px;margin-top:4px;">
           <button onclick="hvAddUnnamed()" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
           <button onclick="hvToggleUnnamedForm(false)" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>
         </div>
@@ -2978,16 +2995,20 @@ function hvAddUnnamed() {
     return;
   }
   document.getElementById('hv-unnamed-label').style.borderColor = '';
-  const area  = (document.getElementById('hv-unnamed-area').value || '').trim().toUpperCase() || '—';
+  const area  = (document.getElementById('hv-unnamed-area').value || '').trim() || '—';
+  const vlan  = parseInt(document.getElementById('hv-unnamed-vlan')?.value) || null;
+  const addr  = (document.getElementById('hv-unnamed-addr')?.value || '').trim() || null;
   const last  = document.getElementById('hv-unnamed-last').value || '';
 
   // Generate a temp ID so we can track this row
   const tempId = 'tbf_' + Date.now();
-  hvAddToRoutePanel(tempId, label, label, '', area, false, '', '', last, true);
+  hvAddToRoutePanel(tempId, label, label, '', area, false, '', addr||'', last, true, vlan);
 
   // Reset form
   document.getElementById('hv-unnamed-label').value = '';
-  document.getElementById('hv-unnamed-area').value  = '';
+  const _ua = document.getElementById('hv-unnamed-area'); if(_ua) _ua.value = '';
+  const _uv = document.getElementById('hv-unnamed-vlan'); if(_uv) _uv.value = '';
+  const _ud = document.getElementById('hv-unnamed-addr'); if(_ud) _ud.value = '';
   document.getElementById('hv-unnamed-last').value  = '';
   hvToggleUnnamedForm(false);
 
@@ -3536,7 +3557,9 @@ function hrepToggleTBF() {
 
 async function hrepAddTBF() {
   const label = (document.getElementById('hrep-tbf-label')?.value || '').trim();
-  const area  = (document.getElementById('hrep-tbf-area')?.value || '').trim().toUpperCase() || null;
+  const area  = (document.getElementById('hrep-tbf-area')?.value || '').trim() || null;
+  const vlan  = parseInt(document.getElementById('hrep-tbf-vlan')?.value) || null;
+  const addr  = (document.getElementById('hrep-tbf-addr')?.value || '').trim() || null;
   const last  = document.getElementById('hrep-tbf-last')?.value || null;
   const labelInp = document.getElementById('hrep-tbf-label');
   if (!label) {
@@ -3561,15 +3584,17 @@ async function hrepAddTBF() {
         sheet_name: label,
         area: area,
         status: 'pending',
-        collector_note: last ? '🔴 TG name TBF · Last harvest: ' + last : '🔴 TG name TBF'
+        collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '')
       })
     });
     if (r.ok) {
       if (msg) { msg.textContent = '✅ Unnamed vendo added!'; msg.style.color = '#15803d'; setTimeout(() => { if(msg) msg.textContent=''; }, 2500); }
       // Reset form + hide
       document.getElementById('hrep-tbf-label').value = '';
-      document.getElementById('hrep-tbf-area').value  = '';
-      document.getElementById('hrep-tbf-last').value  = '';
+      const _ha = document.getElementById('hrep-tbf-area'); if(_ha) _ha.value = '';
+      const _hv = document.getElementById('hrep-tbf-vlan'); if(_hv) _hv.value = '';
+      const _hd = document.getElementById('hrep-tbf-addr'); if(_hd) _hd.value = '';
+      const _hl = document.getElementById('hrep-tbf-last'); if(_hl) _hl.value = '';
       hrepToggleTBF();
       // Reload items
       const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}&order=id.asc`, { headers: H });
@@ -5466,7 +5491,10 @@ function hvoBindBodyEvents(body, routeId) {
     btn.onclick = async function() {
       const rId    = this.dataset.addtbf;
       const label  = (document.getElementById('hvo-tbf-label-' + rId)?.value || '').trim();
-      const area   = (document.getElementById('hvo-tbf-area-' + rId)?.value || '').trim().toUpperCase() || null;
+      const area   = (document.getElementById('hvo-tbf-area-' + rId)?.value || '').trim() || null;
+      const vlan   = parseInt(document.getElementById('hvo-tbf-vlan-' + rId)?.value) || null;
+      const addr   = (document.getElementById('hvo-tbf-addr-' + rId)?.value || '').trim() || null;
+      const last   = document.getElementById('hvo-tbf-last-' + rId)?.value || null;
       const labelInp = document.getElementById('hvo-tbf-label-' + rId);
       if (!label) { if (labelInp) { labelInp.style.borderColor = '#dc2626'; labelInp.focus(); } return; }
       if (labelInp) labelInp.style.borderColor = '';
@@ -5475,15 +5503,17 @@ function hvoBindBodyEvents(body, routeId) {
         const r2 = await fetch(`${_SB}/rest/v1/route_items`, {
           method: 'POST',
           headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
-          body: JSON.stringify({ route_id: parseInt(rId), tg_name: null, sheet_name: label, area: area, status: 'pending', collector_note: '🔴 TG name TBF' })
+          body: JSON.stringify({ route_id: parseInt(rId), tg_name: null, sheet_name: label, area: area, status: 'pending', collector_note: '🔴 TG name TBF' + (addr ? ' · ' + addr : '') + (vlan ? ' · VLAN ' + vlan : '') + (last ? ' · Last harvest: ' + last : '') })
         });
         if (r2.ok) {
           const newItems = await r2.json();
           if (newItems && newItems[0]) hvoRouteItems.push(newItems[0]);
           // Clear form + hide
           if (labelInp) labelInp.value = '';
-          const areaInp = document.getElementById('hvo-tbf-area-' + rId);
-          if (areaInp) areaInp.value = '';
+          const areaInp = document.getElementById('hvo-tbf-area-' + rId); if (areaInp) areaInp.value = '';
+          const vlanInp = document.getElementById('hvo-tbf-vlan-' + rId); if (vlanInp) vlanInp.value = '';
+          const addrInp = document.getElementById('hvo-tbf-addr-' + rId); if (addrInp) addrInp.value = '';
+          const lastInp = document.getElementById('hvo-tbf-last-' + rId); if (lastInp) lastInp.value = '';
           const form = document.getElementById('hvo-tbf-form-' + rId);
           if (form) form.style.display = 'none';
           if (body._refresh) body._refresh();
@@ -5816,8 +5846,22 @@ function hvoRenderRoutes() {
           '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=f.style.display===&quot;none&quot;?&quot;block&quot;:&quot;none&quot;" style="width:100%;padding:5px;background:#fff7ed;color:#ea580c;border:1.5px dashed #fb923c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add vendo (TG name TBF)</button>' +
           '<div id="hvo-tbf-form-' + routeId + '" style="display:none;margin-top:6px;background:#fff7ed;border:1.5px dashed #fb923c;border-radius:7px;padding:8px 10px;">' +
             '<div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;">➕ Add unnamed vendo</div>' +
-            '<input id="hvo-tbf-label-' + routeId + '" placeholder="Description / sheet name e.g. Cogon area vendo" maxlength="80" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
-            '<input id="hvo-tbf-area-' + routeId + '" placeholder="Area (e.g. DIPOLOG)" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">NAME *</div>' +
+            '<input id="hvo-tbf-label-' + routeId + '" placeholder="Owner name e.g. Juan dela Cruz" maxlength="80" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">ADDRESS</div>' +
+            '<input id="hvo-tbf-addr-' + routeId + '" placeholder="e.g. Purok 3 Cogon, Dipolog City" maxlength="120" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">' +
+              '<div><div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">AREA</div>' +
+              '<select id="hvo-tbf-area-' + routeId + '" style="width:100%;padding:5px 6px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;background:#fff;">' +
+                '<option value="">— select —</option>' +
+                '<option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>' +
+                '<option>ROXAS</option><option>POLANCO</option><option>SINAMAN</option><option>MINAOG</option><option>MIX AREAS</option>' +
+              '</select></div>' +
+              '<div><div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">VLAN</div>' +
+              '<input id="hvo-tbf-vlan-' + routeId + '" type="number" placeholder="e.g. 116" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;"></div>' +
+            '</div>' +
+            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">LAST HARVEST DATE</div>' +
+            '<input id="hvo-tbf-last-' + routeId + '" type="date" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
             '<div style="display:flex;gap:4px;">' +
               '<button data-addtbf="' + routeId + '" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>' +
               '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=&quot;none&quot;" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>' +
@@ -10672,11 +10716,29 @@ async function fullBackup() {
         </button>
         <div id="hrep-tbf-form" style="display:none;margin-top:8px;background:#fff7ed;border:1.5px dashed #fb923c;border-radius:7px;padding:8px 10px;">
           <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
-          <input id="hrep-tbf-label" placeholder="Description e.g. Cogon area, Near Jollibee Dipolog" maxlength="80" autocomplete="off"
+          <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">NAME *</div>
+          <input id="hrep-tbf-label" placeholder="Owner name e.g. Juan dela Cruz" maxlength="80" autocomplete="off"
             style="width:100%;padding:6px 8px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:5px;">
-          <input id="hrep-tbf-area" placeholder="Area (e.g. DIPOLOG)" autocomplete="off"
+          <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">ADDRESS</div>
+          <input id="hrep-tbf-addr" placeholder="e.g. Purok 3 Cogon, Dipolog City" maxlength="120" autocomplete="off"
             style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:5px;">
-          <input id="hrep-tbf-last" type="date" title="Last harvest date (optional)"
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:5px;">
+            <div>
+              <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">AREA</div>
+              <select id="hrep-tbf-area" style="width:100%;padding:6px 8px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;background:#fff;color:#374151;">
+                <option value="">— select —</option>
+                <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+                <option>ROXAS</option><option>POLANCO</option><option>SINAMAN</option><option>MINAOG</option><option>MIX AREAS</option>
+              </select>
+            </div>
+            <div>
+              <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">VLAN</div>
+              <input id="hrep-tbf-vlan" type="number" placeholder="e.g. 116"
+                style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;">
+            </div>
+          </div>
+          <div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">LAST HARVEST DATE</div>
+          <input id="hrep-tbf-last" type="date" title="Last harvest date — used as TG income window start"
             style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:6px;">
           <div style="display:flex;gap:5px;">
             <button onclick="hrepAddTBF()" style="flex:1;padding:6px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
