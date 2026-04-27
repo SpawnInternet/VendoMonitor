@@ -3513,44 +3513,139 @@ async function hrepAddVendo(vid) {
   } catch(e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
 }
 
-async function hrepTransferItem(itemId, btn) {
-  // Ask for destination route code
-  const destCode = prompt('Transfer to which route code?\n(Enter the route code e.g. ABC123)');
-  if (!destCode) return;
-  const code = destCode.trim().toUpperCase();
-  btn.textContent = '...'; btn.disabled = true;
+function hrepToggleTBF() {
+  const form = document.getElementById('hrep-tbf-form');
+  const btn  = document.getElementById('hrep-tbf-btn');
+  if (!form) return;
+  const show = form.style.display === 'none';
+  form.style.display = show ? 'block' : 'none';
+  if (show) document.getElementById('hrep-tbf-label').focus();
+}
+
+async function hrepAddTBF() {
+  const label = (document.getElementById('hrep-tbf-label')?.value || '').trim();
+  const area  = (document.getElementById('hrep-tbf-area')?.value || '').trim().toUpperCase() || null;
+  const last  = document.getElementById('hrep-tbf-last')?.value || null;
+  const labelInp = document.getElementById('hrep-tbf-label');
+  if (!label) {
+    if (labelInp) { labelInp.style.borderColor = '#dc2626'; labelInp.focus(); }
+    return;
+  }
+  if (labelInp) labelInp.style.borderColor = '';
+
+  const pop = document.getElementById('hv-route-edit-pop');
+  const routeId = pop?.dataset?.routeId;
+  if (!routeId) return;
   const msg = document.getElementById('hrep-msg');
-  if (msg) { msg.textContent = 'Transferring...'; msg.style.color = '#6b7280'; }
+  if (msg) { msg.textContent = 'Adding…'; msg.style.color = '#6b7280'; }
+
   try {
-    // Find destination route ID
-    const rr = await fetch(`${_SB}/rest/v1/routes?route_code=eq.${code}&select=id,route_code,collector,status&limit=1`, {
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
-    });
-    const routes = await rr.json();
-    if (!routes.length) { if (msg) { msg.textContent = '❌ Route ' + code + ' not found'; msg.style.color = '#dc2626'; } btn.textContent = '↗ Transfer'; btn.disabled = false; return; }
-    const destRoute = routes[0];
-    if (destRoute.status === 'completed') { if (msg) { msg.textContent = '❌ Route ' + code + ' is already completed'; msg.style.color = '#dc2626'; } btn.textContent = '↗ Transfer'; btn.disabled = false; return; }
-    // Update route_item's route_id to destination
-    const r = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
-      method: 'PATCH',
-      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ route_id: destRoute.id, status: 'pending', harvested_at: null, total_coins: null, free_coins: null, old_coins: null, net_collectible: null, spawn_share: null, customer_share: null })
+    const H = { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+    const r = await fetch(`${_SB}/rest/v1/route_items`, {
+      method: 'POST', headers: H,
+      body: JSON.stringify({
+        route_id: parseInt(routeId),
+        tg_name: null,
+        sheet_name: label,
+        area: area,
+        status: 'pending',
+        collector_note: last ? '🔴 TG name TBF · Last harvest: ' + last : '🔴 TG name TBF'
+      })
     });
     if (r.ok) {
-      if (msg) { msg.textContent = '✅ Transferred to route ' + code + ' (' + destRoute.collector + ')'; msg.style.color = '#15803d'; }
-      btn.closest('div[style*="border:1px solid #e5e7eb"]').style.opacity = '0.5';
-      btn.closest('div[style*="border:1px solid #e5e7eb"]').style.pointerEvents = 'none';
-      setTimeout(() => {
-        btn.closest('div[style*="border:1px solid #e5e7eb"]')?.remove();
-        if (msg) msg.textContent = '';
-      }, 2000);
+      if (msg) { msg.textContent = '✅ Unnamed vendo added!'; msg.style.color = '#15803d'; setTimeout(() => { if(msg) msg.textContent=''; }, 2500); }
+      // Reset form + hide
+      document.getElementById('hrep-tbf-label').value = '';
+      document.getElementById('hrep-tbf-area').value  = '';
+      document.getElementById('hrep-tbf-last').value  = '';
+      hrepToggleTBF();
+      // Reload items
+      const ri = await fetch(`${_SB}/rest/v1/route_items?route_id=eq.${routeId}&order=id.asc`, { headers: H });
+      const items = await ri.json();
+      hrepRenderItems(items, routeId);
     } else {
-      if (msg) { msg.textContent = '❌ Transfer failed'; msg.style.color = '#dc2626'; }
-      btn.textContent = '↗ Transfer'; btn.disabled = false;
+      const err = await r.text();
+      if (msg) { msg.textContent = '❌ Failed: ' + err.substring(0,80); msg.style.color = '#dc2626'; }
     }
   } catch(e) {
     if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+  }
+}
+
+async function hrepTransferItem(itemId, btn) {
+  // Show dropdown of active routes instead of prompt
+  const ex = document.getElementById('hvo-transfer-drop');
+  if (ex) { ex.remove(); if (ex._itemId == itemId) return; }
+
+  btn.textContent = '⏳'; btn.disabled = true;
+  const msg = document.getElementById('hrep-msg');
+
+  try {
+    const rr = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=30`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const routes = await rr.json();
     btn.textContent = '↗ Transfer'; btn.disabled = false;
+
+    if (!routes.length) { if (msg) { msg.textContent = '❌ No active routes found'; msg.style.color = '#dc2626'; } return; }
+
+    const drop = document.createElement('div');
+    drop.id = 'hvo-transfer-drop';
+    drop._itemId = itemId;
+    const rect = btn.getBoundingClientRect();
+    drop.style.cssText = 'position:fixed;top:' + (rect.bottom+4) + 'px;left:' + rect.left + 'px;z-index:9999;background:#fff;border:1.5px solid #bae6fd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:240px;max-width:300px;overflow:hidden;';
+    drop.innerHTML =
+      '<div style="padding:8px 12px;background:#0284c7;color:#fff;font-size:11px;font-weight:700;">↗ Transfer to route</div>' +
+      routes.map(rt =>
+        '<div data-dest="' + rt.id + '" data-code="' + rt.route_code + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '"' +
+        ' style="padding:9px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;">' +
+          '<div style="font-weight:700;color:#1e3cb8;">' + rt.route_code + ' · ' + (rt.collector||'—') + '</div>' +
+          '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||'') + '</div>' +
+        '</div>'
+      ).join('') +
+      '<div onclick="var el=document.getElementById(&quot;hvo-transfer-drop&quot;);if(el)el.remove();" style="padding:7px 12px;text-align:center;color:#6b7280;font-size:10px;cursor:pointer;background:#f8faff;">Cancel</div>';
+
+    drop.querySelectorAll('[data-dest]').forEach(el => {
+      el.onmouseover = () => el.style.background = '#eff6ff';
+      el.onmouseout  = () => el.style.background = '';
+      el.onclick = async () => {
+        const destId = el.dataset.dest;
+        const code   = el.dataset.code;
+        const col    = el.dataset.col;
+        drop.remove();
+        btn.textContent = '⏳'; btn.disabled = true;
+        if (msg) { msg.textContent = 'Transferring…'; msg.style.color = '#6b7280'; }
+        try {
+          const r2 = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+            method: 'PATCH',
+            headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ route_id: parseInt(destId), status: 'pending', harvested_at: null, total_coins: null, free_coins: null, old_coins: null, net_collectible: null, spawn_share: null, customer_share: null })
+          });
+          if (r2.ok) {
+            if (msg) { msg.textContent = '✅ Transferred to ' + code + ' (' + col + ')'; msg.style.color = '#15803d'; }
+            btn.closest('div[style*="border:1px solid #e5e7eb"]').style.opacity = '0.5';
+            btn.closest('div[style*="border:1px solid #e5e7eb"]').style.pointerEvents = 'none';
+            setTimeout(() => { btn.closest('div[style*="border:1px solid #e5e7eb"]')?.remove(); if(msg) msg.textContent=''; }, 2000);
+          } else {
+            if (msg) { msg.textContent = '❌ Transfer failed'; msg.style.color = '#dc2626'; }
+            btn.textContent = '↗ Transfer'; btn.disabled = false;
+          }
+        } catch(e2) {
+          if (msg) { msg.textContent = '❌ ' + e2.message; msg.style.color = '#dc2626'; }
+          btn.textContent = '↗ Transfer'; btn.disabled = false;
+        }
+      };
+    });
+
+    document.body.appendChild(drop);
+    setTimeout(() => {
+      document.addEventListener('click', function outsideClick(e) {
+        if (!drop.contains(e.target) && e.target !== btn) { drop.remove(); document.removeEventListener('click', outsideClick); }
+      });
+    }, 100);
+  } catch(e) {
+    btn.textContent = '↗ Transfer'; btn.disabled = false;
+    if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
   }
 }
 
@@ -5306,6 +5401,151 @@ function hvoBindBodyEvents(body, routeId) {
       } catch(e) { this.textContent = '✕ Remove'; this.disabled = false; }
     };
   });
+
+  // Transfer buttons — show dropdown of active routes
+  body.querySelectorAll('[data-transfer]').forEach(btn => {
+    btn.onclick = async function() {
+      const itemId = this.dataset.transfer;
+      hvoShowTransferDropdown(itemId, this, body);
+    };
+  });
+
+  // Save route (collector + date) buttons
+  body.querySelectorAll('[data-saveroute]').forEach(btn => {
+    btn.onclick = async function() {
+      const rId = this.dataset.saveroute;
+      const colInp  = body.querySelector('[data-editcol="' + rId + '"]');
+      const dateInp = body.querySelector('[data-editdate="' + rId + '"]');
+      const msgEl   = document.getElementById('hvo-route-save-msg-' + rId);
+      const col  = colInp?.value?.trim() || '';
+      const date = dateInp?.value || '';
+      if (!col) { if (msgEl) { msgEl.textContent = '⚠ Collector required'; msgEl.style.color = '#dc2626'; } return; }
+      if (msgEl) { msgEl.textContent = 'Saving…'; msgEl.style.color = '#6b7280'; }
+      this.disabled = true;
+      try {
+        const r = await fetch(`${_SB}/rest/v1/routes?id=eq.${rId}`, {
+          method: 'PATCH',
+          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ collector: col, ...(date ? { route_date: date } : {}) })
+        });
+        if (r.ok) {
+          // Update in hvoAllRoutes cache
+          const rt = (hvoAllRoutes||[]).find(x => String(x.id) === String(rId));
+          if (rt) { rt.collector = col; if (date) rt.route_date = date; }
+          if (msgEl) { msgEl.textContent = '✅ Saved'; msgEl.style.color = '#15803d'; setTimeout(()=>{ if(msgEl) msgEl.textContent=''; },2500); }
+          hvRefreshPendingRoutes();
+        } else {
+          if (msgEl) { msgEl.textContent = '❌ Failed'; msgEl.style.color = '#dc2626'; }
+        }
+      } catch(e) {
+        if (msgEl) { msgEl.textContent = '❌ ' + e.message; msgEl.style.color = '#dc2626'; }
+      }
+      this.disabled = false;
+    };
+  });
+
+  // Complete route buttons
+  body.querySelectorAll('[data-completeroute]').forEach(btn => {
+    btn.onclick = async function() {
+      const rId = this.dataset.completeroute;
+      if (!confirm('Mark this route as completed? The collector will no longer be able to access it.')) return;
+      this.textContent = '...'; this.disabled = true;
+      try {
+        const r = await fetch(`${_SB}/rest/v1/routes?id=eq.${rId}`, {
+          method: 'PATCH',
+          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+          body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() })
+        });
+        if (r.ok) {
+          // Update cache
+          const rt = (hvoAllRoutes||[]).find(x => String(x.id) === String(rId));
+          if (rt) rt.status = 'completed';
+          if (body._refresh) body._refresh();
+          hvRefreshPendingRoutes();
+          const toast = document.getElementById('hv-refresh-toast');
+          if (toast) { toast.textContent = '✅ Route marked as completed'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+        } else { this.textContent = '✅ Mark route complete'; this.disabled = false; }
+      } catch(e) { this.textContent = '✅ Mark route complete'; this.disabled = false; }
+    };
+  });
+}
+
+/* ── TRANSFER DROPDOWN ── */
+async function hvoShowTransferDropdown(itemId, btn, body) {
+  // Remove existing dropdown
+  const ex = document.getElementById('hvo-transfer-drop');
+  if (ex) { ex.remove(); if (ex._itemId === itemId) return; }
+
+  btn.textContent = '⏳'; btn.disabled = true;
+
+  // Load active routes
+  try {
+    const r = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=30`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const routes = await r.json();
+    btn.textContent = '↗ Transfer'; btn.disabled = false;
+
+    if (!routes.length) { alert('No active routes found. Create a route first.'); return; }
+
+    const drop = document.createElement('div');
+    drop.id = 'hvo-transfer-drop';
+    drop._itemId = itemId;
+    const rect = btn.getBoundingClientRect();
+    drop.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;z-index:9999;background:#fff;border:1.5px solid #bae6fd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:240px;max-width:300px;overflow:hidden;`;
+    drop.innerHTML =
+      '<div style="padding:8px 12px;background:#0284c7;color:#fff;font-size:11px;font-weight:700;">↗ Transfer to route</div>' +
+      routes.map(rt =>
+        '<div data-dest="' + rt.id + '" data-code="' + rt.route_code + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '"' +
+        ' style="padding:9px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;">' +
+          '<div style="font-weight:700;color:#1e3cb8;">' + rt.route_code + ' · ' + (rt.collector||'—') + '</div>' +
+          '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||rt.created_at?.split('T')[0]||'') + '</div>' +
+        '</div>'
+      ).join('') +
+      '<div onclick="var el=document.getElementById(&quot;hvo-transfer-drop&quot;);if(el)el.remove();" style="padding:7px 12px;text-align:center;color:#6b7280;font-size:10px;cursor:pointer;background:#f8faff;">Cancel</div>';
+
+    // Bind clicks
+    drop.querySelectorAll('[data-dest]').forEach(el => {
+      el.onmouseover = () => el.style.background = '#eff6ff';
+      el.onmouseout  = () => el.style.background = '';
+      el.onclick = async () => {
+        const destId  = el.dataset.dest;
+        const code    = el.dataset.code;
+        const col     = el.dataset.col;
+        drop.remove();
+        btn.textContent = '⏳'; btn.disabled = true;
+        try {
+          const r2 = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+            method: 'PATCH',
+            headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ route_id: parseInt(destId), status: 'pending', harvested_at: null, total_coins: null, free_coins: null, old_coins: null, net_collectible: null, spawn_share: null, customer_share: null })
+          });
+          if (r2.ok) {
+            // Remove from hvoRouteItems cache
+            const idx = hvoRouteItems ? hvoRouteItems.findIndex(x => String(x.id) === String(itemId)) : -1;
+            if (idx > -1) hvoRouteItems.splice(idx, 1);
+            if (body && body._refresh) body._refresh();
+            const toast = document.getElementById('hv-refresh-toast');
+            if (toast) { toast.textContent = '✅ Transferred to ' + code + ' (' + col + ')'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),3000); }
+          } else {
+            btn.textContent = '↗ Transfer'; btn.disabled = false;
+            alert('Transfer failed');
+          }
+        } catch(e) { btn.textContent = '↗ Transfer'; btn.disabled = false; alert('Error: ' + e.message); }
+      };
+    });
+
+    document.body.appendChild(drop);
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function outsideClick(e) {
+        if (!drop.contains(e.target) && e.target !== btn) { drop.remove(); document.removeEventListener('click', outsideClick); }
+      });
+    }, 100);
+  } catch(e) {
+    btn.textContent = '↗ Transfer'; btn.disabled = false;
+    alert('Error loading routes: ' + e.message);
+  }
 }
 
 async function hvoRouteSearch(inp, routeId) {
@@ -5503,6 +5743,7 @@ function hvoRenderRoutes() {
                   ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>'
                   : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
                 (!isDone ? '<button data-markdone="' + item.id + '" style="padding:3px 8px;border:1px solid #bbf7d0;border-radius:4px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:3px;">✅ Mark done</button>' : '') +
+                (!isDone ? '<button data-transfer="' + item.id + '" style="padding:2px 7px;border:1px solid #bae6fd;border-radius:4px;background:#fff;color:#0284c7;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:3px;">↗ Transfer</button>' : '') +
                 (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + routeId + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
               '</div>' +
             '</div>';
@@ -5517,9 +5758,24 @@ function hvoRenderRoutes() {
         '<div id="hvo-add-results-' + routeId + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
         '<div id="hvo-add-confirm-' + routeId + '" style="display:none;"></div>' +
       '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:#f8faff;border-top:1px solid #e5e7eb;font-size:12px;">' +
+      '<div style="padding:8px 14px;background:#f0f4ff;border-top:1px solid #dde3f5;display:flex;flex-direction:column;gap:6px;">' +
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">COLLECTOR</div>' +
+            '<input data-editcol="' + routeId + '" value="' + (r.collector||'').replace(/"/g,'&quot;') + '" style="width:100%;padding:4px 7px;border:1px solid #c7d2fe;border-radius:5px;font-size:11px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+          '</div>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">HARVEST DATE</div>' +
+            '<input type="date" data-editdate="' + routeId + '" value="' + (r.route_date||'') + '" style="width:100%;padding:4px 7px;border:1px solid #c7d2fe;border-radius:5px;font-size:11px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+          '</div>' +
+          '<button data-saveroute="' + routeId + '" style="padding:5px 10px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;align-self:flex-end;">💾 Save</button>' +
+        '</div>' +
+        '<span id="hvo-route-save-msg-' + routeId + '" style="font-size:10px;"></span>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 16px;background:#f8faff;border-top:1px solid #e5e7eb;font-size:12px;">' +
         '<span style="color:#6b7280;">' + curDone + ' harvested · ' + curPend + ' pending</span>' +
         '<span style="font-weight:700;color:#15803d;">Total net: ₱' + totalNet.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
+        (r.status !== 'completed' ? '<button data-completeroute="' + routeId + '" style="padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark route complete</button>' : '<span style="padding:4px 10px;background:#dcfce7;color:#15803d;border-radius:10px;font-size:10px;font-weight:700;">✅ Completed</span>') +
       '</div>';
 
       return html;
@@ -10341,6 +10597,26 @@ async function fullBackup() {
       <input id="hrep-add-search" type="text" placeholder="🔍 Search vendo name..." oninput="hrepSearchVendo(this.value)"
         style="width:100%;padding:8px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">
       <div id="hrep-add-results" style="border:1px solid #e5e7eb;border-radius:6px;max-height:160px;overflow-y:auto;background:#fff;margin-top:4px;"></div>
+      <!-- TBF unnamed vendo form -->
+      <div style="margin-top:8px;">
+        <button onclick="hrepToggleTBF()" id="hrep-tbf-btn"
+          style="width:100%;padding:6px;background:#fff7ed;color:#ea580c;border:1.5px dashed #fb923c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+          ➕ Add vendo (TG name TBF)
+        </button>
+        <div id="hrep-tbf-form" style="display:none;margin-top:8px;background:#fff7ed;border:1.5px dashed #fb923c;border-radius:7px;padding:8px 10px;">
+          <div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">➕ Add unnamed vendo</div>
+          <input id="hrep-tbf-label" placeholder="Description e.g. Cogon area, Near Jollibee Dipolog" maxlength="80" autocomplete="off"
+            style="width:100%;padding:6px 8px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:5px;">
+          <input id="hrep-tbf-area" placeholder="Area (e.g. DIPOLOG)" autocomplete="off"
+            style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:5px;">
+          <input id="hrep-tbf-last" type="date" title="Last harvest date (optional)"
+            style="width:100%;padding:6px 8px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:6px;">
+          <div style="display:flex;gap:5px;">
+            <button onclick="hrepAddTBF()" style="flex:1;padding:6px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>
+            <button onclick="hrepToggleTBF()" style="padding:6px 12px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Vendo list -->
