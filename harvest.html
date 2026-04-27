@@ -532,24 +532,41 @@ async function loadRoute() {
     const r2 = await fetch(`${SB}/rest/v1/route_items?route_id=eq.${currentRoute.id}&order=id.asc`, { headers: HDR });
     currentRoute.items = await r2.json();
 
+    // Enrich by tg_name (normal vendos)
     const tgNamesForEnrich = currentRoute.items.map(i => i.tg_name).filter(Boolean);
-    if (tgNamesForEnrich.length) {
-      try {
+    // Also enrich by sheet_name for TBF items (tg_name = null)
+    const sheetNamesForEnrich = currentRoute.items.filter(i => !i.tg_name && i.sheet_name).map(i => i.sheet_name);
+    try {
+      const vendoMap = {};  // keyed by tg_name
+      const sheetMap = {};  // keyed by sheet_name
+
+      if (tgNamesForEnrich.length) {
         const encoded = tgNamesForEnrich.map(n => '"' + n + '"').join(',');
-        const rv = await fetch(`${SB}/rest/v1/vendos?tg_name=in.(${encoded})&select=tg_name,last_harvest_date,vlan,lat,lng,address`, { headers: HDR });
+        const rv = await fetch(`${SB}/rest/v1/vendos?tg_name=in.(${encoded})&select=tg_name,sheet_name,last_harvest_date,vlan,lat,lng,address`, { headers: HDR });
         const vendoData = await rv.json();
-        const vendoMap = {};
         vendoData.forEach(v => { vendoMap[v.tg_name] = v; });
-        currentRoute.items = currentRoute.items.map(item => ({
+      }
+
+      if (sheetNamesForEnrich.length) {
+        const encodedS = sheetNamesForEnrich.map(n => '"' + n + '"').join(',');
+        const rs = await fetch(`${SB}/rest/v1/vendos?sheet_name=in.(${encodedS})&select=tg_name,sheet_name,last_harvest_date,vlan,lat,lng,address`, { headers: HDR });
+        const sheetData = await rs.json();
+        sheetData.forEach(v => { if (v.sheet_name) sheetMap[v.sheet_name] = v; });
+      }
+
+      currentRoute.items = currentRoute.items.map(item => {
+        const v = item.tg_name ? vendoMap[item.tg_name] : sheetMap[item.sheet_name];
+        if (!v) return item;
+        return {
           ...item,
-          last_harvest_date: vendoMap[item.tg_name]?.last_harvest_date || null,
-          vlan: vendoMap[item.tg_name]?.vlan || null,
-          lat: vendoMap[item.tg_name]?.lat || null,
-          lng: vendoMap[item.tg_name]?.lng || null,
-          address: vendoMap[item.tg_name]?.address || null
-        }));
-      } catch(e) { console.warn('vendo enrich failed:', e); }
-    }
+          last_harvest_date: v.last_harvest_date || item.last_harvest_date || null,
+          vlan: v.vlan || item.vlan || null,
+          lat:  v.lat  || item.lat  || null,
+          lng:  v.lng  || item.lng  || null,
+          address: v.address || item.address || null
+        };
+      });
+    } catch(e) { console.warn('vendo enrich failed:', e); }
 
     document.getElementById('rt-code').textContent = currentRoute.route_code;
     document.getElementById('rt-meta').textContent =
