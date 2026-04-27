@@ -8981,6 +8981,33 @@ async function fullBackup() {
     }
     setProgress(65);
 
+    // ── STEP 2f: Remaining tables ────────────────────────
+    const extraTables = [
+      { name: 'skipped',      file: `data/skipped_${dateStr}.csv`,      limit: 10000 },
+      { name: 'devices',      file: `data/devices_${dateStr}.csv`,       limit: 5000  },
+      { name: 'admin_notes',  file: `data/admin_notes_${dateStr}.csv`,   limit: 2000  },
+      { name: 'collections',  file: `data/collections_${dateStr}.csv`,   limit: 5000  },
+      { name: 'route_vendos', file: `data/route_vendos_${dateStr}.csv`,  limit: 5000  },
+    ];
+    for (const tbl of extraTables) {
+      try {
+        log(`Fetching ${tbl.name}...`);
+        const r = await fetch(`${SB_URL}/rest/v1/${tbl.name}?select=*&limit=${tbl.limit}`, { headers: HDR });
+        const rows = await r.json();
+        if (Array.isArray(rows) && rows.length) {
+          const keys = Object.keys(rows[0]);
+          const csv = [keys.join(','), ...rows.map(row =>
+            keys.map(k => { const val=String(row[k]??'').replace(/"/g,'""'); return (val.includes(',')||val.includes('"')||val.includes('\n'))?'"'+val+'"':val; }).join(',')
+          )].join('\n');
+          zip.file(tbl.file, csv);
+          log(`${tbl.name}: ${rows.length} rows saved`, true);
+        } else {
+          log(`${tbl.name}: empty or no data`, false);
+        }
+      } catch(e) { log(`⚠️ ${tbl.name}: ${e.message}`, false); }
+    }
+    setProgress(73);
+
     // ── STEP 3: Code files from GitHub ───────────────────
     log('Fetching code files from GitHub...');
     const ghBase = 'https://raw.githubusercontent.com/SpawnInternet';
@@ -9017,6 +9044,11 @@ async function fullBackup() {
       `  data/harvests_${dateStr}.csv      — all harvest records`,
       `  data/routes_${dateStr}.csv        — all routes`,
       `  data/route_items_${dateStr}.csv   — route vendo assignments`,
+      `  data/skipped_${dateStr}.csv        — skipped transactions`,
+      `  data/devices_${dateStr}.csv        — devices table`,
+      `  data/admin_notes_${dateStr}.csv    — admin notes`,
+      `  data/collections_${dateStr}.csv    — collections table`,
+      `  data/route_vendos_${dateStr}.csv   — route vendos table`,
       `  code/app.py                       — Railway Telethon listener`,
       `  code/dashboard.html               — web dashboard`,
       `  backup_info.txt                   — this file`,
