@@ -603,6 +603,14 @@ function renderVendoList() {
   // Attach distance from starting point and original index
   allItems.forEach((item, i) => {
     item._origIdx = i;
+    // For TBF items, try to extract GPS from collector_note (format: GPS:lat,lng)
+    if (!item.lat || !item.lng) {
+      const gpsMatch = (item.collector_note||'').match(/GPS:([\d.]+),([\d.]+)/);
+      if (gpsMatch) {
+        item.lat = parseFloat(gpsMatch[1]);
+        item.lng = parseFloat(gpsMatch[2]);
+      }
+    }
     if (item.lat && item.lng) {
       item._dist = haversine(START_LAT, START_LNG, parseFloat(item.lat), parseFloat(item.lng));
     } else {
@@ -611,9 +619,10 @@ function renderVendoList() {
   });
 
   // Count by bucket
-  const pendingItems = allItems.filter(i => i.status !== 'harvested' && !i.collector_note);
+  const isTBF = i => (i.collector_note||'').includes('TG name TBF');
+  const pendingItems = allItems.filter(i => i.status !== 'harvested' && (!i.collector_note || isTBF(i)));
   const doneItems    = allItems.filter(i => i.status === 'harvested');
-  const issueItems   = allItems.filter(i => i.status !== 'harvested' && i.collector_note);
+  const issueItems   = allItems.filter(i => i.status !== 'harvested' && i.collector_note && !isTBF(i));
 
   const total    = allItems.length;
   const doneCnt  = doneItems.length;
@@ -630,7 +639,8 @@ function renderVendoList() {
 
   // Finish button
   const finBtn = document.getElementById('finish-btn');
-  finBtn.style.display = (doneCnt + issueItems.length === total && total > 0) ? '' : 'none';
+  const tbfCount = allItems.filter(i => i.status !== 'harvested' && isTBF(i)).length;
+  finBtn.style.display = (doneCnt + issueItems.length + tbfCount === total && total > 0) ? '' : 'none';
 
   // Pick items for active tab
   let viewItems;
@@ -726,12 +736,14 @@ function renderVendoList() {
 
   const renderItem = (item, seqIdx) => {
     const realIdx = item._origIdx;
-    const cls = item.status === 'harvested' ? 'done' : item.collector_note ? 'pending-item' : '';
+    const cls = item.status === 'harvested' ? 'done' : (item.collector_note && !isTBF(item)) ? 'pending-item' : '';
     const pill = item.status === 'harvested'
       ? '<span class="status-pill harvested">✅ Done</span>'
-      : item.collector_note
+      : (item.collector_note && !isTBF(item))
         ? '<span class="status-pill skipped">⏸ Issue</span>'
-        : '<span class="status-pill pending">Tap to harvest</span>';
+        : isTBF(item)
+          ? '<span class="status-pill pending" style="background:#fff7ed;color:#ea580c;">🔴 TBF</span>'
+          : '<span class="status-pill pending">Tap to harvest</span>';
 
     const seqNum = seqIdx + 1;
     const seqBadge = `<div class="vi-seq">${seqNum}</div>`;
@@ -760,9 +772,13 @@ function renderVendoList() {
       : '';
 
     const noteHtml = item.collector_note && item.status !== 'harvested'
-      ? `<div style="margin-top:5px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;padding:5px 8px;font-size:11px;color:#92400e;line-height:1.4;">
-           📝 <b>Note:</b> ${item.collector_note}
-         </div>`
+      ? isTBF(item)
+        ? `<div style="margin-top:4px;background:#fff7ed;border-left:3px solid #fb923c;border-radius:0 5px 5px 0;padding:4px 8px;font-size:10px;color:#ea580c;line-height:1.4;">
+             🔴 TG name not yet found — harvest and note the TG name
+           </div>`
+        : `<div style="margin-top:5px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;padding:5px 8px;font-size:11px;color:#92400e;line-height:1.4;">
+             📝 <b>Note:</b> ${item.collector_note}
+           </div>`
       : '';
 
     return `<div class="vendo-item ${cls}" onclick="openVendo(${realIdx})">
