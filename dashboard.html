@@ -3173,7 +3173,8 @@ async function hvShowRouteDetail(code) {
     document.getElementById('hrep-collector-inp').value = route.collector || '';
     document.getElementById('hrep-notes-inp').value = route.notes && typeof route.notes === 'string' && !route.notes.startsWith('[') ? route.notes : (route.admin_notes || '');
     document.getElementById('hrep-area').textContent = route.area || 'All areas';
-    document.getElementById('hrep-date').textContent = route.route_date || route.harvest_date || '—';
+    const dateInp = document.getElementById('hrep-date-inp');
+    if (dateInp) dateInp.value = route.route_date || route.harvest_date || '';
 
     // Load items
     let items = [];
@@ -3206,7 +3207,10 @@ function hrepRenderItems(items, routeId) {
           (isDone ? '<div style="font-size:10px;color:#15803d;font-weight:700;">✅ Harvested · Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' :
             '<div style="font-size:10px;color:#d97706;">' + (item.collector_note ? '⏳ Pending: ' + item.collector_note : 'Not yet harvested') + '</div>') +
         '</div>' +
-        (!isDone ? '<button onclick="hrepRemoveItem(' + item.id + ', this)" style="padding:2px 8px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;font-size:10px;cursor:pointer;font-family:inherit;flex-shrink:0;">Remove</button>' : '') +
+        (!isDone ? '<div style="display:flex;gap:4px;flex-shrink:0;">' +
+          '<button onclick="hrepTransferItem(' + item.id + ', this)" style="padding:2px 8px;border:1px solid #bae6fd;border-radius:5px;background:#fff;color:#0284c7;font-size:10px;cursor:pointer;font-family:inherit;">↗ Transfer</button>' +
+          '<button onclick="hrepRemoveItem(' + item.id + ', this)" style="padding:2px 8px;border:1px solid #fca5a5;border-radius:5px;background:#fff;color:#dc2626;font-size:10px;cursor:pointer;font-family:inherit;">Remove</button>' +
+        '</div>' : '') +
       '</div>' +
       '<div style="margin-top:6px;">' +
         '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">📝 Collector note</div>' +
@@ -3296,6 +3300,7 @@ async function hrepSaveRoute() {
   const pop = document.getElementById('hv-route-edit-pop');
   const routeId = pop.dataset.routeId;
   const collector = document.getElementById('hrep-collector-inp').value.trim();
+  const newDate = document.getElementById('hrep-date-inp')?.value || null;
   const notes = document.getElementById('hrep-notes-inp').value.trim();
   const msg = document.getElementById('hrep-msg');
   if (!collector) { msg.textContent = '⚠ Collector name required'; msg.style.color = '#dc2626'; return; }
@@ -3304,7 +3309,7 @@ async function hrepSaveRoute() {
     const r = await fetch(`${_SB}/rest/v1/routes?id=eq.${routeId}`, {
       method: 'PATCH',
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ collector, admin_notes: notes || null })
+      body: JSON.stringify({ collector, admin_notes: notes || null, ...(newDate ? { route_date: newDate } : {}) })
     });
     if (r.ok) {
       msg.textContent = '✅ Saved!'; msg.style.color = '#15803d';
@@ -3354,6 +3359,47 @@ async function hrepAddVendo(vid) {
       setTimeout(() => { msg.textContent = ''; }, 2000);
     } else { msg.textContent = '❌ Add failed'; msg.style.color = '#dc2626'; }
   } catch(e) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+}
+
+async function hrepTransferItem(itemId, btn) {
+  // Ask for destination route code
+  const destCode = prompt('Transfer to which route code?\n(Enter the route code e.g. ABC123)');
+  if (!destCode) return;
+  const code = destCode.trim().toUpperCase();
+  btn.textContent = '...'; btn.disabled = true;
+  const msg = document.getElementById('hrep-msg');
+  if (msg) { msg.textContent = 'Transferring...'; msg.style.color = '#6b7280'; }
+  try {
+    // Find destination route ID
+    const rr = await fetch(`${_SB}/rest/v1/routes?route_code=eq.${code}&select=id,route_code,collector,status&limit=1`, {
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
+    });
+    const routes = await rr.json();
+    if (!routes.length) { if (msg) { msg.textContent = '❌ Route ' + code + ' not found'; msg.style.color = '#dc2626'; } btn.textContent = '↗ Transfer'; btn.disabled = false; return; }
+    const destRoute = routes[0];
+    if (destRoute.status === 'completed') { if (msg) { msg.textContent = '❌ Route ' + code + ' is already completed'; msg.style.color = '#dc2626'; } btn.textContent = '↗ Transfer'; btn.disabled = false; return; }
+    // Update route_item's route_id to destination
+    const r = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ route_id: destRoute.id, status: 'pending', harvested_at: null, total_coins: null, free_coins: null, old_coins: null, net_collectible: null, spawn_share: null, customer_share: null })
+    });
+    if (r.ok) {
+      if (msg) { msg.textContent = '✅ Transferred to route ' + code + ' (' + destRoute.collector + ')'; msg.style.color = '#15803d'; }
+      btn.closest('div[style*="border:1px solid #e5e7eb"]').style.opacity = '0.5';
+      btn.closest('div[style*="border:1px solid #e5e7eb"]').style.pointerEvents = 'none';
+      setTimeout(() => {
+        btn.closest('div[style*="border:1px solid #e5e7eb"]')?.remove();
+        if (msg) msg.textContent = '';
+      }, 2000);
+    } else {
+      if (msg) { msg.textContent = '❌ Transfer failed'; msg.style.color = '#dc2626'; }
+      btn.textContent = '↗ Transfer'; btn.disabled = false;
+    }
+  } catch(e) {
+    if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+    btn.textContent = '↗ Transfer'; btn.disabled = false;
+  }
 }
 
 function hvClearRoute() {
@@ -3832,7 +3878,7 @@ function rcSel(date,btn){
   if(btn)btn.classList.add('on');else{const b=document.querySelector(`.rc-dtab[onclick*="${date}"]`);if(b)b.classList.add('on');}
   _rcRender(date);
 }
-function _rcTA(tg,win,upTo){if(!tg||!_rcTG[tg])return 0;const w=win||_rcWin[tg]||_RC0;return Object.entries(_rcTG[tg]).filter(([d])=>d&&d>=w&&d<=upTo).reduce((s,[,v])=>s+v,0);}
+function _rcTA(tg,win,upTo,winEnd){if(!tg||!_rcTG[tg])return 0;const w=win||_rcWin[tg]||_RC0;const endDate=winEnd?winEnd.split('T')[0]:upTo;return Object.entries(_rcTG[tg]).filter(([d])=>d&&d>=w&&d<=endDate).reduce((s,[,v])=>s+v,0);}
 function _rcRender(date){
   const ct=document.getElementById('rc-content');if(!ct||!_rcDone)return;
   const hs=_rcH.filter(h=>h.harvest_date===date);
@@ -3840,7 +3886,7 @@ function _rcRender(date){
   const dC=v=>Math.abs(v)<200?'#16a34a':v>0?'#d97706':'#dc2626';
   const dT=v=>Math.abs(v)<200?'✅ Match':v>0?`⚠ Coins +${_fP(Math.abs(v))}`:`🔴 TG +${_fP(Math.abs(v))}`;
   const byC={};hs.forEach(h=>{const c=(h.collector||'Unknown').trim(),rc=h.route_code||'No route';if(!byC[c])byC[c]={};if(!byC[c][rc])byC[c][rc]=[];byC[c][rc].push(h);});
-  const gC=hs.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),gT=hs.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date),0),gD=gC-gT;
+  const gC=hs.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),gT=hs.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),gD=gC-gT;
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
     <div class="rc-st" style="background:#f0fdf4;border-left:3px solid #16a34a"><div class="rv" style="color:#16a34a">${_fP(gC)}</div><div class="rl">Coin Net</div></div>
     <div class="rc-st" style="background:#eef2ff;border-left:3px solid #1e3cb8"><div class="rv" style="color:#1e3cb8">${_fP(gT)}</div><div class="rl">TG Income</div></div>
@@ -3848,7 +3894,7 @@ function _rcRender(date){
     <div class="rc-st" style="background:#f8faff"><div class="rv" style="color:${dC(gD)};font-size:13px">${dT(gD)}</div><div class="rl">${hs.length} vendo(s)</div></div>
   </div>`;
   Object.entries(byC).forEach(([col,routes])=>{
-    const ai=Object.values(routes).flat(),cC=ai.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),cT=ai.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date),0),cD=cC-cT;
+    const ai=Object.values(routes).flat(),cC=ai.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),cT=ai.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),cD=cC-cT;
     html+=`<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
       <div style="padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
         <div><div style="font-size:14px;font-weight:800;color:#111">👤 ${col}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">${Object.keys(routes).length} route(s) · ${ai.length} vendo(s)</div></div>
@@ -3863,7 +3909,7 @@ function _rcRender(date){
         <div class="rc-st" style="background:#fafbff"><div class="rv" style="color:${dC(cD)}">${_fP(Math.abs(cD))}</div><div class="rl">${cD>=0?'Surplus':'Deficit'}</div></div>
       </div>`;
     Object.entries(routes).forEach(([rc,rI])=>{
-      const rC=rI.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),rT=rI.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date),0),rD=rC-rT;
+      const rC=rI.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),rT=rI.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),rD=rC-rT;
       const isA=!rc||rc==='No route'||rc.toUpperCase()==='ADMIN';
       const bdg=isA?'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e">🔧 Admin</span>':'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8">📱 PWA</span>';
       html+=`<div style="margin:0 14px 10px;background:#f8faff;border:1px solid #dde3f5;border-radius:8px;overflow:hidden;">
@@ -3878,7 +3924,7 @@ function _rcRender(date){
           <th style="padding:6px 10px;text-align:right;font-size:9px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">TG Income</th>
           <th style="padding:6px 10px;text-align:right;font-size:9px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">Diff</th>
         </tr></thead><tbody>${rI.map(h=>{
-          const coin=parseFloat(h.net_collectible||0),tg=_rcTA(h.tg_name,h.harvest_window_start,date),gap=coin-tg;
+          const coin=parseFloat(h.net_collectible||0),tg=_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),gap=coin-tg;
           return `<tr style="${Math.abs(gap)<50?'':gap>0?'background:#fffbeb':'background:#fef2f2'}">
             <td style="padding:7px 10px"><b style="color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}</b><div style="font-size:9px;color:#6b7280">${h.tg_name||'—'}</div></td>
             <td style="padding:7px 10px;font-size:10px;color:#6b7280">${h.harvest_window_start||_RC0}→${date}</td>
@@ -9476,7 +9522,7 @@ async function fullBackup() {
     <div>
       <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.05em;">Edit Route</div>
       <div style="font-size:16px;font-weight:700;color:#fff;letter-spacing:.08em;" id="hrep-code">—</div>
-      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;"><span id="hrep-area">—</span> · <span id="hrep-date">—</span></div>
+      <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px;"><span id="hrep-area">—</span> · <input id="hrep-date-inp" type="date" style="background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.4);color:rgba(255,255,255,.9);font-size:10px;font-family:inherit;outline:none;padding:1px 2px;" title="Edit harvest date"></div>
     </div>
     <div style="display:flex;gap:6px;align-items:center;">
       <button onclick="hrepDeleteRoute()" style="padding:5px 12px;border:1.5px solid rgba(220,38,38,.5);background:rgba(220,38,38,.2);color:#fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Delete route</button>
