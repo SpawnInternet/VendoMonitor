@@ -65,7 +65,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .progress-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px;}
 
 /* VENDO LIST */
-.vendo-item{background:#fff;border-radius:10px;border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,0.05);}
+.vendo-item{background:#fff;border-radius:10px;border:1px solid var(--border);padding:14px;margin-bottom:10px;display:flex;align-items:center;cursor:pointer;-webkit-tap-highlight-color:rgba(0,0,0,0.05);}
 .vendo-item:active{background:var(--blue-light);}
 .vendo-item.done{border-color:#86efac;background:var(--green-light);}
 .vendo-item.pending-item{border-color:#fca5a5;background:var(--red-light);}
@@ -142,6 +142,29 @@ textarea:focus{border-color:var(--red);}
 /* OFFLINE BANNER */
 .offline-banner{background:var(--amber);color:#fff;text-align:center;padding:6px;font-size:11px;font-weight:700;display:none;}
 .offline-banner.show{display:block;}
+
+/* ROUTE TABS */
+.route-tabs{display:flex;gap:0;border-radius:10px;overflow:hidden;border:1.5px solid var(--border);margin-bottom:12px;background:#fff;}
+.rt-tab{flex:1;padding:11px 6px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;border:none;background:transparent;font-family:inherit;color:var(--muted);transition:.15s;position:relative;}
+.rt-tab.active{background:var(--blue);color:#fff;}
+.rt-tab:not(.active):active{background:var(--blue-light);}
+.rt-tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:9px;font-size:10px;font-weight:700;margin-left:5px;padding:0 4px;}
+.rt-tab.active .rt-tab-badge{background:rgba(255,255,255,.25);color:#fff;}
+.rt-tab:not(.active) .rt-tab-badge{background:var(--border);color:var(--muted);}
+.rt-tab.tab-done:not(.active) .rt-tab-badge{background:#dcfce7;color:#15803d;}
+.rt-tab.tab-pending-issues:not(.active) .rt-tab-badge{background:#fef3c7;color:#92400e;}
+
+/* SORT BADGE */
+.sort-info{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);padding:6px 10px;background:#fff;border-radius:8px;border:1px solid var(--border);margin-bottom:10px;}
+.sort-info svg{flex-shrink:0;}
+
+/* SEQ BADGE on vendo items */
+.vi-seq{width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-right:10px;}
+.vendo-item.done .vi-seq{background:#86efac;color:#15803d;}
+.vendo-item.pending-item .vi-seq{background:#fca5a5;color:#dc2626;}
+
+/* DIST BADGE */
+.vi-dist{font-size:9px;color:#0284c7;background:#e0f2fe;border-radius:5px;padding:2px 6px;display:inline-block;margin-top:3px;}
 </style>
 </head>
 <body>
@@ -207,6 +230,22 @@ textarea:focus{border-color:var(--red);}
         <span id="rt-total-cnt">0 total</span>
       </div>
     </div>
+  </div>
+  <!-- TABS -->
+  <div class="route-tabs">
+    <button class="rt-tab active" id="tab-pending" onclick="switchTab('pending')">
+      ⏳ Pending<span class="rt-tab-badge" id="tab-pending-cnt">0</span>
+    </button>
+    <button class="rt-tab tab-done" id="tab-done" onclick="switchTab('done')">
+      ✅ Done<span class="rt-tab-badge" id="tab-done-cnt">0</span>
+    </button>
+    <button class="rt-tab tab-pending-issues" id="tab-issues" onclick="switchTab('issues')">
+      ⏸ Issues<span class="rt-tab-badge" id="tab-issues-cnt">0</span>
+    </button>
+  </div>
+  <div class="sort-info" id="sort-info" style="display:none;">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+    Optimized route: each stop is closest to previous
   </div>
   <div id="vendo-list"></div>
   <div style="height:20px;"></div>
@@ -323,6 +362,23 @@ let currentRoute = null;
 let currentVendo = null;
 let currentItem  = null;
 let offlineQueue = JSON.parse(localStorage.getItem('harvest_queue') || '[]');
+let activeTab    = 'pending'; // pending | done | issues
+
+// Starting point: Gfour Minimart, Lalawan Dicayas, Dipolog City
+const START_LAT = 8.5912285;
+const START_LNG = 123.3539253;
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function fmtDist(km) {
+  return km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km';
+}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -451,6 +507,7 @@ async function loadRoute() {
     }
 
     localStorage.setItem('cached_route_' + code, JSON.stringify(currentRoute));
+    activeTab = 'pending';
     renderVendoList();
   } catch(e) {
     const cached = localStorage.getItem('cached_route_' + code);
@@ -462,6 +519,7 @@ async function loadRoute() {
         `${currentRoute.collector} · ${currentRoute.harvest_date} · ${currentRoute.area || 'all areas'} (offline)`;
       document.getElementById('topbar-sub').textContent = `Route ${code} (offline)`;
       toast('⚡ Loaded from offline cache', 3000);
+      activeTab = 'pending';
       renderVendoList();
     } else {
       document.getElementById('vendo-list').innerHTML =
@@ -470,40 +528,119 @@ async function loadRoute() {
   }
 }
 
+function switchTab(tab) {
+  activeTab = tab;
+  ['pending','done','issues'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+  });
+  renderVendoList();
+}
+
 function renderVendoList() {
-  const items = currentRoute.items || [];
-  const done  = items.filter(i => i.status === 'harvested').length;
-  const pend  = items.filter(i => i.status === 'pending' && i.collector_note).length;
-  const total = items.length;
-  const pct   = total ? Math.round(done / total * 100) : 0;
+  const allItems = currentRoute.items || [];
+
+  // Attach distance from starting point and original index
+  allItems.forEach((item, i) => {
+    item._origIdx = i;
+    if (item.lat && item.lng) {
+      item._dist = haversine(START_LAT, START_LNG, parseFloat(item.lat), parseFloat(item.lng));
+    } else {
+      item._dist = null;
+    }
+  });
+
+  // Count by bucket
+  const pendingItems = allItems.filter(i => i.status !== 'harvested' && !i.collector_note);
+  const doneItems    = allItems.filter(i => i.status === 'harvested');
+  const issueItems   = allItems.filter(i => i.status !== 'harvested' && i.collector_note);
+
+  const total    = allItems.length;
+  const doneCnt  = doneItems.length;
+  const pct      = total ? Math.round(doneCnt / total * 100) : 0;
 
   document.getElementById('rt-progress').style.width = pct + '%';
-  document.getElementById('rt-done-cnt').textContent = done + ' harvested';
+  document.getElementById('rt-done-cnt').textContent = doneCnt + ' harvested';
   document.getElementById('rt-total-cnt').textContent = total + ' total';
 
-  const finBtn = document.getElementById('finish-btn');
-  if (done + pend === total && total > 0) finBtn.style.display = '';
-  else finBtn.style.display = 'none';
+  // Update tab badges
+  document.getElementById('tab-pending-cnt').textContent = pendingItems.length;
+  document.getElementById('tab-done-cnt').textContent    = doneItems.length;
+  document.getElementById('tab-issues-cnt').textContent  = issueItems.length;
 
-  if (!items.length) {
+  // Finish button
+  const finBtn = document.getElementById('finish-btn');
+  finBtn.style.display = (doneCnt + issueItems.length === total && total > 0) ? '' : 'none';
+
+  // Pick items for active tab
+  let viewItems;
+  if (activeTab === 'done')   viewItems = doneItems;
+  else if (activeTab === 'issues') viewItems = issueItems;
+  else viewItems = pendingItems;
+
+  // Greedy nearest-neighbor: each step picks closest unvisited from current position
+  let hasSorted = false;
+  if (activeTab !== 'done') {
+    const withGPS    = viewItems.filter(i => i._dist !== null);
+    const withoutGPS = viewItems.filter(i => i._dist === null);
+    if (withGPS.length > 0) {
+      const sorted = [];
+      const pool = [...withGPS];
+      let curLat = START_LAT, curLng = START_LNG;
+      while (pool.length) {
+        let bestIdx = 0, bestDist = Infinity;
+        pool.forEach((item, idx) => {
+          const d = haversine(curLat, curLng, parseFloat(item.lat), parseFloat(item.lng));
+          if (d < bestDist) { bestDist = d; bestIdx = idx; }
+        });
+        const chosen = pool.splice(bestIdx, 1)[0];
+        chosen._legDist = bestDist;
+        curLat = parseFloat(chosen.lat);
+        curLng = parseFloat(chosen.lng);
+        sorted.push(chosen);
+      }
+      viewItems = [...sorted, ...withoutGPS];
+      hasSorted = true;
+    } else {
+      viewItems = [...withoutGPS];
+    }
+  }
+
+  const sortInfo = document.getElementById('sort-info');
+  if (sortInfo) sortInfo.style.display = hasSorted ? 'flex' : 'none';
+
+  if (!viewItems.length) {
+    const emptyMsg = {
+      pending: '🎉 All vendos harvested or marked!',
+      done:    'No vendos harvested yet.',
+      issues:  'No pending issues.'
+    }[activeTab];
     document.getElementById('vendo-list').innerHTML =
-      '<div class="loading"><span>No vendos in this route.</span></div>';
+      `<div class="loading"><span style="text-align:center;line-height:1.8;">${emptyMsg}</span></div>`;
     return;
   }
 
-  document.getElementById('vendo-list').innerHTML = items.map((item, i) => {
+  document.getElementById('vendo-list').innerHTML = viewItems.map((item, seqIdx) => {
+    const realIdx = item._origIdx;
     const cls = item.status === 'harvested' ? 'done' : item.collector_note ? 'pending-item' : '';
     const pill = item.status === 'harvested'
       ? '<span class="status-pill harvested">✅ Done</span>'
       : item.collector_note
-        ? '<span class="status-pill skipped">⏳ Pending</span>'
+        ? '<span class="status-pill skipped">⏸ Issue</span>'
         : '<span class="status-pill pending">Tap to harvest</span>';
+
+    const seqNum = seqIdx + 1;
+    const seqBadge = `<div class="vi-seq">${seqNum}</div>`;
+
     const lastHarv = item.last_harvest_date
       ? new Date(item.last_harvest_date + 'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})
       : '—';
     const vlanLbl = item.vlan ? 'VLAN ' + item.vlan : '';
 
-    // GPS directions button
+    const legD = item._legDist != null ? item._legDist : item._dist;
+    const distBadge = (legD != null && activeTab !== 'done')
+      ? `<span class="vi-dist">📍 ${fmtDist(legD)} from prev stop</span>`
+      : '';
+
     let mapsUrl = '';
     if (item.lat && item.lng) {
       mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + item.lat + ',' + item.lng;
@@ -517,17 +654,18 @@ function renderVendoList() {
          </a>`
       : '';
 
-    // Admin note from route_items (collector_note set by admin from dashboard)
     const noteHtml = item.collector_note && item.status !== 'harvested'
       ? `<div style="margin-top:5px;background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;padding:5px 8px;font-size:11px;color:#92400e;line-height:1.4;">
            📝 <b>Note:</b> ${item.collector_note}
          </div>`
       : '';
 
-    return `<div class="vendo-item ${cls}" onclick="openVendo(${i})">
+    return `<div class="vendo-item ${cls}" onclick="openVendo(${realIdx})">
+      ${seqBadge}
       <div class="vi-left" style="flex:1;min-width:0;">
         <div class="vi-name">${item.sheet_name || item.tg_name || 'Unknown'}</div>
         <div class="vi-tg" style="font-size:10px;color:#6b7280;margin-top:1px;">${item.area || '—'}${vlanLbl ? ' · ' + vlanLbl : ''}</div>
+        ${distBadge}
         <div style="font-size:10px;color:#9ca3af;margin-top:1px;">Last harvest: <b style="color:${item.last_harvest_date ? '#15803d' : '#9ca3af'};">${lastHarv}</b></div>
         ${item.address ? '<div style="font-size:10px;color:#6b7280;margin-top:1px;">📍 ' + item.address + '</div>' : ''}
         ${item.status === 'harvested' ? '<div style="font-size:10px;color:#16a34a;margin-top:1px;">Net: ₱' + parseFloat(item.net_collectible||0).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' : ''}
