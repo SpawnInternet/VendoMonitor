@@ -1142,10 +1142,25 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <input id="ah-search" placeholder="Search vendo name..." oninput="ahSearch(this.value)"
       style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;">
     <div id="ah-results" style="margin-top:6px;max-height:180px;overflow-y:auto;border-radius:7px;"></div>
-    <div id="ah-selected" style="display:none;margin-top:8px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:7px;padding:8px 12px;">
-      <div style="font-size:12px;font-weight:700;color:#15803d;" id="ah-sel-name">—</div>
-      <div style="font-size:10px;color:#6b7280;" id="ah-sel-meta">—</div>
-      <button onclick="ahClearVendo()" style="font-size:9px;color:#dc2626;background:none;border:none;cursor:pointer;margin-top:2px;">✕ Clear</button>
+    <div id="ah-selected" style="display:none;margin-top:8px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:7px;padding:10px 12px;">
+      <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:6px;" id="ah-sel-name">—</div>
+      <div style="font-size:10px;color:#6b7280;margin-bottom:8px;" id="ah-sel-meta">—</div>
+      <!-- Inline name editing -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <div>
+          <div style="font-size:9px;font-weight:700;color:#374151;margin-bottom:3px;">📋 Sheet name</div>
+          <input id="ah-edit-sheet" placeholder="Owner name..." style="width:100%;padding:5px 8px;border:1.5px solid #bbf7d0;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#111827;box-sizing:border-box;background:#fff;">
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;color:#374151;margin-bottom:3px;">💬 TG name</div>
+          <input id="ah-edit-tg" placeholder="Telegram name..." style="width:100%;padding:5px 8px;border:1.5px solid #ddd6fe;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#111827;box-sizing:border-box;background:#fff;">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button onclick="ahSaveNames()" style="padding:4px 10px;background:#15803d;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Save names</button>
+        <span id="ah-edit-msg" style="font-size:10px;color:#6b7280;"></span>
+        <button onclick="ahClearVendo()" style="margin-left:auto;font-size:9px;color:#dc2626;background:none;border:none;cursor:pointer;">✕ Clear</button>
+      </div>
     </div>
   </div>
 
@@ -1181,7 +1196,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <!-- COINS -->
   <div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
     <div style="font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px;">💰 Coins</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
       <div>
         <div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">Total coins</div>
         <input type="number" id="ah-total" placeholder="0" min="0" oninput="ahCalc()"
@@ -1191,6 +1206,13 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <div style="font-size:10px;font-weight:700;color:#dc2626;margin-bottom:4px;">Free time coins</div>
         <input type="number" id="ah-free" placeholder="0" min="0" oninput="ahCalc()"
           style="width:100%;padding:9px 11px;border:1.5px solid #fca5a5;border-radius:7px;font-size:15px;font-weight:700;font-family:inherit;outline:none;text-align:right;box-sizing:border-box;">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div>
+        <div style="font-size:10px;font-weight:700;color:#ea580c;margin-bottom:4px;">Saloy coins <span style="font-size:9px;font-weight:400;color:#9ca3af;">(refund/returned)</span></div>
+        <input type="number" id="ah-saloy" placeholder="0" min="0" oninput="ahCalc()"
+          style="width:100%;padding:9px 11px;border:1.5px solid #fed7aa;border-radius:7px;font-size:15px;font-weight:700;font-family:inherit;outline:none;text-align:right;box-sizing:border-box;">
       </div>
       <div>
         <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:4px;">Old coins</div>
@@ -1736,21 +1758,26 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     </div>
 
     <!-- Coins -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
       <div>
         <div style="font-size:10px;color:#6b7280;margin-bottom:3px;font-weight:600;">Total coins</div>
         <input type="number" id="hv-ah-total" placeholder="0" min="0" oninput="hvAhCalc()"
           style="width:100%;padding:8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
       </div>
       <div>
-        <div style="font-size:10px;color:#6b7280;margin-bottom:3px;font-weight:600;">Free coins</div>
+        <div style="font-size:10px;color:#dc2626;margin-bottom:3px;font-weight:600;">Free coins</div>
         <input type="number" id="hv-ah-free" placeholder="0" min="0" oninput="hvAhCalc()"
-          style="width:100%;padding:8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+          style="width:100%;padding:8px;border:1.5px solid #fca5a5;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+      </div>
+      <div>
+        <div style="font-size:10px;color:#ea580c;margin-bottom:3px;font-weight:600;">Saloy <span style="font-size:9px;font-weight:400;color:#9ca3af;">(refund)</span></div>
+        <input type="number" id="hv-ah-saloy" placeholder="0" min="0" oninput="hvAhCalc()"
+          style="width:100%;padding:8px;border:1.5px solid #fed7aa;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
       </div>
       <div>
         <div style="font-size:10px;color:#6b7280;margin-bottom:3px;font-weight:600;">Old coins</div>
         <input type="number" id="hv-ah-old" placeholder="0" min="0" oninput="hvAhCalc()"
-          style="width:100%;padding:8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
+          style="width:100%;padding:8px;border:1.5px solid #fcd34d;border-radius:7px;font-size:12px;font-family:inherit;box-sizing:border-box;">
       </div>
     </div>
 
@@ -2598,9 +2625,9 @@ function hvOpenDetailFromRow(row) {
   const dpAreaSel = document.getElementById('hv-dp-area-sel');
   if (dpAreaSel) dpAreaSel.value = (d.area || '').toUpperCase();
   const dpSheetInp = document.getElementById('hv-dp-sheet-inp');
-  if (dpSheetInp) dpSheetInp.value = '';
+  if (dpSheetInp) dpSheetInp.value = d.sheet || '';
   const dpTgInp = document.getElementById('hv-dp-tg-inp');
-  if (dpTgInp) dpTgInp.value = '';
+  if (dpTgInp) dpTgInp.value = d.tg || '';
   // Pre-fill new fields
   const dpVlan    = document.getElementById('hv-dp-vlan-inp');    if (dpVlan)    dpVlan.value    = d.vlan || '';
   const dpContact = document.getElementById('hv-dp-contact-inp'); if (dpContact) dpContact.value = row.dataset.contact || '';
@@ -4234,7 +4261,7 @@ function _hrRender(){
     rows.forEach(h=>{
       const net=parseFloat(h.net_collectible||0),spawn=parseFloat(h.spawn_share||0),rc=(h.route_code||'').toUpperCase(),isAdm=!rc||rc==='ADMIN'||rc==='MANUAL';
       const row=document.createElement('div');row.style.cssText='display:grid;grid-template-columns:1fr 85px 85px 70px 44px;align-items:center;gap:6px;padding:7px 8px;border-radius:6px;cursor:pointer;border-bottom:1px solid #f0f0f8;transition:background .1s;';
-      row.innerHTML=`<div><div style="font-size:12px;font-weight:700;color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}${h.admin_notes?' 📝':''}</div><div style="font-size:10px;color:#6b7280">${h.tg_name||'—'}</div></div><div style="font-size:12px;font-weight:700;color:#16a34a">${_fP(net)}</div><div style="font-size:12px;font-weight:600;color:#1e3cb8">${_fP(spawn)}</div><div style="font-size:11px;color:#374151">${h.collector||'—'}</div><div>${isAdm?'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">🔧</span>':'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8">📱</span>'}</div>`;
+      row.innerHTML=`<div><div style="font-size:12px;font-weight:700;color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}${h.admin_notes?' 📝':''}</div><div style="font-size:10px;color:#6b7280">${h.tg_name || '<span style="background:#fef2f2;color:#dc2626;font-weight:700;padding:1px 5px;border-radius:4px;font-size:9px;">⚠ NO TG</span>'}</div></div><div style="font-size:12px;font-weight:700;color:#16a34a">${_fP(net)}</div><div style="font-size:12px;font-weight:600;color:#1e3cb8">${_fP(spawn)}</div><div style="font-size:11px;color:#374151">${h.collector||'—'}</div><div>${isAdm?'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">🔧</span>':'<span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1d4ed8">📱</span>'}</div>`;
       row.addEventListener('mouseover',function(){this.style.background='#f0f4ff';});row.addEventListener('mouseout',function(){this.style.background='';});
       Object.assign(row.dataset,{vn:h.vendo_name||'',tg:h.tg_name||'',dt:h.harvest_date||'',win:h.harvest_window_start||'',net,spawn,own:parseFloat(h.customer_share||0),tot:parseFloat(h.coins_total||0),fr:parseFloat(h.coins_free||0),ol:parseFloat(h.coins_old||0),sl:parseFloat(h.coins_saloy||0),col:h.collector||'',rc,note:h.admin_notes||'',cn:h.collector_note||'',adm:isAdm});
       row.addEventListener('click',()=>_hrDetail(row));body.appendChild(row);
@@ -4349,7 +4376,7 @@ function _rcRender(date){
           const coin=parseFloat(h.net_collectible||0),tg=_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),gap=coin-tg;
           const hJson = JSON.stringify(h).replace(/'/g,"\'").replace(/`/g,'\`');
           return `<tr style="cursor:pointer;${Math.abs(gap)<50?'':gap>0?'background:#fffbeb':'background:#fef2f2'}" onclick="rcShowHarvestDetail(${JSON.stringify(h).replace(/</g,'\u003c')})" title="Click for harvest details">
-            <td style="padding:7px 10px"><b style="color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}</b><div style="font-size:9px;color:#6b7280">${h.tg_name||'—'}</div></td>
+            <td style="padding:7px 10px"><b style="color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}</b><div style="font-size:9px;color:#6b7280">${h.tg_name ? h.tg_name : '<span style="background:#fef2f2;color:#dc2626;font-weight:700;padding:1px 5px;border-radius:4px;font-size:9px;">⚠ NO TG NAME</span>'}</div></td>
             <td style="padding:7px 10px;font-size:10px;color:#6b7280">${h.harvest_window_start||_RC0}→${date}</td>
             <td style="padding:7px 10px;text-align:right;font-weight:700;color:#16a34a">${_fP(coin)}</td>
             <td style="padding:7px 10px;text-align:right;color:${tg>0?'#374151':'#9ca3af'}">${_fP(tg)}</td>
@@ -4374,8 +4401,9 @@ let _ahVendo = null; // selected vendo object
 function ahCalc() {
   const total = parseFloat(document.getElementById('ah-total').value) || 0;
   const free  = parseFloat(document.getElementById('ah-free').value)  || 0;
+  const saloy = parseFloat(document.getElementById('ah-saloy').value) || 0;
   const old   = parseFloat(document.getElementById('ah-old').value)   || 0;
-  const net   = Math.max(0, total - free - old);
+  const net   = Math.max(0, total - free - saloy - old);
   const spawn = net * 0.75;
   const owner = net * 0.25;
   const fmt = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:2});
@@ -4388,17 +4416,23 @@ function ahSearch(q) {
   const res = document.getElementById('ah-results');
   if (!q || q.length < 2) { res.innerHTML = ''; return; }
   const matches = (_vnAll || []).filter(v => {
-    const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'')).toLowerCase();
+    const n = ((v.sheet_name||'') + ' ' + (v.tg_name||'') + ' ' + (v.area||'') + ' ' + (v.vlan||'')).toLowerCase();
     return n.includes(q.toLowerCase());
-  }).slice(0, 8);
+  }).slice(0, 10);
   if (!matches.length) { res.innerHTML = '<div style="padding:8px 10px;font-size:11px;color:#9ca3af;">No vendos found</div>'; return; }
-  res.innerHTML = matches.map(v => `
-    <div onclick="ahSelectVendo('${v.id}')"
+  res.innerHTML = matches.map(v => {
+    const displayName = v.sheet_name
+      ? v.sheet_name
+      : v.tg_name
+        ? `<i style="color:#9ca3af;">no sheet — TG: ${v.tg_name}</i>`
+        : `<i style="color:#dc2626;">unnamed · VLAN ${v.vlan||'?'}</i>`;
+    return `<div onclick="ahSelectVendo('${v.id}')"
       style="padding:8px 10px;font-size:12px;cursor:pointer;border-radius:5px;border-bottom:1px solid #f0f0f0;"
       onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background=''">
-      <div style="font-weight:600;color:#374151;">${v.sheet_name||'<i style="color:#9ca3af;">no sheet name</i>'}</div>
+      <div style="font-weight:600;color:#374151;">${displayName}</div>
       <div style="font-size:10px;color:#9ca3af;">${v.tg_name||'—'} · ${v.area||'—'} · VLAN ${v.vlan||'—'}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function ahSelectVendo(id) {
@@ -4408,8 +4442,15 @@ function ahSelectVendo(id) {
   document.getElementById('ah-results').innerHTML = '';
   document.getElementById('ah-search').value = '';
   document.getElementById('ah-selected').style.display = 'block';
-  document.getElementById('ah-sel-name').textContent = v.sheet_name || v.tg_name || '—';
-  document.getElementById('ah-sel-meta').textContent = (v.area||'—') + ' · VLAN ' + (v.vlan||'—') + (v.last_harvest_date ? ' · Last harvest: ' + v.last_harvest_date : '');
+  document.getElementById('ah-sel-name').textContent = v.sheet_name || v.tg_name || ('VLAN ' + (v.vlan||'?'));
+  document.getElementById('ah-sel-meta').textContent = (v.area||'—') + ' · VLAN ' + (v.vlan||'—') + (v.last_harvest_date ? ' · Last: ' + v.last_harvest_date : '');
+  // Pre-fill name edit inputs
+  const sheetInp = document.getElementById('ah-edit-sheet');
+  const tgInp    = document.getElementById('ah-edit-tg');
+  if (sheetInp) sheetInp.value = v.sheet_name || '';
+  if (tgInp)    tgInp.value    = v.tg_name    || '';
+  const msg = document.getElementById('ah-edit-msg');
+  if (msg) msg.textContent = '';
   // Auto-fill window start from last harvest date
   const winEl = document.getElementById('ah-window');
   if (winEl && v.last_harvest_date) winEl.value = v.last_harvest_date;
@@ -4418,11 +4459,45 @@ function ahSelectVendo(id) {
   if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
 }
 
+async function ahSaveNames() {
+  const msg = document.getElementById('ah-edit-msg');
+  if (!_ahVendo) return;
+  const sheet = document.getElementById('ah-edit-sheet')?.value.trim() || null;
+  const tg    = document.getElementById('ah-edit-tg')?.value.trim()    || null;
+  if (!sheet && !tg) { if (msg) { msg.textContent = '⚠ Enter at least one name'; msg.style.color = '#dc2626'; } return; }
+  if (msg) { msg.textContent = 'Saving…'; msg.style.color = '#6b7280'; }
+  try {
+    const payload = {};
+    if (sheet !== null) payload.sheet_name = sheet || null;
+    if (tg    !== null) payload.tg_name    = tg    || null;
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${_ahVendo.id}`, {
+      method: 'PATCH',
+      headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    // Update local cache
+    if (sheet !== null) _ahVendo.sheet_name = sheet || null;
+    if (tg    !== null) _ahVendo.tg_name    = tg    || null;
+    const vnCached = (_vnAll||[]).find(x => String(x.id) === String(_ahVendo.id));
+    if (vnCached) { if (sheet !== null) vnCached.sheet_name = sheet || null; if (tg !== null) vnCached.tg_name = tg || null; }
+    // Update displayed name
+    const nameEl = document.getElementById('ah-sel-name');
+    if (nameEl) nameEl.textContent = _ahVendo.sheet_name || _ahVendo.tg_name || ('VLAN ' + (_ahVendo.vlan||'?'));
+    if (msg) { msg.textContent = '✅ Saved!'; msg.style.color = '#15803d'; setTimeout(() => { if(msg) msg.textContent = ''; }, 2000); }
+  } catch(e) {
+    if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
+  }
+}
+
 function ahClearVendo() {
   _ahVendo = null;
   document.getElementById('ah-selected').style.display = 'none';
   document.getElementById('ah-search').value = '';
   document.getElementById('ah-results').innerHTML = '';
+  const s = document.getElementById('ah-edit-sheet'); if (s) s.value = '';
+  const t = document.getElementById('ah-edit-tg');    if (t) t.value = '';
+  const m = document.getElementById('ah-edit-msg');   if (m) m.textContent = '';
 }
 
 
@@ -4568,8 +4643,9 @@ async function ahSubmit() {
   const route     = document.getElementById('ah-route').value.trim() || 'ADMIN';
   const total     = parseFloat(document.getElementById('ah-total').value) || 0;
   const free      = parseFloat(document.getElementById('ah-free').value)  || 0;
+  const saloy_ah  = parseFloat(document.getElementById('ah-saloy').value) || 0;
   const old       = parseFloat(document.getElementById('ah-old').value)   || 0;
-  const net       = Math.max(0, total - free - old);
+  const net       = Math.max(0, total - free - saloy_ah - old);
   const spawn     = net * 0.75;
   const owner     = net * 0.25;
 
@@ -4582,7 +4658,7 @@ async function ahSubmit() {
   const record = {
     harvest_date:         date,
     harvest_window_start: window_ || '2026-03-01',
-    vendo_name:           _ahVendo.sheet_name || _ahVendo.tg_name || '',
+    vendo_name:           _ahVendo.sheet_name || _ahVendo.tg_name || ('VLAN-' + (_ahVendo.vlan||_ahVendo.id||'unknown')),
     tg_name:              _ahVendo.tg_name    || null,
     sheet_name:           _ahVendo.sheet_name || null,
     area:                 _ahVendo.area       || null,
@@ -4590,6 +4666,7 @@ async function ahSubmit() {
     route_code:           route,
     coins_total:          total,
     coins_free:           free,
+    coins_saloy:          saloy_ah || null,
     coins_old:            old,
     net_collectible:      net,
     spawn_share:          spawn,
@@ -4617,7 +4694,7 @@ async function ahSubmit() {
     msg.innerHTML = `<span style="color:#15803d;">✅ Harvest saved! Net: ₱${net.toLocaleString('en-PH',{minimumFractionDigits:2})} · Spawn: ₱${spawn.toLocaleString('en-PH',{minimumFractionDigits:2})}</span>`;
 
     // Reset form
-    ['ah-total','ah-free','ah-old','ah-collector','ah-route'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+    ['ah-total','ah-free','ah-saloy','ah-old','ah-collector','ah-route'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
     ahCalc();
     ahClearVendo();
   } catch(e) {
@@ -4638,9 +4715,8 @@ async function ahSubmit() {
         <span style="font-size:13px;font-weight:700;">📋 Records &amp; Reconciliation</span>
         <div style="display:flex;gap:3px;background:rgba(255,255,255,.15);border-radius:8px;padding:3px;">
           <button class="hvo-tab on" onclick="hvoSwitchTab('harvests',this)" style="padding:5px 14px;border:none;border-radius:6px;background:#fff;color:#1e3cb8;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Harvest Records</button>
-          <button class="hvo-tab" onclick="hvoSwitchTab('recon',this)" style="padding:5px 14px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">⚖️ Reconciliation</button>
+          <button class="hvo-tab" onclick="hvoSwitchTab('recon',this)" style="padding:5px 14px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">⚖️ Reconcile &amp; Deficits</button>
           <button class="hvo-tab" onclick="hvoSwitchTab('routes',this)" style="padding:5px 14px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">🗺 Routes</button>
-          <button class="hvo-tab" id="hvo-tab-deficits" onclick="hvoSwitchTab('deficits',this)" style="padding:5px 14px;border:none;border-radius:6px;background:transparent;color:rgba(255,255,255,.85);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">🔴 Deficits<span id="hvo-deficit-cnt" style="margin-left:4px;background:rgba(220,38,38,.7);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;"></span></button>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -4665,28 +4741,28 @@ async function ahSubmit() {
       <!-- RECON PANEL -->
       <div class="hvo-panel" id="hvo-panel-recon" style="padding:14px;display:none;">
         <div id="hvo-recon-content"><div style="text-align:center;padding:40px;color:#9ca3af;">⏳ Loading…</div></div>
+        <!-- DEFICIT SECTION embedded inside Reconcile -->
+        <div style="margin-top:20px;border-top:2px solid #fca5a5;padding-top:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#dc2626;">🔴 Deficit Audit <span id="hvo-deficit-cnt" style="margin-left:4px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;"></span></div>
+              <div style="font-size:10px;color:#6b7280;margin-top:2px;">Vendos where coin collected &lt; TG income · Audit and explain each gap</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <select id="def-filter-date" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All dates</option></select>
+              <select id="def-filter-collector" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All collectors</option></select>
+              <select id="def-filter-status" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All</option><option value="open">Open</option><option value="explained">Explained ✅</option></select>
+              <button onclick="hvoLoadDeficits()" style="padding:5px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Load Deficits</button>
+            </div>
+          </div>
+          <div id="hvo-deficit-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;"></div>
+          <div id="hvo-deficit-list"><div style="text-align:center;padding:30px;color:#9ca3af;">Click "Load Deficits" above to audit</div></div>
+        </div>
       </div>
       <!-- ROUTES PANEL -->
       <div class="hvo-panel" id="hvo-panel-routes" style="padding:14px;display:none;">
         <div id="hvo-route-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px;"></div>
         <div id="hvo-route-table"><div style="text-align:center;padding:40px;color:#9ca3af;">Loading…</div></div>
-      </div>
-      <!-- DEFICITS PANEL -->
-      <div class="hvo-panel" id="hvo-panel-deficits" style="padding:14px;display:none;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:#dc2626;">🔴 Deficit Audit</div>
-            <div style="font-size:10px;color:#6b7280;margin-top:2px;">Vendos where coin collected &lt; TG income · Audit and explain each gap</div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <select id="def-filter-date" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All dates</option></select>
-            <select id="def-filter-collector" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All collectors</option></select>
-            <select id="def-filter-status" onchange="hvoRenderDeficits()" style="padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All</option><option value="open">Open</option><option value="explained">Explained ✅</option></select>
-            <button onclick="hvoLoadDeficits()" style="padding:5px 10px;background:#1e3cb8;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
-          </div>
-        </div>
-        <div id="hvo-deficit-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;"></div>
-        <div id="hvo-deficit-list"><div style="text-align:center;padding:40px;color:#9ca3af;">Click Refresh to load deficits</div></div>
       </div>
     </div>
   `;
@@ -5157,12 +5233,12 @@ function hvoSwitchTab(tab, btn) {
   const panel = document.getElementById('hvo-panel-' + tab);
   if (panel) panel.style.display = 'block';
   // Load recon if needed
-  if (tab === 'recon') hvoRenderRecon();
+  if (tab === 'recon') { hvoRenderRecon(); }
   // Load vendos for add-search if routes tab
   if (tab === 'routes') {
     if (!_vnAll || !_vnAll.length) vnLoad();
   }
-  if (tab === 'deficits') hvoLoadDeficits();
+  // deficits tab removed — now embedded in recon panel
 }
 
 /* ─── DEFICIT AUDIT FUNCTIONS ─── */
@@ -5193,8 +5269,12 @@ async function hvoLoadDeficits() {
         ? _rcTA(h.tg_name, h.harvest_window_start, h.harvest_date, h.harvest_window_end)
         : null;
       const coinNet = parseFloat(h.net_collectible || 0);
-      if (tgIncome !== null && coinNet < tgIncome - 10) { // >₱10 deficit
-        deficits.push({ ...h, tg_income: tgIncome, coin_net: coinNet, gap: coinNet - tgIncome });
+      const saloy   = parseFloat(h.coins_saloy || 0);
+      // True deficit = TG income - (coin net + saloy)
+      // Saloy is added back because TG still counted those coins; they were physically returned
+      const trueGap = tgIncome !== null ? tgIncome - (coinNet + saloy) : null;
+      if (trueGap !== null && trueGap > 10) { // >₱10 true deficit
+        deficits.push({ ...h, tg_income: tgIncome, coin_net: coinNet, saloy, gap: -trueGap });
       }
     }
     _deficits = deficits;
@@ -5274,11 +5354,18 @@ function hvoRenderDeficits() {
           <div style="font-size:9px;color:#6b7280;">deficit</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;font-size:11px;">
         <div style="background:#f8fafc;border-radius:6px;padding:6px 8px;">
           <div style="color:#6b7280;font-size:9px;margin-bottom:1px;">Coin net</div>
           <div style="font-weight:700;color:#1e3cb8;">${fmt(item.coin_net)}</div>
         </div>
+        ${item.saloy ? `<div style="background:#fff7ed;border-radius:6px;padding:6px 8px;">
+          <div style="color:#ea580c;font-size:9px;margin-bottom:1px;">Saloy (returned)</div>
+          <div style="font-weight:700;color:#ea580c;">+${fmt(item.saloy)}</div>
+        </div>` : `<div style="background:#f8fafc;border-radius:6px;padding:6px 8px;">
+          <div style="color:#6b7280;font-size:9px;margin-bottom:1px;">Saloy</div>
+          <div style="font-weight:700;color:#9ca3af;">—</div>
+        </div>`}
         <div style="background:#f8fafc;border-radius:6px;padding:6px 8px;">
           <div style="color:#6b7280;font-size:9px;margin-bottom:1px;">TG income</div>
           <div style="font-weight:700;color:#7c3aed;">${fmt(item.tg_income)}</div>
@@ -5486,7 +5573,7 @@ function hvoOpenCollectorPopup(id) {
             return `<tr style="border-bottom:1px solid #f0f0f8;">
               <td style="padding:8px 10px;color:#9ca3af;">${i+1}</td>
               <td style="padding:8px 10px;font-weight:600;color:#1e3cb8;">${h.vendo_name||h.tg_name||'—'}</td>
-              <td style="padding:8px 10px;color:#6b7280;font-size:10px;">${h.tg_name||'—'}</td>
+              <td style="padding:8px 10px;color:#6b7280;font-size:10px;">${h.tg_name || '<span style=\\"background:#fef2f2;color:#dc2626;font-weight:700;padding:1px 6px;border-radius:4px;font-size:9px;\\">⚠ NO TG NAME</span>'}</td>
               <td style="padding:8px 10px;color:#6b7280;font-size:10px;">${h.harvest_window_start||'—'} → ${h.harvest_date||'—'}</td>
               <td style="padding:8px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;background:#f3f4f6;color:#6b7280;">${h.route_code||'ADMIN'}</span></td>
               <td style="padding:8px 10px;font-weight:600;">${fmt(total)}</td>
@@ -6113,7 +6200,7 @@ function hvAhOpen(collector) {
   const dEl = document.getElementById('hv-ah-date');
   if (dEl) dEl.value = today;
   // Clear all other fields
-  ['hv-ah-vsearch','hv-ah-route','hv-ah-total','hv-ah-free','hv-ah-old','hv-ah-window'].forEach(id => {
+  ['hv-ah-vsearch','hv-ah-route','hv-ah-total','hv-ah-free','hv-ah-saloy','hv-ah-old','hv-ah-window'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   ['hv-ah-net','hv-ah-spawn','hv-ah-owner'].forEach(id => {
@@ -6130,7 +6217,7 @@ function hvAhOpen(collector) {
 
 function hvAhCalc() {
   const g = id => parseFloat(document.getElementById(id)?.value) || 0;
-  const net   = Math.max(0, g('hv-ah-total') - g('hv-ah-free') - g('hv-ah-old'));
+  const net   = Math.max(0, g('hv-ah-total') - g('hv-ah-free') - g('hv-ah-saloy') - g('hv-ah-old'));
   const spawn = net * 0.75;
   const owner = net * 0.25;
   const fmt   = v => '₱' + v.toLocaleString('en-PH', {minimumFractionDigits:2});
@@ -6238,8 +6325,9 @@ async function hvAhSubmit() {
   const route   = (document.getElementById('hv-ah-route')?.value || '').trim() || 'ADMIN';
   const total   = parseFloat(document.getElementById('hv-ah-total')?.value) || 0;
   const free    = parseFloat(document.getElementById('hv-ah-free')?.value)  || 0;
+  const saloy_p = parseFloat(document.getElementById('hv-ah-saloy')?.value) || 0;
   const old     = parseFloat(document.getElementById('hv-ah-old')?.value)   || 0;
-  const net     = Math.max(0, total - free - old);
+  const net     = Math.max(0, total - free - saloy_p - old);
   const spawn   = net * 0.75;
   const owner   = net * 0.25;
   const v       = _hvAhVendo;
@@ -6260,6 +6348,7 @@ async function hvAhSubmit() {
     route_code:           route,
     coins_total:          total,
     coins_free:           free,
+    coins_saloy:          saloy_p || null,
     coins_old:            old,
     net_collectible:      net,
     spawn_share:          spawn,
@@ -6284,7 +6373,7 @@ async function hvAhSubmit() {
     const fmt = x => '₱' + x.toLocaleString('en-PH',{minimumFractionDigits:2});
     if (msg) msg.innerHTML = `<span style="color:#15803d;">✅ Saved! Net: ${fmt(net)} · Spawn: ${fmt(spawn)}</span>`;
     // Reset for next entry (keep collector + date)
-    ['hv-ah-total','hv-ah-free','hv-ah-old','hv-ah-vsearch','hv-ah-route'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    ['hv-ah-total','hv-ah-free','hv-ah-saloy','hv-ah-old','hv-ah-vsearch','hv-ah-route'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
     ['hv-ah-net','hv-ah-spawn','hv-ah-owner'].forEach(id => { const el=document.getElementById(id); if(el) el.textContent='₱0'; });
     const sel=document.getElementById('hv-ah-vselected'); if(sel) sel.textContent='';
     _hvAhVendo = null;
@@ -8044,26 +8133,52 @@ function hideSearchDrop() { document.getElementById("search-drop").style.display
 function globalSearch(q) {
   const drop = document.getElementById("search-drop");
   if (!q || q.length < 2) { drop.style.display = "none"; return; }
-  const results = allVendos.filter(v => v.vendo.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+  const ql = q.toLowerCase();
+
+  // Primary: match TG name from allVendos (transaction-based)
+  let results = allVendos.filter(v => v.vendo.toLowerCase().includes(ql)).slice(0, 10);
+
+  // Secondary: if fewer than 5 results, also search sheet_name in _vnAll registry
+  // and cross-reference to allVendos by tg_name
+  if (results.length < 5 && _vnAll && _vnAll.length) {
+    const sheetMatches = _vnAll.filter(v =>
+      v.sheet_name && v.sheet_name.toLowerCase().includes(ql) && v.tg_name
+    );
+    for (const sm of sheetMatches) {
+      const already = results.find(r => r.vendo === sm.tg_name);
+      if (!already) {
+        const fromAll = allVendos.find(r => r.vendo === sm.tg_name);
+        if (fromAll) results.push(fromAll);
+        else results.push({ vendo: sm.tg_name, area: sm.area || '—', sales: 0, txn_count: 0, _sheetLabel: sm.sheet_name });
+      }
+      if (results.length >= 10) break;
+    }
+  }
+
   if (!results.length) { drop.style.display = "none"; return; }
   drop.style.display = "block";
-  drop.innerHTML = 
+  drop.innerHTML =
     `<div style="padding:8px 14px;background:#f0f4ff;border-bottom:1px solid var(--bd);font-size:11px;color:#1565c0;font-weight:600;">
       ${results.length} vendos found — click to view transactions
     </div>` +
-    results.map(v => `
+    results.map(v => {
+      // Find sheet_name label if available
+      const reg = _vnAll ? _vnAll.find(x => x.tg_name === v.vendo) : null;
+      const sheetLabel = reg && reg.sheet_name ? `<span style="color:#7c3aed;font-size:10px;margin-left:6px;">📋 ${reg.sheet_name}</span>` : '';
+      return `
     <div onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')"
       style="padding:11px 14px;border-bottom:1px solid var(--bd);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .12s;"
       onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
       <div>
-        <div style="font-weight:600;font-size:13px;color:#1a1d2e">${v.vendo}</div>
+        <div style="font-weight:600;font-size:13px;color:#1a1d2e">${v.vendo}${sheetLabel}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:2px">📍 ${v.area} · ${parseInt(v.txn_count||v.txns||0).toLocaleString()} txns</div>
       </div>
       <div style="text-align:right;flex-shrink:0;margin-left:8px;">
         <div style="font-weight:700;color:#1565c0;font-size:13px">${fmt(v.sales)}</div>
         <div style="font-size:10px;color:#9FE1CB;font-weight:600;">→ View txns</div>
       </div>
-    </div>`).join("");
+    </div>`;
+    }).join("");
 }
 
 async function openVendoFromSearch(vendo, area) {
