@@ -1837,13 +1837,21 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div><div style="font-size:14px;font-weight:700;color:#1e3cb8;">⚖️ Harvest Reconciliation</div><div style="font-size:10px;color:#6b7280;margin-top:2px;">Coin net vs Telegram income · skipped excluded</div></div>
   <button id="rc-btn" onclick="rcLoad()" style="padding:6px 16px;background:#1e3cb8;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⟳ Refresh</button>
 </div>
-<div id="rc-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
-<div id="rc-content"><div style="text-align:center;padding:60px 20px;color:#9ca3af;"><div style="font-size:32px;margin-bottom:12px;">⚖️</div><div style="font-size:13px;font-weight:600;color:#374151;">Click ⟳ Refresh to load</div></div></div>
-
-<div style="margin-top:24px;border-top:2px solid #fca5a5;padding-top:16px;">
+<!-- Sub-tabs: Reconcile vs Deficit -->
+<div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">
+  <button id="rc-subtab-recon" onclick="rcSubTab('recon')" style="padding:5px 16px;border:none;border-radius:6px;background:#1e3cb8;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">⚖️ Reconciliation</button>
+  <button id="rc-subtab-deficit" onclick="rcSubTab('deficit')" style="padding:5px 16px;border:none;border-radius:6px;background:transparent;border:1.5px solid #fca5a5;color:#dc2626;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🔴 Deficit Audit <span id="hvo-deficit-cnt" style="margin-left:4px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;"></span></button>
+</div>
+<!-- Reconciliation sub-panel -->
+<div id="rc-subpanel-recon">
+  <div id="rc-date-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
+  <div id="rc-content"><div style="text-align:center;padding:60px 20px;color:#9ca3af;"><div style="font-size:32px;margin-bottom:12px;">⚖️</div><div style="font-size:13px;font-weight:600;color:#374151;">Click ⟳ Refresh to load</div></div></div>
+</div>
+<!-- Deficit Audit sub-panel -->
+<div id="rc-subpanel-deficit" style="display:none;">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
     <div>
-      <div style="font-size:14px;font-weight:700;color:#dc2626;">🔴 Deficit Audit <span id="hvo-deficit-cnt" style="margin-left:4px;background:#dc2626;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:8px;"></span></div>
+      <div style="font-size:13px;font-weight:700;color:#dc2626;">🔴 Deficit Audit</div>
       <div style="font-size:10px;color:#6b7280;margin-top:2px;">Vendos where coin collected &lt; TG income · Audit and explain each gap</div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
@@ -4323,18 +4331,52 @@ async function rcLoad(){
     const tgs=[...new Set(_rcH.map(h=>h.tg_name).filter(Boolean))];
     if(ct)ct.innerHTML=`<div class="hv-rec-empty">⏳ Fetching TG income for ${tgs.length} vendos…</div>`;
     _rcTG={};
-    await Promise.all(tgs.map(async tg=>{
-      const win=_rcWin[tg]||_RC0,latest=_rcH.filter(h=>h.tg_name===tg).map(h=>h.harvest_date).filter(Boolean).sort().pop();
-      if(!latest)return;
-      try{const res=await fetch(`${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&date=gte.${win}&date=lte.${latest}&is_skipped=eq.false&select=amount,date`,{headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Range':'0-49999','Prefer':'count=none'}});
-        const rows=res.ok?await res.json():[];_rcTG[tg]={};
-        if(Array.isArray(rows))rows.forEach(t=>{if(!_rcTG[tg][t.date])_rcTG[tg][t.date]=0;_rcTG[tg][t.date]+=parseFloat(t.amount)||0;});
-      }catch(e){_rcTG[tg]={};}
-    }));
+    // Single bulk fetch — get all TG transactions in one query then group by vendo+date in JS
+    const minWin=Object.values(_rcWin).concat([_RC0]).sort()[0]||_RC0;
+    const maxDate=[..._rcH.map(h=>h.harvest_date).filter(Boolean)].sort().pop()||new Date().toISOString().slice(0,10);
+    let allTxns=[];
+    let rcOffset=0;const rcPage=1000;
+    if(ct)ct.innerHTML=`<div class="hv-rec-empty">⏳ Loading transactions…</div>`;
+    while(true){
+      try{
+        const res=await fetch(`${_SB}/rest/v1/transactions?is_skipped=eq.false&date=gte.${minWin}&date=lte.${maxDate}&select=vendo,amount,date&limit=${rcPage}&offset=${rcOffset}`,
+          {headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Prefer':'count=none'}});
+        if(!res.ok)break;
+        const rows=await res.json();
+        if(!Array.isArray(rows)||rows.length===0)break;
+        allTxns=allTxns.concat(rows);
+        if(rows.length<rcPage)break;
+        rcOffset+=rcPage;
+      }catch(e){break;}
+    }
+    // Group by vendo → date → sum
+    allTxns.forEach(t=>{
+      if(!t.vendo)return;
+      if(!_rcTG[t.vendo])_rcTG[t.vendo]={};
+      if(!_rcTG[t.vendo][t.date])_rcTG[t.vendo][t.date]=0;
+      _rcTG[t.vendo][t.date]+=parseFloat(t.amount)||0;
+    });
     _rcDone=true;
     if(dates.length)rcSel(dates[0],tb&&tb.querySelector('.rc-dtab.on'));
   }catch(err){if(ct)ct.innerHTML=`<div class="hv-rec-empty" style="color:#dc2626">Error: ${err.message}</div>`;}
   finally{if(btn){btn.textContent='⟳ Refresh';btn.disabled=false;}}
+}
+function rcSubTab(tab){
+  const reconPanel=document.getElementById('rc-subpanel-recon');
+  const defPanel=document.getElementById('rc-subpanel-deficit');
+  const reconBtn=document.getElementById('rc-subtab-recon');
+  const defBtn=document.getElementById('rc-subtab-deficit');
+  if(tab==='recon'){
+    if(reconPanel)reconPanel.style.display='block';
+    if(defPanel)defPanel.style.display='none';
+    if(reconBtn){reconBtn.style.background='#1e3cb8';reconBtn.style.color='#fff';reconBtn.style.border='none';}
+    if(defBtn){defBtn.style.background='transparent';defBtn.style.border='1.5px solid #fca5a5';defBtn.style.color='#dc2626';}
+  } else {
+    if(reconPanel)reconPanel.style.display='none';
+    if(defPanel)defPanel.style.display='block';
+    if(defBtn){defBtn.style.background='#dc2626';defBtn.style.color='#fff';defBtn.style.border='none';}
+    if(reconBtn){reconBtn.style.background='transparent';reconBtn.style.border='1.5px solid #c7d2fe';reconBtn.style.color='#1e3cb8';}
+  }
 }
 function rcSel(date,btn){
   document.querySelectorAll('.rc-dtab').forEach(b=>b.classList.remove('on'));
