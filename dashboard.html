@@ -5308,11 +5308,11 @@ let _deficitNotes = JSON.parse(localStorage.getItem('deficit_notes') || '{}'); /
 async function hvoLoadDeficits() {
   const listEl = document.getElementById('hvo-deficit-list');
   const statsEl = document.getElementById('hvo-deficit-stats');
-  if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;">Loading harvest data…</div>';
+  if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;">⏳ Loading harvest data…</div>';
 
   try {
-    // Load all harvests with window data
-    const r = await fetch(_SB + '/rest/v1/harvests?select=id,vendo_name,tg_name,harvest_date,harvest_window_start,harvest_window_end,net_collectible,coins_total,coins_free,coins_old,collector,route_code,created_at&order=harvest_date.desc&limit=2000', {
+    // 1. Load all harvests
+    const r = await fetch(_SB + '/rest/v1/harvests?select=id,vendo_name,tg_name,harvest_date,harvest_window_start,harvest_window_end,net_collectible,coins_total,coins_free,coins_old,coins_saloy,collector,route_code,created_at&order=harvest_date.desc&limit=2000', {
       headers: {'apikey':_KEY,'Authorization':'Bearer '+_KEY}
     });
     const harvests = await r.json();
@@ -5321,25 +5321,47 @@ async function hvoLoadDeficits() {
       return;
     }
 
-    // Build TG income per vendo per date window (reuse _rcTG if loaded, else fetch)
+    // 2. If _rcTG not loaded, fetch TG income in bulk now
+    if (!_rcTG || !Object.keys(_rcTG).length) {
+      if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#9ca3af;">⏳ Fetching TG transactions…</div>';
+      const minWin = harvests.map(h=>h.harvest_window_start||_RC0).filter(Boolean).sort()[0] || _RC0;
+      const maxDate = harvests.map(h=>h.harvest_date).filter(Boolean).sort().pop() || new Date().toISOString().slice(0,10);
+      _rcTG = {};
+      let offset = 0; const pageSize = 1000;
+      while(true){
+        try{
+          const res = await fetch(`${_SB}/rest/v1/transactions?is_skipped=eq.false&date=gte.${minWin}&date=lte.${maxDate}&select=vendo,amount,date&limit=${pageSize}&offset=${offset}`,
+            {headers:{'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Prefer':'count=none'}});
+          if(!res.ok) break;
+          const rows = await res.json();
+          if(!Array.isArray(rows)||rows.length===0) break;
+          rows.forEach(t=>{
+            if(!t.vendo) return;
+            if(!_rcTG[t.vendo]) _rcTG[t.vendo]={};
+            if(!_rcTG[t.vendo][t.date]) _rcTG[t.vendo][t.date]=0;
+            _rcTG[t.vendo][t.date]+=parseFloat(t.amount)||0;
+          });
+          if(rows.length<pageSize) break;
+          offset+=pageSize;
+        }catch(e){break;}
+      }
+    }
+
+    // 3. Find deficits
     const deficits = [];
     for (const h of harvests) {
       if (!h.tg_name) continue;
-      const tgIncome = _rcTG && _rcTG[h.tg_name]
-        ? _rcTA(h.tg_name, h.harvest_window_start, h.harvest_date, h.harvest_window_end)
-        : null;
+      const tgIncome = _rcTA(h.tg_name, h.harvest_window_start, h.harvest_date, h.harvest_window_end);
       const coinNet = parseFloat(h.net_collectible || 0);
-      const saloy   = parseFloat(h.coins_saloy || 0);
-      // True deficit = TG income - (coin net + saloy)
-      // Saloy is added back because TG still counted those coins; they were physically returned
-      const trueGap = tgIncome !== null ? tgIncome - (coinNet + saloy) : null;
-      if (trueGap !== null && trueGap > 10) { // >₱10 true deficit
+      const saloy = parseFloat(h.coins_saloy || 0);
+      const trueGap = tgIncome - (coinNet + saloy);
+      if (trueGap > 10) {
         deficits.push({ ...h, tg_income: tgIncome, coin_net: coinNet, saloy, gap: -trueGap });
       }
     }
     _deficits = deficits;
 
-    // Populate filters
+    // 4. Populate filters
     const dates = [...new Set(deficits.map(d => d.harvest_date).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
     const collectors = [...new Set(deficits.map(d => d.collector).filter(Boolean))].sort();
     const dateSel = document.getElementById('def-filter-date');
@@ -5347,7 +5369,7 @@ async function hvoLoadDeficits() {
     if (dateSel) dateSel.innerHTML = '<option value="">All dates</option>' + dates.map(d=>`<option value="${d}">${d}</option>`).join('');
     if (colSel) colSel.innerHTML = '<option value="">All collectors</option>' + collectors.map(c=>`<option value="${c}">${c}</option>`).join('');
 
-    // Update badge count
+    // 5. Update badge
     const badge = document.getElementById('hvo-deficit-cnt');
     const openCount = deficits.filter(d => !_deficitNotes[d.id]?.explained).length;
     if (badge) badge.textContent = openCount || '';
