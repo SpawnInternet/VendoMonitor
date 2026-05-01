@@ -4413,15 +4413,15 @@ function _rcRender(date){
   const dC=v=>Math.abs(v)<200?'#16a34a':v>0?'#d97706':'#dc2626';
   const dT=v=>Math.abs(v)<200?'✅ Match':v>0?`⚠ Coins +${_fP(Math.abs(v))}`:`🔴 TG +${_fP(Math.abs(v))}`;
   const byC={};hs.forEach(h=>{const c=(h.collector||'Unknown').trim(),rc=h.route_code||'No route';if(!byC[c])byC[c]={};if(!byC[c][rc])byC[c][rc]=[];byC[c][rc].push(h);});
-  const gC=hs.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),gT=hs.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),gD=gC-gT;
+  const gC=hs.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0),gT=hs.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),gD=gC-gT;
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
-    <div class="rc-st" style="background:#f0fdf4;border-left:3px solid #16a34a"><div class="rv" style="color:#16a34a">${_fP(gC)}</div><div class="rl">Coin Net</div></div>
+    <div class="rc-st" style="background:#f0fdf4;border-left:3px solid #16a34a"><div class="rv" style="color:#16a34a">${_fP(gC)}</div><div class="rl">Coin Total</div></div>
     <div class="rc-st" style="background:#eef2ff;border-left:3px solid #1e3cb8"><div class="rv" style="color:#1e3cb8">${_fP(gT)}</div><div class="rl">TG Income</div></div>
     <div class="rc-st" style="background:#fafbff"><div class="rv" style="color:${dC(gD)}">${_fP(Math.abs(gD))}</div><div class="rl">${gD>=0?'Surplus':'Deficit'}</div></div>
     <div class="rc-st" style="background:#f8faff"><div class="rv" style="color:${dC(gD)};font-size:13px">${dT(gD)}</div><div class="rl">${hs.length} vendo(s)</div></div>
   </div>`;
   Object.entries(byC).forEach(([col,routes])=>{
-    const ai=Object.values(routes).flat(),cC=ai.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),cT=ai.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),cD=cC-cT;
+    const ai=Object.values(routes).flat(),cC=ai.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0),cT=ai.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),cD=cC-cT;
     html+=`<div style="background:#fff;border:2px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
       <div style="padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
         <div style="cursor:pointer;" onclick="rcShowCollectorDeficits('${col.replace(/'/g,"\'").replace(/"/g,'&quot;')}','${date}')" title="Click to see deficits for ${col}">
@@ -4434,12 +4434,12 @@ function _rcRender(date){
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px 16px;">
-        <div class="rc-st" style="background:#f0fdf4"><div class="rv" style="color:#16a34a">${_fP(cC)}</div><div class="rl">Coin net</div></div>
+        <div class="rc-st" style="background:#f0fdf4"><div class="rv" style="color:#16a34a">${_fP(cC)}</div><div class="rl">Coin Total</div></div>
         <div class="rc-st" style="background:#eef2ff"><div class="rv" style="color:#1e3cb8">${_fP(cT)}</div><div class="rl">TG income</div></div>
         <div class="rc-st" style="background:#fafbff"><div class="rv" style="color:${dC(cD)}">${_fP(Math.abs(cD))}</div><div class="rl">${cD>=0?'Surplus':'Deficit'}</div></div>
       </div>`;
     Object.entries(routes).forEach(([rc,rI])=>{
-      const rC=rI.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0),rT=rI.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),rD=rC-rT;
+      const rC=rI.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0),rT=rI.reduce((s,h)=>s+_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),0),rD=rC-rT;
       const isA=!rc||rc==='No route'||rc.toUpperCase()==='ADMIN';
       const bdg=isA?'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e">🔧 Admin</span>':'<span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8">📱 PWA</span>';
       html+=`<div style="margin:0 14px 10px;background:#f8faff;border:1px solid #dde3f5;border-radius:8px;overflow:hidden;">
@@ -4454,7 +4454,7 @@ function _rcRender(date){
           <th style="padding:6px 10px;text-align:right;font-size:9px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">TG Income</th>
           <th style="padding:6px 10px;text-align:right;font-size:9px;color:#6b7280;font-weight:700;border-bottom:1px solid #e5e7eb">Diff</th>
         </tr></thead><tbody>${rI.map(h=>{
-          const coin=parseFloat(h.net_collectible||0),tg=_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),gap=coin-tg;
+          const coin=parseFloat(h.coins_total||0),tg=_rcTA(h.tg_name,h.harvest_window_start,date,h.harvest_window_end),gap=coin-tg;
           const hJson = JSON.stringify(h).replace(/'/g,"\'").replace(/`/g,'\`');
           return `<tr style="cursor:pointer;${Math.abs(gap)<50?'':gap>0?'background:#fffbeb':'background:#fef2f2'}" onclick="rcShowHarvestDetail(${JSON.stringify(h).replace(/</g,'\u003c')})" title="Click for harvest details">
             <td style="padding:7px 10px"><b style="color:#1e3cb8">${h.vendo_name||h.tg_name||'—'}</b><div style="font-size:9px;color:#6b7280">${h.tg_name ? h.tg_name : '<span style="background:#fef2f2;color:#dc2626;font-weight:700;padding:1px 5px;border-radius:4px;font-size:9px;">⚠ NO TG NAME</span>'}</div></td>
@@ -5013,7 +5013,7 @@ async function hvoRenderReconOverlay(force) {
     let grandCoin=0, grandTg=0;
     dates.forEach(d => {
       const harv = byDate[d];
-      grandCoin += harv.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+      grandCoin += harv.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
       grandTg   += harv.reduce((s,h)=>s+getTg(h,d),0);
     });
     const gDiff=grandCoin-grandTg, gCls=Math.abs(gDiff)<500?'#15803d':gDiff>0?'#d97706':'#dc2626';
@@ -5031,7 +5031,7 @@ async function hvoRenderReconOverlay(force) {
       const harv = byDate[date];
       const byColl = {};
       harv.forEach(h => { const c=h.collector||'—', rc=h.route_code||'No route'; if(!byColl[c]) byColl[c]={}; if(!byColl[c][rc]) byColl[c][rc]=[]; byColl[c][rc].push(h); });
-      const dateCoin = harv.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+      const dateCoin = harv.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
       const dateTg   = harv.reduce((s,h)=>s+getTg(h,date),0);
       const dateDiff = dateCoin-dateTg;
       const dateCls  = Math.abs(dateDiff)<200?'#15803d':dateDiff>0?'#d97706':'#dc2626';
@@ -5048,7 +5048,7 @@ async function hvoRenderReconOverlay(force) {
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:16px;">';
       Object.entries(byColl).forEach(([col, routes]) => {
         const cItems = Object.values(routes).flat();
-        const cCoin  = cItems.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+        const cCoin  = cItems.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
         const cTg    = cItems.reduce((s,h)=>s+getTg(h,date),0);
         const cDiff  = cCoin - cTg;
         const cCls   = Math.abs(cDiff)<200 ? '#15803d' : cDiff>0 ? '#d97706' : '#dc2626';
@@ -5106,7 +5106,7 @@ function hvoOpenReconPopup(popId) {
   // Build per-route vendo rows
   let routeHtml = '';
   Object.entries(d.routes).forEach(([rc, items]) => {
-    const rCoin = items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+    const rCoin = items.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
     // Calculate TG per item using stored getTgFn if available
     const getTg = d.getTgFn || (() => 0);
     const rTg   = items.reduce((s,h)=>s+getTg(h,d.date),0);
@@ -5131,7 +5131,7 @@ function hvoOpenReconPopup(popId) {
       + '<th style="padding:6px 10px;text-align:right;color:#6b7280;font-size:9px;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Window</th>'
       + '</tr></thead><tbody>'
       + items.map(h => {
-          const net   = parseFloat(h.net_collectible||0);
+          const net   = parseFloat(h.coins_total||0);
           const tgAmt = getTg(h, d.date);
           const diff  = net - tgAmt;
           const dCls  = Math.abs(diff)<50 ? '#15803d' : diff>0 ? '#d97706' : '#dc2626';
@@ -5203,7 +5203,7 @@ function hvorOpenPopup(id) {
   const coll = items[0].collector || '—';
   const date = items[0].harvest_date || '—';
   const fmt2 = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
-  const cCoin = items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+  const cCoin = items.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
   const cTg   = items.reduce((s,h)=>s+(h._tgAmt||0),0);
   const diff  = cCoin-cTg;
   const diffCls=Math.abs(diff)<200?'#15803d':diff>0?'#d97706':'#dc2626';
@@ -5230,7 +5230,7 @@ function hvorOpenPopup(id) {
             ${['Vendo','TG Name','Window','Coin Net','TG Income','Diff'].map(h=>`<th style="padding:8px 10px;text-align:left;color:#1e3cb8;font-size:9px;text-transform:uppercase;border-bottom:2px solid #c7d2fe;">${h}</th>`).join('')}
           </tr></thead>
           <tbody>${items.map(h=>{
-            const coin=parseFloat(h.net_collectible||0);
+            const coin=parseFloat(h.coins_total||0);
             const tgAmt=h._tgAmt||0;
             const gap=coin-tgAmt;
             const gCls=Math.abs(gap)<50?'#15803d':gap>0?'#d97706':'#dc2626';
@@ -5380,9 +5380,9 @@ async function hvoLoadDeficits() {
     for (const h of harvests) {
       if (!h.tg_name) continue;
       const tgIncome = _rcTA(h.tg_name, h.harvest_window_start, h.harvest_date, h.harvest_window_end);
-      const coinNet = parseFloat(h.net_collectible || 0);
-      const saloy = parseFloat(h.coins_saloy || 0);
-      const trueGap = tgIncome - (coinNet + saloy);
+      const coinNet = parseFloat(h.coins_total || 0);
+      const saloy = 0;
+      const trueGap = tgIncome - coinNet;
       if (trueGap > 10) {
         deficits.push({ ...h, tg_income: tgIncome, coin_net: coinNet, saloy, gap: -trueGap });
       }
@@ -6644,7 +6644,7 @@ async function hvExportCollector(collector, date) {
     let grandCoin = 0, grandTG = 0;
 
     Object.entries(byRoute).forEach(([rc, items]) => {
-      const routeCoin = items.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+      const routeCoin = items.reduce((s,h) => s + (parseFloat(h.coins_total)||0), 0);
       const routeTG   = items.reduce((s,h) => s + (tgMap[h.tg_name]||0), 0);
       const routeDiff = routeCoin - routeTG;
       grandCoin += routeCoin;
@@ -9201,7 +9201,7 @@ async function loadReconciliation() {
         return amt;
       };
 
-      const dateCoinNet = harvests.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+      const dateCoinNet = harvests.reduce((s,h) => s + (parseFloat(h.coins_total)||0), 0);
       const dateTgTotal = harvests.reduce((s,h) => s + getTgAmt(h), 0);
       grandCoinNet += dateCoinNet;
       grandTgTotal += dateTgTotal;
@@ -9224,7 +9224,7 @@ async function loadReconciliation() {
 
       Object.entries(byCollector).forEach(([collector, routes]) => {
         const allItems = Object.values(routes).flat();
-        const colCoin = allItems.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+        const colCoin = allItems.reduce((s,h) => s + (parseFloat(h.coins_total)||0), 0);
         const colTg   = allItems.reduce((s,h) => s + getTgAmt(h), 0);
         const colDiff = colCoin - colTg;
         const colDiffCls = Math.abs(colDiff)<200 ? 'diff-ok' : colDiff>0 ? 'diff-warn' : 'diff-bad';
@@ -9264,7 +9264,7 @@ async function loadReconciliation() {
                 <th>Coin Net</th><th>TG Income</th><th>Diff</th>
               </tr></thead>
               <tbody>${items.map(h => {
-                const coin = parseFloat(h.net_collectible||0);
+                const coin = parseFloat(h.coins_total||0);
                 const tgAmt = getTgAmt(h);
                 const gap = coin - tgAmt;
                 const gapCls = Math.abs(gap)<50 ? 'diff-ok' : gap>0 ? 'diff-warn' : 'diff-bad';
@@ -9558,7 +9558,7 @@ function rcShowHarvestDetail(h) {
   if (ex) ex.remove();
 
   const tgIncome = _rcTG && _rcTG[h.tg_name] ? _rcTA(h.tg_name, h.harvest_window_start, h.harvest_date, h.harvest_window_end) : null;
-  const coin = parseFloat(h.net_collectible||0);
+  const coin = parseFloat(h.coins_total||0);
   const free = parseFloat(h.coins_free||0);
   const old  = parseFloat(h.coins_old||0);
   const sal  = parseFloat(h.coins_saloy||0);
@@ -9637,7 +9637,7 @@ function rcShowCollectorDeficits(collector, date) {
   const hs = _rcH.filter(h => h.harvest_date === date && (h.collector||'Unknown').trim() === collector);
   const deficits = hs.map(h => {
     const tg = _rcTA(h.tg_name, h.harvest_window_start, date, h.harvest_window_end);
-    const coin = parseFloat(h.net_collectible||0);
+    const coin = parseFloat(h.coins_total||0);
     return { ...h, tg_income: tg, gap: coin - tg };
   }).filter(h => h.gap < -10).sort((a,b) => a.gap - b.gap);
 
