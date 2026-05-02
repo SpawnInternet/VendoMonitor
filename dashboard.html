@@ -348,12 +348,13 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
       <span class="nl" style="color:#dc2626">Suspicious</span>
     </button>
-    <!-- Devices -->
-    <button onclick="showP('devices',this)" data-panel="devices">
-      <div class="ni" style="background:#e0f2fe">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="5" y="2" width="9" height="15" rx="2" fill="#0284c7"/><rect x="15" y="6" width="7" height="11" rx="1.5" fill="#0284c7" opacity=".45"/><circle cx="9.5" cy="14.5" r="1" fill="#fff"/></svg>
+    <!-- Job Orders -->
+    <button onclick="showP('joborders',this);joInit()" data-panel="joborders">
+      <span class="nbadge r" id="nav-jo-badge" style="display:none"></span>
+      <div class="ni" style="background:#fff0e6">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke="#ea580c" stroke-width="2" fill="none"/><line x1="8" y1="7" x2="16" y2="7" stroke="#ea580c" stroke-width="1.8" stroke-linecap="round"/><line x1="8" y1="11" x2="16" y2="11" stroke="#ea580c" stroke-width="1.8" stroke-linecap="round"/><line x1="8" y1="15" x2="13" y2="15" stroke="#ea580c" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
-      <span class="nl">Devices</span>
+      <span class="nl" style="color:#ea580c">Job Orders</span>
     </button>
     <!-- Analytics -->
     <button onclick="showP('analytics',this)" data-panel="analytics">
@@ -7849,9 +7850,6 @@ function toast(msg, dur) {
 </div>
 
 <!-- ══ DEVICES / RECONCILIATION ══ -->
-<div id="panel-devices" class="panel">
-</div>
-
 <!-- ══ ANALYTICS ══ -->
 <!-- ══ ANALYTICS ══ -->
 <!-- ══ ANALYTICS ══ -->
@@ -8301,7 +8299,7 @@ setInterval(_tickClock,1000);
 var _navHistory = [];
 var _navLabels  = {
   dash:'Dashboard', vendos:'Vendos', harvest:'Harvest',
-  suspicious:'Suspicious', skipped:'Skipped', devices:'Devices',
+  suspicious:'Suspicious', skipped:'Skipped', joborders:'Job Orders',
   analytics:'Analytics', notsus:'Not Sus', status:'System'
 };
 function gNavBack() {
@@ -8342,7 +8340,6 @@ function showP(id, btn) {
   gUpdateBackBtn(id);
   hideBread();
   if(id==="harvest")   loadHarvests();
-  // devices panel is intentionally empty
   if(id==="analytics") loadAnalytics();
   if(id==="vendos")    loadVendos();
   if(id==="skipped")   loadSkipped();
@@ -9112,7 +9109,6 @@ function closeSuspiciousDetail() {
 // ══════════════════════════════════════════════════════════
 // DEVICES / RECONCILIATION
 // ══════════════════════════════════════════════════════════
-async function loadDevices() { /* devices panel intentionally empty */ }
 
 const RC_DEFAULT_START = '2026-03-01';
 
@@ -11356,6 +11352,876 @@ async function fullBackup() {
     </div>
   </div>
 </div>
+
+
+<!-- ══ JOB ORDERS STYLES ══ -->
+<style>
+/* JO Tab row */
+.jo-tabs{display:flex;gap:3px;background:#fff4ee;padding:3px;border-radius:8px;margin-bottom:12px;flex-wrap:wrap;border:1px solid rgba(234,88,12,.1)}
+.jo-tab{padding:5px 13px;border-radius:6px;border:none;background:transparent;color:#6b7394;font-size:12px;cursor:pointer;font-family:inherit;font-weight:500}
+.jo-tab.active{background:#ea580c;color:#fff}
+.jo-subp{display:none}.jo-subp.active{display:block}
+
+/* Cards */
+.jo-card{background:#fff;border:1px solid rgba(234,88,12,.12);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.jo-card-hd{font-size:11px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+
+/* Source input areas */
+.jo-src-block{background:#fff;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:10px}
+.jo-src-label{font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.jo-src-badge{padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;text-transform:uppercase}
+.jo-src-badge.server{background:#dbeafe;color:#1e40af}
+.jo-src-badge.gc{background:#dcfce7;color:#15803d}
+.jo-src-badge.tech{background:#fef3c7;color:#92400e}
+.jo-textarea{width:100%;border:1px solid #e5e7eb;border-radius:7px;padding:9px 11px;font-size:12px;font-family:inherit;resize:vertical;outline:none;color:#374151;line-height:1.5}
+.jo-textarea:focus{border-color:#ea580c}
+
+/* Parsed preview table */
+.jo-preview-wrap{background:#f8faff;border:1px solid #dde3f5;border-radius:8px;overflow-x:auto;margin-top:8px}
+.jo-preview-wrap table{width:100%;border-collapse:collapse;font-size:11px}
+.jo-preview-wrap th{padding:6px 9px;background:#eef2ff;color:#1e3cb8;font-size:10px;font-weight:700;text-align:left;border-bottom:1px solid #dde3f5;white-space:nowrap}
+.jo-preview-wrap td{padding:6px 9px;border-bottom:1px solid #f0f4ff;vertical-align:top}
+.jo-preview-wrap tr:last-child td{border-bottom:none}
+.jo-preview-wrap tr.conflict{background:#fff8e1}
+.jo-preview-wrap tr.done-row{background:#f0fdf4;opacity:.7}
+
+/* Job row in today board */
+.jo-job-row{background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:box-shadow .12s;display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start}
+.jo-job-row:hover{box-shadow:0 2px 8px rgba(234,88,12,.12)}
+.jo-status-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:1px}
+.jo-status-dot.pending{background:#fff3cd}
+.jo-status-dot.done{background:#dcfce7}
+.jo-status-dot.new{background:#e0f2fe}
+.jo-tech-group{margin-bottom:14px}
+.jo-tech-hdr{display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:#fff4ee;border-radius:7px;border-left:3px solid #ea580c}
+.jo-tech-name{font-size:13px;font-weight:700;color:#ea580c}
+.jo-tech-count{font-size:10px;color:#6b7394;background:#f3f4f6;padding:2px 7px;border-radius:10px}
+
+/* Area filter pills */
+.jo-area-pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.jo-area-pill{padding:3px 10px;border-radius:12px;font-size:10px;font-weight:600;cursor:pointer;border:1.5px solid #e5e7eb;background:#fff;color:#6b7394;transition:all .12s}
+.jo-area-pill.active{background:#ea580c;border-color:#ea580c;color:#fff}
+
+/* Job detail modal */
+.jo-detail-modal{background:#fff;border-radius:12px;width:min(600px,100%);padding:18px;margin:auto;max-height:90vh;overflow-y:auto}
+.jo-priority-badge{padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
+.jo-priority-badge.high{background:#fee2e2;color:#dc2626}
+.jo-priority-badge.normal{background:#dbeafe;color:#1e40af}
+
+/* Briefing output */
+.jo-briefing-out{background:#1e1e2e;color:#a8e6cf;font-family:monospace;font-size:12px;line-height:1.7;padding:14px;border-radius:8px;white-space:pre-wrap;max-height:400px;overflow-y:auto;margin-top:8px}
+
+/* Stats row */
+.jo-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:10px}
+.jo-stat{background:#fff;border:1px solid rgba(234,88,12,.12);border-radius:8px;padding:8px 11px;border-bottom:3px solid #ea580c}
+.jo-stat .sl{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.jo-stat .sv{font-size:18px;font-weight:700;color:#ea580c}
+</style>
+
+<!-- ══ JOB ORDERS PANEL ══ -->
+<div id="panel-joborders" class="panel">
+<div class="w" style="padding-top:8px">
+
+  <!-- Sub-tab bar -->
+  <div class="jo-tabs">
+    <button class="jo-tab active" onclick="joTab('morning',this)">📥 Morning Setup</button>
+    <button class="jo-tab" onclick="joTab('board',this)">📋 Today's Board</button>
+    <button class="jo-tab" onclick="joTab('pending',this)">🔄 Pending</button>
+    <button class="jo-tab" onclick="joTab('archive',this)">📁 Archive</button>
+  </div>
+
+  <!-- ── MORNING SETUP ── -->
+  <div id="jo-sub-morning" class="jo-subp active">
+
+    <!-- Stats -->
+    <div class="jo-stats" id="jo-morning-stats">
+      <div class="jo-stat"><div class="sl">Pending (yesterday)</div><div class="sv" id="jo-s-pending">0</div></div>
+      <div class="jo-stat"><div class="sl">New today</div><div class="sv" id="jo-s-new">0</div></div>
+      <div class="jo-stat"><div class="sl">Total today</div><div class="sv" id="jo-s-total">0</div></div>
+      <div class="jo-stat"><div class="sl">Assigned</div><div class="sv" id="jo-s-assigned">0</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+
+      <!-- LEFT: Three source inputs -->
+      <div>
+        <!-- Source 1: DCHNP Server -->
+        <div class="jo-src-block">
+          <div class="jo-src-label">
+            <span class="jo-src-badge server">📡 Server</span>
+            DCHNP — Router Details
+          </div>
+          <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste the comment/details you copied from the MikroTik interface. One entry at a time or paste multiple separated by blank lines.</div>
+          <textarea class="jo-textarea" id="jo-src-server" rows="5" placeholder="e.g.&#10;from Viola Yongco&#10;Bagong silang taguilon&#10;Dapitan City&#10;095-345-29707&#10;vlan195  4/21/25&#10;&#10;Jean Rose Rendon&#10;Purok bagong silang Taguilon..."></textarea>
+          <button onclick="joParseSource('server')" style="margin-top:6px;padding:5px 14px;background:#1e40af;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Server Entries</button>
+        </div>
+
+        <!-- Source 2: GC / Messenger reklamo -->
+        <div class="jo-src-block">
+          <div class="jo-src-label">
+            <span class="jo-src-badge gc">💬 GC</span>
+            Messenger / SPAWN NOTES Reklamo
+          </div>
+          <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste customer complaints from SPAWN NOTES GC or personal Messenger. Free text is fine — AI will extract the details.</div>
+          <textarea class="jo-textarea" id="jo-src-gc" rows="5" placeholder="e.g.&#10;Ailyn: Mary Blanche pataod private 09462983726 Relocation Site silingan Peñez&#10;&#10;Rene Napigkit muhunay ang connection inig sa kwarta...&#10;&#10;Sir diri man toy nag ayo sa spawn wifi sa atbang ospital dapitan..."></textarea>
+          <button onclick="joParseSource('gc')" style="margin-top:6px;padding:5px 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse GC Reklamo</button>
+        </div>
+
+        <!-- Source 3: Tech report -->
+        <div class="jo-src-block">
+          <div class="jo-src-label">
+            <span class="jo-src-badge tech">📋 Tech Report</span>
+            Technician End-of-Day Report
+          </div>
+          <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste the tech's reply with ✅ done and ❌ not done marks. Status will be updated automatically.</div>
+          <textarea class="jo-textarea" id="jo-src-tech" rows="5" placeholder="e.g.&#10;MAY 2, 2026&#10;AREA: DIPOLOG&#10;PENDING:&#10;✅62 yaki dael&#10;❌64 Jay Ann sotillo Upper Dicayas...&#10;NEW JOB ORDER:&#10;✅104 GT hardware"></textarea>
+          <button onclick="joParseSource('tech')" style="margin-top:6px;padding:5px 14px;background:#92400e;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Tech Report</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: Parsed preview + confirm -->
+      <div>
+        <div class="jo-card">
+          <div class="jo-card-hd">
+            Parsed Preview
+            <button onclick="joClearPreview()" style="padding:2px 8px;font-size:10px;border:1px solid #e5e7eb;border-radius:5px;background:#fff;cursor:pointer;font-family:inherit;color:#6b7394">Clear</button>
+          </div>
+          <div id="jo-parse-status" style="font-size:11px;color:#6b7394;margin-bottom:6px"></div>
+          <div id="jo-preview-table"></div>
+          <div id="jo-conflict-notice" style="display:none;background:#fff8e1;border:1px solid #fcd34d;border-radius:7px;padding:8px 11px;font-size:11px;color:#92400e;margin-top:8px">
+            ⚠️ <strong>Possible duplicates detected</strong> — rows highlighted in yellow. Review before confirming.
+          </div>
+          <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap" id="jo-preview-actions" style="display:none">
+            <button onclick="joConfirmAll()" id="jo-confirm-btn" style="padding:7px 18px;background:#ea580c;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:none">✅ Confirm All & Add to Today</button>
+            <button onclick="joConfirmSelected()" id="jo-confirm-sel-btn" style="padding:7px 14px;background:#fff;border:1px solid #ea580c;color:#ea580c;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:none">Add Selected Only</button>
+          </div>
+        </div>
+
+        <!-- Assign availabilities -->
+        <div class="jo-card">
+          <div class="jo-card-hd">Available Technicians Today</div>
+          <div id="jo-tech-availability" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px"></div>
+          <button onclick="joManageTechs()" style="font-size:11px;padding:4px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit;color:#6b7394">⚙️ Manage technicians</button>
+        </div>
+
+        <!-- Generate briefing -->
+        <div class="jo-card">
+          <div class="jo-card-hd">📤 Generate Daily Briefing</div>
+          <div style="font-size:10px;color:#6b7394;margin-bottom:8px">Formats today's job orders per technician, sorted by area, pending first then new — ready to copy to Messenger.</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            <select id="jo-brief-tech" style="padding:5px 9px;border:1px solid var(--bd);border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+              <option value="all">All Technicians</option>
+            </select>
+            <button onclick="joGenerateBriefing()" style="padding:5px 14px;background:#1e3cb8;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Generate →</button>
+            <button onclick="joCopyBriefing()" id="jo-copy-brief-btn" style="padding:5px 14px;background:#fff;border:1px solid #1e3cb8;color:#1e3cb8;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:none">📋 Copy</button>
+          </div>
+          <div id="jo-briefing-output" style="display:none">
+            <div class="jo-briefing-out" id="jo-briefing-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TODAY'S BOARD ── -->
+  <div id="jo-sub-board" class="jo-subp">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input type="text" id="jo-board-search" placeholder="🔍 Search job..." oninput="joRenderBoard()"
+        style="padding:5px 10px;border:1px solid var(--bd);border-radius:6px;font-size:12px;outline:none;flex:1;min-width:150px">
+      <select id="jo-board-area" onchange="joRenderBoard()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+        <option value="">All Areas</option>
+        <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option><option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+      <select id="jo-board-status" onchange="joRenderBoard()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+        <option value="">All Status</option>
+        <option value="new">New</option>
+        <option value="pending">Pending</option>
+        <option value="done">Done</option>
+      </select>
+      <button onclick="joShowAddForm()" style="padding:5px 14px;background:#ea580c;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">➕ Add Job</button>
+    </div>
+    <div class="jo-area-pills" id="jo-board-tech-pills"></div>
+    <div id="jo-board-list"></div>
+  </div>
+
+  <!-- ── PENDING ── -->
+  <div id="jo-sub-pending" class="jo-subp">
+    <div style="font-size:12px;color:#6b7394;margin-bottom:10px">Jobs from previous days that were not marked done. Roll them over to today or close them out.</div>
+    <div id="jo-pending-list"></div>
+    <div id="jo-pending-empty" style="display:none;text-align:center;padding:30px;color:#6b7394;font-size:13px">No pending jobs from previous days 🎉</div>
+  </div>
+
+  <!-- ── ARCHIVE ── -->
+  <div id="jo-sub-archive" class="jo-subp">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input type="date" id="jo-arch-from" style="padding:5px 9px;border:1px solid var(--bd);border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+      <input type="date" id="jo-arch-to" style="padding:5px 9px;border:1px solid var(--bd);border-radius:6px;font-size:12px;font-family:inherit;outline:none">
+      <input type="text" id="jo-arch-search" placeholder="🔍 Search..." oninput="joRenderArchive()"
+        style="padding:5px 10px;border:1px solid var(--bd);border-radius:6px;font-size:12px;outline:none;flex:1;min-width:130px">
+      <button onclick="joRenderArchive()" style="padding:5px 12px;background:#1e3cb8;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit">Filter</button>
+    </div>
+    <div id="jo-archive-list"></div>
+  </div>
+
+</div>
+</div>
+
+<!-- ── JOB ORDER DETAIL MODAL ── -->
+<div class="modal-bg" id="jo-detail-modal">
+  <div class="jo-detail-modal">
+    <div class="modal-hd">
+      <div class="modal-title" id="jo-dm-title">Job Order</div>
+      <button class="modal-close" onclick="joCloseDetail()">✕</button>
+    </div>
+    <div id="jo-dm-body"></div>
+  </div>
+</div>
+
+<!-- ── ADD JOB FORM MODAL ── -->
+<div class="modal-bg" id="jo-add-modal">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hd">
+      <div class="modal-title">➕ Add Job Order</div>
+      <button class="modal-close" onclick="document.getElementById('jo-add-modal').classList.remove('open')">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">AREA</label>
+          <select id="jo-add-area" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+            <option value="">— select —</option>
+            <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+            <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option><option>MINAOG</option><option>MIX AREAS</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">VLAN (if vendo)</label>
+          <input id="jo-add-vlan" type="number" placeholder="e.g. 249" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">CUSTOMER / VENDO NAME</label>
+        <input id="jo-add-customer" type="text" placeholder="e.g. Leonora Calizar" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">ADDRESS</label>
+        <input id="jo-add-address" type="text" placeholder="e.g. Purok 2, Reloc. Dicayas" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">ISSUE / CONCERN</label>
+        <textarea id="jo-add-issue" rows="2" placeholder="e.g. Wala connection, mag taod ug extender..." style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none;resize:vertical"></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">CONTACT</label>
+          <input id="jo-add-contact" type="text" placeholder="09xxxxxxxxx" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">PRIORITY</label>
+          <select id="jo-add-priority" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+            <option value="normal">Normal</option>
+            <option value="high">⚡ Priority</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">ASSIGN TO</label>
+        <select id="jo-add-tech" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+          <option value="">— unassigned —</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:#374151;display:block;margin-bottom:3px">SOURCE</label>
+        <select id="jo-add-source" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+          <option value="manual">Manual Entry</option>
+          <option value="server">DCHNP Server</option>
+          <option value="gc">Messenger/GC</option>
+          <option value="rollover">Rollover</option>
+        </select>
+      </div>
+      <button onclick="joSaveAddForm()" style="padding:12px;background:#ea580c;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Save Job Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MANAGE TECHNICIANS MODAL ── -->
+<div class="modal-bg" id="jo-techs-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hd">
+      <div class="modal-title">⚙️ Manage Technicians</div>
+      <button class="modal-close" onclick="document.getElementById('jo-techs-modal').classList.remove('open')">✕</button>
+    </div>
+    <div id="jo-techs-list" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="jo-new-tech-name" type="text" placeholder="New technician name..." style="flex:1;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none">
+      <button onclick="joAddTech()" style="padding:8px 16px;background:#ea580c;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ JOB ORDERS JAVASCRIPT ══ -->
+<script>
+(function(){
+const SUPABASE_URL='https://cviraqfhphhsonjmrtvu.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk3ODk1MDMsImV4cCI6MjAyNTM2NTUwM30.AJAK8bCHMzOp-IFULl5h3MoHM3pElLiXxBNQolGPZtQ';
+
+// ── State ──
+let _joJobs = JSON.parse(localStorage.getItem('jo_jobs')||'[]');
+let _joParsed = [];
+let _joTechs = JSON.parse(localStorage.getItem('jo_techs')||'["Jericho","Bim2x","Warren","Jhoe","Michael","Dodoy","Dongie"]');
+let _joCurrentTab = 'morning';
+
+function joSave(){ localStorage.setItem('jo_jobs', JSON.stringify(_joJobs)); }
+function joSaveTechs(){ localStorage.setItem('jo_techs', JSON.stringify(_joTechs)); }
+
+function joTodayStr(){
+  const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1).toString().padStart(2,'0')+'-'+d.getDate().toString().padStart(2,'0');
+}
+
+window.joInit=function(){
+  joRenderTechAvailability();
+  joPopulateTechSelects();
+  joUpdateStats();
+  joRenderBoard();
+  joRenderPending();
+  joRenderArchive();
+  joUpdateNavBadge();
+};
+
+window.joTab=function(t,btn){
+  _joCurrentTab=t;
+  document.querySelectorAll('.jo-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.jo-subp').forEach(p=>p.classList.remove('active'));
+  document.getElementById('jo-sub-'+t).classList.add('active');
+  if(t==='board') joRenderBoard();
+  if(t==='pending') joRenderPending();
+  if(t==='archive') joRenderArchive();
+};
+
+// ── Technician management ──
+function joRenderTechAvailability(){
+  const el=document.getElementById('jo-tech-availability');
+  el.innerHTML=_joTechs.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#f9fafb;border-radius:6px">
+      <label style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer;font-size:12px;font-weight:600">
+        <input type="checkbox" data-tech="${i}" ${joIsTechAvailable(t)?'checked':''} onchange="joToggleTechAvail(${i})" style="accent-color:#ea580c">
+        ${t}
+      </label>
+      <span style="font-size:10px;color:#6b7394">${_joJobs.filter(j=>j.technician===t&&j.date===joTodayStr()).length} jobs today</span>
+    </div>`).join('');
+}
+
+function joIsTechAvailable(name){
+  const avail=JSON.parse(localStorage.getItem('jo_avail')||'{}');
+  const today=joTodayStr();
+  return avail[today] ? avail[today].includes(name) : true;
+}
+
+window.joToggleTechAvail=function(idx){
+  const avail=JSON.parse(localStorage.getItem('jo_avail')||'{}');
+  const today=joTodayStr();
+  if(!avail[today]) avail[today]=[..._joTechs];
+  const name=_joTechs[idx];
+  if(avail[today].includes(name)) avail[today]=avail[today].filter(t=>t!==name);
+  else avail[today].push(name);
+  localStorage.setItem('jo_avail',JSON.stringify(avail));
+};
+
+function joPopulateTechSelects(){
+  const opts=['<option value="">— unassigned —</option>',..._joTechs.map(t=>`<option>${t}</option>`)].join('');
+  const briefOpts=['<option value="all">All Technicians</option>',..._joTechs.map(t=>`<option>${t}</option>`)].join('');
+  const addSel=document.getElementById('jo-add-tech');
+  if(addSel) addSel.innerHTML=opts;
+  const briefSel=document.getElementById('jo-brief-tech');
+  if(briefSel) briefSel.innerHTML=briefOpts;
+  // Tech pills in board
+  const pills=document.getElementById('jo-board-tech-pills');
+  if(pills) pills.innerHTML=`<button class="jo-area-pill active" onclick="joBoardTechFilter('',this)">All Techs</button>`+
+    _joTechs.map(t=>`<button class="jo-area-pill" onclick="joBoardTechFilter('${t}',this)">${t}</button>`).join('');
+}
+
+let _joBoardTechFilter='';
+window.joBoardTechFilter=function(t,btn){
+  _joBoardTechFilter=t;
+  document.querySelectorAll('#jo-board-tech-pills .jo-area-pill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  joRenderBoard();
+};
+
+window.joManageTechs=function(){
+  const modal=document.getElementById('jo-techs-modal');
+  modal.classList.add('open');
+  joRenderTechsList();
+};
+
+function joRenderTechsList(){
+  document.getElementById('jo-techs-list').innerHTML=_joTechs.map((t,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f9fafb;border-radius:7px;margin-bottom:5px">
+      <span style="flex:1;font-size:13px;font-weight:600">${t}</span>
+      <button onclick="joDeleteTech(${i})" style="padding:3px 9px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit">Remove</button>
+    </div>`).join('');
+}
+
+window.joAddTech=function(){
+  const inp=document.getElementById('jo-new-tech-name');
+  const name=inp.value.trim();
+  if(!name) return;
+  if(_joTechs.includes(name)){alert('Already exists');return;}
+  _joTechs.push(name);
+  joSaveTechs();
+  inp.value='';
+  joRenderTechsList();
+  joRenderTechAvailability();
+  joPopulateTechSelects();
+};
+
+window.joDeleteTech=function(i){
+  if(!confirm('Remove '+_joTechs[i]+'?')) return;
+  _joTechs.splice(i,1);
+  joSaveTechs();
+  joRenderTechsList();
+  joRenderTechAvailability();
+  joPopulateTechSelects();
+};
+
+// ── Stats ──
+function joUpdateStats(){
+  const today=joTodayStr();
+  const todayJobs=_joJobs.filter(j=>j.date===today);
+  const pending=_joJobs.filter(j=>j.date<today&&j.status!=='done').length;
+  document.getElementById('jo-s-pending').textContent=pending;
+  document.getElementById('jo-s-new').textContent=todayJobs.filter(j=>j.source!=='rollover').length;
+  document.getElementById('jo-s-total').textContent=todayJobs.length;
+  document.getElementById('jo-s-assigned').textContent=todayJobs.filter(j=>j.technician).length;
+}
+
+function joUpdateNavBadge(){
+  const today=joTodayStr();
+  const undone=_joJobs.filter(j=>j.date<today&&j.status!=='done').length;
+  const badge=document.getElementById('nav-jo-badge');
+  if(badge){ badge.textContent=undone||''; badge.style.display=undone?'':'none'; }
+}
+
+// ── AI Parsing via Anthropic API ──
+window.joParseSource=async function(src){
+  const textareaId={'server':'jo-src-server','gc':'jo-src-gc','tech':'jo-src-tech'}[src];
+  const raw=document.getElementById(textareaId).value.trim();
+  if(!raw){alert('Please paste some text first.');return;}
+
+  const statusEl=document.getElementById('jo-parse-status');
+  statusEl.textContent='⏳ Parsing with AI...';
+  statusEl.style.color='#1e3cb8';
+
+  const systemPrompts={
+    server:`You are parsing MikroTik router details copied from a DCHNP Server interface. Extract job order entries. Each entry may contain: customer name, address, city/area, contact number, VLAN number, date, assigned tech. 
+Areas are: DAPITAN, DIPOLOG, SINDANGAN, SINAMAN, ROXAS, POLANCO, MINAOG. Detect area from city/address keywords.
+Return ONLY a JSON array, no markdown, no explanation. Each item: {customer, address, area, vlan, contact, issue, priority, source, raw}
+issue should be "Waiting/No Connection" unless stated otherwise. priority is "normal" unless text says priority.`,
+    gc:`You are parsing customer complaint messages (reklamo) from a Filipino WiFi business group chat. Messages are in Bisaya/Tagalog/English mix. Extract job order entries.
+Areas: DAPITAN, DIPOLOG, SINDANGAN, SINAMAN, ROXAS, POLANCO, MINAOG. Detect area from address/location keywords (Dapitan, Dipolog, Taguilon=Dapitan, Dicayas=Dipolog, etc).
+Return ONLY a JSON array. Each item: {customer, address, area, vlan, contact, issue, priority, source, raw}
+customer = person's name if mentioned, else "Unknown Customer". issue = their complaint in English. priority = "high" if text says "priority". source = "gc".`,
+    tech:`You are parsing a technician end-of-day report. The report has a date, area, and job items marked with ✅ (done) or ❌ (not done). Items without marks may be new job orders.
+Extract all job items. Return ONLY a JSON array. Each item: {customer, address, area, vlan, contact, issue, status, priority, source, raw}
+status: "done" if ✅, "pending" if ❌, "new" if under NEW JOB ORDER section. source = "tech_report". Extract VLAN from numbers before customer names.`
+  };
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system: systemPrompts[src],
+        messages:[{role:'user',content:raw}]
+      })
+    });
+    const data=await resp.json();
+    const text=data.content.map(c=>c.text||'').join('');
+    const clean=text.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean);
+    joParsed_merge(parsed, src);
+    statusEl.textContent=`✅ Parsed ${parsed.length} entries from ${src==='server'?'Server':src==='gc'?'GC Reklamo':'Tech Report'}`;
+    statusEl.style.color='#15803d';
+  }catch(e){
+    statusEl.textContent='❌ Parse error: '+e.message;
+    statusEl.style.color='#dc2626';
+  }
+};
+
+function joParsed_merge(newItems, src){
+  newItems.forEach(item=>{
+    item.id='jo_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);
+    item.source=item.source||src;
+    item.status=item.status||'new';
+    item.priority=item.priority||'normal';
+    item.selected=true;
+    // Conflict detection
+    item.conflict=_joParsed.some(ex=>
+      (ex.customer&&item.customer&&ex.customer.toLowerCase()===item.customer.toLowerCase())||
+      (ex.vlan&&item.vlan&&String(ex.vlan)===String(item.vlan))
+    ) || _joJobs.some(j=>j.date===joTodayStr()&&(
+      (j.customer&&item.customer&&j.customer.toLowerCase()===item.customer.toLowerCase())||
+      (j.vlan&&item.vlan&&String(j.vlan)===String(item.vlan))
+    ));
+    _joParsed.push(item);
+  });
+  joRenderPreview();
+}
+
+function joRenderPreview(){
+  const container=document.getElementById('jo-preview-table');
+  if(!_joParsed.length){container.innerHTML='<div style="font-size:12px;color:#6b7394;text-align:center;padding:20px">No entries parsed yet</div>';return;}
+  const hasConflict=_joParsed.some(p=>p.conflict);
+  document.getElementById('jo-conflict-notice').style.display=hasConflict?'block':'none';
+  document.getElementById('jo-confirm-btn').style.display='inline-block';
+  document.getElementById('jo-confirm-sel-btn').style.display='inline-block';
+
+  const srcColor={server:'#dbeafe',gc:'#dcfce7',tech_report:'#fef3c7',manual:'#f3f4f6'};
+  const statusIcon={done:'✅',pending:'❌',new:'🆕'};
+  container.innerHTML=`<div class="jo-preview-wrap"><table>
+    <thead><tr>
+      <th><input type="checkbox" onchange="joSelectAll(this.checked)" checked></th>
+      <th>Area</th><th>VLAN</th><th>Customer</th><th>Issue</th><th>Status</th><th>Source</th>
+    </tr></thead>
+    <tbody>${_joParsed.map((p,i)=>`
+    <tr class="${p.conflict?'conflict':''} ${p.status==='done'?'done-row':''}" data-idx="${i}">
+      <td><input type="checkbox" data-pi="${i}" ${p.selected?'checked':''} onchange="joToggleSelect(${i},this.checked)"></td>
+      <td><span style="font-size:10px;font-weight:600;padding:2px 6px;background:#fff4ee;color:#ea580c;border-radius:6px">${p.area||'?'}</span></td>
+      <td style="font-weight:600;color:#1e3cb8">${p.vlan||'—'}</td>
+      <td style="font-weight:500;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${p.customer||''}">${p.customer||'Unknown'}</td>
+      <td style="font-size:10px;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6b7394" title="${p.issue||''}">${p.issue||'—'}</td>
+      <td>${statusIcon[p.status]||'🆕'}</td>
+      <td><span style="font-size:9px;padding:1px 5px;background:${srcColor[p.source]||'#f3f4f6'};border-radius:5px">${p.source||'?'}</span></td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+window.joSelectAll=function(checked){
+  _joParsed.forEach(p=>p.selected=checked);
+  joRenderPreview();
+};
+window.joToggleSelect=function(i,checked){ _joParsed[i].selected=checked; };
+
+window.joClearPreview=function(){
+  _joParsed=[];
+  document.getElementById('jo-preview-table').innerHTML='';
+  document.getElementById('jo-parse-status').textContent='';
+  document.getElementById('jo-conflict-notice').style.display='none';
+  document.getElementById('jo-confirm-btn').style.display='none';
+  document.getElementById('jo-confirm-sel-btn').style.display='none';
+};
+
+window.joConfirmAll=function(){ joConfirmItems(_joParsed); };
+window.joConfirmSelected=function(){ joConfirmItems(_joParsed.filter(p=>p.selected)); };
+
+function joConfirmItems(items){
+  const today=joTodayStr();
+  items.forEach(p=>{
+    if(p.status==='done') return; // Tech reports marking done: update existing or skip
+    const job={
+      id:p.id||('jo_'+Date.now()+'_'+Math.random().toString(36).substr(2,5)),
+      date:today, customer:p.customer||'Unknown', area:p.area||'', vlan:p.vlan||'',
+      address:p.address||'', issue:p.issue||'', contact:p.contact||'',
+      priority:p.priority||'normal', status:p.status==='pending'?'pending':'new',
+      source:p.source||'manual', technician:'', notes:'', created:Date.now()
+    };
+    _joJobs.push(job);
+  });
+  // Handle done items from tech report — mark matching jobs as done
+  items.filter(p=>p.status==='done').forEach(p=>{
+    const match=_joJobs.find(j=>j.date===today&&(
+      (p.vlan&&String(j.vlan)===String(p.vlan))||
+      (p.customer&&j.customer&&j.customer.toLowerCase()===p.customer.toLowerCase())
+    ));
+    if(match) match.status='done';
+  });
+  joSave();
+  _joParsed=[];
+  joRenderPreview();
+  joUpdateStats();
+  joUpdateNavBadge();
+  joRenderBoard();
+  document.getElementById('jo-parse-status').textContent='✅ '+items.filter(p=>p.status!=='done').length+' job(s) added to today\'s board';
+  document.getElementById('jo-confirm-btn').style.display='none';
+  document.getElementById('jo-confirm-sel-btn').style.display='none';
+}
+
+// ── Today's Board ──
+window.joRenderBoard=function(){
+  const today=joTodayStr();
+  const search=(document.getElementById('jo-board-search')||{}).value||'';
+  const areaFilter=(document.getElementById('jo-board-area')||{}).value||'';
+  const statusFilter=(document.getElementById('jo-board-status')||{}).value||'';
+  const techFilter=_joBoardTechFilter||'';
+  let jobs=_joJobs.filter(j=>{
+    if(j.date!==today) return false;
+    if(areaFilter&&j.area!==areaFilter) return false;
+    if(statusFilter&&j.status!==statusFilter) return false;
+    if(techFilter&&j.technician!==techFilter) return false;
+    if(search){const s=search.toLowerCase();return(j.customer+j.address+j.area+j.issue+j.vlan).toLowerCase().includes(s);}
+    return true;
+  });
+  const container=document.getElementById('jo-board-list');
+  if(!jobs.length){container.innerHTML='<div style="text-align:center;padding:30px;color:#6b7394;font-size:13px">No jobs for today yet — use Morning Setup to add from your sources.</div>';return;}
+
+  // Group by technician
+  const byTech={};
+  jobs.forEach(j=>{
+    const k=j.technician||'— Unassigned —';
+    if(!byTech[k]) byTech[k]=[];
+    byTech[k].push(j);
+  });
+  // Sort: pending first, then new, then done
+  const statusOrder={pending:0,new:1,done:2};
+  container.innerHTML=Object.entries(byTech).map(([tech,tjobs])=>{
+    const sorted=[...tjobs].sort((a,b)=>(statusOrder[a.status]||1)-(statusOrder[b.status]||1));
+    const doneCount=tjobs.filter(j=>j.status==='done').length;
+    return `<div class="jo-tech-group">
+      <div class="jo-tech-hdr">
+        <span class="jo-tech-name">${tech}</span>
+        <span class="jo-tech-count">${doneCount}/${tjobs.length} done</span>
+      </div>
+      ${sorted.map(j=>joJobRowHTML(j)).join('')}
+    </div>`;
+  }).join('');
+};
+
+function joJobRowHTML(j){
+  const dotClass={new:'new',pending:'pending',done:'done'}[j.status]||'new';
+  const dotIcon={new:'🆕',pending:'❌',done:'✅'}[j.status]||'🆕';
+  const priorityBadge=j.priority==='high'?'<span class="jo-priority-badge high">⚡ PRIORITY</span>':'';
+  return `<div class="jo-job-row" onclick="joOpenDetail('${j.id}')">
+    <div class="jo-status-dot ${dotClass}">${dotIcon}</div>
+    <div>
+      <div style="font-size:12px;font-weight:700;color:#1a1d2e">${j.customer||'Unknown'} ${priorityBadge}</div>
+      <div style="font-size:10px;color:#6b7394;margin-top:1px">${j.area||''} ${j.vlan?'· VLAN '+j.vlan:''} ${j.address?'· '+j.address:''}</div>
+      <div style="font-size:11px;color:#374151;margin-top:3px">${j.issue||''}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
+      <select onclick="event.stopPropagation()" onchange="joAssignTech('${j.id}',this.value)"
+        style="padding:3px 6px;border:1px solid var(--bd);border-radius:5px;font-size:10px;font-family:inherit;outline:none;max-width:90px">
+        <option value="">Unassigned</option>
+        ${_joTechs.map(t=>`<option ${j.technician===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:3px">
+        <button onclick="event.stopPropagation();joSetStatus('${j.id}','done')" style="padding:2px 7px;background:#dcfce7;color:#15803d;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-family:inherit">✅ Done</button>
+        <button onclick="event.stopPropagation();joSetStatus('${j.id}','pending')" style="padding:2px 7px;background:#fff3cd;color:#92400e;border:none;border-radius:4px;font-size:10px;cursor:pointer;font-family:inherit">❌</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.joSetStatus=function(id,status){
+  const j=_joJobs.find(j=>j.id===id); if(!j) return;
+  j.status=status; joSave(); joUpdateStats(); joUpdateNavBadge(); joRenderBoard();
+};
+
+window.joAssignTech=function(id,tech){
+  const j=_joJobs.find(j=>j.id===id); if(!j) return;
+  j.technician=tech; joSave(); joUpdateStats();
+};
+
+// ── Job Detail ──
+window.joOpenDetail=function(id){
+  const j=_joJobs.find(j=>j.id===id); if(!j) return;
+  document.getElementById('jo-dm-title').textContent=j.customer||'Job Order';
+  document.getElementById('jo-dm-body').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">Area</div><div style="font-size:13px;font-weight:600">${j.area||'—'}</div></div>
+      <div><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">VLAN</div><div style="font-size:13px;font-weight:600;color:#1e3cb8">${j.vlan||'—'}</div></div>
+      <div><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">Contact</div><div style="font-size:13px">${j.contact||'—'}</div></div>
+      <div><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">Priority</div>
+        <span class="jo-priority-badge ${j.priority==='high'?'high':'normal'}">${j.priority==='high'?'⚡ PRIORITY':'Normal'}</span>
+      </div>
+    </div>
+    <div style="margin-bottom:10px"><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">Address</div><div style="font-size:13px">${j.address||'—'}</div></div>
+    <div style="margin-bottom:10px"><div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:2px">Issue</div><div style="font-size:13px">${j.issue||'—'}</div></div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:4px">Assign Technician</div>
+      <select id="jo-dm-tech" onchange="joAssignTech('${j.id}',this.value)" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:13px;font-family:inherit;outline:none;width:100%">
+        <option value="">— Unassigned —</option>
+        ${_joTechs.map(t=>`<option ${j.technician===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:9px;text-transform:uppercase;font-weight:700;color:#6b7394;margin-bottom:4px">Notes</div>
+      <textarea id="jo-dm-notes" rows="2" style="width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;outline:none;resize:vertical">${j.notes||''}</textarea>
+      <button onclick="joSaveNotes('${j.id}')" style="margin-top:4px;padding:4px 12px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit">Save Note</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button onclick="joSetStatus('${j.id}','done');joCloseDetail()" style="padding:8px 18px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✅ Mark Done</button>
+      <button onclick="joSetStatus('${j.id}','pending');joCloseDetail()" style="padding:8px 18px;background:#d97706;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">❌ Still Pending</button>
+      <button onclick="joDeleteJob('${j.id}')" style="padding:8px 18px;background:#fff;border:1px solid #fca5a5;color:#dc2626;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">🗑 Delete</button>
+    </div>`;
+  document.getElementById('jo-detail-modal').classList.add('open');
+};
+
+window.joCloseDetail=function(){ document.getElementById('jo-detail-modal').classList.remove('open'); };
+
+window.joSaveNotes=function(id){
+  const j=_joJobs.find(j=>j.id===id); if(!j) return;
+  j.notes=document.getElementById('jo-dm-notes').value;
+  joSave();
+  alert('Note saved.');
+};
+
+window.joDeleteJob=function(id){
+  if(!confirm('Delete this job order?')) return;
+  _joJobs=_joJobs.filter(j=>j.id!==id);
+  joSave(); joCloseDetail(); joRenderBoard(); joUpdateStats(); joUpdateNavBadge();
+};
+
+// ── Pending rollover ──
+window.joRenderPending=function(){
+  const today=joTodayStr();
+  const pending=_joJobs.filter(j=>j.date<today&&j.status!=='done');
+  const container=document.getElementById('jo-pending-list');
+  const empty=document.getElementById('jo-pending-empty');
+  if(!pending.length){ container.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  container.innerHTML=pending.map(j=>`
+    <div style="background:#fff;border:1px solid #fcd34d;border-left:3px solid #d97706;border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:10px">
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:700">${j.customer||'Unknown'} <span style="font-size:10px;color:#6b7394;font-weight:400">— ${j.date}</span></div>
+        <div style="font-size:10px;color:#6b7394">${j.area||''} ${j.vlan?'· VLAN '+j.vlan:''} ${j.address?'· '+j.address:''}</div>
+        <div style="font-size:11px;color:#374151;margin-top:2px">${j.issue||''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+        <button onclick="joRollover('${j.id}')" style="padding:4px 10px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Roll to Today</button>
+        <button onclick="joSetStatus('${j.id}','done');joRenderPending()" style="padding:4px 10px;background:#dcfce7;color:#15803d;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit">Mark Done</button>
+      </div>
+    </div>`).join('');
+};
+
+window.joRollover=function(id){
+  const orig=_joJobs.find(j=>j.id===id); if(!orig) return;
+  orig.status='rolled'; // mark original as rolled
+  const newJob={...orig, id:'jo_'+Date.now()+'_'+Math.random().toString(36).substr(2,5),
+    date:joTodayStr(), status:'pending', source:'rollover',
+    rollover_from:orig.date, created:Date.now()};
+  _joJobs.push(newJob);
+  joSave(); joRenderPending(); joRenderBoard(); joUpdateStats(); joUpdateNavBadge();
+};
+
+// ── Archive ──
+window.joRenderArchive=function(){
+  const from=(document.getElementById('jo-arch-from')||{}).value||'';
+  const to=(document.getElementById('jo-arch-to')||{}).value||'';
+  const search=((document.getElementById('jo-arch-search')||{}).value||'').toLowerCase();
+  let jobs=_joJobs.filter(j=>{
+    if(from&&j.date<from) return false;
+    if(to&&j.date>to) return false;
+    if(search&&!(j.customer+j.area+j.issue+j.vlan+j.address).toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b)=>b.date.localeCompare(a.date));
+  const container=document.getElementById('jo-archive-list');
+  if(!jobs.length){container.innerHTML='<div style="text-align:center;padding:30px;color:#6b7394">No records found</div>';return;}
+  const statusBg={done:'#dcfce7',pending:'#fff3cd',new:'#e0f2fe',rolled:'#f3f4f6'};
+  const statusColor={done:'#15803d',pending:'#92400e',new:'#1e40af',rolled:'#6b7394'};
+  container.innerHTML=`<div class="tw"><table>
+    <thead><tr><th>Date</th><th>Area</th><th>VLAN</th><th>Customer</th><th>Issue</th><th>Tech</th><th>Status</th></tr></thead>
+    <tbody>${jobs.map(j=>`<tr onclick="joOpenDetail('${j.id}')">
+      <td style="white-space:nowrap">${j.date}</td>
+      <td><span style="font-size:10px;font-weight:600;padding:1px 6px;background:#fff4ee;color:#ea580c;border-radius:5px">${j.area||'—'}</span></td>
+      <td style="font-weight:600;color:#1e3cb8">${j.vlan||'—'}</td>
+      <td style="font-weight:500">${j.customer||'—'}</td>
+      <td style="font-size:11px;color:#6b7394;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${j.issue||'—'}</td>
+      <td style="font-size:11px">${j.technician||'—'}</td>
+      <td><span style="padding:2px 7px;background:${statusBg[j.status]||'#f3f4f6'};color:${statusColor[j.status]||'#6b7394'};border-radius:10px;font-size:9px;font-weight:700">${j.status||'new'}</span></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+};
+
+// ── Add job manually ──
+window.joShowAddForm=function(){
+  joPopulateTechSelects();
+  document.getElementById('jo-add-modal').classList.add('open');
+};
+
+window.joSaveAddForm=function(){
+  const job={
+    id:'jo_'+Date.now()+'_'+Math.random().toString(36).substr(2,5),
+    date:joTodayStr(),
+    area:document.getElementById('jo-add-area').value,
+    vlan:document.getElementById('jo-add-vlan').value,
+    customer:document.getElementById('jo-add-customer').value,
+    address:document.getElementById('jo-add-address').value,
+    issue:document.getElementById('jo-add-issue').value,
+    contact:document.getElementById('jo-add-contact').value,
+    priority:document.getElementById('jo-add-priority').value,
+    technician:document.getElementById('jo-add-tech').value,
+    source:document.getElementById('jo-add-source').value,
+    status:'new', notes:'', created:Date.now()
+  };
+  if(!job.customer&&!job.vlan){alert('Enter at least a customer name or VLAN.');return;}
+  _joJobs.push(job); joSave();
+  document.getElementById('jo-add-modal').classList.remove('open');
+  ['jo-add-area','jo-add-vlan','jo-add-customer','jo-add-address','jo-add-issue','jo-add-contact'].forEach(id=>{document.getElementById(id).value='';});
+  joUpdateStats(); joRenderBoard(); joUpdateNavBadge();
+};
+
+// ── Generate Briefing ──
+window.joGenerateBriefing=function(){
+  const today=joTodayStr();
+  const techFilter=document.getElementById('jo-brief-tech').value;
+  const d=new Date(); const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dateStr=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();
+  const jobs=_joJobs.filter(j=>j.date===today||(j.date<today&&j.status==='pending'));
+  const techs=techFilter==='all'?_joTechs:[techFilter];
+  let out='';
+  const AREAS=['DAPITAN','DIPOLOG','SINDANGAN','SINAMAN','ROXAS','POLANCO','MINAOG','MIX AREAS'];
+
+  techs.forEach(tech=>{
+    const techJobs=jobs.filter(j=>j.technician===tech);
+    if(!techJobs.length) return;
+    out+=`DATE TODAY: ${dateStr}\n`;
+    out+=`TECHNICIAN: ${tech.toUpperCase()}\n`;
+    AREAS.forEach(area=>{
+      const aJobs=techJobs.filter(j=>j.area===area);
+      if(!aJobs.length) return;
+      out+=`\nAREA: ${area}\n`;
+      const pending=aJobs.filter(j=>j.status==='pending'||j.source==='rollover');
+      const newJ=aJobs.filter(j=>j.status==='new'&&j.source!=='rollover');
+      if(pending.length){
+        out+='PENDING:\n';
+        pending.forEach(j=>{ out+=`❌ ${j.vlan?j.vlan+' ':''}${j.customer||''}${j.address?' '+j.address:''}\n`; });
+      }
+      if(newJ.length){
+        out+='NEW JOB ORDER:\n';
+        newJ.forEach(j=>{
+          out+=`${j.priority==='high'?'⚡ PRIORITY\n':''}`;
+          out+=`${j.vlan?j.vlan+' ':''}${j.customer||''}`;
+          if(j.address) out+=' '+j.address;
+          if(j.contact) out+=' '+j.contact;
+          if(j.issue) out+='\n  Issue: '+j.issue;
+          out+='\n';
+        });
+      }
+    });
+    out+='\n---\n\n';
+  });
+
+  if(!out){out='No jobs assigned for today.';}
+  document.getElementById('jo-briefing-text').textContent=out.trim();
+  document.getElementById('jo-briefing-output').style.display='block';
+  document.getElementById('jo-copy-brief-btn').style.display='inline-block';
+};
+
+window.joCopyBriefing=function(){
+  const text=document.getElementById('jo-briefing-text').textContent;
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn=document.getElementById('jo-copy-brief-btn');
+    btn.textContent='✅ Copied!'; btn.style.background='#dcfce7'; btn.style.color='#15803d';
+    setTimeout(()=>{btn.textContent='📋 Copy';btn.style.background='';btn.style.color='';},2000);
+  });
+};
+
+})();
+</script>
 
 </body>
 </html>
