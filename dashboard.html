@@ -11453,7 +11453,7 @@ async function fullBackup() {
           </div>
           <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste the comment/details you copied from the MikroTik interface. One entry at a time or paste multiple separated by blank lines.</div>
           <textarea class="jo-textarea" id="jo-src-server" rows="5" placeholder="e.g.&#10;from Viola Yongco&#10;Bagong silang taguilon&#10;Dapitan City&#10;095-345-29707&#10;vlan195  4/21/25&#10;&#10;Jean Rose Rendon&#10;Purok bagong silang Taguilon..."></textarea>
-          <button onclick="joParseSource('server')" style="margin-top:6px;padding:5px 14px;background:#1e40af;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Server Entries</button>
+          <button id="jo-btn-server" onclick="joParseSource('server')" style="margin-top:6px;padding:5px 14px;background:#1e40af;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Server Entries</button>
         </div>
 
         <!-- Source 2: GC / Messenger reklamo -->
@@ -11464,7 +11464,7 @@ async function fullBackup() {
           </div>
           <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste customer complaints from SPAWN NOTES GC or personal Messenger. Free text is fine — AI will extract the details.</div>
           <textarea class="jo-textarea" id="jo-src-gc" rows="5" placeholder="e.g.&#10;Ailyn: Mary Blanche pataod private 09462983726 Relocation Site silingan Peñez&#10;&#10;Rene Napigkit muhunay ang connection inig sa kwarta...&#10;&#10;Sir diri man toy nag ayo sa spawn wifi sa atbang ospital dapitan..."></textarea>
-          <button onclick="joParseSource('gc')" style="margin-top:6px;padding:5px 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse GC Reklamo</button>
+          <button id="jo-btn-gc" onclick="joParseSource('gc')" style="margin-top:6px;padding:5px 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse GC Reklamo</button>
         </div>
 
         <!-- Source 3: Tech report -->
@@ -11475,7 +11475,7 @@ async function fullBackup() {
           </div>
           <div style="font-size:10px;color:#6b7394;margin-bottom:6px">Paste the tech's reply with ✅ done and ❌ not done marks. Status will be updated automatically.</div>
           <textarea class="jo-textarea" id="jo-src-tech" rows="5" placeholder="e.g.&#10;MAY 2, 2026&#10;AREA: DIPOLOG&#10;PENDING:&#10;✅62 yaki dael&#10;❌64 Jay Ann sotillo Upper Dicayas...&#10;NEW JOB ORDER:&#10;✅104 GT hardware"></textarea>
-          <button onclick="joParseSource('tech')" style="margin-top:6px;padding:5px 14px;background:#92400e;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Tech Report</button>
+          <button id="jo-btn-tech" onclick="joParseSource('tech')" style="margin-top:6px;padding:5px 14px;background:#92400e;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Tech Report</button>
         </div>
       </div>
 
@@ -11805,50 +11805,48 @@ function joUpdateNavBadge(){
 }
 
 // ── AI Parsing via Anthropic API ──
+const JO_EDGE_URL='https://cviraqfhphhsonjmrtvu.supabase.co/functions/v1/jo-parse';
+
 window.joParseSource=async function(src){
   const textareaId={'server':'jo-src-server','gc':'jo-src-gc','tech':'jo-src-tech'}[src];
   const raw=document.getElementById(textareaId).value.trim();
   if(!raw){alert('Please paste some text first.');return;}
 
   const statusEl=document.getElementById('jo-parse-status');
-  statusEl.textContent='⏳ Parsing with AI...';
+  const srcLabel=src==='server'?'Server':src==='gc'?'GC Reklamo':'Tech Report';
+  statusEl.textContent='⏳ Parsing '+srcLabel+' with AI...';
   statusEl.style.color='#1e3cb8';
 
-  const systemPrompts={
-    server:`You are parsing MikroTik router details copied from a DCHNP Server interface. Extract job order entries. Each entry may contain: customer name, address, city/area, contact number, VLAN number, date, assigned tech. 
-Areas are: DAPITAN, DIPOLOG, SINDANGAN, SINAMAN, ROXAS, POLANCO, MINAOG. Detect area from city/address keywords.
-Return ONLY a JSON array, no markdown, no explanation. Each item: {customer, address, area, vlan, contact, issue, priority, source, raw}
-issue should be "Waiting/No Connection" unless stated otherwise. priority is "normal" unless text says priority.`,
-    gc:`You are parsing customer complaint messages (reklamo) from a Filipino WiFi business group chat. Messages are in Bisaya/Tagalog/English mix. Extract job order entries.
-Areas: DAPITAN, DIPOLOG, SINDANGAN, SINAMAN, ROXAS, POLANCO, MINAOG. Detect area from address/location keywords (Dapitan, Dipolog, Taguilon=Dapitan, Dicayas=Dipolog, etc).
-Return ONLY a JSON array. Each item: {customer, address, area, vlan, contact, issue, priority, source, raw}
-customer = person's name if mentioned, else "Unknown Customer". issue = their complaint in English. priority = "high" if text says "priority". source = "gc".`,
-    tech:`You are parsing a technician end-of-day report. The report has a date, area, and job items marked with ✅ (done) or ❌ (not done). Items without marks may be new job orders.
-Extract all job items. Return ONLY a JSON array. Each item: {customer, address, area, vlan, contact, issue, status, priority, source, raw}
-status: "done" if ✅, "pending" if ❌, "new" if under NEW JOB ORDER section. source = "tech_report". Extract VLAN from numbers before customer names.`
-  };
+  // Disable button while parsing
+  const btnId={'server':'jo-btn-server','gc':'jo-btn-gc','tech':'jo-btn-tech'}[src];
+  const btn=document.getElementById(btnId);
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
 
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const resp=await fetch(JO_EDGE_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        system: systemPrompts[src],
-        messages:[{role:'user',content:raw}]
-      })
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk3ODk1MDMsImV4cCI6MjAyNTM2NTUwM30.AJAK8bCHMzOp-IFULl5h3MoHM3pElLiXxBNQolGPZtQ'
+      },
+      body:JSON.stringify({source:src, text:raw})
     });
     const data=await resp.json();
-    const text=data.content.map(c=>c.text||'').join('');
-    const clean=text.replace(/```json|```/g,'').trim();
-    const parsed=JSON.parse(clean);
+    if(data.error) throw new Error(data.error);
+    const parsed=data.items||[];
+    if(!parsed.length){
+      statusEl.textContent='⚠️ No entries found — try rephrasing or check the text';
+      statusEl.style.color='#d97706';
+      return;
+    }
     joParsed_merge(parsed, src);
-    statusEl.textContent=`✅ Parsed ${parsed.length} entries from ${src==='server'?'Server':src==='gc'?'GC Reklamo':'Tech Report'}`;
+    statusEl.textContent='✅ Parsed '+parsed.length+' entr'+(parsed.length===1?'y':'ies')+' from '+srcLabel;
     statusEl.style.color='#15803d';
   }catch(e){
     statusEl.textContent='❌ Parse error: '+e.message;
     statusEl.style.color='#dc2626';
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='1';}
   }
 };
 
@@ -11876,29 +11874,70 @@ function joRenderPreview(){
   const container=document.getElementById('jo-preview-table');
   if(!_joParsed.length){container.innerHTML='<div style="font-size:12px;color:#6b7394;text-align:center;padding:20px">No entries parsed yet</div>';return;}
   const hasConflict=_joParsed.some(p=>p.conflict);
+  const hasNoArea=_joParsed.filter(p=>p.selected!==false).some(p=>!p.area);
   document.getElementById('jo-conflict-notice').style.display=hasConflict?'block':'none';
   document.getElementById('jo-confirm-btn').style.display='inline-block';
   document.getElementById('jo-confirm-sel-btn').style.display='inline-block';
 
+  // Area missing warning
+  let areaWarn=document.getElementById('jo-area-warn');
+  if(!areaWarn){
+    areaWarn=document.createElement('div');
+    areaWarn.id='jo-area-warn';
+    areaWarn.style.cssText='background:#fff0e6;border:1px solid #fdba74;border-radius:7px;padding:8px 11px;font-size:11px;color:#c2410c;margin-top:8px';
+    document.getElementById('jo-conflict-notice').parentNode.insertBefore(areaWarn, document.getElementById('jo-conflict-notice').nextSibling);
+  }
+  areaWarn.style.display=hasNoArea?'block':'none';
+  areaWarn.innerHTML=hasNoArea?'⚠️ <strong>Some entries have no area assigned</strong> — select the area in the dropdown before confirming.':'';
+
+  const AREAS=['DAPITAN','DIPOLOG','SINDANGAN','SINAMAN','ROXAS','POLANCO','MINAOG','MIX AREAS'];
+  const areaOpts=AREAS.map(a=>`<option value="${a}">${a}</option>`).join('');
   const srcColor={server:'#dbeafe',gc:'#dcfce7',tech_report:'#fef3c7',manual:'#f3f4f6'};
   const statusIcon={done:'✅',pending:'❌',new:'🆕'};
+
   container.innerHTML=`<div class="jo-preview-wrap"><table>
     <thead><tr>
       <th><input type="checkbox" onchange="joSelectAll(this.checked)" checked></th>
       <th>Area</th><th>VLAN</th><th>Customer</th><th>Issue</th><th>Status</th><th>Source</th>
     </tr></thead>
     <tbody>${_joParsed.map((p,i)=>`
-    <tr class="${p.conflict?'conflict':''} ${p.status==='done'?'done-row':''}" data-idx="${i}">
-      <td><input type="checkbox" data-pi="${i}" ${p.selected?'checked':''} onchange="joToggleSelect(${i},this.checked)"></td>
-      <td><span style="font-size:10px;font-weight:600;padding:2px 6px;background:#fff4ee;color:#ea580c;border-radius:6px">${p.area||'?'}</span></td>
+    <tr class="${p.conflict?'conflict':''} ${p.status==='done'?'done-row':''} ${!p.area?'jo-no-area-row':''}" data-idx="${i}" style="${!p.area?'background:#fff8f0;':p.conflict?'background:#fff8e1;':''}">
+      <td><input type="checkbox" data-pi="${i}" ${p.selected!==false?'checked':''} onchange="joToggleSelect(${i},this.checked)"></td>
+      <td>
+        ${p.area
+          ? `<span style="font-size:10px;font-weight:700;padding:3px 8px;background:#fff4ee;color:#ea580c;border-radius:6px;cursor:pointer" onclick="joInlineAreaEdit(${i},this)">${p.area}</span>`
+          : `<select onchange="joSetParsedArea(${i},this.value)"
+              style="padding:3px 6px;border:1.5px solid #f97316;border-radius:6px;font-size:10px;font-weight:700;font-family:inherit;outline:none;background:#fff8f0;color:#c2410c;cursor:pointer">
+              <option value="">— pick area —</option>
+              ${areaOpts}
+            </select>`
+        }
+      </td>
       <td style="font-weight:600;color:#1e3cb8">${p.vlan||'—'}</td>
-      <td style="font-weight:500;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${p.customer||''}">${p.customer||'Unknown'}</td>
-      <td style="font-size:10px;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6b7394" title="${p.issue||''}">${p.issue||'—'}</td>
+      <td style="font-weight:500;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(p.customer||'').replace(/"/g,'&quot;')}">${p.customer||'Unknown'}</td>
+      <td style="font-size:10px;max-width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#6b7394" title="${(p.issue||'').replace(/"/g,'&quot;')}">${p.issue||'—'}</td>
       <td>${statusIcon[p.status]||'🆕'}</td>
       <td><span style="font-size:9px;padding:1px 5px;background:${srcColor[p.source]||'#f3f4f6'};border-radius:5px">${p.source||'?'}</span></td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }
+
+window.joSetParsedArea=function(i,area){
+  _joParsed[i].area=area;
+  joRenderPreview();
+};
+
+window.joInlineAreaEdit=function(i,el){
+  const AREAS=['DAPITAN','DIPOLOG','SINDANGAN','SINAMAN','ROXAS','POLANCO','MINAOG','MIX AREAS'];
+  const areaOpts=AREAS.map(a=>`<option value="${a}" ${_joParsed[i].area===a?'selected':''}>${a}</option>`).join('');
+  const sel=document.createElement('select');
+  sel.innerHTML=areaOpts;
+  sel.style.cssText='padding:3px 6px;border:1.5px solid #ea580c;border-radius:6px;font-size:10px;font-weight:700;font-family:inherit;outline:none;background:#fff4ee;color:#ea580c';
+  sel.onchange=function(){ _joParsed[i].area=sel.value; joRenderPreview(); };
+  sel.onblur=function(){ joRenderPreview(); };
+  el.replaceWith(sel);
+  sel.focus();
+};
 
 window.joSelectAll=function(checked){
   _joParsed.forEach(p=>p.selected=checked);
@@ -11919,6 +11958,19 @@ window.joConfirmAll=function(){ joConfirmItems(_joParsed); };
 window.joConfirmSelected=function(){ joConfirmItems(_joParsed.filter(p=>p.selected)); };
 
 function joConfirmItems(items){
+  // Block if any selected item (non-done) has no area
+  const missing=items.filter(p=>p.status!=='done'&&!p.area);
+  if(missing.length){
+    const statusEl=document.getElementById('jo-parse-status');
+    statusEl.textContent='⚠️ '+missing.length+' entr'+(missing.length===1?'y':'ies')+' still need an area — assign it in the dropdown first';
+    statusEl.style.color='#c2410c';
+    // Flash the missing rows
+    document.querySelectorAll('.jo-no-area-row').forEach(r=>{
+      r.style.outline='2px solid #f97316';
+      setTimeout(()=>r.style.outline='',2000);
+    });
+    return;
+  }
   const today=joTodayStr();
   items.forEach(p=>{
     if(p.status==='done') return; // Tech reports marking done: update existing or skip
