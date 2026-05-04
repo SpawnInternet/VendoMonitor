@@ -11477,6 +11477,32 @@ async function fullBackup() {
           <textarea class="jo-textarea" id="jo-src-tech" rows="5" placeholder="e.g.&#10;MAY 2, 2026&#10;AREA: DIPOLOG&#10;PENDING:&#10;✅62 yaki dael&#10;❌64 Jay Ann sotillo Upper Dicayas...&#10;NEW JOB ORDER:&#10;✅104 GT hardware"></textarea>
           <button id="jo-btn-tech" onclick="joParseSource('tech')" style="margin-top:6px;padding:5px 14px;background:#92400e;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⚡ Parse Tech Report</button>
         </div>
+
+        <!-- Facebook Live Feed -->
+        <div class="jo-src-block" style="border-color:#1877f2">
+          <div class="jo-src-label">
+            <span class="jo-src-badge" style="background:#e7f0fd;color:#1877f2">📘 Facebook Live</span>
+            <span style="font-size:10px;color:#6b7394;font-weight:400">Auto-captured from SPAWN Internet Page</span>
+          </div>
+          <div id="jo-fb-status" style="font-size:11px;color:#6b7394;margin-bottom:6px">Not loaded yet</div>
+          <div id="jo-fb-list" style="max-height:180px;overflow-y:auto;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button id="jo-btn-fb" onclick="joFetchFacebook()" style="padding:5px 14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Load FB Job Orders</button>
+            <button onclick="joImportFacebook()" id="jo-btn-fb-import" style="padding:5px 14px;background:#fff;border:1px solid #1877f2;color:#1877f2;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:none">⬇ Add Selected to Board</button>
+          </div>
+        </div>
+
+        <!-- OpenAI Key (for parsing) -->
+        <div class="jo-src-block" style="border-color:#10a37f">
+          <div class="jo-src-label">
+            <span class="jo-src-badge" style="background:#d1fae5;color:#065f46">🔑 OpenAI Key</span>
+            <span style="font-size:10px;color:#6b7394;font-weight:400">Stored locally — for AI parsing</span>
+          </div>
+          <input type="password" id="jo-oai-key" placeholder="sk-..." value=""
+            style="width:100%;padding:7px 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:monospace;outline:none;box-sizing:border-box"
+            oninput="localStorage.setItem('jo_oai_key',this.value)">
+        </div>
+        </div>
       </div>
 
       <!-- RIGHT: Parsed preview + confirm -->
@@ -11687,6 +11713,12 @@ window.joInit=function(){
   joRenderPending();
   joRenderArchive();
   joUpdateNavBadge();
+  // Restore OpenAI key
+  const savedKey=localStorage.getItem('jo_oai_key')||'';
+  const keyInp=document.getElementById('jo-oai-key');
+  if(keyInp&&savedKey) keyInp.value=savedKey;
+  // Auto-load Facebook job orders
+  joFetchFacebook();
 };
 
 window.joTab=function(t,btn){
@@ -11804,38 +11836,56 @@ function joUpdateNavBadge(){
   if(badge){ badge.textContent=undone||''; badge.style.display=undone?'':'none'; }
 }
 
-// ── AI Parsing via Anthropic API ──
-const JO_EDGE_URL='https://cviraqfhphhsonjmrtvu.supabase.co/functions/v1/jo-parse';
+// ── OpenAI key helper ──
+function joGetOAIKey(){
+  const stored=localStorage.getItem('jo_oai_key')||'';
+  const inp=document.getElementById('jo-oai-key');
+  if(inp&&!inp.value&&stored) inp.value=stored;
+  return stored;
+}
+
+// ── AI Parsing via OpenAI gpt-4o-mini (replaces Edge Function) ──
+const JO_PROMPTS={
+  server:'You are a job order parser for Spawn Internetan, a piso WiFi business in Zamboanga del Norte, Philippines. Parse these MikroTik router comment entries. Each entry separated by blank lines contains: owner name, barangay/purok, city, contact number, VLAN number, install date. Area mapping: Dapitan City=DAPITAN, Dipolog City=DIPOLOG, Sindangan=SINDANGAN, Sinaman=SINAMAN, Roxas=ROXAS, Polanco=POLANCO, Minaog=MINAOG, else=MIX AREAS. These are offline routers needing site visit. Return ONLY a JSON array, no markdown: [{"customer":"name","area":"AREA","vlan":number_or_null,"address":"barangay","contact":"number","issue":"Offline router needs site visit","status":"new","priority":"normal","source":"server"}]',
+  gc:'You are a job order parser for Spawn Internetan, a piso WiFi business in Zamboanga del Norte, Philippines. Parse customer complaints (reklamo) in Bisaya/Tagalog/English. Area from barangay/city: DAPITAN(Dapitan,Taguilon,Tambak,Talisay), DIPOLOG(Dipolog,Dicayas,Upper Dicayas,Turno,Sta.Isabel), SINDANGAN, SINAMAN, ROXAS(Roxas,Dohinob), POLANCO(Polanco,Guinles,Bandera), MINAOG(Minaog,Parpagayo), else MIX AREAS. Keywords: pataod/install=install, muhunay=intermittent, wala internet=no_internet, hinay=slow, saloy=refund, relocation/balhin=relocation, extender=extender. Return ONLY a JSON array, no markdown: [{"customer":"name","area":"AREA","vlan":number_or_null,"address":"barangay","contact":"number","issue":"description","status":"new","priority":"normal","source":"gc"}]',
+  tech:'You are a job order parser for Spawn Internetan. Parse this technician end-of-day report. Checkmark/done/natapos=done, X/pending/wala=pending. Return ONLY a JSON array, no markdown: [{"customer":"name","area":"AREA","vlan":number_or_null,"address":"","contact":"","issue":"description","status":"done or pending","priority":"normal","source":"tech_report"}]'
+};
 
 window.joParseSource=async function(src){
   const textareaId={'server':'jo-src-server','gc':'jo-src-gc','tech':'jo-src-tech'}[src];
   const raw=document.getElementById(textareaId).value.trim();
   if(!raw){alert('Please paste some text first.');return;}
 
+  const oaiKey=joGetOAIKey();
+  if(!oaiKey){alert('Please enter your OpenAI API key in the key field below.');return;}
+
   const statusEl=document.getElementById('jo-parse-status');
   const srcLabel=src==='server'?'Server':src==='gc'?'GC Reklamo':'Tech Report';
   statusEl.textContent='⏳ Parsing '+srcLabel+' with AI...';
   statusEl.style.color='#1e3cb8';
 
-  // Disable button while parsing
   const btnId={'server':'jo-btn-server','gc':'jo-btn-gc','tech':'jo-btn-tech'}[src];
   const btn=document.getElementById(btnId);
   if(btn){btn.disabled=true;btn.style.opacity='.6';}
 
   try{
-    const resp=await fetch(JO_EDGE_URL,{
+    const resp=await fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk3ODk1MDMsImV4cCI6MjAyNTM2NTUwM30.AJAK8bCHMzOp-IFULl5h3MoHM3pElLiXxBNQolGPZtQ'
-      },
-      body:JSON.stringify({source:src, text:raw})
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+oaiKey},
+      body:JSON.stringify({
+        model:'gpt-4o-mini',
+        messages:[{role:'system',content:JO_PROMPTS[src]},{role:'user',content:raw}],
+        temperature:0.1,max_tokens:1500
+      })
     });
     const data=await resp.json();
-    if(data.error) throw new Error(data.error);
-    const parsed=data.items||[];
-    if(!parsed.length){
-      statusEl.textContent='⚠️ No entries found — try rephrasing or check the text';
+    if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+    const raw_text=data.choices[0].message.content.trim();
+    let parsed;
+    try{parsed=JSON.parse(raw_text.replace(/```json|```/g,'').trim());}
+    catch(e){throw new Error('AI returned invalid JSON: '+raw_text.substring(0,80));}
+    if(!Array.isArray(parsed)||!parsed.length){
+      statusEl.textContent='⚠️ No entries found — check the pasted text format';
       statusEl.style.color='#d97706';
       return;
     }
@@ -11848,6 +11898,66 @@ window.joParseSource=async function(src){
   }finally{
     if(btn){btn.disabled=false;btn.style.opacity='1';}
   }
+};
+
+// ── Facebook Live Feed from Supabase job_orders ──
+let _joFbItems=[];
+
+window.joFetchFacebook=async function(){
+  const statusEl=document.getElementById('jo-fb-status');
+  const btn=document.getElementById('jo-btn-fb');
+  statusEl.textContent='⏳ Loading from Supabase...';
+  statusEl.style.color='#1877f2';
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+  try{
+    const today=joTodayStr();
+    const url=SUPABASE_URL+'/rest/v1/job_orders?source=eq.facebook&date=eq.'+today+'&order=created_at.desc&limit=100';
+    const resp=await fetch(url,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+    const rows=await resp.json();
+    if(!Array.isArray(rows)) throw new Error('Unexpected response');
+    _joFbItems=rows;
+    joRenderFbList();
+    statusEl.textContent=rows.length+' FB job order'+(rows.length!==1?'s':'')+' today ('+today+')';
+    statusEl.style.color=rows.length?'#15803d':'#6b7394';
+    document.getElementById('jo-btn-fb-import').style.display=rows.length?'inline-block':'none';
+  }catch(e){
+    statusEl.textContent='❌ Error: '+e.message;
+    statusEl.style.color='#dc2626';
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='1';}
+  }
+};
+
+function joRenderFbList(){
+  const el=document.getElementById('jo-fb-list');
+  if(!_joFbItems.length){el.innerHTML='<div style="font-size:11px;color:#6b7394;text-align:center;padding:10px">No Facebook job orders today</div>';return;}
+  const typeColor={no_internet:'#fee2e2',slow:'#fef3c7',install:'#dcfce7',intermittent:'#fef9c3',refund:'#ede9fe',relocation:'#e0f2fe',check:'#f3f4f6',other:'#f3f4f6'};
+  el.innerHTML=_joFbItems.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:${typeColor[r.job_type]||'#f3f4f6'};border-radius:6px;margin-bottom:4px;font-size:11px">
+      <input type="checkbox" data-fb="${i}" checked style="accent-color:#1877f2;flex-shrink:0">
+      <span style="font-weight:600;min-width:60px">${r.area||'?'}</span>
+      <span style="color:#374151;flex:1">${r.customer_name||'Unknown'}</span>
+      <span style="color:#6b7394;font-size:10px">${r.job_type||'other'}</span>
+      ${r.vlan?'<span style="color:#1e40af;font-weight:700;font-size:10px">VLAN '+r.vlan+'</span>':''}
+    </div>`).join('');
+}
+
+window.joImportFacebook=function(){
+  const checked=[...document.querySelectorAll('[data-fb]')].filter(c=>c.checked).map(c=>parseInt(c.dataset.fb));
+  if(!checked.length){alert('No items selected');return;}
+  const items=checked.map(i=>({
+    customer:_joFbItems[i].customer_name||'Unknown',
+    area:_joFbItems[i].area||'MIX AREAS',
+    vlan:_joFbItems[i].vlan||null,
+    address:_joFbItems[i].description||'',
+    contact:'',
+    issue:_joFbItems[i].description||_joFbItems[i].job_type||'Customer complaint via Facebook',
+    status:'new',priority:'normal',source:'facebook',
+    fb_id:_joFbItems[i].id
+  }));
+  joParsed_merge(items,'facebook');
+  document.getElementById('jo-fb-status').textContent='✅ '+items.length+' item'+(items.length!==1?'s':'')+' added to preview';
+  document.getElementById('jo-fb-status').style.color='#15803d';
 };
 
 function joParsed_merge(newItems, src){
@@ -11992,6 +12102,8 @@ function joConfirmItems(items){
     if(match) match.status='done';
   });
   joSave();
+  // Also save to Supabase job_orders
+  joSaveToSupabase(items.filter(p=>p.status!=='done'));
   _joParsed=[];
   joRenderPreview();
   joUpdateStats();
@@ -12000,6 +12112,31 @@ function joConfirmItems(items){
   document.getElementById('jo-parse-status').textContent='✅ '+items.filter(p=>p.status!=='done').length+' job(s) added to today\'s board';
   document.getElementById('jo-confirm-btn').style.display='none';
   document.getElementById('jo-confirm-sel-btn').style.display='none';
+}
+
+async function joSaveToSupabase(items){
+  if(!items.length) return;
+  const today=joTodayStr();
+  const records=items.map(p=>({
+    source:p.source||'dashboard',
+    type:'reklamo',
+    area:p.area||'MIX AREAS',
+    vlan:p.vlan||null,
+    customer_name:p.customer||'Unknown',
+    job_type:p.issue||'other',
+    description:p.issue||'',
+    technician:p.technician||null,
+    status:p.status||'new',
+    date:today,
+    created_at:new Date().toISOString()
+  }));
+  try{
+    await fetch(SUPABASE_URL+'/rest/v1/job_orders',{
+      method:'POST',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(records)
+    });
+  }catch(e){console.warn('Supabase save failed:',e);}
 }
 
 // ── Today's Board ──
