@@ -11911,7 +11911,7 @@ window.joFetchFacebook=async function(){
   if(btn){btn.disabled=true;btn.style.opacity='.6';}
   try{
     const today=joTodayStr();
-    const url=SUPABASE_URL+'/rest/v1/job_orders?source=eq.facebook&date=eq.'+today+'&order=created_at.desc&limit=100';
+    const url=SUPABASE_URL+'/rest/v1/job_orders?source=eq.facebook&date=eq.'+today+'&order=created_at.desc&limit=100&select=id,date,area,customer,vlan,address,issue,contact,priority,status,source,technician,notes';
     const resp=await fetch(url,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
     const rows=await resp.json();
     if(!Array.isArray(rows)) throw new Error('Unexpected response');
@@ -11936,8 +11936,8 @@ function joRenderFbList(){
     <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:${typeColor[r.job_type]||'#f3f4f6'};border-radius:6px;margin-bottom:4px;font-size:11px">
       <input type="checkbox" data-fb="${i}" checked style="accent-color:#1877f2;flex-shrink:0">
       <span style="font-weight:600;min-width:60px">${r.area||'?'}</span>
-      <span style="color:#374151;flex:1">${r.customer_name||'Unknown'}</span>
-      <span style="color:#6b7394;font-size:10px">${r.job_type||'other'}</span>
+      <span style="color:#374151;flex:1">${r.customer||'Unknown'}</span>
+      <span style="color:#6b7394;font-size:10px">${r.issue||'other'}</span>
       ${r.vlan?'<span style="color:#1e40af;font-weight:700;font-size:10px">VLAN '+r.vlan+'</span>':''}
     </div>`).join('');
 }
@@ -11946,12 +11946,12 @@ window.joImportFacebook=function(){
   const checked=[...document.querySelectorAll('[data-fb]')].filter(c=>c.checked).map(c=>parseInt(c.dataset.fb));
   if(!checked.length){alert('No items selected');return;}
   const items=checked.map(i=>({
-    customer:_joFbItems[i].customer_name||'Unknown',
+    customer:_joFbItems[i].customer||'Unknown',
     area:_joFbItems[i].area||'MIX AREAS',
     vlan:_joFbItems[i].vlan||null,
-    address:_joFbItems[i].description||'',
+    address:_joFbItems[i].address||'',
     contact:'',
-    issue:_joFbItems[i].description||_joFbItems[i].job_type||'Customer complaint via Facebook',
+    issue:_joFbItems[i].issue||'Customer complaint via Facebook',
     status:'new',priority:'normal',source:'facebook',
     fb_id:_joFbItems[i].id
   }));
@@ -12119,14 +12119,16 @@ async function joSaveToSupabase(items){
   const today=joTodayStr();
   const records=items.map(p=>({
     source:p.source||'dashboard',
-    type:'reklamo',
     area:p.area||'MIX AREAS',
-    vlan:p.vlan||null,
-    customer_name:p.customer||'Unknown',
-    job_type:p.issue||'other',
-    description:p.issue||'',
+    vlan:p.vlan?String(p.vlan):null,
+    customer:p.customer||'Unknown',
+    issue:p.issue||'',
+    address:p.address||'',
+    contact:p.contact||'',
+    priority:p.priority||'normal',
     technician:p.technician||null,
     status:p.status||'new',
+    notes:p.notes||'',
     date:today,
     created_at:new Date().toISOString()
   }));
