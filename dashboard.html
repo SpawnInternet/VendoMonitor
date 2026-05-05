@@ -6094,34 +6094,30 @@ function hvoRenderRoutes() {
   container.innerHTML = '';
 
   Object.entries(byCollector).forEach(([collector, routes]) => {
-    // Collector-level stats
-    const allItems = routes.flatMap(r => hvoRouteItems.filter(x => x.route_id === r.id));
-    const totalVendos = allItems.length;
-    const doneVendos  = allItems.filter(x => x.status === 'harvested').length;
-    const pendVendos  = totalVendos - doneVendos;
-    const pct = totalVendos ? Math.round(doneVendos / totalVendos * 100) : 0;
-    const totalNet = allItems.reduce((s,x) => s + (parseFloat(x.net_collectible)||0), 0);
+    const allItems   = routes.flatMap(r => hvoRouteItems.filter(x => x.route_id === r.id));
+    const totalVendos= allItems.length;
+    const doneVendos = allItems.filter(x => x.status === 'harvested').length;
+    const pct        = totalVendos ? Math.round(doneVendos / totalVendos * 100) : 0;
     const totalCoins = allItems.reduce((s,x) => s + (parseFloat(x.total_coins)||0), 0);
 
-    // Collector block wrapper
     const block = document.createElement('div');
     block.style.cssText = 'border:2px solid #e5e7eb;border-radius:20px;padding:16px 18px;margin-bottom:14px;background:#fff;';
 
-    // Collector header row
+    // Collector header
     const colHdr = document.createElement('div');
     colHdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;';
     colHdr.innerHTML =
       '<div style="flex-shrink:0;">' + collSvg(collector).replace('width="64"','width="52"').replace('height="64"','height="52"') + '</div>' +
       '<div style="flex:1;">' +
         '<div style="font-size:15px;font-weight:800;color:#1a1d2e;">' + collector + '</div>' +
-        '<div style="font-size:11px;color:#6b7280;">' + routes.length + ' route' + (routes.length!==1?'s':'') + ' · ' + totalVendos + ' vendos · ' + doneVendos + ' done</div>' +
-        '<div style="margin-top:5px;background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden;width:100%;max-width:220px;">' +
+        '<div style="font-size:11px;color:#6b7280;">' + routes.length + ' route' + (routes.length!==1?'s':'') + ' · ' + totalVendos + ' vendos · ' + doneVendos + ' harvested</div>' +
+        '<div style="margin-top:5px;background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden;max-width:220px;">' +
           '<div style="background:' + (pct===100?'#16a34a':'#d97706') + ';height:5px;width:' + pct + '%;border-radius:4px;transition:.4s;"></div>' +
         '</div>' +
       '</div>' +
       '<div style="text-align:right;flex-shrink:0;">' +
-        '<div style="font-size:12px;color:#15803d;font-weight:700;">' + doneVendos + '/' + totalVendos + ' harvested</div>' +
-        (totalCoins > 0 ? '<div style="font-size:13px;font-weight:800;color:#1e3cb8;">' + fmt(totalCoins) + '</div><div style="font-size:9px;color:#6b7280;">total coins</div>' : '') +
+        '<div style="font-size:12px;color:#15803d;font-weight:700;">' + doneVendos + '/' + totalVendos + ' done</div>' +
+        (totalCoins > 0 ? '<div style="font-size:14px;font-weight:800;color:#1e3cb8;">' + fmt(totalCoins) + '</div><div style="font-size:9px;color:#6b7280;">total coins</div>' : '') +
       '</div>';
     block.appendChild(colHdr);
 
@@ -6134,7 +6130,6 @@ function hvoRenderRoutes() {
       const doneN  = items.filter(x => x.status === 'harvested').length;
       const pctR   = items.length ? Math.round(doneN / items.length * 100) : 0;
       const rCoins = items.reduce((s,x) => s + (parseFloat(x.total_coins)||0), 0);
-      const rNet   = items.reduce((s,x) => s + (parseFloat(x.net_collectible)||0), 0);
       const isComp = r.status === 'completed';
       const bdColor= isComp ? '#bbf7d0' : '#fde68a';
       const bgColor= isComp ? '#f0fdf4' : '#fffbeb';
@@ -6148,91 +6143,28 @@ function hvoRenderRoutes() {
       card.dataset.routecard = r.id;
 
       card.innerHTML =
-        // Route code + status
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
           '<span style="font-size:14px;font-weight:800;color:#1e3cb8;letter-spacing:.08em;">' + r.route_code + '</span>' +
           (isComp
             ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#dcfce7;color:#15803d;">✅ Done</span>'
             : '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#fef3c7;color:#92400e;">⏳ Active</span>') +
         '</div>' +
-        // Area + date
         '<div style="font-size:10px;color:#6b7280;margin-bottom:6px;">' + (r.area||'All areas') + ' · ' + (r.route_date||r.harvest_date||created) + '</div>' +
-        // Progress bar
         '<div style="background:#e5e7eb;border-radius:4px;height:4px;overflow:hidden;margin-bottom:6px;">' +
           '<div style="background:' + barClr + ';height:4px;width:' + pctR + '%;border-radius:4px;"></div>' +
         '</div>' +
-        // Counts
         '<div style="font-size:11px;color:' + barClr + ';font-weight:700;margin-bottom:6px;">' + doneN + '/' + items.length + ' done</div>' +
-        // Coins if any harvested
         (rCoins > 0 ? '<div style="font-size:13px;font-weight:800;color:#15803d;">' + fmt(rCoins) + '</div><div style="font-size:9px;color:#6b7280;margin-bottom:6px;">total coins</div>' : '') +
-        // Action buttons
         '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
           '<button data-copycode="' + r.route_code + '" style="padding:3px 7px;border:1.5px solid #bfdbfe;border-radius:5px;background:#eff6ff;color:#1e40af;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Copy</button>' +
           '<button data-quickcol="' + r.id + '" data-curval="' + (r.collector||'').replace(/"/g,'&quot;') + '" style="padding:3px 7px;border:1.5px solid #d8b4fe;border-radius:5px;background:#faf5ff;color:#6d28d9;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">✏️ ' + (r.collector||'—') + '</button>' +
           '<button data-quickdate="' + r.id + '" data-curval="' + (r.route_date||r.harvest_date||'') + '" style="padding:3px 7px;border:1.5px solid #a5f3fc;border-radius:5px;background:#ecfeff;color:#0e7490;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">📅 ' + (r.route_date||r.harvest_date||'—') + '</button>' +
         '</div>';
 
-      // Click card to expand full route detail below
+      // Click → popup
       card.addEventListener('click', function(e) {
         if (e.target.closest('button')) return;
-        // Toggle expanded vendo list
-        const existing = block.querySelector('.hvo-route-expand[data-expandid="' + r.id + '"]');
-        if (existing) { existing.remove(); return; }
-        // Remove any other expanded
-        block.querySelectorAll('.hvo-route-expand').forEach(el => el.remove());
-        block.querySelectorAll('[data-routecard]').forEach(el => el.style.boxShadow = '');
-        card.style.boxShadow = '0 0 0 3px #1e3cb8';
-
-        const expand = document.createElement('div');
-        expand.className = 'hvo-route-expand';
-        expand.dataset.expandid = r.id;
-        expand.style.cssText = 'margin-top:12px;border:2px solid ' + bdColor + ';border-radius:12px;overflow:hidden;';
-
-        const renderExpand = () => {
-          const curItems = hvoRouteItems.filter(x => x.route_id === r.id);
-          let html = curItems.length === 0
-            ? '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>'
-            : curItems.map(item => {
-                const isDone = item.status === 'harvested';
-                const net = parseFloat(item.net_collectible||0);
-                return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone?'#f0fdf4':'#fff') + ';">' +
-                  '<div style="margin-top:2px;font-size:16px;">' + (isDone?'✅':'⏳') + '</div>' +
-                  '<div>' +
-                    '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name||item.tg_name||'—') + '</div>' +
-                    '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name||'—') + ' · ' + (item.area||'—') + '</div>' +
-                    (isDone
-                      ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
-                      : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
-                    (item.collector_note ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
-                    (item.tg_name === null ? '<div style="margin-top:3px;"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;">⚠ NO TG NAME</span></div>' : '') +
-                  '</div>' +
-                  '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">' +
-                    (isDone ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
-                    (!isDone ? '<button data-markdone="' + item.id + '" style="padding:3px 8px;border:1px solid #bbf7d0;border-radius:4px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark done</button>' : '') +
-                    (!isDone ? '<button data-transfer="' + item.id + '" style="padding:2px 7px;border:1px solid #bae6fd;border-radius:4px;background:#fff;color:#0284c7;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">↗ Transfer</button>' : '') +
-                    (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + r.id + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
-                  '</div>' +
-                '</div>';
-              }).join('');
-
-          html += '<div style="padding:10px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;">' +
-            '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;">➕ Add vendo</div>' +
-            '<div style="display:flex;gap:6px;">' +
-              '<input type="text" placeholder="Search vendo name..." data-addsearch="' + r.id + '" style="flex:1;padding:6px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;" oninput="hvoRouteSearch(this,' + r.id + ')">' +
-            '</div>' +
-            '<div id="hvo-add-results-' + r.id + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
-            '<div id="hvo-add-confirm-' + r.id + '" style="display:none;"></div>' +
-            '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' +
-              '<button data-deleteroute="' + r.id + '" style="padding:4px 10px;border:1.5px solid #fca5a5;border-radius:6px;background:#fff;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Delete route</button>' +
-              '<button data-markall="' + r.id + '" style="padding:4px 10px;border:1.5px solid #bbf7d0;border-radius:6px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark all done</button>' +
-            '</div>' +
-          '</div>';
-          expand.innerHTML = html;
-        };
-
-        renderExpand();
-        expand._refresh = renderExpand;
-        block.appendChild(expand);
+        hvoOpenRoutePopup(r.id);
       });
 
       grid.appendChild(card);
@@ -6242,6 +6174,237 @@ function hvoRenderRoutes() {
     container.appendChild(block);
   });
 }
+
+/* ─── ROUTE CARD POPUP ─── */
+function hvoOpenRoutePopup(routeId) {
+  const r = hvoRoutes.find(x => x.id === routeId);
+  if (!r) return;
+  const items  = hvoRouteItems.filter(x => x.route_id === routeId);
+  const doneN  = items.filter(x => x.status === 'harvested').length;
+  const isComp = r.status === 'completed';
+  const fmt    = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+
+  const existing = document.getElementById('hvo-route-popup');
+  if (existing) existing.remove();
+
+  const renderBody = () => {
+    const curItems = hvoRouteItems.filter(x => x.route_id === routeId);
+    const doneCount= curItems.filter(x => x.status === 'harvested').length;
+    const rCoins   = curItems.reduce((s,x) => s + (parseFloat(x.total_coins)||0), 0);
+    const rNet     = curItems.reduce((s,x) => s + (parseFloat(x.net_collectible)||0), 0);
+
+    const rows = curItems.length === 0
+      ? '<div style="padding:20px;text-align:center;color:#9ca3af;">No vendos in this route</div>'
+      : curItems.map(item => {
+          const isDone = item.status === 'harvested';
+          const net    = parseFloat(item.net_collectible||0);
+          const noTg   = !item.tg_name;
+          return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone?'#f0fdf4':'#fff') + ';">' +
+            '<div style="margin-top:2px;font-size:16px;">' + (isDone?'✅':'⏳') + '</div>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name||item.tg_name||'—') + '</div>' +
+              '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name||'—') + ' · ' + (item.area||'—') + '</div>' +
+              (noTg ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;margin-top:3px;display:inline-block;">⚠ NO TG NAME</span>' : '') +
+              (isDone ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>' : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
+              (item.collector_note ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">' +
+              (isDone ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
+              (!isDone ? '<button data-markdone="' + item.id + '" style="padding:3px 8px;border:1px solid #bbf7d0;border-radius:4px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark done</button>' : '') +
+              (!isDone ? '<button data-transfer="' + item.id + '" style="padding:2px 7px;border:1px solid #bae6fd;border-radius:4px;background:#fff;color:#0284c7;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">↗ Transfer</button>' : '') +
+              (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + routeId + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
+            '</div>' +
+          '</div>';
+        }).join('');
+
+    // Summary stats
+    const statsHtml =
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;">' +
+        '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:#1e3cb8;">' + doneCount + '/' + curItems.length + '</div><div style="font-size:9px;color:#6b7280;">Harvested</div></div>' +
+        (rCoins > 0 ? '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:#15803d;">' + fmt(rCoins) + '</div><div style="font-size:9px;color:#6b7280;">Total Coins</div></div>' : '<div></div>') +
+        (rNet > 0 ? '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;color:#1565c0;">' + fmt(rNet) + '</div><div style="font-size:9px;color:#6b7280;">Net Collectible</div></div>' : '<div></div>') +
+      '</div>';
+
+    // Add vendo section
+    const addHtml =
+      '<div style="padding:12px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;">' +
+        '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;">➕ Add vendo to route</div>' +
+        '<input type="text" placeholder="Search vendo name..." data-addsearch="' + routeId + '" style="width:100%;padding:7px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;" oninput="hvoRouteSearch(this,' + routeId + ')">' +
+        '<div id="hvo-add-results-' + routeId + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
+        '<div id="hvo-add-confirm-' + routeId + '" style="display:none;"></div>' +
+        '<div style="margin-top:8px;">' +
+          '<button onclick="hvoOpenTbfPopup(' + routeId + ')" style="width:100%;padding:7px;background:#fff7ed;color:#ea580c;border:1.5px dashed #fb923c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add vendo (No TG name yet)</button>' +
+        '</div>' +
+        '<div style="margin-top:6px;display:flex;gap:6px;">' +
+          '<button data-deleteroute="' + routeId + '" style="flex:1;padding:6px;border:1.5px solid #fca5a5;border-radius:6px;background:#fff;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Delete route</button>' +
+          '<button data-markall="' + routeId + '" style="flex:1;padding:6px;border:1.5px solid #bbf7d0;border-radius:6px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark all done</button>' +
+        '</div>' +
+      '</div>';
+
+    return statsHtml + rows + addHtml;
+  };
+
+  const bdColor = isComp ? '#bbf7d0' : '#fde68a';
+  const pop = document.createElement('div');
+  pop.id = 'hvo-route-popup';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:19999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;';
+  pop.innerHTML =
+    '<div id="hvo-route-popup-inner" style="background:#fff;border-radius:14px;width:min(640px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto;">' +
+      '<div style="background:#1e3cb8;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">' +
+        '<div>' +
+          '<div style="font-size:15px;font-weight:800;letter-spacing:.08em;">' + r.route_code + ' <span style="font-size:11px;font-weight:400;opacity:.8;">· ' + (r.collector||'—') + '</span></div>' +
+          '<div style="font-size:11px;opacity:.8;margin-top:2px;">' + (r.area||'All areas') + ' · ' + (r.route_date||r.harvest_date||'—') + ' · ' + doneN + '/' + items.length + ' done</div>' +
+        '</div>' +
+        '<button onclick="document.getElementById(\'hvo-route-popup\').remove()" style="width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;flex-shrink:0;">×</button>' +
+      '</div>' +
+      '<div id="hvo-route-popup-body"></div>' +
+      '<div style="padding:12px 16px;border-top:1px solid #e5e7eb;">' +
+        '<button onclick="document.getElementById(\'hvo-route-popup\').remove()" style="width:100%;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151;">Close</button>' +
+      '</div>' +
+    '</div>';
+
+  pop.addEventListener('click', e => { if (e.target === pop) pop.remove(); });
+  document.body.appendChild(pop);
+
+  // Render body and bind events
+  const bindAndRender = () => {
+    const b = document.getElementById('hvo-route-popup-body');
+    if (!b) return;
+    b.innerHTML = renderBody();
+    b._refresh = bindAndRender;
+    hvoBindBodyEvents(b, routeId);
+  };
+  bindAndRender();
+
+  // Also refresh the cards behind when popup closes
+  pop.addEventListener('remove', () => hvoRenderRoutes());
+}
+
+/* ─── TBF / NO TG NAME POPUP ─── */
+function hvoOpenTbfPopup(routeId) {
+  const existing = document.getElementById('hvo-tbf-popup');
+  if (existing) existing.remove();
+
+  const pop = document.createElement('div');
+  pop.id = 'hvo-tbf-popup';
+  pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  pop.innerHTML =
+    '<div style="background:#fff;border-radius:14px;width:min(460px,100%);max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+      '<div style="background:#ea580c;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;">' +
+        '<div>' +
+          '<div style="font-size:14px;font-weight:700;">➕ Add Vendo (No TG Name Yet)</div>' +
+          '<div style="font-size:10px;opacity:.85;margin-top:2px;">TG name to be filled later</div>' +
+        '</div>' +
+        '<button onclick="document.getElementById(\'hvo-tbf-popup\').remove()" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;">×</button>' +
+      '</div>' +
+      '<div style="padding:16px;">' +
+        '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">OWNER NAME *</div>' +
+          '<input id="hvo-tbfp-label" placeholder="e.g. Juan dela Cruz" maxlength="80" autocomplete="off" style="width:100%;padding:8px 10px;border:1.5px solid #fed7aa;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+        '</div>' +
+        '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">ADDRESS</div>' +
+          '<input id="hvo-tbfp-addr" placeholder="e.g. Purok 3 Cogon, Dipolog City" maxlength="120" autocomplete="off" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">' +
+          '<div>' +
+            '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">AREA</div>' +
+            '<select id="hvo-tbfp-area" style="width:100%;padding:8px 8px;border:1.5px solid #fed7aa;border-radius:7px;font-size:12px;font-family:inherit;outline:none;background:#fff;">' +
+              '<option value="">— select —</option>' +
+              '<option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>' +
+              '<option>ROXAS</option><option>POLANCO</option><option>SINAMAN</option><option>MINAOG</option><option>MIX AREAS</option>' +
+            '</select>' +
+          '</div>' +
+          '<div>' +
+            '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">VLAN</div>' +
+            '<input id="hvo-tbfp-vlan" type="number" placeholder="e.g. 116" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">LAST HARVEST DATE</div>' +
+          '<input id="hvo-tbfp-last" type="date" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+        '</div>' +
+        '<div style="margin-bottom:10px;">' +
+          '<div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:4px;">GPS (paste lat, lng)</div>' +
+          '<input id="hvo-tbfp-gps" type="text" placeholder="e.g. 8.5912, 123.3539" oninput="hvoTbfpParseGPS(this)" style="width:100%;padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+          '<input type="hidden" id="hvo-tbfp-lat"><input type="hidden" id="hvo-tbfp-lng">' +
+        '</div>' +
+        '<div id="hvo-tbfp-msg" style="display:none;margin-bottom:8px;padding:8px 10px;border-radius:7px;font-size:11px;font-weight:600;"></div>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button onclick="document.getElementById(\'hvo-tbf-popup\').remove()" style="flex:1;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151;">Cancel</button>' +
+          '<button onclick="hvoTbfpSubmit(' + routeId + ')" style="flex:2;padding:9px;background:#ea580c;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;">➕ Add to Route</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  pop.addEventListener('click', e => { if (e.target === pop) pop.remove(); });
+  document.body.appendChild(pop);
+  setTimeout(() => document.getElementById('hvo-tbfp-label')?.focus(), 100);
+}
+
+function hvoTbfpParseGPS(inp) {
+  const parts = inp.value.replace(/\s+/g,' ').trim().split(/[,\s]+/);
+  if (parts.length >= 2) {
+    const lat = parseFloat(parts[0]), lng = parseFloat(parts[1]);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      document.getElementById('hvo-tbfp-lat').value = lat;
+      document.getElementById('hvo-tbfp-lng').value = lng;
+      inp.style.borderColor = '#86efac'; return;
+    }
+  }
+  document.getElementById('hvo-tbfp-lat').value = '';
+  document.getElementById('hvo-tbfp-lng').value = '';
+  inp.style.borderColor = '';
+}
+
+async function hvoTbfpSubmit(routeId) {
+  const label = (document.getElementById('hvo-tbfp-label')?.value||'').trim();
+  const area  = (document.getElementById('hvo-tbfp-area')?.value||'').trim()||null;
+  const vlan  = parseInt(document.getElementById('hvo-tbfp-vlan')?.value)||null;
+  const addr  = (document.getElementById('hvo-tbfp-addr')?.value||'').trim()||null;
+  const last  = document.getElementById('hvo-tbfp-last')?.value||null;
+  const lat   = parseFloat(document.getElementById('hvo-tbfp-lat')?.value)||null;
+  const lng   = parseFloat(document.getElementById('hvo-tbfp-lng')?.value)||null;
+  const msg   = document.getElementById('hvo-tbfp-msg');
+
+  if (!label) {
+    msg.style.display='block'; msg.style.background='#fef2f2'; msg.style.color='#dc2626';
+    msg.textContent='⚠ Owner name is required'; return;
+  }
+
+  msg.style.display='block'; msg.style.background='#fffbeb'; msg.style.color='#92400e';
+  msg.textContent='Saving…';
+
+  try {
+    // Insert into vendos
+    const vR = await fetch(SB_URL + '/rest/v1/vendos', {
+      method:'POST',
+      headers:{ ...{ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, 'Content-Type':'application/json', Prefer:'return=representation' },
+      body: JSON.stringify({ vendo_name: label, area, vlan, address: addr, last_harvest_date: last, lat, lng, is_active: true })
+    });
+    const vData = await vR.json();
+    const vendoId = Array.isArray(vData) ? vData[0]?.id : vData?.id;
+    if (!vendoId) throw new Error('Failed to create vendo');
+
+    // Insert into route_items
+    await fetch(SB_URL + '/rest/v1/route_items', {
+      method:'POST',
+      headers:{ ...{ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, 'Content-Type':'application/json' },
+      body: JSON.stringify({ route_id: routeId, vendo_id: vendoId, sheet_name: label, tg_name: null, area, status: 'pending' })
+    });
+
+    msg.style.background='#f0fdf4'; msg.style.color='#15803d';
+    msg.textContent='✅ Added! Refreshing…';
+    setTimeout(() => {
+      document.getElementById('hvo-tbf-popup')?.remove();
+      hvoLoadAll();
+    }, 800);
+  } catch(err) {
+    msg.style.background='#fef2f2'; msg.style.color='#dc2626';
+    msg.textContent='❌ Error: ' + err.message;
+  }
+}
+
 
 // hvoLoadAll called on tab open
 function auditLoad(key) {
