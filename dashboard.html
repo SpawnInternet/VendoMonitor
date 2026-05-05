@@ -6055,14 +6055,20 @@ async function hvoConfirmAddVendo(vid, routeId) {
     });
     if (r.ok) {
       const newItems = await r.json();
-      if (newItems && newItems[0]) hvoRouteItems.push(newItems[0]);
+      if (Array.isArray(newItems) && newItems[0]) hvoRouteItems.push(newItems[0]);
+      if (confirmEl) confirmEl.style.display = 'none';
+      const popBody = document.getElementById('hvo-route-popup-body');
+      if (popBody && popBody._refresh) popBody._refresh();
       hvoRenderRoutes();
       const toast = document.getElementById('hv-refresh-toast');
       if (toast) { toast.textContent = '✅ Vendo added' + (newDate ? ' · Last harvest: ' + newDate : ''); toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+    } else {
+      if (btn) { btn.textContent = '✅ Add to route'; btn.disabled = false; }
+      const err = await r.text(); console.error('Add failed:', err);
     }
   } catch(e) {
     if (btn) { btn.textContent = '✅ Add to route'; btn.disabled = false; }
-    console.error(e);
+    console.error('hvoConfirmAddVendo error:', e);
   }
 }
 
@@ -6377,31 +6383,45 @@ async function hvoTbfpSubmit(routeId) {
 
   try {
     // Insert into vendos
-    const vR = await fetch(SB_URL + '/rest/v1/vendos', {
+    const vR = await fetch(`${_SB}/rest/v1/vendos`, {
       method:'POST',
-      headers:{ ...{ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, 'Content-Type':'application/json', Prefer:'return=representation' },
-      body: JSON.stringify({ vendo_name: label, area, vlan, address: addr, last_harvest_date: last, lat, lng, is_active: true })
+      headers:{ 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+      body: JSON.stringify({ sheet_name: label, area, vlan, address: addr, last_harvest_date: last, lat, lng, is_active: true })
     });
     const vData = await vR.json();
-    const vendoId = Array.isArray(vData) ? vData[0]?.id : vData?.id;
-    if (!vendoId) throw new Error('Failed to create vendo');
+    const newVendo = Array.isArray(vData) ? vData[0] : vData;
+    if (!newVendo?.id) throw new Error('Failed to create vendo — ' + JSON.stringify(vData));
+
+    // Update local registry
+    if (_vnAll) _vnAll.push(newVendo);
 
     // Insert into route_items
-    await fetch(SB_URL + '/rest/v1/route_items', {
+    const riR = await fetch(`${_SB}/rest/v1/route_items`, {
       method:'POST',
-      headers:{ ...{ apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, 'Content-Type':'application/json' },
-      body: JSON.stringify({ route_id: routeId, vendo_id: vendoId, sheet_name: label, tg_name: null, area, status: 'pending' })
+      headers:{ 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type':'application/json', 'Prefer':'return=representation' },
+      body: JSON.stringify({ route_id: routeId, sheet_name: label, tg_name: null, area, status: 'pending', collector_note: 'TG name TBF' })
     });
+    const riData = await riR.json();
+    const newItem = Array.isArray(riData) ? riData[0] : riData;
+    if (newItem?.id) hvoRouteItems.push(newItem);
 
     msg.style.background='#f0fdf4'; msg.style.color='#15803d';
-    msg.textContent='✅ Added! Refreshing…';
+    msg.textContent='✅ Added!';
+
     setTimeout(() => {
       document.getElementById('hvo-tbf-popup')?.remove();
-      hvoLoadAll();
-    }, 800);
+      // Refresh the route popup body if open
+      const popBody = document.getElementById('hvo-route-popup-body');
+      if (popBody && popBody._refresh) popBody._refresh();
+      hvoRenderRoutes();
+      const toast = document.getElementById('hv-refresh-toast');
+      if (toast) { toast.textContent = '✅ Vendo added to route'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500); }
+    }, 600);
+
   } catch(err) {
     msg.style.background='#fef2f2'; msg.style.color='#dc2626';
     msg.textContent='❌ Error: ' + err.message;
+    console.error('TBF submit error:', err);
   }
 }
 
