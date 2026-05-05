@@ -9279,10 +9279,15 @@ async function loadReconciliation() {
       });
 
       const getTgAmt = (h) => {
+        // Prefer stored system_total when available (manually corrected via SQL)
+        if (h.system_total !== null && h.system_total !== undefined) return parseFloat(h.system_total) || 0;
         if (!h.tg_name || !tgMap[h.tg_name]) return 0;
-        const win = windowMap[h.tg_name] || RC_DEFAULT_START;
+        // Use per-harvest window_start, not the last-write-wins windowMap
+        const win = h.harvest_window_start || windowMap[h.tg_name] || RC_DEFAULT_START;
         let amt = 0;
-        Object.entries(tgMap[h.tg_name]).forEach(([d, v]) => { if (d >= win && d <= date) amt += v; });
+        Object.entries(tgMap[h.tg_name]).forEach(([d, v]) => { 
+          if (d !== '_total' && d >= win && d <= date) amt += v; 
+        });
         return amt;
       };
 
