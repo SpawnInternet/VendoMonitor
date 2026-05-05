@@ -4983,22 +4983,27 @@ async function hvoRenderReconOverlay(force) {
     const tgMap = {};
     await Promise.all(tgNames.map(async tgName => {
       const vh = allH.filter(h => h.tg_name === tgName);
-      const start2 = vh.map(h => h.harvest_window_start).filter(Boolean).sort()[0] || DS;
-      const latest = vh.map(h => h.harvest_date).filter(Boolean).sort().pop();
-      if (!latest) return;
-      let rows = [], page = 0;
-      while (true) {
-        try {
-          const r = await fetch(SB_URL + '/rest/v1/transactions?vendo=eq.' + encodeURIComponent(tgName) + '&date=gte.' + start2 + '&date=lte.' + latest + '&is_skipped=eq.false&not.and=(total_time.like.*w*,extended.eq.1)&select=amount,date',
-            { headers: { ...H2, Range: (page*1000) + '-' + ((page+1)*1000-1), Prefer: 'count=none' } });
-          const d = await r.json() || [];
-          rows = rows.concat(d);
-          if (d.length < 1000) break;
-          page++;
-        } catch(e) { break; }
+      // Use per-harvest windows — fetch each harvest's window separately
+      // to avoid cross-contamination between harvests
+      const allRows = [];
+      for (const h of vh) {
+        const winStart = h.harvest_window_start || DS;
+        const winEnd   = h.harvest_date;
+        if (!winEnd) continue;
+        let page = 0;
+        while (true) {
+          try {
+            const r = await fetch(SB_URL + '/rest/v1/transactions?vendo=eq.' + encodeURIComponent(tgName) + '&date=gte.' + winStart + '&date=lte.' + winEnd + '&is_skipped=eq.false&not.and=(total_time.like.*w*,extended.eq.1)&select=amount,date',
+              { headers: { ...H2, Range: (page*1000) + '-' + ((page+1)*1000-1), Prefer: 'count=none' } });
+            const d = await r.json() || [];
+            allRows.push(...d);
+            if (d.length < 1000) break;
+            page++;
+          } catch(e) { break; }
+        }
       }
       tgMap[tgName] = {};
-      rows.forEach(tx => { tgMap[tgName][tx.date] = (tgMap[tgName][tx.date]||0) + (parseFloat(tx.amount)||0); });
+      allRows.forEach(tx => { tgMap[tgName][tx.date] = (tgMap[tgName][tx.date]||0) + (parseFloat(tx.amount)||0); });
     }));
 
     const byDate = {};
@@ -9279,15 +9284,10 @@ async function loadReconciliation() {
       });
 
       const getTgAmt = (h) => {
-        // Prefer stored system_total when available (manually corrected via SQL)
-        if (h.system_total !== null && h.system_total !== undefined) return parseFloat(h.system_total) || 0;
         if (!h.tg_name || !tgMap[h.tg_name]) return 0;
-        // Use per-harvest window_start, not the last-write-wins windowMap
-        const win = h.harvest_window_start || windowMap[h.tg_name] || RC_DEFAULT_START;
+        const win = windowMap[h.tg_name] || RC_DEFAULT_START;
         let amt = 0;
-        Object.entries(tgMap[h.tg_name]).forEach(([d, v]) => { 
-          if (d !== '_total' && d >= win && d <= date) amt += v; 
-        });
+        Object.entries(tgMap[h.tg_name]).forEach(([d, v]) => { if (d >= win && d <= date) amt += v; });
         return amt;
       };
 
