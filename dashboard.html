@@ -6075,265 +6075,171 @@ function hvoRenderRoutes() {
     '<div class="stat"><div class="sl">Completed</div><div class="sv green">' + done + '</div></div>' +
     '<div class="stat"><div class="sl">Route Items</div><div class="sv blue">' + hvoRouteItems.length + '</div></div>';
 
+  const container = document.getElementById('hvo-route-table');
   if (!hvoRoutes.length) {
-    document.getElementById('hvo-route-table').innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">No routes found</div>';
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">No routes found</div>';
     return;
   }
 
-  const container = document.getElementById('hvo-route-table');
+  const fmt = v => '₱' + Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+
+  // Group routes by collector
+  const byCollector = {};
+  hvoRoutes.forEach(r => {
+    const col = r.collector || '—';
+    if (!byCollector[col]) byCollector[col] = [];
+    byCollector[col].push(r);
+  });
+
   container.innerHTML = '';
 
-  hvoRoutes.forEach((r, i) => {
-    const items   = hvoRouteItems.filter(x => x.route_id === r.id);
-    const doneN   = items.filter(x => x.status === 'harvested').length;
-    const pendN   = items.filter(x => x.status !== 'harvested').length;
-    const pct     = items.length ? Math.round(doneN / items.length * 100) : 0;
-    const created = r.created_at
-      ? new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
-      : '—';
-    const isComp  = r.status === 'completed';
-    const bdColor = isComp ? '#bbf7d0' : '#fde68a';
-    const bgColor = isComp ? '#f0fdf4' : '#fffbeb';
-    const barColor= isComp ? '#16a34a' : '#d97706';
+  Object.entries(byCollector).forEach(([collector, routes]) => {
+    // Collector-level stats
+    const allItems = routes.flatMap(r => hvoRouteItems.filter(x => x.route_id === r.id));
+    const totalVendos = allItems.length;
+    const doneVendos  = allItems.filter(x => x.status === 'harvested').length;
+    const pendVendos  = totalVendos - doneVendos;
+    const pct = totalVendos ? Math.round(doneVendos / totalVendos * 100) : 0;
+    const totalNet = allItems.reduce((s,x) => s + (parseFloat(x.net_collectible)||0), 0);
+    const totalCoins = allItems.reduce((s,x) => s + (parseFloat(x.total_coins)||0), 0);
 
-    // Route card
-    const card = document.createElement('div');
-    card.style.cssText = 'border:2px solid ' + bdColor + ';border-radius:12px;margin-bottom:10px;overflow:hidden;';
+    // Collector block wrapper
+    const block = document.createElement('div');
+    block.style.cssText = 'border:2px solid #e5e7eb;border-radius:20px;padding:16px 18px;margin-bottom:14px;background:#fff;';
 
-    // Header row — clickable to expand
-    const hdr = document.createElement('div');
-    hdr.style.cssText = 'background:' + bgColor + ';padding:12px 16px;cursor:pointer;user-select:none;';
-    hdr.innerHTML =
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
-        '<div style="display:flex;align-items:center;gap:10px;">' +
-          '<span style="font-size:16px;font-weight:800;color:#1e3cb8;letter-spacing:.1em;">' + r.route_code + '</span>' +
-          (isComp ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#15803d;">✅ Completed</span>'
-                  : '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#fef3c7;color:#92400e;">⏳ Active</span>') +
-        '</div>' +
-        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
-          '<button data-copycode="' + r.route_code + '" title="Copy route code" style="padding:3px 8px;border:1.5px solid #bfdbfe;border-radius:6px;background:#eff6ff;color:#1e40af;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">📋 Copy</button>' +
-          '<button data-quickcol="' + r.id + '" data-curval="' + (r.collector||'').replace(/"/g,'&quot;') + '" title="Change collector" style="padding:3px 8px;border:1.5px solid #d8b4fe;border-radius:6px;background:#faf5ff;color:#6d28d9;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">✏️ ' + (r.collector||'—') + '</button>' +
-          '<button data-quickdate="' + r.id + '" data-curval="' + (r.route_date||r.harvest_date||'') + '" title="Change harvest date" style="padding:3px 8px;border:1.5px solid #a5f3fc;border-radius:6px;background:#ecfeff;color:#0e7490;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;">📅 ' + (r.route_date||r.harvest_date||'—') + '</button>' +
-          '<span style="font-size:11px;font-weight:700;color:' + barColor + ';">' + doneN + '/' + items.length + ' done</span>' +
-          '<span style="font-size:16px;color:#9ca3af;transition:.2s;transform:rotate(180deg);display:inline-block;" class="hvo-rt-arr">▾</span>' +
+    // Collector header row
+    const colHdr = document.createElement('div');
+    colHdr.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;';
+    colHdr.innerHTML =
+      '<div style="flex-shrink:0;">' + collSvg(collector).replace('width="64"','width="52"').replace('height="64"','height="52"') + '</div>' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:15px;font-weight:800;color:#1a1d2e;">' + collector + '</div>' +
+        '<div style="font-size:11px;color:#6b7280;">' + routes.length + ' route' + (routes.length!==1?'s':'') + ' · ' + totalVendos + ' vendos · ' + doneVendos + ' done</div>' +
+        '<div style="margin-top:5px;background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden;width:100%;max-width:220px;">' +
+          '<div style="background:' + (pct===100?'#16a34a':'#d97706') + ';height:5px;width:' + pct + '%;border-radius:4px;transition:.4s;"></div>' +
         '</div>' +
       '</div>' +
-      // Progress bar
-      '<div style="margin-top:8px;background:#e5e7eb;border-radius:4px;height:5px;overflow:hidden;">' +
-        '<div style="background:' + barColor + ';height:5px;width:' + pct + '%;border-radius:4px;transition:.4s;"></div>' +
-      '</div>' +
-      '<div style="font-size:10px;color:#6b7280;margin-top:3px;">' +
-        (r.area||'All areas') + ' · ' + created +
-        (r.admin_notes ? ' · <span style="color:#1e3cb8;">📝 ' + r.admin_notes + '</span>' : '') +
+      '<div style="text-align:right;flex-shrink:0;">' +
+        '<div style="font-size:12px;color:#15803d;font-weight:700;">' + doneVendos + '/' + totalVendos + ' harvested</div>' +
+        (totalCoins > 0 ? '<div style="font-size:13px;font-weight:800;color:#1e3cb8;">' + fmt(totalCoins) + '</div><div style="font-size:9px;color:#6b7280;">total coins</div>' : '') +
       '</div>';
+    block.appendChild(colHdr);
 
-    // Build body content
-    const routeId = r.id;
+    // Route cards grid
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;';
 
-    // Vendo items body — visible by default
-    const body = document.createElement('div');
-    body.style.cssText = 'display:block;border-top:1px solid ' + bdColor + ';';
-    body.dataset.routebody = routeId;
+    routes.forEach(r => {
+      const items  = hvoRouteItems.filter(x => x.route_id === r.id);
+      const doneN  = items.filter(x => x.status === 'harvested').length;
+      const pctR   = items.length ? Math.round(doneN / items.length * 100) : 0;
+      const rCoins = items.reduce((s,x) => s + (parseFloat(x.total_coins)||0), 0);
+      const rNet   = items.reduce((s,x) => s + (parseFloat(x.net_collectible)||0), 0);
+      const isComp = r.status === 'completed';
+      const bdColor= isComp ? '#bbf7d0' : '#fde68a';
+      const bgColor= isComp ? '#f0fdf4' : '#fffbeb';
+      const barClr = isComp ? '#16a34a' : '#d97706';
+      const created = r.created_at
+        ? new Date(r.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true})
+        : '—';
 
-    const renderItems = () => {
-      const curItems = hvoRouteItems.filter(x => x.route_id === routeId);
-      const curDone  = curItems.filter(x => x.status === 'harvested').length;
-      const curPend  = curItems.filter(x => x.status !== 'harvested').length;
-      const totalNet = curItems.reduce((s,x)=>s+(parseFloat(x.net_collectible)||0),0);
+      const card = document.createElement('div');
+      card.style.cssText = 'border:2px solid ' + bdColor + ';border-radius:12px;background:' + bgColor + ';padding:12px;cursor:pointer;transition:.15s;';
+      card.dataset.routecard = r.id;
 
-      let html = curItems.length === 0
-        ? '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>'
-        : curItems.map(item => {
-            const isDone = item.status === 'harvested';
-            const net    = parseFloat(item.net_collectible || 0);
-            const hasCN  = !!item.collector_note;
-            return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone ? '#f0fdf4' : '#fff') + ';">' +
-              '<div style="margin-top:2px;font-size:16px;">' + (isDone ? '✅' : '⏳') + '</div>' +
-              '<div>' +
-                '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name || item.tg_name || '—') + '</div>' +
-                '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name || '—') + ' · ' + (item.area || '—') + '</div>' +
-                (isDone
-                  ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
-                  : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
-                (hasCN ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
-              '</div>' +
-              '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">' +
-                (isDone
-                  ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>'
-                  : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
-                (!isDone ? '<button data-markdone="' + item.id + '" style="padding:3px 8px;border:1px solid #bbf7d0;border-radius:4px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:3px;">✅ Mark done</button>' : '') +
-                (!isDone ? '<button data-transfer="' + item.id + '" style="padding:2px 7px;border:1px solid #bae6fd;border-radius:4px;background:#fff;color:#0284c7;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:3px;">↗ Transfer</button>' : '') +
-                (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + routeId + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
-              '</div>' +
-            '</div>';
-          }).join('');
-
-      // Add vendo section + summary
-      html += '<div style="padding:10px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;">' +
-        '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;">➕ Add vendo</div>' +
-        '<div style="display:flex;gap:6px;">' +
-          '<input type="text" placeholder="Search vendo name..." data-addsearch="' + routeId + '" style="flex:1;padding:6px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;" oninput="hvoRouteSearch(this,' + routeId + ')">' +
+      card.innerHTML =
+        // Route code + status
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+          '<span style="font-size:14px;font-weight:800;color:#1e3cb8;letter-spacing:.08em;">' + r.route_code + '</span>' +
+          (isComp
+            ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#dcfce7;color:#15803d;">✅ Done</span>'
+            : '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:8px;background:#fef3c7;color:#92400e;">⏳ Active</span>') +
         '</div>' +
-        '<div id="hvo-add-results-' + routeId + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
-        '<div id="hvo-add-confirm-' + routeId + '" style="display:none;"></div>' +
-        '<div style="margin-top:6px;">' +
-          '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=f.style.display===&quot;none&quot;?&quot;block&quot;:&quot;none&quot;" style="width:100%;padding:5px;background:#fff7ed;color:#ea580c;border:1.5px dashed #fb923c;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">➕ Add vendo (TG name TBF)</button>' +
-          '<div id="hvo-tbf-form-' + routeId + '" style="display:none;margin-top:6px;background:#fff7ed;border:1.5px dashed #fb923c;border-radius:7px;padding:8px 10px;">' +
-            '<div style="font-size:9px;font-weight:700;color:#ea580c;margin-bottom:5px;text-transform:uppercase;">➕ Add unnamed vendo</div>' +
-            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">NAME *</div>' +
-            '<input id="hvo-tbf-label-' + routeId + '" placeholder="Owner name e.g. Juan dela Cruz" maxlength="80" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
-            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">ADDRESS</div>' +
-            '<input id="hvo-tbf-addr-' + routeId + '" placeholder="e.g. Purok 3 Cogon, Dipolog City" maxlength="120" autocomplete="off" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;">' +
-              '<div><div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">AREA</div>' +
-              '<select id="hvo-tbf-area-' + routeId + '" style="width:100%;padding:5px 6px;border:1px solid #fed7aa;border-radius:5px;font-size:11px;font-family:inherit;outline:none;background:#fff;">' +
-                '<option value="">— select —</option>' +
-                '<option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>' +
-                '<option>ROXAS</option><option>POLANCO</option><option>SINAMAN</option><option>MINAOG</option><option>MIX AREAS</option>' +
-              '</select></div>' +
-              '<div><div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">VLAN</div>' +
-              '<input id="hvo-tbf-vlan-' + routeId + '" type="number" placeholder="e.g. 116" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;"></div>' +
+        // Area + date
+        '<div style="font-size:10px;color:#6b7280;margin-bottom:6px;">' + (r.area||'All areas') + ' · ' + (r.route_date||r.harvest_date||created) + '</div>' +
+        // Progress bar
+        '<div style="background:#e5e7eb;border-radius:4px;height:4px;overflow:hidden;margin-bottom:6px;">' +
+          '<div style="background:' + barClr + ';height:4px;width:' + pctR + '%;border-radius:4px;"></div>' +
+        '</div>' +
+        // Counts
+        '<div style="font-size:11px;color:' + barClr + ';font-weight:700;margin-bottom:6px;">' + doneN + '/' + items.length + ' done</div>' +
+        // Coins if any harvested
+        (rCoins > 0 ? '<div style="font-size:13px;font-weight:800;color:#15803d;">' + fmt(rCoins) + '</div><div style="font-size:9px;color:#6b7280;margin-bottom:6px;">total coins</div>' : '') +
+        // Action buttons
+        '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">' +
+          '<button data-copycode="' + r.route_code + '" style="padding:3px 7px;border:1.5px solid #bfdbfe;border-radius:5px;background:#eff6ff;color:#1e40af;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Copy</button>' +
+          '<button data-quickcol="' + r.id + '" data-curval="' + (r.collector||'').replace(/"/g,'&quot;') + '" style="padding:3px 7px;border:1.5px solid #d8b4fe;border-radius:5px;background:#faf5ff;color:#6d28d9;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">✏️ ' + (r.collector||'—') + '</button>' +
+          '<button data-quickdate="' + r.id + '" data-curval="' + (r.route_date||r.harvest_date||'') + '" style="padding:3px 7px;border:1.5px solid #a5f3fc;border-radius:5px;background:#ecfeff;color:#0e7490;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">📅 ' + (r.route_date||r.harvest_date||'—') + '</button>' +
+        '</div>';
+
+      // Click card to expand full route detail below
+      card.addEventListener('click', function(e) {
+        if (e.target.closest('button')) return;
+        // Toggle expanded vendo list
+        const existing = block.querySelector('.hvo-route-expand[data-expandid="' + r.id + '"]');
+        if (existing) { existing.remove(); return; }
+        // Remove any other expanded
+        block.querySelectorAll('.hvo-route-expand').forEach(el => el.remove());
+        block.querySelectorAll('[data-routecard]').forEach(el => el.style.boxShadow = '');
+        card.style.boxShadow = '0 0 0 3px #1e3cb8';
+
+        const expand = document.createElement('div');
+        expand.className = 'hvo-route-expand';
+        expand.dataset.expandid = r.id;
+        expand.style.cssText = 'margin-top:12px;border:2px solid ' + bdColor + ';border-radius:12px;overflow:hidden;';
+
+        const renderExpand = () => {
+          const curItems = hvoRouteItems.filter(x => x.route_id === r.id);
+          let html = curItems.length === 0
+            ? '<div style="padding:12px 16px;font-size:11px;color:#9ca3af;text-align:center;">No vendos in this route</div>'
+            : curItems.map(item => {
+                const isDone = item.status === 'harvested';
+                const net = parseFloat(item.net_collectible||0);
+                return '<div style="display:grid;grid-template-columns:24px 1fr auto;align-items:start;gap:8px;padding:10px 16px;border-bottom:1px solid #f0f0f0;background:' + (isDone?'#f0fdf4':'#fff') + ';">' +
+                  '<div style="margin-top:2px;font-size:16px;">' + (isDone?'✅':'⏳') + '</div>' +
+                  '<div>' +
+                    '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (item.sheet_name||item.tg_name||'—') + '</div>' +
+                    '<div style="font-size:10px;color:#6b7280;">' + (item.tg_name||'—') + ' · ' + (item.area||'—') + '</div>' +
+                    (isDone
+                      ? '<div style="font-size:11px;color:#15803d;font-weight:600;margin-top:2px;">Net: ₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + ' · Spawn: ₱' + (net*0.75).toLocaleString('en-PH',{minimumFractionDigits:2}) + '</div>'
+                      : '<div style="font-size:11px;color:#d97706;margin-top:2px;">Not yet harvested</div>') +
+                    (item.collector_note ? '<div style="margin-top:4px;background:#e0f2fe;border-left:3px solid #0284c7;border-radius:0 5px 5px 0;padding:4px 8px;font-size:11px;color:#0369a1;">💬 ' + item.collector_note + '</div>' : '') +
+                    (item.tg_name === null ? '<div style="margin-top:3px;"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;">⚠ NO TG NAME</span></div>' : '') +
+                  '</div>' +
+                  '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">' +
+                    (isDone ? '<span style="font-size:11px;font-weight:700;color:#15803d;">₱' + net.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' : '<span style="font-size:11px;color:#d97706;">Pending</span>') +
+                    (!isDone ? '<button data-markdone="' + item.id + '" style="padding:3px 8px;border:1px solid #bbf7d0;border-radius:4px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark done</button>' : '') +
+                    (!isDone ? '<button data-transfer="' + item.id + '" style="padding:2px 7px;border:1px solid #bae6fd;border-radius:4px;background:#fff;color:#0284c7;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit;">↗ Transfer</button>' : '') +
+                    (!isDone ? '<button data-rmitem="' + item.id + '" data-routeid="' + r.id + '" style="padding:2px 7px;border:1px solid #fca5a5;border-radius:4px;background:#fff;color:#dc2626;font-size:9px;cursor:pointer;font-family:inherit;">✕ Remove</button>' : '') +
+                  '</div>' +
+                '</div>';
+              }).join('');
+
+          html += '<div style="padding:10px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;">' +
+            '<div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;">➕ Add vendo</div>' +
+            '<div style="display:flex;gap:6px;">' +
+              '<input type="text" placeholder="Search vendo name..." data-addsearch="' + r.id + '" style="flex:1;padding:6px 10px;border:1.5px solid #bbf7d0;border-radius:7px;font-size:12px;font-family:inherit;outline:none;" oninput="hvoRouteSearch(this,' + r.id + ')">' +
             '</div>' +
-            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">LAST HARVEST DATE</div>' +
-            '<input id="hvo-tbf-last-' + routeId + '" type="date" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
-            '<div style="font-size:8px;font-weight:700;color:#6b7280;margin-bottom:2px;">GPS (paste lat, lng)</div>' +
-            '<input id="hvo-tbf-gps-' + routeId + '" type="text" placeholder="e.g. 8.5912285, 123.3539253" oninput="hvTbfParseGPS(this,' + JSON.stringify(routeId) + ')" style="width:100%;padding:5px 7px;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;font-family:inherit;outline:none;color:#374151;box-sizing:border-box;margin-bottom:4px;">' +
-            '<input id="hvo-tbf-lat-' + routeId + '" type="hidden">' +
-            '<input id="hvo-tbf-lng-' + routeId + '" type="hidden">' +
-            '<div style="display:flex;gap:4px;">' +
-              '<button data-addtbf="' + routeId + '" style="flex:1;padding:5px;background:#ea580c;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Add to route</button>' +
-              '<button onclick="var f=document.getElementById(&quot;hvo-tbf-form-' + routeId + '&quot;);if(f)f.style.display=&quot;none&quot;" style="padding:5px 10px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;border-radius:5px;font-size:11px;cursor:pointer;font-family:inherit;">Cancel</button>' +
+            '<div id="hvo-add-results-' + r.id + '" style="border:1px solid #e5e7eb;border-radius:6px;max-height:140px;overflow-y:auto;background:#fff;margin-top:4px;display:none;"></div>' +
+            '<div id="hvo-add-confirm-' + r.id + '" style="display:none;"></div>' +
+            '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">' +
+              '<button data-deleteroute="' + r.id + '" style="padding:4px 10px;border:1.5px solid #fca5a5;border-radius:6px;background:#fff;color:#dc2626;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Delete route</button>' +
+              '<button data-markall="' + r.id + '" style="padding:4px 10px;border:1.5px solid #bbf7d0;border-radius:6px;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark all done</button>' +
             '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="padding:8px 14px;background:#f0f4ff;border-top:1px solid #dde3f5;display:flex;flex-direction:column;gap:6px;">' +
-        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">COLLECTOR</div>' +
-            '<input data-editcol="' + routeId + '" value="' + (r.collector||'').replace(/"/g,'&quot;') + '" style="width:100%;padding:4px 7px;border:1px solid #c7d2fe;border-radius:5px;font-size:11px;font-family:inherit;outline:none;box-sizing:border-box;">' +
-          '</div>' +
-          '<div style="flex:1;min-width:0;">' +
-            '<div style="font-size:9px;font-weight:700;color:#6b7280;margin-bottom:2px;">HARVEST DATE</div>' +
-            '<input type="date" data-editdate="' + routeId + '" value="' + (r.route_date||'') + '" style="width:100%;padding:4px 7px;border:1px solid #c7d2fe;border-radius:5px;font-size:11px;font-family:inherit;outline:none;box-sizing:border-box;">' +
-          '</div>' +
-          '<button data-saveroute="' + routeId + '" style="padding:5px 10px;background:#1e3cb8;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;align-self:flex-end;">💾 Save</button>' +
-        '</div>' +
-        '<span id="hvo-route-save-msg-' + routeId + '" style="font-size:10px;"></span>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;padding:10px 16px;background:#f8faff;border-top:1px solid #e5e7eb;font-size:12px;">' +
-        '<span style="color:#6b7280;">' + curDone + ' harvested · ' + curPend + ' pending</span>' +
-        '<span style="font-weight:700;color:#15803d;">Total net: ₱' + totalNet.toLocaleString('en-PH',{minimumFractionDigits:2}) + '</span>' +
-        (r.status !== 'completed' ? '<button data-completeroute="' + routeId + '" style="padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Mark route complete</button>' : '<span style="padding:4px 10px;background:#dcfce7;color:#15803d;border-radius:10px;font-size:10px;font-weight:700;">✅ Completed</span>') +
-      '</div>';
+          '</div>';
+          expand.innerHTML = html;
+        };
 
-      return html;
-    };
+        renderExpand();
+        expand._refresh = renderExpand;
+        block.appendChild(expand);
+      });
 
-    body.innerHTML = renderItems();
-
-    // Store render fn on body for refresh after add/remove
-    body._refresh = () => { body.innerHTML = renderItems(); hvoBindBodyEvents(body, routeId); };
-    hvoBindBodyEvents(body, routeId);
-
-    // ── Header quick-action buttons ─────────────────────────────────
-    hdr.addEventListener('click', function(e) {
-      // Copy route code
-      const cpBtn = e.target.closest('[data-copycode]');
-      if (cpBtn) {
-        e.stopPropagation();
-        const code = cpBtn.dataset.copycode;
-        navigator.clipboard.writeText(code).then(() => {
-          const orig = cpBtn.textContent;
-          cpBtn.textContent = '✅ Copied!';
-          cpBtn.style.background = '#dcfce7';
-          cpBtn.style.borderColor = '#86efac';
-          cpBtn.style.color = '#15803d';
-          setTimeout(() => { cpBtn.textContent = orig; cpBtn.style.background = '#eff6ff'; cpBtn.style.borderColor = '#bfdbfe'; cpBtn.style.color = '#1e40af'; }, 1500);
-        });
-        return;
-      }
-
-      // Quick-edit collector
-      const colBtn = e.target.closest('[data-quickcol]');
-      if (colBtn) {
-        e.stopPropagation();
-        const rId = colBtn.dataset.quickcol;
-        const cur = colBtn.dataset.curval || '';
-        const val = window.prompt('Change collector name:', cur);
-        if (val === null) return; // cancelled
-        const trimmed = val.trim();
-        if (!trimmed) { alert('Collector name cannot be empty.'); return; }
-        colBtn.textContent = '⏳ Saving…';
-        colBtn.disabled = true;
-        fetch(_SB + '/rest/v1/routes?id=eq.' + rId, {
-          method: 'PATCH',
-          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ collector: trimmed })
-        }).then(res => {
-          if (res.ok) {
-            const rt = (hvoRoutes||[]).find(x => String(x.id) === String(rId));
-            if (rt) rt.collector = trimmed;
-            colBtn.textContent = '✏️ ' + trimmed;
-            colBtn.dataset.curval = trimmed;
-            // also update edit-col input if visible
-            const inp = document.querySelector('[data-editcol="' + rId + '"]');
-            if (inp) inp.value = trimmed;
-            hvRefreshPendingRoutes();
-          } else {
-            alert('Failed to save collector. Try again.');
-          }
-          colBtn.disabled = false;
-        }).catch(() => { alert('Network error.'); colBtn.disabled = false; colBtn.textContent = '✏️ ' + cur; });
-        return;
-      }
-
-      // Quick-edit harvest date
-      const dtBtn = e.target.closest('[data-quickdate]');
-      if (dtBtn) {
-        e.stopPropagation();
-        const rId = dtBtn.dataset.quickdate;
-        const cur = dtBtn.dataset.curval || '';
-        const val = window.prompt('Change harvest date (YYYY-MM-DD):', cur);
-        if (val === null) return; // cancelled
-        const trimmed = val.trim();
-        if (!trimmed) { alert('Date cannot be empty.'); return; }
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) { alert('Use YYYY-MM-DD format, e.g. 2026-05-07'); return; }
-        dtBtn.textContent = '⏳ Saving…';
-        dtBtn.disabled = true;
-        fetch(_SB + '/rest/v1/routes?id=eq.' + rId, {
-          method: 'PATCH',
-          headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ route_date: trimmed })
-        }).then(res => {
-          if (res.ok) {
-            const rt = (hvoRoutes||[]).find(x => String(x.id) === String(rId));
-            if (rt) rt.route_date = trimmed;
-            dtBtn.textContent = '📅 ' + trimmed;
-            dtBtn.dataset.curval = trimmed;
-            const inp = document.querySelector('[data-editdate="' + rId + '"]');
-            if (inp) inp.value = trimmed;
-            hvRefreshPendingRoutes();
-          } else {
-            alert('Failed to save date. Try again.');
-          }
-          dtBtn.disabled = false;
-        }).catch(() => { alert('Network error.'); dtBtn.disabled = false; dtBtn.textContent = '📅 ' + cur; });
-        return;
-      }
-
-      // Toggle expand (default click)
-      const isOpen = body.style.display !== 'none';
-      body.style.display = isOpen ? 'none' : 'block';
-      const arr = hdr.querySelector('.hvo-rt-arr');
-      if (arr) arr.style.transform = isOpen ? '' : 'rotate(180deg)';
+      grid.appendChild(card);
     });
-    // Ensure events are bound on initial render
-    hvoBindBodyEvents(body, routeId);
 
-    card.appendChild(hdr);
-    card.appendChild(body);
-    container.appendChild(card);
+    block.appendChild(grid);
+    container.appendChild(block);
   });
 }
 
@@ -6665,7 +6571,7 @@ async function hvExportCollector(collector, date) {
       // Data rows
       items.forEach(h => {
         const tgAmt = tgMap[h.tg_name] || 0;
-        const diff  = (parseFloat(h.net_collectible)||0) - tgAmt;
+        const diff  = (parseFloat(h.coins_total)||0) - tgAmt;
         ws_data.push([
           h.vendo_name || h.tg_name || '—',
           h.tg_name || '',
@@ -9232,7 +9138,7 @@ async function loadReconciliation() {
           </div>`;
 
         Object.entries(routes).forEach(([rc, items]) => {
-          const routeCoin = items.reduce((s,h) => s + (parseFloat(h.net_collectible)||0), 0);
+          const routeCoin = items.reduce((s,h) => s + (parseFloat(h.coins_total)||0), 0);
           const routeTg   = items.reduce((s,h) => s + getTgAmt(h), 0);
           const routeDiff = routeCoin - routeTg;
           const rdCls = Math.abs(routeDiff)<100 ? 'diff-ok' : routeDiff>0 ? 'diff-warn' : 'diff-bad';
@@ -9249,7 +9155,7 @@ async function loadReconciliation() {
               <div class="${rdCls}" style="font-weight:700;font-size:12px;">${Math.abs(routeDiff)<100?'✅ Match':routeDiff>0?'⚠ Coins +'+fmtP(Math.abs(routeDiff)):'🔴 TG +'+fmtP(Math.abs(routeDiff))}</div>
             </div>
             <div class="rc-grid">
-              <div class="rc-box" style="background:#f0fdf4;"><div class="val" style="color:#15803d;">${fmtP(routeCoin)}</div><div class="lbl">Coin net</div></div>
+              <div class="rc-box" style="background:#f0fdf4;"><div class="val" style="color:#15803d;">${fmtP(routeCoin)}</div><div class="lbl">Total Coins</div></div>
               <div class="rc-box" style="background:#eef2ff;"><div class="val" style="color:#1e3cb8;">${fmtP(routeTg)}</div><div class="lbl">TG income</div></div>
               <div class="rc-box" style="background:#fafbff;"><div class="val ${rdCls}">${fmtP(Math.abs(routeDiff))}</div><div class="lbl">${routeDiff>=0?'Surplus':'Deficit'}</div></div>
             </div>
