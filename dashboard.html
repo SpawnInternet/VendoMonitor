@@ -11633,24 +11633,38 @@ async function fullBackup() {
         </div>
 
         <!-- Facebook Live Feed -->
-        <div class="jo-src-block" style="border-color:#1877f2;padding:0;overflow:hidden;border-radius:10px">
-          <div style="background:linear-gradient(135deg,#1877f2,#0d5fd4);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
+        <div class="jo-src-block" style="border-color:#1877f2">
+          <div class="jo-src-label">
+            <span class="jo-src-badge" style="background:#e7f0fd;color:#1877f2">📘 Facebook Live</span>
+            <span style="font-size:10px;color:#6b7394;font-weight:400">Auto-captured from SPAWN Internet Page</span>
+          </div>
+          <div id="jo-fb-status" style="font-size:11px;color:#6b7394;margin-bottom:6px">Not loaded yet</div>
+          <div id="jo-fb-list" style="max-height:180px;overflow-y:auto;margin-bottom:6px"></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button id="jo-btn-fb" onclick="joFetchFacebook()" style="padding:5px 14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Load FB Job Orders</button>
+            <button onclick="joImportFacebook()" id="jo-btn-fb-import" style="padding:5px 14px;background:#fff;border:1px solid #1877f2;color:#1877f2;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:none">⬇ Add Selected to Board</button>
+          </div>
+        </div>
+
+        <!-- MikroTik Live Feed -->
+        <div class="jo-src-block" style="border-color:#c0392b;padding:0;overflow:hidden;border-radius:10px;margin-bottom:10px">
+          <div style="background:linear-gradient(135deg,#c0392b,#922b21);padding:10px 14px;display:flex;align-items:center;justify-content:space-between">
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:18px">📘</span>
+              <span style="font-size:18px">📡</span>
               <div>
-                <div style="font-size:11px;font-weight:700;color:#fff;letter-spacing:.05em">FACEBOOK LIVE</div>
-                <div style="font-size:9px;color:rgba(255,255,255,.75)">AUTO-CAPTURED FROM SPAWN INTERNET PAGE</div>
+                <div style="font-size:11px;font-weight:700;color:#fff;letter-spacing:.05em">MIKROTIK LIVE</div>
+                <div style="font-size:9px;color:rgba(255,255,255,.75)">AUTO-SYNCED — WAITING DHCP LEASES</div>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
-              <div id="jo-fb-dot" style="width:7px;height:7px;border-radius:50%;background:#9ca3af"></div>
-              <span id="jo-fb-status" style="font-size:10px;color:rgba(255,255,255,.85)">Not loaded</span>
+              <div id="jo-mk-dot" style="width:7px;height:7px;border-radius:50%;background:#9ca3af"></div>
+              <span id="jo-mk-status" style="font-size:10px;color:rgba(255,255,255,.85)">Not loaded</span>
             </div>
           </div>
-          <div id="jo-fb-list" style="max-height:260px;overflow-y:auto;padding:8px;background:#fff"></div>
-          <div style="padding:8px 10px;border-top:1px solid #e7f0fd;background:#f0f6ff;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-            <button id="jo-btn-fb" onclick="joFetchFacebook()" style="padding:5px 14px;background:#1877f2;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Load FB Job Orders</button>
-            <button onclick="joImportFacebook()" id="jo-btn-fb-import" style="padding:5px 14px;background:#fff;border:1px solid #1877f2;color:#1877f2;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:none">⬇ Add Selected to Board</button>
+          <div id="jo-mk-list" style="max-height:260px;overflow-y:auto;padding:8px;background:#fff"></div>
+          <div style="padding:8px 10px;border-top:1px solid #fde8e8;background:#fff5f5;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <button id="jo-btn-mk" onclick="joFetchMikroTik()" style="padding:5px 14px;background:#c0392b;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔄 Load MikroTik Jobs</button>
+            <button onclick="joImportMikroTik()" id="jo-btn-mk-import" style="padding:5px 14px;background:#fff;border:1px solid #c0392b;color:#c0392b;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:none">⬇ Add Selected to Board</button>
           </div>
         </div>
 
@@ -11881,6 +11895,8 @@ window.joInit=function(){
   if(keyInp&&savedKey) keyInp.value=savedKey;
   // Auto-load Facebook job orders
   joFetchFacebook();
+  // Auto-load MikroTik job orders
+  joFetchMikroTik();
 };
 
 window.joTab=function(t,btn){
@@ -12080,11 +12096,11 @@ window.joFetchFacebook=async function(){
     _joFbItems=rows;
     joRenderFbList();
     statusEl.textContent=rows.length+' FB job order'+(rows.length!==1?'s':'')+' today ('+today+')';
-    statusEl.style.color=rows.length?'rgba(255,255,255,.95)':'rgba(255,255,255,.6)';
+    statusEl.style.color=rows.length?'#15803d':'#6b7394';
     document.getElementById('jo-btn-fb-import').style.display=rows.length?'inline-block':'none';
   }catch(e){
     statusEl.textContent='❌ Error: '+e.message;
-    statusEl.style.color='rgba(255,220,220,.9)';
+    statusEl.style.color='#dc2626';
   }finally{
     if(btn){btn.disabled=false;btn.style.opacity='1';}
   }
@@ -12092,57 +12108,111 @@ window.joFetchFacebook=async function(){
 
 function joRenderFbList(){
   const el=document.getElementById('jo-fb-list');
-  const dot=document.getElementById('jo-fb-dot');
-  if(!_joFbItems.length){
-    el.innerHTML='<div style="font-size:11px;color:#6b7394;text-align:center;padding:16px">No Facebook job orders today</div>';
-    if(dot) dot.style.background='#9ca3af';
-    return;
-  }
-  if(dot){dot.style.background='#4ade80';dot.style.boxShadow='0 0 6px #4ade80';}
-  const statusColors={open:'#fef3c7',done:'#dcfce7',pending:'#fee2e2'};
-  const areaColors={DIPOLOG:'#dbeafe',DAPITAN:'#dcfce7',SINDANGAN:'#fef3c7',POLANCO:'#ede9fe',ROXAS:'#fce7f3','MIX AREAS':'#f3f4f6'};
-  el.innerHTML=_joFbItems.map((r,i)=>{
-    const details=[
-      r.contact?'📞 '+r.contact:'',
-      r.address?'📍 '+r.address:'',
-      r.issue?'⚠️ '+r.issue:''
-    ].filter(Boolean).join(' · ');
-    const copyText=`👤 Name: ${r.customer||'Unknown'}
-📍 Location: ${r.address||'—'}
-⚠️ Issue: ${r.issue||'—'}
-📞 Contact: ${r.contact||'—'}
-📌 Area: ${r.area||'—'}`;
-    return `
-    <div style="background:#fff;border:1px solid #e7f0fd;border-radius:8px;margin-bottom:6px;overflow:hidden">
-      <div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:${areaColors[r.area]||'#f8faff'}">
-        <input type="checkbox" data-fb="${i}" checked style="accent-color:#1877f2;flex-shrink:0">
-        <span style="font-size:10px;font-weight:700;color:#1e40af;background:#dbeafe;padding:1px 7px;border-radius:8px;white-space:nowrap">${r.area||'?'}</span>
-        <span style="font-weight:700;color:#1e293b;font-size:12px;flex:1">${r.customer||'Unknown'}</span>
-        <span style="font-size:9px;padding:2px 7px;border-radius:8px;background:${statusColors[r.status]||'#f3f4f6'};font-weight:600;color:#374151;text-transform:uppercase">${r.status||'open'}</span>
-        <button onclick="joCopyFbItem(${i})" title="Copy details" style="border:none;background:transparent;cursor:pointer;font-size:13px;padding:0 2px;opacity:.7" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.7">📋</button>
-      </div>
-      <div style="padding:5px 10px 7px 28px;font-size:10px;color:#6b7394;line-height:1.6">
-        ${details||'<span style="color:#d1d5db">No details</span>'}
-        ${r.notes?'<br><span style="color:#9ca3af;font-style:italic">'+r.notes+'</span>':''}
-      </div>
-    </div>`;
-  }).join('');
+  if(!_joFbItems.length){el.innerHTML='<div style="font-size:11px;color:#6b7394;text-align:center;padding:10px">No Facebook job orders today</div>';return;}
+  const typeColor={no_internet:'#fee2e2',slow:'#fef3c7',install:'#dcfce7',intermittent:'#fef9c3',refund:'#ede9fe',relocation:'#e0f2fe',check:'#f3f4f6',other:'#f3f4f6'};
+  el.innerHTML=_joFbItems.map((r,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:${typeColor[r.job_type]||'#f3f4f6'};border-radius:6px;margin-bottom:4px;font-size:11px">
+      <input type="checkbox" data-fb="${i}" checked style="accent-color:#1877f2;flex-shrink:0">
+      <span style="font-weight:600;min-width:60px">${r.area||'?'}</span>
+      <span style="color:#374151;flex:1">${r.customer||'Unknown'}</span>
+      <span style="color:#6b7394;font-size:10px">${r.issue||'other'}</span>
+      ${r.vlan?'<span style="color:#1e40af;font-weight:700;font-size:10px">VLAN '+r.vlan+'</span>':''}
+    </div>`).join('');
 }
 
-window.joCopyFbItem=function(i){
-  const r=_joFbItems[i];
-  const text=`👤 Name: ${r.customer||'Unknown'}
-📍 Location: ${r.address||'—'}
-⚠️ Issue: ${r.issue||'—'}
-📞 Contact: ${r.contact||'—'}
-📌 Area: ${r.area||'—'}
-📅 Date: ${r.date||'—'}`;
-  navigator.clipboard.writeText(text).then(()=>{
-    const btn=document.querySelectorAll('[data-fb="'+i+'"]')[0]?.closest('.jo-fb-card')?.querySelector('button');
-    // flash feedback
-    const el=document.querySelectorAll('#jo-fb-list > div')[i];
-    if(el){const orig=el.style.outline;el.style.outline='2px solid #1877f2';setTimeout(()=>el.style.outline=orig,600);}
-  }).catch(()=>alert(text));
+// ── MikroTik Live Feed ──────────────────────────────────────────
+let _joMkItems=[];
+
+window.joFetchMikroTik=async function(){
+  var statusEl=document.getElementById('jo-mk-status');
+  var dot=document.getElementById('jo-mk-dot');
+  var btn=document.getElementById('jo-btn-mk');
+  statusEl.textContent='Loading...';
+  if(btn){btn.disabled=true;btn.style.opacity='.6';}
+  try{
+    var today=joTodayStr();
+    var url=SUPABASE_URL+'/rest/v1/job_orders?source=eq.mikrotik&date=eq.'+today+'&order=vlan.asc&limit=100&select=id,date,area,customer,vlan,address,issue,contact,priority,status,source,technician,notes';
+    var resp=await fetch(url,{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}});
+    var rows=await resp.json();
+    if(!Array.isArray(rows)) throw new Error('Bad response');
+    _joMkItems=rows;
+    joRenderMkList();
+    var msg=rows.length+' offline router'+(rows.length!==1?'s':'')+' today ('+today+')';
+    statusEl.textContent=msg;
+    statusEl.style.color=rows.length?'rgba(255,255,255,.95)':'rgba(255,255,255,.6)';
+    if(dot){dot.style.background=rows.length?'#4ade80':'#9ca3af';dot.style.boxShadow=rows.length?'0 0 6px #4ade80':'none';}
+    document.getElementById('jo-btn-mk-import').style.display=rows.length?'inline-block':'none';
+  }catch(e){
+    statusEl.textContent='Error: '+e.message;
+  }finally{
+    if(btn){btn.disabled=false;btn.style.opacity='1';}
+  }
+};
+
+function joRenderMkList(){
+  var el=document.getElementById('jo-mk-list');
+  if(!_joMkItems.length){el.innerHTML='<div style="font-size:11px;color:#6b7394;text-align:center;padding:16px">No MikroTik job orders today</div>';return;}
+  var areaColors={DIPOLOG:'#dbeafe',DAPITAN:'#dcfce7',SINDANGAN:'#fef3c7',POLANCO:'#ede9fe',ROXAS:'#fce7f3'};
+  var html='';
+  for(var i=0;i<_joMkItems.length;i++){
+    var r=_joMkItems[i];
+    var notes=r.notes||'';
+    var oLabel='';
+    var om=notes.match(/(\d+[wdh]+) offline/);
+    if(om) oLabel=om[1]+' offline';
+    var isHigh=r.priority==='high';
+    var areaBg=areaColors[r.area]||'#f3f4f6';
+    var customer=r.customer||'';
+    var issue=r.issue||'Offline router';
+    var contact=r.contact||'';
+    var vlan=r.vlan||'?';
+    var area=r.area||'?';
+    var noteParts=notes.split('Note:');
+    var noteExtra=noteParts.length>1?noteParts[1].trim():'';
+    html+='<div style="background:'+(isHigh?'#fff5f5':'#f9fafb')+';border:1px solid '+(isHigh?'#fca5a5':'#f3e8e8')+';border-radius:8px;margin-bottom:6px;overflow:hidden">';
+    html+='<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:'+areaBg+'">';
+    html+='<input type="checkbox" data-mk="'+i+'" checked style="accent-color:#c0392b;flex-shrink:0">';
+    html+='<span style="font-size:10px;font-weight:700;color:#374151;background:rgba(0,0,0,.08);padding:1px 7px;border-radius:8px">vlan'+vlan+'</span>';
+    html+='<span style="font-size:10px;font-weight:700;color:#1e40af;background:#dbeafe;padding:1px 7px;border-radius:8px">'+area+'</span>';
+    html+='<span style="font-weight:700;color:#1e293b;font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+customer+'</span>';
+    if(oLabel) html+='<span style="font-size:9px;padding:2px 6px;border-radius:8px;background:'+(isHigh?'#fca5a5':'#e5e7eb')+';font-weight:700;color:'+(isHigh?'#dc2626':'#374151')+'">'+oLabel+'</span>';
+    html+='<button onclick="joCopyMkItem('+i+')" style="border:none;background:transparent;cursor:pointer;font-size:13px;padding:0 2px">&#128203;</button>';
+    html+='</div>';
+    html+='<div style="padding:4px 10px 6px 28px;font-size:10px;color:#6b7394">';
+    html+='Issue: '+issue+(contact?' | Contact: '+contact:'');
+    if(noteExtra&&noteExtra.length>1) html+=' | '+noteExtra;
+    html+='</div></div>';
+  }
+  el.innerHTML=html;
+}
+
+window.joCopyMkItem=function(i){
+  var r=_joMkItems[i];
+  var notes=r.notes||'';
+  var om=notes.match(/(\d+[wdh]+) offline/);
+  var text='vlan'+(r.vlan||'?')+' - '+(r.area||'')+'\nCustomer: '+(r.customer||'')+'\nIssue: '+(r.issue||'')+'\nContact: '+(r.contact||'-')+(om?'\nOffline: '+om[1]:'');
+  navigator.clipboard.writeText(text).catch(function(){alert(text);});
+  var el=document.querySelectorAll('#jo-mk-list > div')[i];
+  if(el){var o=el.style.outline;el.style.outline='2px solid #c0392b';setTimeout(function(){el.style.outline=o;},600);}
+};
+
+window.joImportMikroTik=function(){
+  var checked=[];
+  document.querySelectorAll('[data-mk]').forEach(function(c){if(c.checked) checked.push(parseInt(c.dataset.mk));});
+  if(!checked.length){alert('No items selected');return;}
+  var items=checked.map(function(i){
+    return {
+      customer:_joMkItems[i].customer||'',
+      area:_joMkItems[i].area||'MIX AREAS',
+      vlan:_joMkItems[i].vlan||null,
+      address:_joMkItems[i].address||'',
+      contact:_joMkItems[i].contact||'',
+      issue:_joMkItems[i].issue||'Offline router needs site visit',
+      status:'new',priority:_joMkItems[i].priority||'normal',source:'mikrotik'
+    };
+  });
+  joParsed_merge(items,'mikrotik');
+  document.getElementById('jo-mk-status').textContent=items.length+' item'+(items.length!==1?'s':'')+' added to board';
 };
 
 window.joImportFacebook=function(){
