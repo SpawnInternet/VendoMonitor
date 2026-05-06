@@ -974,6 +974,7 @@ async function submitHarvest() {
     harvest_date:         today,
     harvest_window_start: windowStart,
     harvest_window_end:   now,
+    harvested_at:         now,
     vendo_name:           currentItem.sheet_name || currentItem.tg_name || '',
     tg_name:              currentItem.tg_name    || null,
     sheet_name:           currentItem.sheet_name || null,
@@ -1231,7 +1232,7 @@ async function flushQueue() {
             headers: { ...HDR, 'Prefer': 'return=minimal' },
             body: JSON.stringify({
               status: 'harvested',
-              harvested_at: item.data.harvest_date,
+              harvested_at: item.data.harvest_window_end || new Date(item.timestamp || Date.now()).toISOString(),
               total_coins: item.data.coins_total,
               free_coins: item.data.coins_free,
               old_coins: item.data.coins_old,
