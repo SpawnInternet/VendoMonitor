@@ -3798,46 +3798,78 @@ async function hrepAddTBF() {
 }
 
 async function hrepTransferItem(itemId, btn) {
-  // Show dropdown of active routes instead of prompt
-  const ex = document.getElementById('hvo-transfer-drop');
-  if (ex) { ex.remove(); if (ex._itemId == itemId) return; }
+  // Remove any existing transfer popup
+  const ex = document.getElementById('hvo-transfer-pop');
+  if (ex) { ex.remove(); if (ex._itemId === String(itemId)) return; }
 
   btn.textContent = '⏳'; btn.disabled = true;
   const msg = document.getElementById('hrep-msg');
 
   try {
-    const rr = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=30`, {
+    const rr = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=50`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     const routes = await rr.json();
     btn.textContent = '↗ Transfer'; btn.disabled = false;
 
-    if (!routes.length) { if (msg) { msg.textContent = '❌ No active routes found'; msg.style.color = '#dc2626'; } return; }
+    if (!Array.isArray(routes) || !routes.length) {
+      if (msg) { msg.textContent = '❌ No active routes found'; msg.style.color = '#dc2626'; }
+      return;
+    }
 
-    const drop = document.createElement('div');
-    drop.id = 'hvo-transfer-drop';
-    drop._itemId = itemId;
-    const rect = btn.getBoundingClientRect();
-    drop.style.cssText = 'position:fixed;top:' + (rect.bottom+4) + 'px;left:' + rect.left + 'px;z-index:9999;background:#fff;border:1.5px solid #bae6fd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:240px;max-width:300px;overflow:hidden;';
-    drop.innerHTML =
-      '<div style="padding:8px 12px;background:#0284c7;color:#fff;font-size:11px;font-weight:700;">↗ Transfer to route</div>' +
-      routes.map(rt =>
-        '<div data-dest="' + rt.id + '" data-code="' + rt.route_code + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '"' +
-        ' style="padding:9px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;">' +
-          '<div style="font-weight:700;color:#1e3cb8;">' + rt.route_code + ' · ' + (rt.collector||'—') + '</div>' +
-          '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||'') + '</div>' +
-        '</div>'
-      ).join('') +
-      '<div onclick="var el=document.getElementById(&quot;hvo-transfer-drop&quot;);if(el)el.remove();" style="padding:7px 12px;text-align:center;color:#6b7280;font-size:10px;cursor:pointer;background:#f8faff;">Cancel</div>';
+    const pop = document.createElement('div');
+    pop.id = 'hvo-transfer-pop';
+    pop._itemId = String(itemId);
+    pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:29999;display:flex;align-items:center;justify-content:center;padding:16px;';
 
-    drop.querySelectorAll('[data-dest]').forEach(el => {
+    pop.innerHTML =
+      '<div style="background:#fff;border-radius:14px;width:min(460px,100%);max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+        '<div style="background:#0284c7;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+          '<div style="font-size:14px;font-weight:700;">↗ Transfer to Route</div>' +
+          '<button id="hvo-transfer-close" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;line-height:1;">×</button>' +
+        '</div>' +
+        '<div style="padding:10px 14px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">' +
+          '<input id="hvo-transfer-search" placeholder="Search route code or collector..." style="width:100%;padding:7px 10px;border:1.5px solid #bae6fd;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+        '</div>' +
+        '<div id="hvo-transfer-list" style="overflow-y:auto;flex:1;">' +
+          routes.map(rt =>
+            '<div class="hvo-tr-row" data-dest="' + rt.id + '" data-code="' + (rt.route_code||'') + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '" data-area="' + (rt.area||'').replace(/"/g,'&quot;') + '"' +
+            ' style="padding:11px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (rt.route_code||'—') + ' <span style="font-weight:400;color:#374151;">· ' + (rt.collector||'—') + '</span></div>' +
+                '<div style="font-size:10px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||rt.harvest_date||(rt.created_at||'').split('T')[0]||'') + '</div>' +
+              '</div>' +
+              '<span style="font-size:11px;color:#0284c7;font-weight:700;flex-shrink:0;">Transfer →</span>' +
+            '</div>'
+          ).join('') +
+        '</div>' +
+        '<div style="padding:10px 14px;border-top:1px solid #e5e7eb;flex-shrink:0;">' +
+          '<button id="hvo-transfer-cancel" style="width:100%;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151;">Cancel</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(pop);
+
+    const closePop = () => pop.remove();
+    pop.querySelector('#hvo-transfer-close').onclick = closePop;
+    pop.querySelector('#hvo-transfer-cancel').onclick = closePop;
+    pop.addEventListener('click', e => { if (e.target === pop) closePop(); });
+
+    pop.querySelector('#hvo-transfer-search').addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      pop.querySelectorAll('.hvo-tr-row').forEach(row => {
+        row.style.display = (row.dataset.code + row.dataset.col + row.dataset.area).toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+
+    pop.querySelectorAll('.hvo-tr-row').forEach(el => {
       el.onmouseover = () => el.style.background = '#eff6ff';
       el.onmouseout  = () => el.style.background = '';
       el.onclick = async () => {
         const destId = el.dataset.dest;
         const code   = el.dataset.code;
         const col    = el.dataset.col;
-        drop.remove();
+        closePop();
         btn.textContent = '⏳'; btn.disabled = true;
         if (msg) { msg.textContent = 'Transferring…'; msg.style.color = '#6b7280'; }
         try {
@@ -3848,14 +3880,14 @@ async function hrepTransferItem(itemId, btn) {
           });
           if (r2.ok) {
             if (msg) { msg.textContent = '✅ Transferred to ' + code + ' (' + col + ')'; msg.style.color = '#15803d'; }
-            // Update hvoRouteItems cache so Records panel reflects change immediately
             const cachedItem = hvoRouteItems ? hvoRouteItems.find(x => String(x.id) === String(itemId)) : null;
             if (cachedItem) { cachedItem.route_id = parseInt(destId); cachedItem.status = 'pending'; cachedItem.total_coins = null; cachedItem.net_collectible = null; }
             const destBody = document.querySelector('[data-routebody="' + destId + '"]');
             if (destBody && destBody._refresh) destBody._refresh();
-            btn.closest('div[style*="border:1px solid #e5e7eb"]').style.opacity = '0.5';
-            btn.closest('div[style*="border:1px solid #e5e7eb"]').style.pointerEvents = 'none';
-            setTimeout(() => { btn.closest('div[style*="border:1px solid #e5e7eb"]')?.remove(); if(msg) msg.textContent=''; }, 2000);
+            hvoRenderRoutes();
+            const toast = document.getElementById('hv-refresh-toast');
+            if (toast) { toast.textContent = '✅ Transferred to ' + code + ' (' + col + ')'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),3000); }
+            btn.textContent = '↗ Transfer'; btn.disabled = false;
           } else {
             if (msg) { msg.textContent = '❌ Transfer failed'; msg.style.color = '#dc2626'; }
             btn.textContent = '↗ Transfer'; btn.disabled = false;
@@ -3867,12 +3899,6 @@ async function hrepTransferItem(itemId, btn) {
       };
     });
 
-    document.body.appendChild(drop);
-    setTimeout(() => {
-      document.addEventListener('click', function outsideClick(e) {
-        if (!drop.contains(e.target) && e.target !== btn) { drop.remove(); document.removeEventListener('click', outsideClick); }
-      });
-    }, 100);
   } catch(e) {
     btn.textContent = '↗ Transfer'; btn.disabled = false;
     if (msg) { msg.textContent = '❌ ' + e.message; msg.style.color = '#dc2626'; }
@@ -5891,47 +5917,86 @@ function hvoBindBodyEvents(body, routeId) {
 
 /* ── TRANSFER DROPDOWN ── */
 async function hvoShowTransferDropdown(itemId, btn, body) {
-  // Remove existing dropdown
-  const ex = document.getElementById('hvo-transfer-drop');
-  if (ex) { ex.remove(); if (ex._itemId === itemId) return; }
+  // Remove existing transfer popup
+  const ex = document.getElementById('hvo-transfer-pop');
+  if (ex) { ex.remove(); if (ex._itemId === String(itemId)) return; }
 
   btn.textContent = '⏳'; btn.disabled = true;
 
-  // Load active routes
   try {
-    const r = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=30`, {
+    const r = await fetch(`${_SB}/rest/v1/routes?status=eq.active&order=created_at.desc&limit=50`, {
       headers: { 'apikey': _KEY, 'Authorization': 'Bearer ' + _KEY }
     });
     const routes = await r.json();
     btn.textContent = '↗ Transfer'; btn.disabled = false;
 
-    if (!routes.length) { alert('No active routes found. Create a route first.'); return; }
+    if (!Array.isArray(routes) || !routes.length) {
+      alert('No active routes found. Create a route first.');
+      return;
+    }
 
-    const drop = document.createElement('div');
-    drop.id = 'hvo-transfer-drop';
-    drop._itemId = itemId;
-    const rect = btn.getBoundingClientRect();
-    drop.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${rect.left}px;z-index:9999;background:#fff;border:1.5px solid #bae6fd;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:240px;max-width:300px;overflow:hidden;`;
-    drop.innerHTML =
-      '<div style="padding:8px 12px;background:#0284c7;color:#fff;font-size:11px;font-weight:700;">↗ Transfer to route</div>' +
-      routes.map(rt =>
-        '<div data-dest="' + rt.id + '" data-code="' + rt.route_code + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '"' +
-        ' style="padding:9px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:11px;">' +
-          '<div style="font-weight:700;color:#1e3cb8;">' + rt.route_code + ' · ' + (rt.collector||'—') + '</div>' +
-          '<div style="font-size:9px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||rt.created_at?.split('T')[0]||'') + '</div>' +
-        '</div>'
-      ).join('') +
-      '<div onclick="var el=document.getElementById(&quot;hvo-transfer-drop&quot;);if(el)el.remove();" style="padding:7px 12px;text-align:center;color:#6b7280;font-size:10px;cursor:pointer;background:#f8faff;">Cancel</div>';
+    // Full-screen popup (works inside any fixed container)
+    const pop = document.createElement('div');
+    pop.id = 'hvo-transfer-pop';
+    pop._itemId = String(itemId);
+    pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:29999;display:flex;align-items:center;justify-content:center;padding:16px;';
 
-    // Bind clicks
-    drop.querySelectorAll('[data-dest]').forEach(el => {
+    pop.innerHTML =
+      '<div style="background:#fff;border-radius:14px;width:min(460px,100%);max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);">' +
+        '<div style="background:#0284c7;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+          '<div style="font-size:14px;font-weight:700;">↗ Transfer to Route</div>' +
+          '<button id="hvo-transfer-close" style="width:28px;height:28px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:16px;cursor:pointer;line-height:1;">×</button>' +
+        '</div>' +
+        '<div style="padding:10px 14px;border-bottom:1px solid #e5e7eb;flex-shrink:0;">' +
+          '<input id="hvo-transfer-search" placeholder="Search route code or collector..." style="width:100%;padding:7px 10px;border:1.5px solid #bae6fd;border-radius:7px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;">' +
+        '</div>' +
+        '<div id="hvo-transfer-list" style="overflow-y:auto;flex:1;">' +
+          routes.map(rt =>
+            '<div class="hvo-tr-row" data-dest="' + rt.id + '" data-code="' + (rt.route_code||'') + '" data-col="' + (rt.collector||'').replace(/"/g,'&quot;') + '" data-area="' + (rt.area||'').replace(/"/g,'&quot;') + '"' +
+            ' style="padding:11px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+              '<div>' +
+                '<div style="font-size:13px;font-weight:700;color:#1e3cb8;">' + (rt.route_code||'—') + ' <span style="font-weight:400;color:#374151;">· ' + (rt.collector||'—') + '</span></div>' +
+                '<div style="font-size:10px;color:#6b7280;">' + (rt.area||'All areas') + ' · ' + (rt.route_date||rt.harvest_date||(rt.created_at||'').split('T')[0]||'') + '</div>' +
+              '</div>' +
+              '<span style="font-size:11px;color:#0284c7;font-weight:700;flex-shrink:0;">Transfer →</span>' +
+            '</div>'
+          ).join('') +
+        '</div>' +
+        '<div style="padding:10px 14px;border-top:1px solid #e5e7eb;flex-shrink:0;">' +
+          '<button id="hvo-transfer-cancel" style="width:100%;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#374151;">Cancel</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(pop);
+
+    // Close handlers
+    const closePop = () => pop.remove();
+    pop.querySelector('#hvo-transfer-close').onclick = closePop;
+    pop.querySelector('#hvo-transfer-cancel').onclick = closePop;
+    pop.addEventListener('click', e => { if (e.target === pop) closePop(); });
+
+    // Search filter
+    pop.querySelector('#hvo-transfer-search').addEventListener('input', function() {
+      const q = this.value.toLowerCase();
+      pop.querySelectorAll('.hvo-tr-row').forEach(row => {
+        const match = (row.dataset.code + row.dataset.col + row.dataset.area).toLowerCase().includes(q);
+        row.style.display = match ? '' : 'none';
+      });
+    });
+
+    // Hover effect
+    pop.querySelectorAll('.hvo-tr-row').forEach(el => {
       el.onmouseover = () => el.style.background = '#eff6ff';
       el.onmouseout  = () => el.style.background = '';
+    });
+
+    // Transfer click
+    pop.querySelectorAll('.hvo-tr-row').forEach(el => {
       el.onclick = async () => {
-        const destId  = el.dataset.dest;
-        const code    = el.dataset.code;
-        const col     = el.dataset.col;
-        drop.remove();
+        const destId = el.dataset.dest;
+        const code   = el.dataset.code;
+        const col    = el.dataset.col;
+        closePop();
         btn.textContent = '⏳'; btn.disabled = true;
         try {
           const r2 = await fetch(`${_SB}/rest/v1/route_items?id=eq.${itemId}`, {
@@ -5940,30 +6005,20 @@ async function hvoShowTransferDropdown(itemId, btn, body) {
             body: JSON.stringify({ route_id: parseInt(destId), status: 'pending', harvested_at: null, total_coins: null, free_coins: null, old_coins: null, net_collectible: null, spawn_share: null, customer_share: null })
           });
           if (r2.ok) {
-            // Update route_id in hvoRouteItems cache so it appears in the destination route
             const cached = hvoRouteItems ? hvoRouteItems.find(x => String(x.id) === String(itemId)) : null;
             if (cached) { cached.route_id = parseInt(destId); cached.status = 'pending'; cached.total_coins = null; cached.net_collectible = null; }
             if (body && body._refresh) body._refresh();
-            // Also refresh destination route card if visible
-            const destBody = document.querySelector('[data-routebody="' + destId + '"]');
-            if (destBody && destBody._refresh) destBody._refresh();
+            hvoRenderRoutes();
             const toast = document.getElementById('hv-refresh-toast');
             if (toast) { toast.textContent = '✅ Transferred to ' + code + ' (' + col + ')'; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),3000); }
           } else {
             btn.textContent = '↗ Transfer'; btn.disabled = false;
-            alert('Transfer failed');
+            alert('Transfer failed — check console');
           }
         } catch(e) { btn.textContent = '↗ Transfer'; btn.disabled = false; alert('Error: ' + e.message); }
       };
     });
 
-    document.body.appendChild(drop);
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', function outsideClick(e) {
-        if (!drop.contains(e.target) && e.target !== btn) { drop.remove(); document.removeEventListener('click', outsideClick); }
-      });
-    }, 100);
   } catch(e) {
     btn.textContent = '↗ Transfer'; btn.disabled = false;
     alert('Error loading routes: ' + e.message);
