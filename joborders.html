@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPAWN Internet — Job Orders</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+:root {
+  --navy:#1a2744;--blue:#2563eb;--cyan:#06b6d4;--green:#10b981;
+  --yellow:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--orange:#f97316;
+  --bg:#f0f4f8;--white:#ffffff;--border:#e2e8f0;--text:#1e293b;--muted:#94a3b8;
+  --sidebar-w:220px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;}
+.sidebar{width:var(--sidebar-w);background:var(--navy);min-height:100vh;display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;z-index:50;}
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.brand{font-size:13px;font-weight:700;color:#fff;margin-top:10px;line-height:1.3;}
+.brand span{display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1px;}
+.nav{padding:12px 10px;flex:1;display:flex;flex-direction:column;gap:2px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.55);cursor:pointer;transition:all 0.15s;}
+.nav-item:hover{background:rgba(255,255,255,0.07);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,0.12);color:#fff;}
+.nav-item .icon{font-size:15px;width:20px;text-align:center;}
+.nav-count{margin-left:auto;background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;min-width:20px;text-align:center;}
+.nav-section{font-size:10px;font-weight:600;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:1.5px;padding:10px 12px 4px;}
+.sidebar-footer{padding:12px 10px;border-top:1px solid rgba(255,255,255,0.08);}
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:40;}
+.topbar h1{font-size:18px;font-weight:700;color:var(--navy);}
+.topbar .sub{font-size:12px;color:var(--muted);margin-top:1px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.search-wrap{position:relative;}
+.search-wrap input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px 8px 34px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:var(--text);outline:none;width:210px;transition:border 0.15s;}
+.search-wrap input:focus{border-color:var(--blue);}
+.search-wrap .si{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;}
+.btn{padding:8px 16px;border-radius:8px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all 0.15s;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{background:#1d4ed8;}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-outline:hover{border-color:var(--blue);color:var(--blue);}
+.filter-bar{background:var(--white);padding:0 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:2px;}
+.ftab{padding:13px 16px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap;display:flex;align-items:center;gap:7px;}
+.ftab:hover{color:var(--text);}
+.ftab.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:700;}
+.ftab .fc{background:var(--bg);color:var(--muted);font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;}
+.ftab.active .fc{background:var(--navy);color:#fff;}
+.content{padding:22px 24px;flex:1;}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+.stat-card{background:var(--white);border-radius:12px;padding:16px 18px;border:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.si-blue{background:#eff6ff;}.si-yellow{background:#fffbeb;}.si-green{background:#f0fdf4;}.si-red{background:#fef2f2;}
+.stat-info .num{font-size:22px;font-weight:800;color:var(--navy);line-height:1;}
+.stat-info .lbl{font-size:12px;color:var(--muted);margin-top:2px;}
+.jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;}
+.job-card{background:var(--white);border-radius:14px;padding:18px;border:1px solid var(--border);cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;}
+.job-card:hover{border-color:var(--blue);box-shadow:0 4px 20px rgba(37,99,235,0.1);transform:translateY(-2px);}
+.job-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:14px 0 0 14px;}
+.type-vendo_repair::before{background:var(--blue);}
+.type-subscriber_repair::before{background:var(--cyan);}
+.type-vendo_installation::before{background:var(--yellow);}
+.type-subscriber_installation::before{background:var(--green);}
+.type-complaint::before{background:var(--red);}
+.type-unrecognized::before{background:var(--purple);}
+.type-technical::before{background:var(--blue);}
+.jc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
+.jc-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.jc-status{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:capitalize;}
+.st-open{background:#eff6ff;color:var(--blue);}
+.st-in_progress{background:#fffbeb;color:var(--yellow);}
+.st-resolved{background:#f0fdf4;color:var(--green);}
+.st-unresolved{background:#f5f3ff;color:var(--purple);}
+.jc-name{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;}
+.jc-issue{font-size:12px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:12px;}
+.jc-bottom{display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid var(--border);}
+.jc-area{font-size:11px;color:var(--muted);}
+.jc-date{font-size:11px;color:var(--muted);}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,0.5);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--white);border-radius:16px;width:100%;max-width:860px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.2);}
+.modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;}
+.mh-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;}
+.modal-header h2{font-size:15px;font-weight:700;color:var(--navy);}
+.modal-header .mh-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.mhr{margin-left:auto;display:flex;gap:8px;align-items:center;}
+.modal-body{display:grid;grid-template-columns:1fr 290px;flex:1;overflow:hidden;}
+.conv-panel{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;}
+.conv-area{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;background:#f8fafc;}
+.msg{display:flex;flex-direction:column;max-width:80%;}
+.msg.user{align-self:flex-start;}
+.msg.assistant{align-self:flex-end;}
+.msg-bubble{padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;}
+.msg.user .msg-bubble{background:var(--white);border:1px solid var(--border);border-radius:12px 12px 12px 3px;color:var(--text);}
+.msg.assistant .msg-bubble{background:var(--navy);color:#fff;border-radius:12px 12px 3px 12px;}
+.msg-lbl{font-size:10px;color:var(--muted);margin-bottom:4px;padding:0 4px;}
+.msg.assistant .msg-lbl{text-align:right;}
+.reply-area{padding:14px 16px;border-top:1px solid var(--border);background:var(--white);display:flex;gap:8px;align-items:flex-end;}
+.reply-ta{flex:1;border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:var(--text);resize:none;outline:none;min-height:42px;max-height:120px;transition:border 0.15s;}
+.reply-ta:focus{border-color:var(--blue);}
+.send-btn{background:var(--navy);border:none;border-radius:10px;color:#fff;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:600;padding:10px 16px;cursor:pointer;transition:background 0.15s;white-space:nowrap;}
+.send-btn:hover{background:var(--blue);}
+.send-btn:disabled{opacity:0.5;cursor:not-allowed;}
+.info-panel{overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;}
+.info-section h4{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.info-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:7px;gap:8px;}
+.info-label{font-size:12px;color:var(--muted);flex-shrink:0;}
+.info-value{font-size:12px;font-weight:600;color:var(--navy);text-align:right;word-break:break-word;}
+.status-select{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:var(--navy);outline:none;cursor:pointer;background:var(--white);font-weight:600;}
+.notes-ta{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;color:var(--text);resize:vertical;outline:none;min-height:80px;}
+.notes-ta:focus{border-color:var(--blue);}
+.cfg-modal{background:var(--white);border-radius:14px;padding:26px;width:440px;box-shadow:0 20px 60px rgba(0,0,0,0.2);display:flex;flex-direction:column;gap:14px;}
+.cfg-modal h3{font-size:16px;font-weight:700;color:var(--navy);}
+.cfg-modal label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;}
+.cfg-modal input{width:100%;border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;color:var(--text);outline:none;}
+.cfg-modal input:focus{border-color:var(--blue);}
+.cfg-btns{display:flex;gap:8px;justify-content:flex-end;}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;}
+.empty .ei{font-size:52px;opacity:0.25;}
+.empty p{font-size:13px;color:var(--muted);}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--muted);font-size:13px;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;background:linear-gradient(135deg,#f59e0b,#10b981,#2563eb,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;">📡</div>
+      <div class="brand">SPAWN Internet<span>Job Orders</span></div>
+    </div>
+  </div>
+  <div class="nav">
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="setType('all',this)"><span class="icon">📋</span>All Orders<span class="nav-count" id="nc-all">0</span></div>
+    <div class="nav-section">Repairs</div>
+    <div class="nav-item" onclick="setType('vendo_repair',this)"><span class="icon">🔧</span>Vendo Repair<span class="nav-count" id="nc-vendo_repair">0</span></div>
+    <div class="nav-item" onclick="setType('subscriber_repair',this)"><span class="icon">🛠️</span>Subscriber Repair<span class="nav-count" id="nc-subscriber_repair">0</span></div>
+    <div class="nav-section">Installation</div>
+    <div class="nav-item" onclick="setType('vendo_installation',this)"><span class="icon">📶</span>Vendo Install<span class="nav-count" id="nc-vendo_installation">0</span></div>
+    <div class="nav-item" onclick="setType('subscriber_installation',this)"><span class="icon">🏠</span>Subscriber Install<span class="nav-count" id="nc-subscriber_installation">0</span></div>
+    <div class="nav-section">Other</div>
+    <div class="nav-item" onclick="setType('complaint',this)"><span class="icon">😤</span>Complaints<span class="nav-count" id="nc-complaint">0</span></div>
+    <div class="nav-item" onclick="setType('unrecognized',this)"><span class="icon">❓</span>Unknown<span class="nav-count" id="nc-unrecognized">0</span></div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="nav-item" onclick="showConfig()"><span class="icon">⚙️</span>Settings</div>
+    <div class="nav-item" onclick="loadJobs()"><span class="icon">🔄</span>Refresh</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div>
+      <h1 id="pageTitle">All Job Orders</h1>
+      <div class="sub" id="pageSub">—</div>
+    </div>
+    <div class="topbar-right">
+      <div class="search-wrap">
+        <span class="si">🔍</span>
+        <input type="text" placeholder="Search..." oninput="filterJobs(this.value)">
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="ftab active" id="ft-all" onclick="setStatusFilter('all',this)">All<span class="fc" id="fc-all">0</span></div>
+    <div class="ftab" id="ft-open" onclick="setStatusFilter('open',this)">Open<span class="fc" id="fc-open">0</span></div>
+    <div class="ftab" id="ft-in_progress" onclick="setStatusFilter('in_progress',this)">In Progress<span class="fc" id="fc-in_progress">0</span></div>
+    <div class="ftab" id="ft-resolved" onclick="setStatusFilter('resolved',this)">Resolved<span class="fc" id="fc-resolved">0</span></div>
+    <div class="ftab" id="ft-unresolved" onclick="setStatusFilter('unresolved',this)">Unresolved<span class="fc" id="fc-unresolved">0</span></div>
+  </div>
+
+  <div class="content">
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-icon si-blue">📋</div><div class="stat-info"><div class="num" id="st-total">0</div><div class="lbl">Total Orders</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-yellow">⏳</div><div class="stat-info"><div class="num" id="st-open">0</div><div class="lbl">Open</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-blue">🔄</div><div class="stat-info"><div class="num" id="st-prog">0</div><div class="lbl">In Progress</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-green">✅</div><div class="stat-info"><div class="num" id="st-done">0</div><div class="lbl">Resolved</div></div></div>
+    </div>
+    <div id="jobsGrid"><div class="loading"><div class="spinner"></div>Loading job orders...</div></div>
+  </div>
+</div>
+
+<!-- DETAIL MODAL -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header" id="modalHeader"></div>
+    <div class="modal-body">
+      <div class="conv-panel">
+        <div class="conv-area" id="convArea"></div>
+        <div class="reply-area">
+          <textarea class="reply-ta" id="replyInput" placeholder="Type your reply..."
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply()}"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="sendReply()">Send ↗</button>
+        </div>
+      </div>
+      <div class="info-panel" id="infoPanel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="modal-overlay" id="configModal">
+  <div class="cfg-modal">
+    <h3>⚙️ Configuration</h3>
+    <div><label>Supabase Anon Key</label><input type="password" id="cfg-key" placeholder="eyJ..."></div>
+    <div><label>FB Page Token (for replies)</label><input type="password" id="cfg-fb" placeholder="EAA..."></div>
+    <div class="cfg-btns">
+      <button class="btn btn-outline" onclick="hideConfig()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEYS={key:'jo_supa_key',fb:'jo_fb_token'};
+let supaUrl='https://cviraqfhphhsonjmrtvu.supabase.co';
+let supaKey=localStorage.getItem(KEYS.key)||'';
+let fbToken=localStorage.getItem(KEYS.fb)||'';
+let allJobs=[],currentType='all',currentStatus='all',currentJob=null,searchQ='';
+
+const TYPES={
+  vendo_repair:        {icon:'🔧',label:'Vendo Repair',       bg:'#eff6ff'},
+  subscriber_repair:   {icon:'🛠️',label:'Subscriber Repair',  bg:'#e0f2fe'},
+  vendo_installation:  {icon:'📶',label:'Vendo Installation', bg:'#fffbeb'},
+  subscriber_installation:{icon:'🏠',label:'Subscriber Install',bg:'#f0fdf4'},
+  complaint:           {icon:'😤',label:'Complaint',          bg:'#fef2f2'},
+  unrecognized:        {icon:'❓',label:'Unknown',            bg:'#f5f3ff'},
+  technical:           {icon:'🔧',label:'Technical',          bg:'#eff6ff'},
+};
+
+function showConfig(){document.getElementById('cfg-key').value=supaKey;document.getElementById('cfg-fb').value=fbToken;document.getElementById('configModal').classList.add('show');}
+function hideConfig(){document.getElementById('configModal').classList.remove('show');}
+function saveConfig(){supaKey=document.getElementById('cfg-key').value.trim();fbToken=document.getElementById('cfg-fb').value.trim();localStorage.setItem(KEYS.key,supaKey);localStorage.setItem(KEYS.fb,fbToken);hideConfig();loadJobs();}
+
+async function sbGet(p){const r=await fetch(`${supaUrl}/rest/v1/${p}`,{headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`}});return r.json();}
+async function sbPatch(p,d){const r=await fetch(`${supaUrl}/rest/v1/${p}`,{method:'PATCH',headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(d)});return r.json();}
+
+async function loadJobs(){
+  if(!supaUrl||!supaKey){showConfig();return;}
+  document.getElementById('jobsGrid').innerHTML='<div class="loading"><div class="spinner"></div>Loading...</div>';
+  try{allJobs=await sbGet('job_orders?select=*&order=created_at.desc');updateCounts();renderGrid();}
+  catch(e){document.getElementById('jobsGrid').innerHTML='<div class="loading">❌ Connection failed</div>';}
+}
+
+function updateCounts(){
+  const total=allJobs.length,open=allJobs.filter(j=>j.status==='open').length,prog=allJobs.filter(j=>j.status==='in_progress').length,done=allJobs.filter(j=>j.status==='resolved').length,unres=allJobs.filter(j=>j.status==='unresolved').length;
+  document.getElementById('st-total').textContent=total;document.getElementById('st-open').textContent=open;document.getElementById('st-prog').textContent=prog;document.getElementById('st-done').textContent=done;
+  document.getElementById('fc-all').textContent=total;document.getElementById('fc-open').textContent=open;document.getElementById('fc-in_progress').textContent=prog;document.getElementById('fc-resolved').textContent=done;document.getElementById('fc-unresolved').textContent=unres;
+  document.getElementById('nc-all').textContent=total;
+  ['vendo_repair','subscriber_repair','vendo_installation','subscriber_installation','complaint','unrecognized'].forEach(t=>{
+    const el=document.getElementById('nc-'+t);
+    if(el)el.textContent=allJobs.filter(j=>(j.type||'unrecognized')===t).length;
+  });
+  document.getElementById('pageSub').textContent=`${total} total · ${new Date().toLocaleTimeString('en-PH')}`;
+}
+
+function setType(type,el){currentType=type;currentStatus='all';document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));el.classList.add('active');document.getElementById('pageTitle').textContent=type==='all'?'All Job Orders':(TYPES[type]?.label||type);document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));document.getElementById('ft-all').classList.add('active');renderGrid();}
+
+function setStatusFilter(status,el){currentStatus=status;document.querySelectorAll('.ftab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderGrid();}
+
+function filterJobs(q){searchQ=q.toLowerCase();renderGrid();}
+
+function renderGrid(){
+  let jobs=allJobs;
+  if(currentType!=='all')jobs=jobs.filter(j=>(j.type||'technical')===currentType);
+  if(currentStatus!=='all')jobs=jobs.filter(j=>j.status===currentStatus);
+  if(searchQ)jobs=jobs.filter(j=>(j.customer||'').toLowerCase().includes(searchQ)||(j.issue||'').toLowerCase().includes(searchQ)||(j.area||'').toLowerCase().includes(searchQ));
+  if(!jobs.length){document.getElementById('jobsGrid').innerHTML='<div class="empty"><div class="ei">📭</div><p>No job orders found</p></div>';return;}
+  document.getElementById('jobsGrid').innerHTML=`<div class="jobs-grid">${jobs.map(j=>{
+    const type=j.type||'unrecognized',t=TYPES[type]||TYPES.unrecognized;
+    const sc='st-'+(j.status||'open').replace('_','_');
+    const d=j.created_at?new Date(j.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'';
+    return `<div class="job-card type-${type}" onclick="openDetail('${j.id}')">
+      <div class="jc-top"><div class="jc-icon" style="background:${t.bg}">${t.icon}</div><span class="jc-status st-${j.status||'open'}">${(j.status||'open').replace('_',' ')}</span></div>
+      <div class="jc-name">${esc(j.customer||'Unknown')}</div>
+      <div class="jc-issue">${esc(j.issue||'No description')}</div>
+      <div class="jc-bottom"><span class="jc-area">📍 ${esc(j.area||'—')}</span><span class="jc-date">${d}</span></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function openDetail(id){
+  currentJob=allJobs.find(j=>j.id===id);
+  if(!currentJob)return;
+  const j=currentJob,type=j.type||'unrecognized',t=TYPES[type]||TYPES.unrecognized;
+  let conv=[];
+  if(j.sender_id){try{const rows=await sbGet(`fb_conversations?sender_id=eq.${j.sender_id}&select=messages`);if(rows&&rows[0])conv=rows[0].messages||[];}catch(e){}}
+  document.getElementById('modalHeader').innerHTML=`
+    <div class="mh-icon" style="background:${t.bg}">${t.icon}</div>
+    <div><h2>${esc(j.customer||'Unknown')}</h2><div class="mh-sub">${t.label} · ${esc(j.area||'—')} · 📞 ${esc(j.contact||'—')}</div></div>
+    <div class="mhr">
+      <select class="status-select" style="width:130px" onchange="updateStatus('${j.id}',this.value)">
+        ${['open','in_progress','resolved','unresolved'].map(s=>`<option value="${s}" ${j.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('')}
+      </select>
+      <button class="btn btn-outline" onclick="closeDetail()">✕</button>
+    </div>`;
+  document.getElementById('convArea').innerHTML=conv.length?conv.map(m=>`<div class="msg ${m.role==='user'?'user':'assistant'}"><div class="msg-lbl">${m.role==='user'?'👤 Customer':'🤖 SPAWN AI'}</div><div class="msg-bubble">${esc(m.content)}</div></div>`).join(''):'<div class="empty"><div class="ei">💬</div><p>No conversation history</p></div>';
+  setTimeout(()=>{const ca=document.getElementById('convArea');if(ca)ca.scrollTop=ca.scrollHeight;},50);
+  document.getElementById('infoPanel').innerHTML=`
+    <div class="info-section"><h4>Customer</h4>
+      <div class="info-row"><span class="info-label">Name</span><span class="info-value">${esc(j.customer||'—')}</span></div>
+      <div class="info-row"><span class="info-label">Contact</span><span class="info-value">${esc(j.contact||'—')}</span></div>
+      <div class="info-row"><span class="info-label">Address</span><span class="info-value">${esc(j.address||'—')}</span></div>
+      <div class="info-row"><span class="info-label">Area</span><span class="info-value">${esc(j.area||'—')}</span></div>
+    </div>
+    <div class="info-section"><h4>Job Details</h4>
+      <div class="info-row"><span class="info-label">Type</span><span class="info-value">${t.label}</span></div>
+      <div class="info-row"><span class="info-label">Issue</span><span class="info-value">${esc(j.issue||'—')}</span></div>
+      <div class="info-row"><span class="info-label">Priority</span><span class="info-value">${esc(j.priority||'normal')}</span></div>
+      <div class="info-row"><span class="info-label">Date</span><span class="info-value">${j.created_at?new Date(j.created_at).toLocaleString('en-PH'):'—'}</span></div>
+    </div>
+    <div class="info-section"><h4>Update Status</h4>
+      <select class="status-select" onchange="updateStatus('${j.id}',this.value)">
+        ${['open','in_progress','resolved','unresolved'].map(s=>`<option value="${s}" ${j.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('')}
+      </select>
+    </div>
+    <div class="info-section"><h4>Internal Notes</h4>
+      <textarea class="notes-ta" id="notesInput" placeholder="Add notes...">${esc(j.notes||'')}</textarea>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px;font-size:12px;padding:8px" onclick="saveNotes('${j.id}')">Save Notes</button>
+    </div>`;
+  document.getElementById('replyInput').value='';
+  document.getElementById('detailModal').classList.add('show');
+}
+
+function closeDetail(){document.getElementById('detailModal').classList.remove('show');currentJob=null;}
+
+async function updateStatus(id,status){
+  await sbPatch(`job_orders?id=eq.${id}`,{status,updated_at:new Date().toISOString()});
+  const job=allJobs.find(j=>j.id===id);if(job)job.status=status;
+  updateCounts();renderGrid();
+}
+
+async function saveNotes(id){
+  const notes=document.getElementById('notesInput')?.value||'';
+  await sbPatch(`job_orders?id=eq.${id}`,{notes,updated_at:new Date().toISOString()});
+  const job=allJobs.find(j=>j.id===id);if(job)job.notes=notes;
+  alert('✅ Notes saved!');
+}
+
+async function sendReply(){
+  const input=document.getElementById('replyInput'),btn=document.getElementById('sendBtn');
+  const text=input.value.trim();
+  if(!text||!currentJob?.sender_id){if(!currentJob?.sender_id)alert('No sender ID for this job.');return;}
+  if(!fbToken){alert('FB Token not set. Click Settings.');return;}
+  btn.disabled=true;btn.textContent='Sending...';
+  try{
+    const r=await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${fbToken}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient:{id:currentJob.sender_id},message:{text}})});
+    const d=await r.json();if(d.error)throw new Error(d.error.message);
+    const ca=document.getElementById('convArea');
+    const div=document.createElement('div');div.className='msg assistant';
+    div.innerHTML=`<div class="msg-lbl">👤 You (Manual)</div><div class="msg-bubble">${esc(text)}</div>`;
+    ca.appendChild(div);ca.scrollTop=ca.scrollHeight;
+    input.value='';input.style.height='auto';
+  }catch(e){alert('❌ '+e.message);}
+  finally{if(btn){btn.disabled=false;btn.textContent='Send ↗';}}
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+document.getElementById('detailModal').addEventListener('click',function(e){if(e.target===this)closeDetail();});
+document.getElementById('configModal').addEventListener('click',function(e){if(e.target===this)hideConfig();});
+
+if(!supaKey)showConfig();
+else{loadJobs();setInterval(loadJobs,30000);}
+</script>
+</body>
+</html>
