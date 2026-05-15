@@ -315,7 +315,7 @@ function renderGrid(){
     const type=j.type||'unrecognized',t=TYPES[type]||TYPES.unrecognized;
     const src=j.source||'facebook';
     const d=j.created_at?new Date(j.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'';
-    const vlanTag=j.vlan?`<span class="vlan-badge">VLAN ${esc(String(j.vlan))}</span>`:'';
+    const vlanTag=(j.vlan!=null&&j.vlan!=='')?`<span class="vlan-badge">VLAN ${esc(String(j.vlan))}</span>`:'';
     const hasNote=j.notes&&j.notes.includes('Lease note:');
     const isIpOnly=j.notes&&j.notes.includes('No lease note');
     const noteTag=src==='mikrotik'?(hasNote?'<span class="note-tag has-note">📝 Has note</span>':(isIpOnly?'<span class="note-tag ip-only">🔵 IP only</span>':'')):'';
@@ -349,7 +349,7 @@ function renderConvGC(conv,j){
       <div style="font-size:12px;color:var(--muted);text-align:center">No conversation — job was created automatically from router scan</div>
       <div class="mikrotik-info-box" style="width:100%;max-width:320px">
         <div class="mk-row"><span class="mk-label">Offline</span><span class="mk-val">${esc(offLabel)}</span></div>
-        ${j.vlan?`<div class="mk-row"><span class="mk-label">VLAN</span><span class="mk-val">${esc(String(j.vlan))}</span></div>`:''}
+        ${(j.vlan!=null&&j.vlan!=='')?`<div class="mk-row"><span class="mk-label">VLAN</span><span class="mk-val">${esc(String(j.vlan))}</span></div>`:''}
         <div class="mk-row"><span class="mk-label">MAC</span><span class="mk-val">${esc(mac)}</span></div>
         ${hasLeaseNote?`<div class="mk-row"><span class="mk-label">Lease Note</span><span class="mk-val">${esc(leaseNote)}</span></div>`:''}
         <div class="mk-row"><span class="mk-label">Type</span><span class="mk-val">${noteKind}</span></div>
@@ -391,7 +391,7 @@ async function openDetail(id){
   document.getElementById('convHeader').querySelector('.conv-header-avatar').textContent=src==='mikrotik'?'📡':(src==='office'?'🏢':'💬');
   document.getElementById('modalHeader').innerHTML=`
     <div class="mh-icon" style="background:${t.bg}">${t.icon}</div>
-    <div><h2>${esc(j.customer||'Unknown')}${j.vlan?` <span class="vlan-badge">VLAN ${esc(String(j.vlan))}</span>`:''}</h2>
+    <div><h2>${esc(j.customer||'Unknown')}${(j.vlan!=null&&j.vlan!=='')?` <span class="vlan-badge">VLAN ${esc(String(j.vlan))}</span>`:''}</h2>
     <div class="mh-sub">${t.label} · ${sourceBadge(src)} · 📞 ${esc(j.contact||'—')}</div></div>
     <div class="mhr">
       <select class="status-select" style="width:130px" onchange="updateStatus('${j.id}',this.value)">
@@ -410,7 +410,7 @@ async function openDetail(id){
       <div class="info-row"><span class="info-label">Contact</span><span class="info-value">${esc(j.contact||'—')}</span></div>
       <div class="info-row"><span class="info-label">Address</span><span class="info-value">${esc(j.address||'—')}</span></div>
       <div class="info-row"><span class="info-label">Area</span><span class="info-value">${esc(j.area||'—')}</span></div>
-      ${j.vlan?`<div class="info-row"><span class="info-label">VLAN</span><span class="info-value">${esc(String(j.vlan))}</span></div>`:''}
+      ${(j.vlan!=null&&j.vlan!=='')?`<div class="info-row"><span class="info-label">VLAN</span><span class="info-value">${esc(String(j.vlan))}</span></div>`:''}
     </div>
     <div class="info-section"><h4>Job Details</h4>
       <div class="info-row"><span class="info-label">Type</span><span class="info-value">${t.label}</span></div>
