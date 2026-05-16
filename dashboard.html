@@ -10296,6 +10296,51 @@ async function resetWebhook() {
 // Check webhook health every 5 minutes — no-op since Railway replaced it
 setInterval(checkWebhookHealth, 5 * 60 * 1000);
 
+// ── Auto Telegram Session Health Check every 3 minutes ───
+let _tgAutoChecking = false;
+async function autoCheckTgSession() {
+  if (_tgAutoChecking) return;
+  _tgAutoChecking = true;
+  try {
+    const url = getTgUrl();
+    if (!url) return;
+    const r = await fetch(`${url}/api/tg_status`, { signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    const banner = document.getElementById('tg-auto-alert');
+    const pill   = document.getElementById('tg-status-pill');
+
+    if (data.status === 'ok') {
+      // Session healthy — hide alert if showing
+      if (banner) banner.style.display = 'none';
+      if (pill) { pill.textContent = '● Session Active'; pill.style.background='#dcfce7'; pill.style.color='#16a34a'; }
+    } else {
+      // Session problem — show top alert
+      if (pill) { pill.textContent = '❌ Session Error'; pill.style.background='#fee2e2'; pill.style.color='#dc2626'; }
+      if (!banner) {
+        const el = document.createElement('div');
+        el.id = 'tg-auto-alert';
+        el.style.cssText = 'position:fixed;top:52px;left:0;right:0;background:#d97706;color:white;padding:10px 16px;font-size:13px;font-weight:700;z-index:1000;display:flex;justify-content:space-between;align-items:center;gap:10px;';
+        el.innerHTML = `⚠️ Telegram session problem detected: <b>${data.status}</b> — Go to SYSTEM tab to fix.
+          <button onclick="showPanel('system');document.getElementById('tg-auto-alert').style.display='none';"
+            style="padding:4px 12px;background:white;color:#d97706;border:none;border-radius:4px;cursor:pointer;font-weight:700;white-space:nowrap;">
+            Fix Now →
+          </button>`;
+        document.body.appendChild(el);
+      } else {
+        banner.style.display = 'flex';
+        banner.querySelector('b').textContent = data.status;
+      }
+    }
+  } catch(e) {
+    // Railway unreachable — show subtle warning only if bot was previously ok
+  } finally {
+    _tgAutoChecking = false;
+  }
+}
+// Run once on load after 10s, then every 3 minutes
+setTimeout(autoCheckTgSession, 10000);
+setInterval(autoCheckTgSession, 3 * 60 * 1000);
+
 // Also check last transaction time every minute (silent — uses sb() error handling)
 setInterval(async () => {
   if (sbOffline) return; // don't pile on when already offline
