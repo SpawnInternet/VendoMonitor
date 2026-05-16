@@ -8345,6 +8345,7 @@ let analyticsAreaChart = null;
 
 // ── Supabase ──────────────────────────────────────────────
 let sbOffline = false;
+let sbFailCount = 0;
 
 async function sb(table, params="", limit=1000) {
   try {
@@ -8357,9 +8358,11 @@ async function sb(table, params="", limit=1000) {
       throw new Error(`HTTP ${r.status}: ${err.slice(0,200)}`);
     }
     sbOffline = false;
+    sbFailCount = 0;
     return r.json();
   } catch(e) {
-    if (!sbOffline) { sbOffline = true; showConnError(e.message); }
+    sbFailCount++;
+    if (sbFailCount >= 2 && !sbOffline) { sbOffline = true; showConnError(e.message); }
     return [];
   }
 }
@@ -8404,6 +8407,7 @@ async function testConnection() {
     const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR });
     if (r.ok) {
       sbOffline = false;
+      sbFailCount = 0;
       const el = document.getElementById("conn-error-banner");
       if (el) el.remove();
     } else {
@@ -10702,7 +10706,7 @@ async function runFullBackup() {
 // TELEGRAM SESSION AUTH
 // ══════════════════════════════════════════════════════════
 function getTgUrl() {
-  return localStorage.getItem("railway_url") || "";
+  return localStorage.getItem("railway_url") || "https://vendomonitor-cloud-production.up.railway.app";
 }
 function saveTgUrl() {
   const url = (document.getElementById("railway-url")?.value||"").trim().replace(/\/$/,"");
@@ -10797,7 +10801,7 @@ async function submitTgCode() {
 
 // Auto-restore saved Railway URL
 (function(){
-  const saved = localStorage.getItem("railway_url");
+  const saved = localStorage.getItem("railway_url") || "https://vendomonitor-cloud-production.up.railway.app";
   if (saved) { const el=document.getElementById("railway-url"); if(el)el.value=saved; }
   // Restore last backup time
   const lb = localStorage.getItem("last_backup");
