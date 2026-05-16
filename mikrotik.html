@@ -80,7 +80,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:1
 .count-bar{padding:6px 20px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:11px;color:var(--text3);font-family:var(--mono)}
 .table-wrap{flex:1;overflow-x:auto}
 table{width:100%;border-collapse:collapse}
-thead th{background:var(--bg2);padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);border-bottom:1px solid var(--border);position:sticky;top:56px;white-space:nowrap}
+thead th{background:var(--bg2);padding:10px 16px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);border-bottom:1px solid var(--border);position:sticky;top:0;white-space:nowrap}
 tbody tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s}
 tbody tr:hover{background:rgba(30,45,74,0.03)}
 tbody tr.high-row{border-left:3px solid var(--red)}
@@ -211,7 +211,7 @@ td{padding:10px 16px;font-size:13px;vertical-align:middle}
             <th class="td-num">#</th><th class="td-status">Status</th><th class="td-type">Type</th>
             <th class="td-area">Area</th><th class="td-priority">Priority</th><th class="td-vlan">VLAN</th>
             <th class="td-name">Name / Customer</th><th class="td-issue">Issue</th>
-            <th class="td-time">Offline</th><th class="td-action">Action</th>
+            <th class="td-time">Date / Offline</th><th class="td-action">Action</th>
           </tr>
         </thead>
         <tbody id="tbody"><tr><td colspan="10"><div class="empty"><div class="empty-icon">⟳</div>Loading...</div></td></tr></tbody>
@@ -321,12 +321,13 @@ function render(){
     const vlanCell=j.vlan?`<span class="b-vlan">${j.vlan}</span>`:'—';
     const notes=j.notes||'',offM=notes.match(/^([^|]+)\|/),offLabel=offM?offM[1].trim():'';
     const dateStr=j.created_at?new Date(j.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'—';
+    const timeCell=isSub?dateStr:(offLabel||dateStr);
     return `<tr class="${rowCls}" onclick="openPanel(${i})">
       <td class="td-num">${i+1}</td><td class="td-status">${stBadge}</td><td class="td-type">${typeBadge}</td>
       <td class="td-area" style="font-size:12px;color:var(--text2)">${j.area||'—'}</td><td class="td-priority">${priLabel}</td>
       <td class="td-vlan">${vlanCell}</td><td class="td-name"><span class="td-name-text">${esc(j.customer||'Unknown')}</span></td>
       <td class="td-issue"><span class="td-issue-text">${esc(j.issue||'—')}</span></td>
-      <td class="td-time">${offLabel||dateStr}</td>
+      <td class="td-time">${timeCell}</td>
       <td class="td-action" onclick="event.stopPropagation()"><button class="${isDone?'act done':'act'}" onclick="quickResolve('${j.id}',this)">${isDone?'Done ✓':'Resolve'}</button></td>
     </tr>`;
   }).join('');
