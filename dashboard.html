@@ -8350,8 +8350,8 @@ let sbFailCount = 0;
 async function sb(table, params="", limit=1000) {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=${limit}`, {
-      headers: HDR,
-      signal: AbortSignal.timeout(25000)
+      headers: {...HDR, 'Statement-Timeout': '0'},
+      signal: AbortSignal.timeout(45000)
     });
     if (!r.ok) {
       const err = await r.text();
@@ -8590,7 +8590,7 @@ async function openVendoFromSearch(vendo, area) {
   hideBread();
   // Load vendo list only if empty
   if (!allVendos.length) {
-    const v = await sb("summary_by_vendo","order=sales.desc",2000);
+    const v = await sb("summary_by_vendo","order=sales.desc&select=vendo,area,sales,txn_count,today_sales,last_date",2000);
     allVendos = v;
   }
   await openVendoDetail(vendo, area);
@@ -8611,7 +8611,7 @@ async function loadDashboard() {
       sb("trend_7day","",7),
       sb("hacked_summary_mat","order=txn_count.desc",1000),
       sb("transactions","select=date,time,vendo,area,amount,created_at&order=created_at.desc",30),
-      sb("summary_by_vendo","order=sales.desc",2000)
+      sb("summary_by_vendo","order=sales.desc&select=vendo,area,sales,txn_count,today_sales,last_date",2000)
     ]);
 
     allVendos = vendos;
@@ -8766,7 +8766,7 @@ function filterModalVendos(q) {
 // ══════════════════════════════════════════════════════════
 async function loadVendos() {
   if(!allVendos.length) {
-    const v = await sb("summary_by_vendo","order=sales.desc",2000);
+    const v = await sb("summary_by_vendo","order=sales.desc&select=vendo,area,sales,txn_count,today_sales,last_date",2000);
     allVendos = v;
   }
   const totalSales = allVendos.reduce((s,v)=>s+parseFloat(v.sales||0),0);
@@ -9519,12 +9519,12 @@ let _anlC=null;
 async function loadAnalytics(){
   if(_anlC){_anlR(_anlC);return;}
   try{
-    const [tr,aD]=await Promise.all([
-      fetch(`${SB_URL}/rest/v1/transactions?select=date,amount&is_skipped=eq.false&date=gte.2025-01-01&order=date.asc`,{headers:{...HDR,'Range':'0-49999','Prefer':'count=none'}}),
+    const [ms,aD]=await Promise.all([
+      sb('monthly_summary_mat','order=month.asc',48),
       sb('summary_by_area','order=total_sales.desc',20)
     ]);
-    const rows=tr.ok?await tr.json():[];
-    const mm={};rows.forEach(r=>{const m=(r.date||'').slice(0,7);if(m)mm[m]=(mm[m]||0)+parseFloat(r.amount||0);});
+    const mm={};
+    (ms||[]).forEach(r=>{ if(r.month) mm[r.month]=(mm[r.month]||0)+parseFloat(r.total_sales||0); });
     _anlC={mm,aD};_anlR(_anlC);
   }catch(e){console.error('loadAnalytics:',e);}
 }
@@ -9918,7 +9918,7 @@ async function loadSkipped() {
   // Step 2: Use skipped_by_vendo view — one row per vendo, fast
   try {
     const r = await fetch(
-      `${SB_URL}/rest/v1/skipped_by_vendo?select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc&limit=1000`,
+      `${SB_URL}/rest/v1/skipped_by_vendo_mat?select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc&limit=1000`,
       { headers: HDR, signal: AbortSignal.timeout(30000) }
     );
     const vendoRows = r.ok ? await r.json() : [];
