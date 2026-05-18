@@ -8599,15 +8599,6 @@ async function openVendoFromSearch(vendo, area) {
 // ══════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
-// ── Refresh materialized views (call after new transactions arrive) ──
-async function refreshMatViews() {
-  try {
-    await fetch(`${SB_URL}/rest/v1/rpc/refresh_mat_views`, {
-      method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: '{}'
-    });
-  } catch(e) { /* silent — views will just show slightly stale data */ }
-}
-
 async function loadDashboard() {
   // Always hide harvest overlays when loading dashboard
   ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){
@@ -8627,9 +8618,7 @@ async function loadDashboard() {
     suspMap   = {};
     hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
 
-    // Exclude MIX AREAS from totals to prevent double-counting
-    // MIX AREAS = transactions from outside named area GCs (already counted in their area)
-    // Pull accurate totals from summary_totals (single pre-aggregated row — always correct)
+    // Pull accurate totals from summary_totals (pre-aggregated, always correct)
     const totRow     = await sb("summary_totals","",1);
     const totalTx    = parseInt(totRow[0]?.txn_count  || areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0));
     const totalSales = parseFloat(totRow[0]?.total_sales || areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0));
@@ -9895,7 +9884,10 @@ function removeFromNotSuspicious(vendo) {
 
 async function removeNotSuspicious(id, vendo, btn) {
   if(!confirm(`Restore "${vendo}" back to suspicious list?`)) return;
-  await fetch(`${SB_URL}/rest/v1/not_suspicious?id=eq.${id}`,{method:"DELETE",headers:HDR});
+  // Use localStorage only - no not_suspicious table in DB
+  let notsus = JSON.parse(localStorage.getItem("not_suspicious_vendos") || "[]");
+  notsus = notsus.filter(v => v.vendo !== vendo);
+  localStorage.setItem("not_suspicious_vendos", JSON.stringify(notsus));
   btn.closest("tr").remove();
   showAlert(`↩ ${vendo} restored to suspicious list!`,"ok");
 }
@@ -10332,7 +10324,7 @@ async function autoCheckTgSession() {
         el.id = 'tg-auto-alert';
         el.style.cssText = 'position:fixed;top:52px;left:0;right:0;background:#d97706;color:white;padding:10px 16px;font-size:13px;font-weight:700;z-index:1000;display:flex;justify-content:space-between;align-items:center;gap:10px;';
         el.innerHTML = `⚠️ Telegram session problem detected: <b>${data.status}</b> — Go to SYSTEM tab to fix.
-          <button onclick="showPanel('system');document.getElementById('tg-auto-alert').style.display='none';"
+          <button onclick="showP('status',document.querySelector('.nav-bar button[data-panel=status]'));document.getElementById('tg-auto-alert').style.display='none';"
             style="padding:4px 12px;background:white;color:#d97706;border:none;border-radius:4px;cursor:pointer;font-weight:700;white-space:nowrap;">
             Fix Now →
           </button>`;
