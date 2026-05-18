@@ -8590,7 +8590,7 @@ async function openVendoFromSearch(vendo, area) {
   hideBread();
   // Load vendo list only if empty
   if (!allVendos.length) {
-    const v = await sb("vendo_summary","order=sales.desc",2000);
+    const v = await sb("vendo_summary_mat","order=sales.desc",2000);
     allVendos = v;
   }
   await openVendoDetail(vendo, area);
@@ -8775,7 +8775,7 @@ function filterModalVendos(q) {
 // ══════════════════════════════════════════════════════════
 async function loadVendos() {
   if(!allVendos.length) {
-    const v = await sb("vendo_summary","order=sales.desc",2000);
+    const v = await sb("vendo_summary_mat","order=sales.desc",2000);
     allVendos = v;
   }
   const totalSales = allVendos.reduce((s,v)=>s+parseFloat(v.sales||0),0);
@@ -9168,7 +9168,7 @@ function hPage(d){ }
 // HACKED — TODO LIST
 // ══════════════════════════════════════════════════════════
 async function loadSuspicious() {
-  const rows=await sb("hacked_summary","order=txn_count.desc",1000);
+  const rows=await sb("hacked_summary_mat","order=txn_count.desc",1000);
   hackedAll=rows;
   const total_txns=rows.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
   const total_amt=rows.reduce((s,h)=>s+parseFloat(h.total_amount||0),0);
@@ -10916,7 +10916,7 @@ async function fullBackup() {
 
     // ── STEP 2: Vendo Summary CSV ─────────────────────────
     log('Fetching vendo summary...');
-    const vsR = await fetch(`${SB_URL}/rest/v1/vendo_summary?select=vendo,area,sales,txn_count&order=sales.desc&limit=2000`, { headers: HDR });
+    const vsR = await fetch(`${SB_URL}/rest/v1/vendo_summary_mat?select=vendo,area,sales,txn_count&order=sales.desc&limit=2000`, { headers: HDR });
     const vs = await vsR.json();
     if (vs?.length) {
       const vsCsv = ['vendo,area,sales,txn_count', ...vs.map(r => `"${r.vendo}","${r.area}",${r.sales},${r.txn_count}`)].join('\n');
