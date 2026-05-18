@@ -8599,6 +8599,15 @@ async function openVendoFromSearch(vendo, area) {
 // ══════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
+// ── Refresh materialized views (call after new transactions arrive) ──
+async function refreshMatViews() {
+  try {
+    await fetch(`${SB_URL}/rest/v1/rpc/refresh_mat_views`, {
+      method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: '{}'
+    });
+  } catch(e) { /* silent — views will just show slightly stale data */ }
+}
+
 async function loadDashboard() {
   // Always hide harvest overlays when loading dashboard
   ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){
@@ -8607,8 +8616,8 @@ async function loadDashboard() {
   document.getElementById("dash-stats").innerHTML = '<div style="padding:20px;color:var(--mu)">Loading...</div>';
   try {
     const [areas, trend, hacked, recent, vendos] = await Promise.all([
-      sb("area_summary","",20),
-      sb("trend_7day","",7),
+      sb("area_summary_mat","",20),
+      sb("trend_7day_mat","",7),
       sb("hacked_summary_mat","order=txn_count.desc",1000),
       sb("transactions","select=date,time,vendo,area,amount,created_at&order=created_at.desc",30),
       sb("vendo_summary_mat","order=sales.desc",2000)
@@ -9521,7 +9530,7 @@ async function loadAnalytics(){
   try{
     const [tr,aD]=await Promise.all([
       fetch(`${SB_URL}/rest/v1/transactions?select=date,amount&is_skipped=eq.false&date=gte.2025-01-01&order=date.asc`,{headers:{...HDR,'Range':'0-49999','Prefer':'count=none'}}),
-      sb('area_summary','',20)
+      sb('area_summary_mat','',20)
     ]);
     const rows=tr.ok?await tr.json():[];
     const mm={};rows.forEach(r=>{const m=(r.date||'').slice(0,7);if(m)mm[m]=(mm[m]||0)+parseFloat(r.amount||0);});
