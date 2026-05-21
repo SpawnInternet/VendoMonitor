@@ -8654,6 +8654,7 @@ function toast(msg, dur) {
             <button class="btn p" onclick="saveStgEdit()">💾 Save</button>
             <button class="btn sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="importStgRow()">✅ Import to Harvests</button>
             <button class="btn sm danger" onclick="skipStgRow()">⏭ Skip</button>
+            <button class="btn sm" onclick="deleteStgRow()" style="background:#7f1d1d;color:#fff;border-color:#7f1d1d">🗑 Delete</button>
             <button class="btn sm" onclick="closeStgModal()" style="margin-left:auto">✕ Close</button>
           </div>
         </div>
@@ -9248,6 +9249,33 @@ async function skipStgRow() {
     method:'PATCH',
     headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json'},
     body: JSON.stringify({status:'skipped'})
+  });
+  closeStgModal();
+  await importRefreshStaging();
+  renderStaging();
+}
+
+async function deleteBulkStg() {
+  const done = stgData.filter(r=>r.status==='imported'||r.status==='skipped');
+  if (!done.length) return alert('No imported or skipped rows to delete.');
+  if (!confirm(`Delete ${done.length} imported/skipped rows from staging?`)) return;
+  for (const r of done) {
+    await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${r.id}`, {
+      method:'DELETE',
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY}
+    });
+  }
+  await importRefreshStaging();
+  renderStaging();
+  alert(`✅ ${done.length} rows deleted.`);
+}
+
+async function deleteStgRow() {
+  if (!stgEditId) return;
+  if (!confirm('Delete this row from staging? This cannot be undone.')) return;
+  await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${stgEditId}`, {
+    method:'DELETE',
+    headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY}
   });
   closeStgModal();
   await importRefreshStaging();
