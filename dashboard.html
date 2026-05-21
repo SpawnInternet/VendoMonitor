@@ -386,6 +386,14 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">System</span>
     </button>
 
+    <!-- Import -->
+    <button onclick="showP('import',this);importInit()" data-panel="import">
+      <div class="ni" style="background:#fef3c7">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="14" rx="2" stroke="#d97706" stroke-width="2" fill="none"/><path d="M8 10h8M8 13h5" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/><path d="M12 17v4M9 21h6" stroke="#d97706" stroke-width="1.5" stroke-linecap="round"/><circle cx="18" cy="18" r="4" fill="#d97706"/><path d="M18 16v4M16 18h4" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <span class="nl">Import</span>
+    </button>
+
   <!-- Date + Time box -->
   <div class="dt-box">
     <div>
@@ -8297,6 +8305,848 @@ function toast(msg, dur) {
     <div id="sys-warnings" style="font-size:12px;padding:8px 0"></div>
   </div>
 </div>
+
+<!-- ══ IMPORT PANEL ══ -->
+<div id="panel-import" class="panel">
+<style>
+#panel-import .imp-tabs{display:flex;gap:0;border-bottom:2px solid #e8eeff;margin-bottom:14px}
+#panel-import .imp-tab{padding:8px 18px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:#6b7394;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit;transition:all .15s}
+#panel-import .imp-tab.active{color:#1565c0;border-bottom-color:#1565c0;background:#f0f4ff}
+#panel-import .imp-mode{display:none}
+#panel-import .imp-mode.active{display:block}
+
+/* Scanner */
+#panel-import .scan-drop{border:2.5px dashed #bfcfef;border-radius:12px;background:#f8faff;text-align:center;padding:32px 20px;cursor:pointer;transition:border-color .2s;position:relative}
+#panel-import .scan-drop:hover{border-color:#1565c0;background:#eef3ff}
+#panel-import .scan-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+#panel-import .scan-preview{max-width:100%;max-height:320px;border-radius:8px;margin:10px auto;display:block;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+#panel-import .ocr-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:12px 0}
+#panel-import .ocr-field label{display:block;font-size:10px;font-weight:600;color:#6b7394;text-transform:uppercase;margin-bottom:3px}
+#panel-import .ocr-field input{width:100%;padding:6px 9px;border:1px solid #dbeafe;border-radius:6px;font-size:13px;font-family:inherit;background:#fff;color:#1a1d2e}
+#panel-import .ocr-field input:focus{outline:none;border-color:#1565c0}
+#panel-import .ocr-raw{font-family:monospace;font-size:11px;white-space:pre-wrap;background:#f8faff;border:1px solid #e8eeff;border-radius:6px;padding:10px;max-height:160px;overflow-y:auto;color:#374151;margin:8px 0}
+
+/* CSV */
+#panel-import .csv-drop{border:2.5px dashed #bfcfef;border-radius:12px;background:#f8faff;text-align:center;padding:28px 20px;cursor:pointer;position:relative}
+#panel-import .csv-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+
+/* TG Match */
+#panel-import .tg-wrap{position:relative}
+#panel-import .tg-inp{width:100%;padding:5px 9px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit}
+#panel-import .tg-inp:focus{outline:none;border-color:#1565c0}
+#panel-import .tg-inp.matched{border-color:#16a34a;background:#f0fdf4}
+#panel-import .tg-sugg{position:absolute;top:calc(100% + 2px);left:0;right:0;background:#fff;border:1px solid #dbeafe;border-radius:7px;max-height:180px;overflow-y:auto;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+#panel-import .tg-sugg div{padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #f0f4ff}
+#panel-import .tg-sugg div:hover{background:#f0f4ff;color:#1565c0}
+
+/* Staging queue */
+#panel-import .stg-row{display:grid;grid-template-columns:24px 1fr 1fr 90px 70px 70px 1fr 80px;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid #f0f4ff;font-size:12px}
+#panel-import .stg-row:hover{background:#f8faff}
+#panel-import .stg-row.hdr{background:#f0f4ff;font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;border-radius:6px 6px 0 0}
+#panel-import .stg-status{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;display:inline-block}
+#panel-import .stg-status.pending{background:#fef3c7;color:#d97706}
+#panel-import .stg-status.matched{background:#dcfce7;color:#16a34a}
+#panel-import .stg-status.imported{background:#dbeafe;color:#1565c0}
+#panel-import .stg-status.skipped{background:#fee2e2;color:#dc2626}
+#panel-import .imp-progress{height:6px;background:#e8eeff;border-radius:3px;overflow:hidden;margin-bottom:12px}
+#panel-import .imp-progress-bar{height:100%;background:linear-gradient(90deg,#1565c0,#16a34a);border-radius:3px;transition:width .3s}
+</style>
+
+<div class="w" style="padding-top:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div>
+      <div style="font-size:16px;font-weight:700;color:#1565c0">📥 Harvest Import</div>
+      <div style="font-size:11px;color:#6b7394">Scan, upload CSV, or enter manually — then match TG names and save to staging</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn p sm" onclick="importRefreshStaging()">🔄 Refresh Queue</button>
+      <button class="btn sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="importConfirmAll()">✅ Import All Matched</button>
+    </div>
+  </div>
+
+  <!-- Sub-tabs -->
+  <div class="imp-tabs">
+    <button class="imp-tab active" onclick="impTab('scan',this)">📷 Scanner</button>
+    <button class="imp-tab" onclick="impTab('csv',this)">📄 CSV Upload</button>
+    <button class="imp-tab" onclick="impTab('manual',this)">✏️ Manual Entry</button>
+    <button class="imp-tab" onclick="impTab('queue',this)" id="imp-queue-tab">🗂 Staging Queue <span id="imp-queue-badge" style="background:#d97706;color:#fff;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:4px">0</span></button>
+  </div>
+
+  <!-- ── SCANNER MODE ── -->
+  <div class="imp-mode active" id="imp-mode-scan">
+    <div class="two" style="align-items:start">
+      <div>
+        <div class="cs" style="margin-bottom:10px">
+          <div class="cs-t">📷 Photo / Image</div>
+          <div class="scan-drop" id="scanDrop" onclick="document.getElementById('scanFileInput').click()">
+            <input type="file" id="scanFileInput" accept="image/*" capture="environment" onchange="onScanFile(event)">
+            <div style="font-size:32px;margin-bottom:8px">📷</div>
+            <div style="font-size:13px;font-weight:600;color:#1565c0">Tap to take photo or upload image</div>
+            <div style="font-size:11px;color:#6b7394;margin-top:4px">Supports handwritten & printed sheets</div>
+          </div>
+          <img id="scanPreview" class="scan-preview" style="display:none">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn p" id="btnRunOCR" style="display:none;flex:1" onclick="runOCR()">🔍 Extract Text (OCR)</button>
+            <button class="btn" id="btnClearScan" style="display:none" onclick="clearScan()">✕ Clear</button>
+          </div>
+          <div id="ocrStatus" style="font-size:11px;color:#6b7394;margin-top:6px;min-height:16px"></div>
+        </div>
+
+        <!-- OCR Raw output -->
+        <div class="cs" id="ocrRawBox" style="display:none;margin-bottom:10px">
+          <div class="cs-t">📝 OCR Raw Text <span style="font-size:9px;color:#6b7394;font-weight:400">(read-only — fields auto-filled below)</span></div>
+          <div class="ocr-raw" id="ocrRawText"></div>
+        </div>
+      </div>
+
+      <div>
+        <!-- Extracted Fields -->
+        <div class="cs" style="margin-bottom:10px">
+          <div class="cs-t">✏️ Edit Extracted Fields</div>
+          <div class="ocr-fields">
+            <div class="ocr-field" style="grid-column:1/-1">
+              <label>Piso Wifi Name (Sheet Name)</label>
+              <input type="text" id="sf-name" placeholder="e.g. Dorin">
+            </div>
+            <div class="ocr-field" style="grid-column:1/-1">
+              <label>Address</label>
+              <input type="text" id="sf-address" placeholder="e.g. Dicayas">
+            </div>
+            <div class="ocr-field">
+              <label>Harvest Date</label>
+              <input type="date" id="sf-date">
+            </div>
+            <div class="ocr-field">
+              <label>Collector</label>
+              <input type="text" id="sf-collector" placeholder="e.g. Gilbert">
+            </div>
+            <div class="ocr-field">
+              <label>Total Coins</label>
+              <input type="number" id="sf-total" placeholder="0" oninput="scanCalcNet()">
+            </div>
+            <div class="ocr-field">
+              <label>Customer Share</label>
+              <input type="number" id="sf-customer" placeholder="0" oninput="scanCalcNet()">
+            </div>
+            <div class="ocr-field">
+              <label>Spawn Share</label>
+              <input type="number" id="sf-spawn" placeholder="0">
+            </div>
+            <div class="ocr-field">
+              <label>Old Coins</label>
+              <input type="number" id="sf-old" placeholder="0" oninput="scanCalcNet()">
+            </div>
+            <div class="ocr-field">
+              <label>Free Time</label>
+              <input type="number" id="sf-free" placeholder="0" oninput="scanCalcNet()">
+            </div>
+            <div class="ocr-field">
+              <label>Saloy</label>
+              <input type="number" id="sf-saloy" placeholder="0" oninput="scanCalcNet()">
+            </div>
+          </div>
+          <div id="sf-net-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;font-size:12px;color:#16a34a;font-weight:600;display:none">
+            Net Collectible: ₱<span id="sf-net-val">0</span>
+          </div>
+        </div>
+
+        <!-- TG Match -->
+        <div class="cs" style="margin-bottom:10px">
+          <div class="cs-t">🔗 Match Telegram Name</div>
+          <div class="tg-wrap" style="margin-bottom:8px">
+            <input class="tg-inp" id="sf-tg" placeholder="Type to search TG name…" oninput="impTgSearch('sf-tg','sf-tg-sugg')" autocomplete="off">
+            <div class="tg-sugg" id="sf-tg-sugg" style="display:none"></div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn sm" onclick="impUseSheetName('sf-tg','sf-name')">📋 Use sheet name</button>
+            <button class="btn sm p" onclick="saveScanRow()">💾 Save to Staging</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CSV MODE ── -->
+  <div class="imp-mode" id="imp-mode-csv">
+    <div class="cs" style="margin-bottom:12px">
+      <div class="cs-t">📄 Upload Harvest CSV</div>
+      <div class="csv-drop" onclick="document.getElementById('csvFileInput').click()">
+        <input type="file" id="csvFileInput" accept=".csv" onchange="onCSVFile(event)">
+        <div style="font-size:28px;margin-bottom:8px">📄</div>
+        <div style="font-size:13px;font-weight:600;color:#1565c0">Click to upload CSV file</div>
+        <div style="font-size:11px;color:#6b7394;margin-top:4px">Format: #, Batch, Name, Address, Vendo No, Date, Total Coins, Customer Share, Spawn Share, Old Coins, Free Time, Saloy, Collector</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="csvBatchLabel" placeholder="Batch label (e.g. May 2026)" style="padding:5px 9px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;flex:1;min-width:150px">
+        <button class="btn p" id="btnCSVImport" style="display:none" onclick="saveCSVToStaging()">💾 Save All to Staging</button>
+      </div>
+      <div id="csvPreviewArea" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- ── MANUAL MODE ── -->
+  <div class="imp-mode" id="imp-mode-manual">
+    <div class="cs" style="max-width:600px">
+      <div class="cs-t">✏️ Manual Entry</div>
+      <div class="ocr-fields">
+        <div class="ocr-field" style="grid-column:1/-1">
+          <label>Piso Wifi Name</label>
+          <input type="text" id="mf-name" placeholder="e.g. Dorin">
+        </div>
+        <div class="ocr-field" style="grid-column:1/-1">
+          <label>Address</label>
+          <input type="text" id="mf-address" placeholder="e.g. Dicayas">
+        </div>
+        <div class="ocr-field">
+          <label>Harvest Date</label>
+          <input type="date" id="mf-date">
+        </div>
+        <div class="ocr-field">
+          <label>Collector</label>
+          <input type="text" id="mf-collector">
+        </div>
+        <div class="ocr-field">
+          <label>Total Coins</label>
+          <input type="number" id="mf-total" placeholder="0" oninput="manualCalcNet()">
+        </div>
+        <div class="ocr-field">
+          <label>Customer Share</label>
+          <input type="number" id="mf-customer" placeholder="0">
+        </div>
+        <div class="ocr-field">
+          <label>Spawn Share</label>
+          <input type="number" id="mf-spawn" placeholder="0">
+        </div>
+        <div class="ocr-field">
+          <label>Old Coins</label>
+          <input type="number" id="mf-old" placeholder="0" oninput="manualCalcNet()">
+        </div>
+        <div class="ocr-field">
+          <label>Free Time</label>
+          <input type="number" id="mf-free" placeholder="0" oninput="manualCalcNet()">
+        </div>
+        <div class="ocr-field">
+          <label>Saloy</label>
+          <input type="number" id="mf-saloy" placeholder="0" oninput="manualCalcNet()">
+        </div>
+      </div>
+      <div id="mf-net-display" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;font-size:12px;color:#16a34a;font-weight:600;margin-bottom:10px;display:none">
+        Net Collectible: ₱<span id="mf-net-val">0</span>
+      </div>
+      <div class="cs-t" style="margin-top:4px">🔗 Match Telegram Name</div>
+      <div class="tg-wrap" style="margin-bottom:8px">
+        <input class="tg-inp" id="mf-tg" placeholder="Type to search TG name…" oninput="impTgSearch('mf-tg','mf-tg-sugg')" autocomplete="off">
+        <div class="tg-sugg" id="mf-tg-sugg" style="display:none"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" onclick="impUseSheetName('mf-tg','mf-name')">📋 Use sheet name</button>
+        <button class="btn p" onclick="saveManualRow()">💾 Save to Staging</button>
+        <button class="btn sm" onclick="clearManual()">✕ Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── STAGING QUEUE ── -->
+  <div class="imp-mode" id="imp-mode-queue">
+    <div class="cs">
+      <div class="cs-t" style="margin-bottom:8px">
+        🗂 Staging Queue
+        <div style="display:flex;gap:6px;margin-left:auto">
+          <input type="text" id="stgSearch" placeholder="Search…" oninput="renderStaging()" style="padding:4px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:11px;width:140px">
+          <select id="stgFilter" onchange="renderStaging()" style="padding:4px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:11px">
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="matched">Matched</option>
+            <option value="imported">Imported</option>
+            <option value="skipped">Skipped</option>
+          </select>
+        </div>
+      </div>
+      <div id="imp-progress" class="imp-progress" style="display:none"><div class="imp-progress-bar" id="imp-progress-bar" style="width:0%"></div></div>
+      <div style="overflow-x:auto">
+        <div class="stg-row hdr">
+          <div>#</div><div>Sheet Name</div><div>Address</div><div>Date</div><div>Total</div><div>Net</div><div>TG Name</div><div>Status</div>
+        </div>
+        <div id="stgList"></div>
+      </div>
+      <div id="stgEmpty" style="text-align:center;padding:32px;color:#6b7394;font-size:13px;display:none">No records yet. Use Scanner, CSV Upload, or Manual Entry.</div>
+    </div>
+
+    <!-- Row edit panel -->
+    <div id="stgEditPanel" style="display:none;margin-top:10px">
+      <div class="cs" style="border:2px solid #1565c0">
+        <div class="cs-t">✏️ Edit & Match — <span id="stgEditName"></span></div>
+        <div class="ocr-fields" style="margin-bottom:10px">
+          <div class="ocr-field"><label>Sheet Name</label><input type="text" id="se-name"></div>
+          <div class="ocr-field"><label>Address</label><input type="text" id="se-address"></div>
+          <div class="ocr-field"><label>Date</label><input type="date" id="se-date"></div>
+          <div class="ocr-field"><label>Collector</label><input type="text" id="se-collector"></div>
+          <div class="ocr-field"><label>Total Coins</label><input type="number" id="se-total"></div>
+          <div class="ocr-field"><label>Customer Share</label><input type="number" id="se-customer"></div>
+          <div class="ocr-field"><label>Spawn Share</label><input type="number" id="se-spawn"></div>
+          <div class="ocr-field"><label>Old Coins</label><input type="number" id="se-old"></div>
+          <div class="ocr-field"><label>Free Time</label><input type="number" id="se-free"></div>
+          <div class="ocr-field"><label>Saloy</label><input type="number" id="se-saloy"></div>
+        </div>
+        <div class="cs-t">🔗 Telegram Name</div>
+        <div class="tg-wrap" style="margin-bottom:10px">
+          <input class="tg-inp" id="se-tg" placeholder="Type to search TG name…" oninput="impTgSearch('se-tg','se-tg-sugg')" autocomplete="off">
+          <div class="tg-sugg" id="se-tg-sugg" style="display:none"></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn sm" onclick="impUseSheetName('se-tg','se-name')">📋 Use sheet name</button>
+          <button class="btn p" onclick="saveStgEdit()">💾 Save Changes</button>
+          <button class="btn sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="importStgRow()">✅ Import to Harvests</button>
+          <button class="btn sm danger" onclick="skipStgRow()">⏭ Skip</button>
+          <button class="btn sm" onclick="document.getElementById('stgEditPanel').style.display='none'">✕ Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// IMPORT MODULE
+// ══════════════════════════════════════════════════════════
+const IMP_URL  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const IMP_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
+const OCR_KEY  = 'K83477038988957'; // OCR.space free key
+
+let impTgNames = [];
+let stgData    = [];
+let stgEditId  = null;
+let currentScanFile = null;
+
+async function importInit() {
+  if (!impTgNames.length) await impLoadTgNames();
+  await importRefreshStaging();
+}
+
+async function impLoadTgNames() {
+  try {
+    const r = await fetch(`${IMP_URL}/rest/v1/vendos?select=tg_name&tg_name=not.is.null&order=tg_name.asc&limit=5000`, {
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY}
+    });
+    const d = await r.json();
+    impTgNames = [...new Set(d.map(x=>x.tg_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  } catch(e){ impTgNames=[]; }
+}
+
+// ── TABS ──────────────────────────────────────────────────
+function impTab(mode, btn) {
+  document.querySelectorAll('#panel-import .imp-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#panel-import .imp-mode').forEach(m=>m.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('imp-mode-'+mode).classList.add('active');
+  if (mode==='queue') renderStaging();
+}
+
+// ── TG SEARCH ─────────────────────────────────────────────
+function impTgSearch(inputId, suggId) {
+  const q = document.getElementById(inputId).value.toLowerCase().trim();
+  const box = document.getElementById(suggId);
+  if (!q) { box.style.display='none'; return; }
+  const results = impTgNames.filter(n=>n.toLowerCase().includes(q)).slice(0,12);
+  if (!results.length) { box.style.display='none'; return; }
+  box.innerHTML = results.map(n=>`<div onclick="impSelectTg('${inputId}','${suggId}','${n.replace(/'/g,"\\'")}')">${n}</div>`).join('');
+  box.style.display='block';
+}
+
+function impSelectTg(inputId, suggId, name) {
+  document.getElementById(inputId).value = name;
+  document.getElementById(inputId).classList.add('matched');
+  document.getElementById(suggId).style.display='none';
+}
+
+function impUseSheetName(tgId, nameId) {
+  const name = document.getElementById(nameId).value.trim();
+  if (!name) return;
+  document.getElementById(tgId).value = name;
+  document.getElementById(tgId).classList.add('matched');
+}
+
+document.addEventListener('click', e=>{
+  if (!e.target.closest('.tg-wrap')) {
+    document.querySelectorAll('.tg-sugg').forEach(b=>b.style.display='none');
+  }
+});
+
+// ── SCANNER ───────────────────────────────────────────────
+function onScanFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  currentScanFile = file;
+  const url = URL.createObjectURL(file);
+  const prev = document.getElementById('scanPreview');
+  prev.src = url; prev.style.display='block';
+  document.getElementById('btnRunOCR').style.display='block';
+  document.getElementById('btnClearScan').style.display='block';
+  document.getElementById('ocrStatus').textContent='Image ready. Click "Extract Text" to run OCR.';
+}
+
+function clearScan() {
+  currentScanFile = null;
+  document.getElementById('scanPreview').style.display='none';
+  document.getElementById('scanPreview').src='';
+  document.getElementById('btnRunOCR').style.display='none';
+  document.getElementById('btnClearScan').style.display='none';
+  document.getElementById('scanFileInput').value='';
+  document.getElementById('ocrStatus').textContent='';
+  document.getElementById('ocrRawBox').style.display='none';
+  document.getElementById('ocrRawText').textContent='';
+  ['sf-name','sf-address','sf-date','sf-collector','sf-total','sf-customer','sf-spawn','sf-old','sf-free','sf-saloy','sf-tg'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('sf-net-display').style.display='none';
+}
+
+async function runOCR() {
+  if (!currentScanFile) return;
+  const btn = document.getElementById('btnRunOCR');
+  btn.textContent='⏳ Extracting…'; btn.disabled=true;
+  document.getElementById('ocrStatus').textContent='Sending to OCR.space…';
+  try {
+    const fd = new FormData();
+    fd.append('file', currentScanFile);
+    fd.append('apikey', OCR_KEY);
+    fd.append('language', 'eng');
+    fd.append('isOverlayRequired', 'false');
+    fd.append('scale', 'true');
+    fd.append('OCREngine', '2');
+    const res = await fetch('https://api.ocr.space/parse/image', {method:'POST', body:fd});
+    const data = await res.json();
+    if (data.IsErroredOnProcessing) throw new Error(data.ErrorMessage || 'OCR failed');
+    const rawText = data.ParsedResults?.[0]?.ParsedText || '';
+    document.getElementById('ocrRawText').textContent = rawText;
+    document.getElementById('ocrRawBox').style.display='block';
+    parseOCRText(rawText);
+    document.getElementById('ocrStatus').textContent='✅ OCR complete — review and edit fields below.';
+  } catch(e) {
+    document.getElementById('ocrStatus').textContent='❌ OCR error: '+e.message;
+  }
+  btn.textContent='🔍 Extract Text (OCR)'; btn.disabled=false;
+}
+
+function parseOCRText(text) {
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const get = (patterns) => {
+    for (const line of lines) {
+      for (const p of patterns) {
+        const m = line.match(p);
+        if (m) return m[1]?.trim().replace(/,/g,'') || '';
+      }
+    }
+    return '';
+  };
+  // Name & address — usually first 2 non-header lines
+  const nameLines = lines.filter(l => !l.match(/spawn|internet|contact|fb page|piso wifi name|address|date|total|customer|collector|signature/i));
+  if (nameLines[0]) document.getElementById('sf-name').value = nameLines[0];
+  if (nameLines[1]) document.getElementById('sf-address').value = nameLines[1];
+
+  const total    = get([/total[\s\-:]+([0-9,]+)/i, /total coin[\s\-:]*([0-9,]+)/i]);
+  const customer = get([/customer[\s\-:]+([0-9,]+)/i]);
+  const spawn    = get([/spawn[\s\-:]+([0-9,]+)/i]);
+  const old      = get([/old coins?[\s\-:]+([0-9,]+)/i, /old[\s\-:]+([0-9,]+)/i]);
+  const free     = get([/free\s*time[\s\-:]+([0-9,]+)/i, /freetime[\s\-:]+([0-9,]+)/i]);
+  const saloy    = get([/saloy[\s\-:]+([0-9,]+)/i]);
+  const collector= get([/gilbert|tandoy|ailyn|nelmar|joely/i]);
+  const dateM    = text.match(/(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/);
+
+  if (total)    document.getElementById('sf-total').value    = total;
+  if (customer) document.getElementById('sf-customer').value = customer;
+  if (spawn)    document.getElementById('sf-spawn').value    = spawn;
+  if (old)      document.getElementById('sf-old').value      = old;
+  if (free)     document.getElementById('sf-free').value     = free;
+  if (saloy)    document.getElementById('sf-saloy').value    = saloy;
+
+  // Parse collector name from text
+  const collectorMatch = text.match(/\b(gilbert|tandoy|ailyn|nelmar|joely)\b/i);
+  if (collectorMatch) document.getElementById('sf-collector').value = collectorMatch[1];
+
+  // Parse date
+  if (dateM) {
+    const parts = dateM[1].split(/[\/-]/);
+    if (parts.length===3) {
+      let [m,d,y] = parts;
+      if (y.length===2) y='20'+y;
+      document.getElementById('sf-date').value = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    }
+  }
+  scanCalcNet();
+}
+
+function scanCalcNet() {
+  const t=+document.getElementById('sf-total').value||0;
+  const f=+document.getElementById('sf-free').value||0;
+  const o=+document.getElementById('sf-old').value||0;
+  const s=+document.getElementById('sf-saloy').value||0;
+  const net=t-f-o-s;
+  const disp=document.getElementById('sf-net-display');
+  if(t>0){disp.style.display='block';document.getElementById('sf-net-val').textContent=net.toLocaleString();}
+  else disp.style.display='none';
+  // Auto-calc spawn if missing
+  const sp=document.getElementById('sf-spawn');
+  if(!sp.value && net>0) sp.value=Math.round(net*0.75);
+  const cu=document.getElementById('sf-customer');
+  if(!cu.value && net>0) cu.value=Math.round(net*0.25);
+}
+
+async function saveScanRow() {
+  const row = {
+    source:'scan',
+    sheet_name: document.getElementById('sf-name').value.trim(),
+    address:    document.getElementById('sf-address').value.trim(),
+    harvest_date: document.getElementById('sf-date').value||null,
+    collector:  document.getElementById('sf-collector').value.trim(),
+    total_coins: +document.getElementById('sf-total').value||0,
+    customer_share: +document.getElementById('sf-customer').value||0,
+    spawn_share: +document.getElementById('sf-spawn').value||0,
+    old_coins:  +document.getElementById('sf-old').value||0,
+    free_coins: +document.getElementById('sf-free').value||0,
+    saloy_coins:+document.getElementById('sf-saloy').value||0,
+    tg_name:    document.getElementById('sf-tg').value.trim()||null,
+    status:     document.getElementById('sf-tg').value.trim() ? 'matched' : 'pending',
+    ocr_raw:    document.getElementById('ocrRawText').textContent||null,
+  };
+  if (!row.sheet_name) return alert('Please enter the Piso Wifi Name.');
+  await impSaveRows([row]);
+  alert('✅ Saved to staging!');
+  clearScan();
+  importRefreshStaging();
+}
+
+// ── CSV ───────────────────────────────────────────────────
+let csvParsedRows = [];
+
+function onCSVFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text = ev.target.result;
+    csvParsedRows = parseCSV(text);
+    renderCSVPreview();
+    document.getElementById('btnCSVImport').style.display='block';
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const headers = lines[0].split(',').map(h=>h.trim().replace(/"/g,'').toLowerCase());
+  return lines.slice(1).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || line.split(',');
+    const clean = v => (v||'').replace(/"/g,'').trim().replace(/,/g,'');
+    const idx = k => headers.findIndex(h=>h.includes(k));
+    return {
+      source:'csv',
+      import_batch: document.getElementById('csvBatchLabel').value.trim()||'CSV Import',
+      sheet_name: clean(vals[idx('name')]),
+      address: clean(vals[idx('address')]),
+      vendo_no: clean(vals[idx('vendo')]),
+      harvest_date: parseDate(clean(vals[idx('date')])),
+      collector: clean(vals[idx('collector')]),
+      total_coins: +clean(vals[idx('total')])||0,
+      customer_share: +clean(vals[idx('customer')])||0,
+      spawn_share: +clean(vals[idx('spawn')])||0,
+      old_coins: +clean(vals[idx('old')])||0,
+      free_coins: +clean(vals[idx('free')])||0,
+      saloy_coins: +clean(vals[idx('saloy')])||0,
+      status:'pending',
+    };
+  }).filter(r=>r.sheet_name);
+}
+
+function parseDate(d) {
+  if (!d) return null;
+  const parts = d.split('/');
+  if (parts.length===3) {
+    let [m,day,y]=parts;
+    if(y.length===2) y='20'+y;
+    return `${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+  return null;
+}
+
+function renderCSVPreview() {
+  const area = document.getElementById('csvPreviewArea');
+  if (!csvParsedRows.length) { area.innerHTML='<div style="color:#dc2626;font-size:12px">No rows parsed.</div>'; return; }
+  area.innerHTML = `<div style="font-size:12px;color:#16a34a;font-weight:600;margin-bottom:8px">✅ ${csvParsedRows.length} rows parsed — ready to save</div>
+  <div style="overflow-x:auto;max-height:240px;font-size:11px;border:1px solid #e8eeff;border-radius:6px">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:#f0f4ff">${['#','Name','Address','Date','Total','Customer','Spawn','Collector'].map(h=>`<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;color:#1565c0;border-bottom:1px solid #e8eeff">${h}</th>`).join('')}</tr></thead>
+      <tbody>${csvParsedRows.map((r,i)=>`<tr style="border-bottom:1px solid #f0f4ff">
+        <td style="padding:4px 8px">${i+1}</td>
+        <td style="padding:4px 8px;font-weight:600">${r.sheet_name}</td>
+        <td style="padding:4px 8px;color:#6b7394">${r.address}</td>
+        <td style="padding:4px 8px">${r.harvest_date||'—'}</td>
+        <td style="padding:4px 8px">₱${r.total_coins.toLocaleString()}</td>
+        <td style="padding:4px 8px">₱${r.customer_share.toLocaleString()}</td>
+        <td style="padding:4px 8px">₱${r.spawn_share.toLocaleString()}</td>
+        <td style="padding:4px 8px">${r.collector}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+async function saveCSVToStaging() {
+  if (!csvParsedRows.length) return;
+  const label = document.getElementById('csvBatchLabel').value.trim()||'CSV Import';
+  const rows = csvParsedRows.map(r=>({...r, import_batch:label}));
+  await impSaveRows(rows);
+  alert(`✅ ${rows.length} rows saved to staging!`);
+  document.getElementById('csvPreviewArea').innerHTML='';
+  document.getElementById('btnCSVImport').style.display='none';
+  document.getElementById('csvFileInput').value='';
+  csvParsedRows=[];
+  importRefreshStaging();
+  impTab('queue', document.getElementById('imp-queue-tab'));
+}
+
+// ── MANUAL ────────────────────────────────────────────────
+function manualCalcNet() {
+  const t=+document.getElementById('mf-total').value||0;
+  const f=+document.getElementById('mf-free').value||0;
+  const o=+document.getElementById('mf-old').value||0;
+  const s=+document.getElementById('mf-saloy').value||0;
+  const net=t-f-o-s;
+  const disp=document.getElementById('mf-net-display');
+  if(t>0){disp.style.display='block';document.getElementById('mf-net-val').textContent=net.toLocaleString();}
+  else disp.style.display='none';
+}
+
+async function saveManualRow() {
+  const row = {
+    source:'manual',
+    sheet_name: document.getElementById('mf-name').value.trim(),
+    address:    document.getElementById('mf-address').value.trim(),
+    harvest_date: document.getElementById('mf-date').value||null,
+    collector:  document.getElementById('mf-collector').value.trim(),
+    total_coins: +document.getElementById('mf-total').value||0,
+    customer_share: +document.getElementById('mf-customer').value||0,
+    spawn_share: +document.getElementById('mf-spawn').value||0,
+    old_coins:  +document.getElementById('mf-old').value||0,
+    free_coins: +document.getElementById('mf-free').value||0,
+    saloy_coins:+document.getElementById('mf-saloy').value||0,
+    tg_name:    document.getElementById('mf-tg').value.trim()||null,
+    status:     document.getElementById('mf-tg').value.trim() ? 'matched' : 'pending',
+  };
+  if (!row.sheet_name) return alert('Please enter the Piso Wifi Name.');
+  await impSaveRows([row]);
+  alert('✅ Saved to staging!');
+  clearManual();
+  importRefreshStaging();
+}
+
+function clearManual() {
+  ['mf-name','mf-address','mf-date','mf-collector','mf-total','mf-customer','mf-spawn','mf-old','mf-free','mf-saloy','mf-tg'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mf-net-display').style.display='none';
+}
+
+// ── SUPABASE SAVE ─────────────────────────────────────────
+async function impSaveRows(rows) {
+  const CHUNK = 50;
+  for (let i=0; i<rows.length; i+=CHUNK) {
+    const chunk = rows.slice(i, i+CHUNK);
+    await fetch(`${IMP_URL}/rest/v1/harvest_staging`, {
+      method:'POST',
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body: JSON.stringify(chunk)
+    });
+  }
+}
+
+// ── STAGING QUEUE ─────────────────────────────────────────
+async function importRefreshStaging() {
+  try {
+    const r = await fetch(`${IMP_URL}/rest/v1/harvest_staging?order=created_at.desc&limit=500`, {
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY}
+    });
+    stgData = await r.json();
+    const pending = stgData.filter(r=>r.status==='pending'||r.status==='matched').length;
+    document.getElementById('imp-queue-badge').textContent = pending;
+    renderStaging();
+    updateStgProgress();
+  } catch(e){}
+}
+
+function renderStaging() {
+  const q = (document.getElementById('stgSearch')?.value||'').toLowerCase();
+  const f = document.getElementById('stgFilter')?.value||'all';
+  const filtered = stgData.filter(r=>{
+    const matchF = f==='all' || r.status===f;
+    const matchQ = !q || (r.sheet_name||'').toLowerCase().includes(q) || (r.tg_name||'').toLowerCase().includes(q) || (r.address||'').toLowerCase().includes(q);
+    return matchF && matchQ;
+  });
+  const list = document.getElementById('stgList');
+  const empty = document.getElementById('stgEmpty');
+  if (!filtered.length) { list.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  list.innerHTML = filtered.map(r => {
+    const net = (r.total_coins||0)-(r.free_coins||0)-(r.old_coins||0)-(r.saloy_coins||0);
+    return `<div class="stg-row" onclick="stgEditRow(${r.id})" style="cursor:pointer">
+      <div style="font-size:10px;color:#6b7394">${r.source==='scan'?'📷':r.source==='csv'?'📄':'✏️'}</div>
+      <div style="font-weight:600">${r.sheet_name||'—'}</div>
+      <div style="color:#6b7394;font-size:11px">${r.address||'—'}</div>
+      <div style="font-size:11px">${r.harvest_date||'—'}</div>
+      <div style="font-size:11px">₱${(r.total_coins||0).toLocaleString()}</div>
+      <div style="font-size:11px;color:#16a34a">₱${net.toLocaleString()}</div>
+      <div style="font-size:11px;color:${r.tg_name?'#16a34a':'#d97706'}">${r.tg_name||'— unmatched'}</div>
+      <div><span class="stg-status ${r.status||'pending'}">${r.status||'pending'}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function updateStgProgress() {
+  const total = stgData.length;
+  if (!total) return;
+  const done = stgData.filter(r=>r.status==='imported'||r.status==='skipped').length;
+  const pct = Math.round(done/total*100);
+  document.getElementById('imp-progress').style.display='block';
+  document.getElementById('imp-progress-bar').style.width=pct+'%';
+}
+
+function stgEditRow(id) {
+  const r = stgData.find(x=>x.id===id);
+  if (!r) return;
+  stgEditId = id;
+  document.getElementById('stgEditName').textContent = r.sheet_name||'';
+  document.getElementById('se-name').value = r.sheet_name||'';
+  document.getElementById('se-address').value = r.address||'';
+  document.getElementById('se-date').value = r.harvest_date||'';
+  document.getElementById('se-collector').value = r.collector||'';
+  document.getElementById('se-total').value = r.total_coins||'';
+  document.getElementById('se-customer').value = r.customer_share||'';
+  document.getElementById('se-spawn').value = r.spawn_share||'';
+  document.getElementById('se-old').value = r.old_coins||'';
+  document.getElementById('se-free').value = r.free_coins||'';
+  document.getElementById('se-saloy').value = r.saloy_coins||'';
+  document.getElementById('se-tg').value = r.tg_name||'';
+  if (r.tg_name) document.getElementById('se-tg').classList.add('matched');
+  else document.getElementById('se-tg').classList.remove('matched');
+  document.getElementById('stgEditPanel').style.display='block';
+  document.getElementById('stgEditPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+async function saveStgEdit() {
+  if (!stgEditId) return;
+  const tg = document.getElementById('se-tg').value.trim();
+  const updates = {
+    sheet_name: document.getElementById('se-name').value.trim(),
+    address: document.getElementById('se-address').value.trim(),
+    harvest_date: document.getElementById('se-date').value||null,
+    collector: document.getElementById('se-collector').value.trim(),
+    total_coins: +document.getElementById('se-total').value||0,
+    customer_share: +document.getElementById('se-customer').value||0,
+    spawn_share: +document.getElementById('se-spawn').value||0,
+    old_coins: +document.getElementById('se-old').value||0,
+    free_coins: +document.getElementById('se-free').value||0,
+    saloy_coins: +document.getElementById('se-saloy').value||0,
+    tg_name: tg||null,
+    status: tg ? 'matched' : 'pending',
+  };
+  await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${stgEditId}`, {
+    method:'PATCH',
+    headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json'},
+    body: JSON.stringify(updates)
+  });
+  await importRefreshStaging();
+  renderStaging();
+  alert('✅ Saved!');
+}
+
+async function importStgRow() {
+  if (!stgEditId) return;
+  const r = stgData.find(x=>x.id===stgEditId);
+  if (!r) return;
+  const tg = document.getElementById('se-tg').value.trim();
+  if (!tg) return alert('Please match a TG name first.');
+  // Insert into harvests
+  const net = (r.total_coins||0)-(r.free_coins||0)-(r.old_coins||0)-(r.saloy_coins||0);
+  const harvest = {
+    tg_name: tg,
+    sheet_name: document.getElementById('se-name').value.trim(),
+    harvest_date: document.getElementById('se-date').value||null,
+    collector: document.getElementById('se-collector').value.trim(),
+    coins_total: +document.getElementById('se-total').value||0,
+    customer_share: +document.getElementById('se-customer').value||0,
+    spawn_share: +document.getElementById('se-spawn').value||0,
+    coins_old: +document.getElementById('se-old').value||0,
+    coins_free: +document.getElementById('se-free').value||0,
+    coins_saloy: +document.getElementById('se-saloy').value||0,
+    net_collectible: net,
+    source: 'import',
+    status: 'harvested',
+  };
+  const res = await fetch(`${IMP_URL}/rest/v1/harvests`, {
+    method:'POST',
+    headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body: JSON.stringify(harvest)
+  });
+  if (res.ok) {
+    // Mark staging as imported
+    await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${stgEditId}`, {
+      method:'PATCH',
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({status:'imported', imported_at: new Date().toISOString()})
+    });
+    alert('✅ Imported to harvests!');
+    document.getElementById('stgEditPanel').style.display='none';
+    await importRefreshStaging();
+    renderStaging();
+  } else {
+    alert('❌ Import failed.');
+  }
+}
+
+async function skipStgRow() {
+  if (!stgEditId) return;
+  await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${stgEditId}`, {
+    method:'PATCH',
+    headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json'},
+    body: JSON.stringify({status:'skipped'})
+  });
+  document.getElementById('stgEditPanel').style.display='none';
+  await importRefreshStaging();
+  renderStaging();
+}
+
+async function importConfirmAll() {
+  const matched = stgData.filter(r=>r.status==='matched'&&r.tg_name);
+  if (!matched.length) return alert('No matched rows to import.');
+  if (!confirm(`Import ${matched.length} matched rows to harvests?`)) return;
+  let ok=0;
+  for (const r of matched) {
+    const net=(r.total_coins||0)-(r.free_coins||0)-(r.old_coins||0)-(r.saloy_coins||0);
+    const harvest={
+      tg_name:r.tg_name, sheet_name:r.sheet_name,
+      harvest_date:r.harvest_date, collector:r.collector,
+      coins_total:r.total_coins, customer_share:r.customer_share,
+      spawn_share:r.spawn_share, coins_old:r.old_coins,
+      coins_free:r.free_coins, coins_saloy:r.saloy_coins,
+      net_collectible:net, source:'import', status:'harvested',
+    };
+    const res=await fetch(`${IMP_URL}/rest/v1/harvests`,{
+      method:'POST',
+      headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(harvest)
+    });
+    if (res.ok) {
+      await fetch(`${IMP_URL}/rest/v1/harvest_staging?id=eq.${r.id}`,{
+        method:'PATCH',
+        headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({status:'imported',imported_at:new Date().toISOString()})
+      });
+      ok++;
+    }
+  }
+  alert(`✅ ${ok} rows imported to harvests!`);
+  await importRefreshStaging();
+  renderStaging();
+}
+</script>
 
 </div><!-- end .w -->
 <!-- Floating back button — top right, shown on all sub-pages -->
