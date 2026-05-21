@@ -9117,8 +9117,10 @@ async function seLoadLastHarvest() {
   const lhNone = document.getElementById('se-last-harvest-none');
   if (!tg || tg.length < 2) { lhBox.style.display='none'; lhNone.style.display='none'; return; }
   try {
+    // Get the harvest date currently being imported for this row
+    const currentDate = document.getElementById('se-date').value || '9999-12-31';
     const r = await fetch(
-      `${IMP_URL}/rest/v1/harvests?tg_name=eq.${encodeURIComponent(tg)}&order=harvest_date.desc&limit=1&select=harvest_date,coins_total,net_collectible,coins_free,coins_old,coins_saloy,collector,harvest_window_start`,
+      `${IMP_URL}/rest/v1/harvests?tg_name=eq.${encodeURIComponent(tg)}&harvest_date=lt.${currentDate}&order=harvest_date.desc&limit=1&select=harvest_date,coins_total,net_collectible,coins_free,coins_old,coins_saloy,collector,harvest_window_start`,
       {headers:{'apikey':IMP_KEY,'Authorization':'Bearer '+IMP_KEY}}
     );
     const data = await r.json();
