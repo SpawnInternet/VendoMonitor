@@ -8622,6 +8622,32 @@ function toast(msg, dur) {
           <div id="se-last-harvest-none" style="display:none;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#d97706">
             ⚠️ No previous harvest found for this TG name — first harvest
           </div>
+          <!-- Manual previous harvest fields -->
+          <div style="background:#f8faff;border:1.5px solid #dbeafe;border-radius:8px;padding:12px 14px;margin-bottom:12px">
+            <div style="font-size:10px;font-weight:700;color:#1565c0;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📋 Previous Harvest <span style="font-size:9px;color:#6b7394;font-weight:400;text-transform:none">(fill in manually for reconciliation window)</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <div style="font-size:10px;color:#6b7394;margin-bottom:3px;font-weight:600">Prev Harvest Date *</div>
+                <input type="date" id="se-prev-date" oninput="seUpdateReconWindow()" style="width:100%;padding:7px 10px;border:1px solid #dbeafe;border-radius:6px;font-size:13px;font-family:inherit;background:#fff">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7394;margin-bottom:3px;font-weight:600">Prev Total Coins</div>
+                <input type="number" id="se-prev-total" placeholder="0" style="width:100%;padding:7px 10px;border:1px solid #dbeafe;border-radius:6px;font-size:13px;font-family:inherit;background:#fff">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7394;margin-bottom:3px;font-weight:600">Prev Net Collectible</div>
+                <input type="number" id="se-prev-net" placeholder="0" style="width:100%;padding:7px 10px;border:1px solid #dbeafe;border-radius:6px;font-size:13px;font-family:inherit;background:#fff">
+              </div>
+              <div>
+                <div style="font-size:10px;color:#6b7394;margin-bottom:3px;font-weight:600">Prev Collector</div>
+                <input type="text" id="se-prev-collector" placeholder="e.g. Gilbert" style="width:100%;padding:7px 10px;border:1px solid #dbeafe;border-radius:6px;font-size:13px;font-family:inherit;background:#fff">
+              </div>
+            </div>
+            <div style="margin-top:8px;padding:7px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#d97706;display:flex;align-items:center;gap:6px">
+              <span>⚡</span>
+              <span>Recon window: <strong id="se-recon-window-display">set prev harvest date →</strong></span>
+            </div>
+          </div>
           <!-- Actions -->
           <div style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid #e8eeff;padding-top:12px">
             <button class="btn sm" onclick="impUseSheetName('se-tg','se-name')">📋 Use sheet name</button>
@@ -9058,14 +9084,30 @@ function stgEditRow(id) {
   document.getElementById('se-tg').value = r.tg_name||'';
   if (r.tg_name) document.getElementById('se-tg').classList.add('matched');
   else document.getElementById('se-tg').classList.remove('matched');
+  // Clear previous harvest fields
+  ['se-prev-date','se-prev-total','se-prev-net','se-prev-collector'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('se-recon-window-display').textContent='set prev harvest date →';
+  document.getElementById('se-last-harvest').style.display='none';
+  document.getElementById('se-last-harvest-none').style.display='none';
   document.getElementById('stgEditPanel').style.display='flex';
   document.getElementById('stgEditPanel').scrollTop=0;
   setTimeout(()=>document.getElementById('se-tg').focus(),100);
+  // Load last harvest if TG name already set
+  if (document.getElementById('se-tg').value.trim()) seLoadLastHarvest();
 }
 
 function closeStgModal() {
   document.getElementById('stgEditPanel').style.display='none';
   stgEditId=null;
+}
+
+function seUpdateReconWindow() {
+  const d = document.getElementById('se-prev-date').value;
+  const disp = document.getElementById('se-recon-window-display');
+  if (!d) { disp.textContent = 'set prev harvest date →'; return; }
+  const harvestDate = document.getElementById('se-date').value;
+  const days = harvestDate ? Math.round((new Date(harvestDate)-new Date(d))/86400000) : '?';
+  disp.textContent = d + ' → ' + (harvestDate||'harvest date') + (days !== '?' ? ' (' + days + ' days)' : '');
 }
 
 async function seLoadLastHarvest() {
@@ -9102,6 +9144,12 @@ async function seLoadLastHarvest() {
     document.getElementById('se-lh-days').textContent      = daysSince;
     lhBox.style.display='block';
     lhNone.style.display='none';
+    // Auto-fill manual fields from fetched data
+    document.getElementById('se-prev-date').value      = lhDate !== '—' ? lhDate : '';
+    document.getElementById('se-prev-total').value     = lh.coins_total || '';
+    document.getElementById('se-prev-net').value       = net || '';
+    document.getElementById('se-prev-collector').value = lh.collector || '';
+    seUpdateReconWindow();
   } catch(e) {
     lhBox.style.display='none';
     lhNone.style.display='none';
@@ -9171,6 +9219,7 @@ async function importStgRow() {
     net_collectible: net,
     source: 'import',
     status: 'harvested',
+    harvest_window_start: document.getElementById('se-prev-date').value || null,
   };
   const res = await fetch(`${IMP_URL}/rest/v1/harvests`, {
     method:'POST',
