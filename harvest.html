@@ -223,11 +223,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="collector-btn-team">Team B — Dapitan</div>
     </div>
   </div>
+  <div style="text-align:center;margin-top:8px">
+    <span onclick="forceClearSession()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">Clear saved session</span>
+  </div>
+
   <div id="resume-banner" style="display:none;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:6px">⚡ Resume previous session?</div>
     <div style="font-size:13px;color:var(--text);margin-bottom:10px"><b id="resume-collector-name"></b> — <b id="resume-group-name"></b></div>
     <button class="btn btn-green" onclick="resumeSession()" style="margin-bottom:6px">▶ Resume</button>
     <button class="btn btn-gray" onclick="clearResume()">✕ Start fresh</button>
+    </div>
+
+    <!-- Emergency reset -->
+    <div style="margin-top:8px;text-align:center">
+      <span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
+    </div>
   </div>
 </div>
 
@@ -489,13 +499,31 @@ updateOnline();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 // ── INIT ──────────────────────────────────────────────────────────
+const APP_VERSION = 'v7.3';
+
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
+
+  // Clear stale sessions from old app versions
+  const savedVersion = localStorage.getItem('harvest_app_version');
+  if(savedVersion !== APP_VERSION){
+    ['harvest_session','cached_auto_route','harvest_last_group','harvest_last_code']
+      .forEach(k=>localStorage.removeItem(k));
+    Object.keys(localStorage).filter(k=>k.startsWith('cached_items_')||k.startsWith('cached_route_'))
+      .forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem('harvest_app_version', APP_VERSION);
+  }
+
   const saved = JSON.parse(localStorage.getItem('harvest_session')||'null');
-  if(saved&&saved.collector&&saved.groupRunId){
+  // Validate: must have a known groupId
+  const validGroup = saved && SCHEDULE.find(g=>g.id===saved.groupId);
+  if(saved && saved.collector && saved.groupRunId && validGroup){
     document.getElementById('resume-banner').style.display='';
     document.getElementById('resume-collector-name').textContent=saved.collector;
-    document.getElementById('resume-group-name').textContent=saved.groupLabel||'—';
+    document.getElementById('resume-group-name').textContent=saved.groupLabel||validGroup.label||'—';
+  } else if(saved){
+    // Stale/invalid session — clear silently
+    localStorage.removeItem('harvest_session');
   }
 });
 
@@ -670,21 +698,29 @@ async function startGroup(groupId){
 
   } catch(e){
     toast('❌ '+e.message,4000);
-    const cached=localStorage.getItem('harvest_session');
-    if(cached){
-      const s=JSON.parse(cached);
-      if(s.groupRunId){
-        currentGroupRun={id:s.groupRunId};
-        currentGroupDef=SCHEDULE.find(x=>x.id===s.groupId)||g;
-        const cachedItems=localStorage.getItem('cached_items_'+s.groupRunId);
-        if(cachedItems) currentItems=JSON.parse(cachedItems);
+    // Try loading from cached items first
+    const cachedItems=localStorage.getItem('cached_items_'+(JSON.parse(localStorage.getItem('harvest_session')||'{}').groupRunId||''));
+    if(cachedItems&&cachedItems!=='undefined'){
+      try{
+        currentItems=JSON.parse(cachedItems);
+        currentGroupRun={id:JSON.parse(localStorage.getItem('harvest_session')||'{}').groupRunId};
+        currentGroupDef=g;
         document.getElementById('sched-group-name').textContent=g.label;
-        document.getElementById('sched-day-num').textContent='—';
+        document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.start+' → '+g.end;
+        document.getElementById('sched-day-num').textContent='—/—';
         document.getElementById('topbar-sub').textContent=g.label+' (offline)';
         activeTab='pending';
         renderVendoList();
-      }
+        return;
+      }catch(e2){}
     }
+    // No cache — go back to collector screen
+    localStorage.removeItem('harvest_session');
+    document.getElementById('vendo-list').innerHTML=
+      '<div class="loading"><span style="color:var(--red);text-align:center;line-height:1.8">❌ '+e.message+'<br><small>Please check your connection and try again.</small></span></div>';
+    setTimeout(()=>{
+      showScreen('screen-collector');
+    },3000);
   }
 }
 
@@ -1149,6 +1185,34 @@ function showReceipt(){
 function startNextGroup(){
   if(nextGroupDef) startGroup(nextGroupDef.id);
 }
+function hardReset(){
+  // Clear ALL harvest-related localStorage
+  const keysToRemove = Object.keys(localStorage).filter(k=>
+    k.startsWith('harvest_') || k.startsWith('cached_') || k==='hq' || k==='hs'
+  );
+  keysToRemove.forEach(k=>localStorage.removeItem(k));
+  localStorage.setItem('harvest_app_version', APP_VERSION);
+  // Unregister service worker to force fresh load
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+    });
+  }
+  toast('✅ App reset — reloading…', 2000);
+  setTimeout(()=>location.reload(true), 2000);
+}
+
+function forceClearSession(){
+  ['harvest_session','cached_auto_route','harvest_last_group','harvest_last_code']
+    .forEach(k=>localStorage.removeItem(k));
+  Object.keys(localStorage).filter(k=>k.startsWith('cached_items_')||k.startsWith('cached_route_'))
+    .forEach(k=>localStorage.removeItem(k));
+  document.getElementById('resume-banner').style.display='none';
+  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('group-section') && (document.getElementById('group-section').style.display='none');
+  toast('✅ Session cleared');
+}
+
 function goHome(){
   currentGroupRun=null;currentGroupDef=null;currentItems=[];currentItem=null;
   capturedGPS=null;nextGroupDef=null;selectedCollector=null;selectedTeam=null;
