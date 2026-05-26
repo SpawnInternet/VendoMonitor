@@ -623,11 +623,13 @@ async function startGroup(groupId){
       let sbMap = {};
       try {
         const names = excelVendos.map(v=>v.name).filter(Boolean);
-        const encoded = names.slice(0,200).map(n=>`"${n.replace(/"/g,'')}"`).join(',');
-        const rSB = await fetch(`${SB}/rest/v1/vendos?sheet_name=in.(${encoded})&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address&limit=300`,{headers:HDR});
-        const sbRows = await rSB.json();
-        sbRows.forEach(r=>{ if(r.sheet_name) sbMap[r.sheet_name]=r; });
-      } catch(e){ console.warn('Supabase enrich failed, using excel data only'); }
+        const encoded = names.slice(0,200).map(n=>'"'+n.replace(/"/g,'')+'"').join(',');
+        const rSB = await fetch(SB+'/rest/v1/vendos?sheet_name=in.('+encoded+')&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address&limit=300',{headers:HDR});
+        if(rSB.ok){
+          const sbRows = await rSB.json();
+          if(Array.isArray(sbRows)) sbRows.forEach(r=>{ if(r.sheet_name) sbMap[r.sheet_name]=r; });
+        }
+      } catch(e){ console.warn('Supabase enrich failed, using excel data only:', e.message); }
 
       const vendos = excelVendos.map(v => {
         const sb = sbMap[v.name] || {};
@@ -675,11 +677,15 @@ async function startGroup(groupId){
 
       // Insert in batches of 100
       for(let i=0;i<itemsToInsert.length;i+=100){
-        await fetch(`${SB}/rest/v1/harvest_group_items`,{
+        const batchRes = await fetch(SB+'/rest/v1/harvest_group_items',{
           method:'POST',
           headers:{...HDR,'Prefer':'return=minimal'},
           body:JSON.stringify(itemsToInsert.slice(i,i+100))
         });
+        if(!batchRes.ok){
+          const errText = await batchRes.text();
+          throw new Error('Insert items failed (batch '+i+'): '+errText.substring(0,200));
+        }
       }
       // Fetch back to get IDs
       const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&order=id.asc`,{headers:HDR});
@@ -702,33 +708,21 @@ async function startGroup(groupId){
     renderVendoList();
 
   } catch(e){
-    toast('❌ '+e.message,4000);
-    // Try loading from cached items first
-    const cachedItems=localStorage.getItem('cached_items_'+(JSON.parse(localStorage.getItem('harvest_session')||'{}').groupRunId||''));
-    if(cachedItems&&cachedItems!=='undefined'){
-      try{
-        currentItems=JSON.parse(cachedItems);
-        currentGroupRun={id:JSON.parse(localStorage.getItem('harvest_session')||'{}').groupRunId};
-        currentGroupDef=g;
-        document.getElementById('sched-group-name').textContent=g.label;
-        document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.start+' → '+g.end;
-        document.getElementById('sched-day-num').textContent='—/—';
-        document.getElementById('topbar-sub').textContent=g.label+' (offline)';
-        activeTab='pending';
-        renderVendoList();
-        return;
-      }catch(e2){}
-    }
-    // No cache — go back to collector screen
-    localStorage.removeItem('harvest_session');
-    document.getElementById('vendo-list').innerHTML=
-      '<div class="loading"><span style="color:var(--red);text-align:center;line-height:1.8">❌ '+e.message+'<br><small>Please check your connection and try again.</small></span></div>';
-    setTimeout(()=>{
-      showScreen('screen-collector');
-    },3000);
+    console.error('startGroup error:', e);
+    const errMsg = e.message || String(e);
+    const errEl = document.getElementById('vendo-list');
+    errEl.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'loading';
+    div.innerHTML = '<span style="color:var(--red);text-align:center;line-height:2">❌ ' + errMsg + '</span>';
+    const btn = document.createElement('button');
+    btn.textContent = '← Back';
+    btn.style.cssText = 'margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+    btn.onclick = function(){ showScreen('screen-groups'); };
+    div.appendChild(btn);
+    errEl.appendChild(div);
   }
 }
-
 async function resumeSession(){
   const saved=JSON.parse(localStorage.getItem('harvest_session')||'null');
   if(!saved) return;
