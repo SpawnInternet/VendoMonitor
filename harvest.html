@@ -320,6 +320,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <!-- Coins -->
+  <input type="hidden" id="coin-old" value="0">
   <div class="card">
     <div class="card-title">💰 Count coins</div>
     <div style="margin-bottom:12px">
@@ -904,13 +905,23 @@ function openItem(idx){
   document.getElementById('owner-name-inp').value=currentItem.sheet_name||'';
   document.getElementById('contact-inp').value=currentItem.contact_number||'';
 
-  // GPS status
+  // GPS status — distinguish stored coords from freshly captured
   const gpsLbl=document.getElementById('gps-status-lbl');
-  if(currentItem.lat&&currentItem.lng){
+  if(currentItem.lat_captured&&currentItem.lng_captured){
+    // Fresh capture from this session
     gpsLbl.className='gps-status got';
-    gpsLbl.textContent=`✅ ${parseFloat(currentItem.lat).toFixed(5)}, ${parseFloat(currentItem.lng).toFixed(5)}`;
+    gpsLbl.textContent='✅ '+parseFloat(currentItem.lat_captured).toFixed(5)+', '+parseFloat(currentItem.lng_captured).toFixed(5)+' (captured today)';
+  } else if(currentItem.lat&&currentItem.lng){
+    // Historical coords from DB — show differently
+    gpsLbl.className='gps-status';
+    gpsLbl.style.background='#f0f9ff';
+    gpsLbl.style.borderColor='#bae6fd';
+    gpsLbl.style.color='#0369a1';
+    gpsLbl.textContent='📍 '+parseFloat(currentItem.lat).toFixed(5)+', '+parseFloat(currentItem.lng).toFixed(5)+' (stored — tap to recapture)';
   } else {
-    gpsLbl.className='gps-status'; gpsLbl.textContent='No GPS yet — tap Capture';
+    gpsLbl.className='gps-status';
+    gpsLbl.style.background='';gpsLbl.style.borderColor='';gpsLbl.style.color='';
+    gpsLbl.textContent='No GPS yet — tap Capture';
   }
   document.getElementById('gps-verify-link').style.display='none';
   document.getElementById('gps-btn').textContent='📍 Capture'; document.getElementById('gps-btn').disabled=false;
