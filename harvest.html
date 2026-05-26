@@ -504,25 +504,26 @@ const APP_VERSION = 'v7.3';
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
 
-  // Clear stale sessions from old app versions
+  // ALWAYS start on collector screen — never auto-navigate
+  showScreen('screen-collector');
+
+  // Clear ALL stale data from previous app versions
   const savedVersion = localStorage.getItem('harvest_app_version');
   if(savedVersion !== APP_VERSION){
-    ['harvest_session','cached_auto_route','harvest_last_group','harvest_last_code']
-      .forEach(k=>localStorage.removeItem(k));
-    Object.keys(localStorage).filter(k=>k.startsWith('cached_items_')||k.startsWith('cached_route_'))
+    Object.keys(localStorage)
+      .filter(k=>k.startsWith('cached_')||k.startsWith('harvest_'))
       .forEach(k=>localStorage.removeItem(k));
     localStorage.setItem('harvest_app_version', APP_VERSION);
   }
 
+  // Show resume banner only — never auto-start
   const saved = JSON.parse(localStorage.getItem('harvest_session')||'null');
-  // Validate: must have a known groupId
   const validGroup = saved && SCHEDULE.find(g=>g.id===saved.groupId);
   if(saved && saved.collector && saved.groupRunId && validGroup){
     document.getElementById('resume-banner').style.display='';
     document.getElementById('resume-collector-name').textContent=saved.collector;
     document.getElementById('resume-group-name').textContent=saved.groupLabel||validGroup.label||'—';
-  } else if(saved){
-    // Stale/invalid session — clear silently
+  } else {
     localStorage.removeItem('harvest_session');
   }
 });
