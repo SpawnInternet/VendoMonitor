@@ -209,15 +209,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="font-size:13px;color:var(--muted)">Select your name to see your groups</div>
   </div>
   <div class="collector-grid" id="collector-grid">
-    <div class="collector-btn" onclick="selectCollector('Carlona','TeamA')">
+    <div class="collector-btn" onclick="selectCollector(this,'Carlona','TeamA')">
       <div class="collector-btn-name">Carlona</div>
       <div class="collector-btn-team">Team A</div>
     </div>
-    <div class="collector-btn" onclick="selectCollector('Gilbert','TeamA')">
+    <div class="collector-btn" onclick="selectCollector(this,'Gilbert','TeamA')">
       <div class="collector-btn-name">Gilbert</div>
       <div class="collector-btn-team">Team A</div>
     </div>
-    <div class="collector-btn" onclick="selectCollector('Tandoy','TeamB')" style="grid-column:1/-1">
+    <div class="collector-btn" onclick="selectCollector(this,'Tandoy','TeamB')" style="grid-column:1/-1">
       <div class="collector-btn-name">Tandoy</div>
       <div class="collector-btn-team">Team B — Dapitan</div>
     </div>
@@ -237,6 +237,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="margin-top:8px;text-align:center">
       <span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
     </div>
+</div><!-- /screen-collector -->
 
 <!-- ── SCREEN 2: GROUP LIST ───────────────────────────── -->
 <div class="screen" id="screen-groups">
@@ -245,7 +246,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="font-size:13px;color:var(--muted)">Select your group to start</div>
   </div>
   <div id="group-list"></div>
-  <button class="btn btn-gray" onclick="showScreen('screen-collector')" style="margin-top:4px">← Change collector</button>
+  <button class="btn btn-gray" onclick="showScreen('screen-collector');document.getElementById('topbar-sub').textContent='Collector PWA'" style="margin-top:4px">← Change collector</button>
 </div>
 
 <!-- ── SCREEN 3: ROUTE LIST ───────────────────────────── -->
@@ -323,19 +324,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card-title">💰 Count coins</div>
     <div style="margin-bottom:12px">
       <div class="coin-label">Total coins <span>All coins in box</span></div>
-      <input type="number" class="coin-input" id="coin-total" aria-label="Total coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input" id="coin-total" step="1" aria-label="Total coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="margin-bottom:12px">
       <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" aria-label="Free time coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" step="1" aria-label="Free time coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="margin-bottom:12px">
       <div class="coin-label" style="color:var(--orange)">− Saloy <span style="color:var(--muted)">Refund returned to customer</span></div>
-      <input type="number" class="coin-input saloy" id="coin-saloy" aria-label="Saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input saloy" id="coin-saloy" step="1" aria-label="Saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="margin-bottom:4px">
       <div class="coin-label" style="color:var(--red)">− Free time coins <span style="color:var(--muted)">Additional free coins deducted</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" aria-label="Free time coins additional" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" aria-label="Free time coins additional" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="background:#f1f5f9;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:11px;color:var(--muted);line-height:1.7">
       Net = Total − Free time − Saloy − Free time coins
@@ -344,7 +345,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div class="summary">
     <div class="sum-row" style="border-bottom:1px solid var(--blue-mid)">
-      <span class="sum-lbl">Deductions (free + saloy)</span>
+      <span class="sum-lbl">Free time deductions</span>
       <span class="sum-val" style="color:var(--red);font-size:13px" id="sum-free">-₱0</span>
     </div>
     <div class="sum-row saloy-row" id="saloy-row" style="display:none">
@@ -531,10 +532,10 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ── COLLECTOR SELECT ──────────────────────────────────────────────
-function selectCollector(name,team){
+function selectCollector(el,name,team){
   selectedCollector=name; selectedTeam=team;
   document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  if(el) el.classList.add('selected');
   loadGroupsScreen(name,team);
 }
 
@@ -594,6 +595,12 @@ async function startGroup(groupId){
   const g = SCHEDULE.find(s=>s.id===groupId);
   if(!g){toast('Group not found');return;}
   currentGroupDef=g;
+
+  // Warn if before schedule window (but don't block)
+  const todayCheck = todayPHT();
+  if(todayCheck < g.start){
+    toast('⚠️ Schedule starts ' + g.start + ' — harvesting early', 4000);
+  }
 
   showScreen('screen-route');
   document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
@@ -736,7 +743,7 @@ function switchTab(tab){
   ['pending','done','issues','sync'].forEach(t=>{document.getElementById('tab-'+t).classList.toggle('active',t===tab);});
   renderVendoList();
 }
-function onSearch(v){searchQuery=v.trim().toLowerCase();document.getElementById('search-clear').style.display=v?'inline':'none';renderVendoList();}
+function onSearch(v){if(!currentGroupRun||!currentItems.length) return;searchQuery=v.trim().toLowerCase();document.getElementById('search-clear').style.display=v?'inline':'none';renderVendoList();}
 function clearSearch(){searchQuery='';document.getElementById('search-inp').value='';document.getElementById('search-clear').style.display='none';renderVendoList();}
 
 function renderVendoList(){
@@ -778,10 +785,11 @@ function renderVendoList(){
   let view=activeTab==='done'?done:activeTab==='issues'?issues:pending;
   if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+(i.area||'')).toLowerCase().includes(searchQuery));
 
-  // GPS sort
+  // GPS sort — filter outliers > 15km from start point
   let sorted=false;
   if(activeTab!=='done'){
-    const withG=view.filter(i=>i._dist!==null),noG=view.filter(i=>i._dist===null);
+    const MAX_DIST_KM = 15;
+    const withG=view.filter(i=>i._dist!==null && i._dist<=MAX_DIST_KM),noG=view.filter(i=>i._dist===null || i._dist>MAX_DIST_KM);
     if(withG.length){
       const out=[],pool=[...withG];let cLat=START_LAT,cLng=START_LNG;
       while(pool.length){let bi=0,bd=Infinity;pool.forEach((x,i)=>{const d=haversine(cLat,cLng,parseFloat(x.lat),parseFloat(x.lng));if(d<bd){bd=d;bi=i;}});const ch=pool.splice(bi,1)[0];ch._legDist=bd;cLat=parseFloat(ch.lat);cLng=parseFloat(ch.lng);out.push(ch);}
@@ -989,7 +997,7 @@ async function submitHarvest(){
   // Update harvest_group_items
   const itemUpdate={
     status:'harvested',
-    coins_total:total,coins_free:free+freeCoins,coins_old:0,coins_saloy:saloy,
+    coins_total:total,coins_free:free+freeCoins,coins_old:0,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
     net_collectible:net,spawn_share:spawn,customer_share:customer,
     harvested_at:now,collector_note:note,
   };
@@ -1011,7 +1019,7 @@ async function submitHarvest(){
     tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&currentGroupDef.id)||''),
-    coins_total:total,coins_free:free+freeCoins,coins_old:0,coins_saloy:saloy,
+    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_old:0,coins_saloy:saloy,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
   };
 
