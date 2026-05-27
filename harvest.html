@@ -202,42 +202,51 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
-<!-- ── SCREEN 1: SELECT COLLECTOR ─────────────────────── -->
+<!-- ── SCREEN 1: PIN LOGIN ────────────────────────────── -->
 <div class="screen active" id="screen-collector">
-  <div style="margin-top:8px;margin-bottom:16px;">
-    <div style="font-size:20px;font-weight:700;margin-bottom:4px">Who are you?</div>
-    <div style="font-size:13px;color:var(--muted)">Select your name to see your groups</div>
-  </div>
-  <div class="collector-grid" id="collector-grid">
-    <div class="collector-btn" onclick="selectCollector(this,'Carlona','TeamA')">
-      <div class="collector-btn-name">Carlona</div>
-      <div class="collector-btn-team">Team A</div>
-    </div>
-    <div class="collector-btn" onclick="selectCollector(this,'Gilbert','TeamA')">
-      <div class="collector-btn-name">Gilbert</div>
-      <div class="collector-btn-team">Team A</div>
-    </div>
-    <div class="collector-btn" onclick="selectCollector(this,'Tandoy','TeamB')" style="grid-column:1/-1">
-      <div class="collector-btn-name">Tandoy</div>
-      <div class="collector-btn-team">Team B — Dapitan</div>
-    </div>
-  </div>
-  <div style="text-align:center;margin-top:8px">
-    <span onclick="forceClearSession()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">Clear saved session</span>
+  <div style="margin-top:24px;margin-bottom:24px;text-align:center">
+    <div style="font-size:32px;margin-bottom:8px">🌐</div>
+    <div style="font-size:22px;font-weight:700;color:var(--blue);margin-bottom:4px">Spawn Harvest</div>
+    <div style="font-size:13px;color:var(--muted)">Enter your name and PIN to continue</div>
   </div>
 
-  <div id="resume-banner" style="display:none;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:12px">
+  <div class="card">
+    <div class="card-title">🔐 Login</div>
+    <div style="margin-bottom:12px">
+      <div class="coin-label">Your name</div>
+      <div id="pin-name-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px"></div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div class="coin-label">4-digit PIN</div>
+      <input type="password" inputmode="numeric" maxlength="4" id="pin-inp"
+        placeholder="••••"
+        style="width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:28px;font-weight:700;letter-spacing:8px;text-align:center;font-family:inherit;outline:none;color:var(--text)"
+        oninput="pinOnInput(this)" onkeydown="if(event.key==='Enter')pinSubmit()">
+    </div>
+    <button class="btn btn-blue" id="pin-login-btn" onclick="pinSubmit()" disabled>Login →</button>
+    <div id="pin-error" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
+  </div>
+
+  <div id="resume-banner" style="display:none;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:14px;margin-top:12px">
     <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:6px">⚡ Resume previous session?</div>
     <div style="font-size:13px;color:var(--text);margin-bottom:10px"><b id="resume-collector-name"></b> — <b id="resume-group-name"></b></div>
     <button class="btn btn-green" onclick="resumeSession()" style="margin-bottom:6px">▶ Resume</button>
     <button class="btn btn-gray" onclick="clearResume()">✕ Start fresh</button>
-    </div>
-
-    <!-- Emergency reset -->
-    <div style="margin-top:8px;text-align:center">
-      <span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-    </div>
+  </div>
+  <div style="margin-top:12px;text-align:center">
+    <span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
+  </div>
 </div><!-- /screen-collector -->
+
+<!-- ── SCREEN 1b: AREA SELECT ─────────────────────────── -->
+<div class="screen" id="screen-areas">
+  <div style="margin-top:8px;margin-bottom:16px">
+    <div style="font-size:20px;font-weight:700;margin-bottom:2px">Hi, <span id="areas-collector-name">—</span> 👋</div>
+    <div style="font-size:13px;color:var(--muted)">Select an area to start harvesting</div>
+  </div>
+  <div id="areas-list"></div>
+  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+</div>
 
 <!-- ── SCREEN 2: GROUP LIST ───────────────────────────── -->
 <div class="screen" id="screen-groups">
@@ -247,7 +256,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div id="group-section">
     <div id="group-list"></div>
-    <button class="btn btn-gray" onclick="showScreen('screen-collector');document.getElementById('topbar-sub').textContent='Collector PWA'" style="margin-top:4px">← Change collector</button>
+    <button class="btn btn-gray" onclick="showAreasScreen()" style="margin-top:4px">← Back to areas</button>
   </div>
 </div>
 
@@ -544,13 +553,14 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.0';
+const APP_VERSION = 'v8.1';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
 
   // ALWAYS start on collector screen — never auto-navigate
   showScreen('screen-collector');
+  pinLoadCollectors();
 
   // Clear ALL stale data from previous app versions
   const savedVersion = localStorage.getItem('harvest_app_version');
@@ -574,14 +584,149 @@ window.addEventListener('DOMContentLoaded',()=>{
 });
 
 // ── COLLECTOR SELECT ──────────────────────────────────────────────
+// ── PIN LOGIN ─────────────────────────────────────────────────────
+let _pinCollectors = [];
+
+async function pinLoadCollectors(){
+  try{
+    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR});
+    _pinCollectors=await r.json();
+  }catch(e){
+    // Fallback hardcoded if offline
+    _pinCollectors=[{name:'Carlona',pin:'0000'},{name:'Gilbert',pin:'0000'},{name:'Tandoy',pin:'0000'}];
+  }
+  const el=document.getElementById('pin-name-list');
+  if(!el)return;
+  el.innerHTML=_pinCollectors.map(c=>`
+    <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
+      <div class="collector-btn-name">${c.name}</div>
+    </div>`).join('');
+}
+
+let _pinSelectedName=null;
+
+function pinSelectName(el,name){
+  _pinSelectedName=name;
+  document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('pin-inp').focus();
+  pinCheckReady();
+}
+
+function pinOnInput(inp){
+  // Numbers only
+  inp.value=inp.value.replace(/[^0-9]/g,'');
+  pinCheckReady();
+}
+
+function pinCheckReady(){
+  const btn=document.getElementById('pin-login-btn');
+  const ready=_pinSelectedName&&document.getElementById('pin-inp').value.length===4;
+  btn.disabled=!ready;
+}
+
+async function pinSubmit(){
+  const pin=document.getElementById('pin-inp').value;
+  const errEl=document.getElementById('pin-error');
+  const btn=document.getElementById('pin-login-btn');
+  if(!_pinSelectedName){errEl.textContent='Please select your name';errEl.style.display='';return;}
+  if(pin.length!==4){errEl.textContent='Enter your 4-digit PIN';errEl.style.display='';return;}
+
+  btn.disabled=true; btn.textContent='Checking…';
+  errEl.style.display='none';
+
+  // Validate against DB
+  try{
+    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&active=eq.true`,{headers:HDR});
+    const rows=await r.json();
+    if(!rows.length||rows[0].pin!==pin){
+      errEl.textContent='❌ Wrong PIN — try again';
+      errEl.style.display='';
+      btn.disabled=false; btn.textContent='Login →';
+      document.getElementById('pin-inp').value='';
+      pinCheckReady();
+      return;
+    }
+    // Success
+    const collector=rows[0];
+    selectedCollector=collector.name;
+    selectedTeam=collector.name==='Tandoy'?'TeamB':'TeamA';
+    document.getElementById('topbar-sub').textContent=collector.name;
+    document.getElementById('pin-inp').value='';
+    showAreasScreen();
+  }catch(e){
+    // Offline fallback — check cached collectors
+    const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&c.pin===pin);
+    if(cached){
+      selectedCollector=cached.name;
+      selectedTeam=cached.name==='Tandoy'?'TeamB':'TeamA';
+      document.getElementById('topbar-sub').textContent=cached.name;
+      document.getElementById('pin-inp').value='';
+      showAreasScreen();
+    }else{
+      errEl.textContent='❌ Wrong PIN or offline — try again';
+      errEl.style.display='';
+      btn.disabled=false; btn.textContent='Login →';
+    }
+  }
+}
+
+function pinLogout(){
+  selectedCollector=null; selectedTeam=null;
+  _pinSelectedName=null;
+  document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('pin-inp').value='';
+  document.getElementById('pin-error').style.display='none';
+  document.getElementById('topbar-sub').textContent='Collector PWA';
+  pinCheckReady();
+  showScreen('screen-collector');
+}
+
+// ── AREA SELECT SCREEN ────────────────────────────────────────────
+const AREAS = [
+  {id:'DIPOLOG', label:'Dipolog', icon:'🏙', groups:['A1','A2','A3']},
+  {id:'DAPITAN', label:'Dapitan', icon:'🌊', groups:['B1','B2','B3']},
+  {id:'SINDANGAN', label:'Sindangan', icon:'🏝', groups:['A4']},
+  {id:'POLANCO', label:'Polanco', icon:'🌿', groups:['A5']},
+  {id:'ROXAS', label:'Roxas', icon:'🌺', groups:['A6']},
+];
+
+function showAreasScreen(){
+  document.getElementById('areas-collector-name').textContent=selectedCollector;
+  document.getElementById('areas-list').innerHTML='';
+  AREAS.forEach(area=>{
+    const el=document.createElement('div');
+    el.className='group-item active-group';
+    el.style.cssText='cursor:pointer';
+    el.innerHTML=`
+      <div class="gi-icon active" style="font-size:20px;width:44px;height:44px">${area.icon}</div>
+      <div class="gi-left">
+        <div class="gi-name">${area.label}</div>
+        <div class="gi-meta">${area.groups.length>1?area.groups.length+' groups':'1 group — tap to start'}</div>
+      </div>
+      <div class="gi-badge"><span class="pill pill-blue">▶</span></div>`;
+    el.onclick=()=>areaSelect(area);
+    document.getElementById('areas-list').appendChild(el);
+  });
+  showScreen('screen-areas');
+}
+
+function areaSelect(area){
+  if(area.groups.length===1){
+    // Single group — go straight to vendos
+    startGroup(area.groups[0]);
+  } else {
+    // Multiple groups — show group list
+    loadGroupsScreen(selectedCollector, selectedTeam, area.groups);
+  }
+}
+
 function selectCollector(el,name,team){
   selectedCollector=name; selectedTeam=team;
-  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
-  if(el) el.classList.add('selected');
   loadGroupsScreen(name,team);
 }
 
-async function loadGroupsScreen(collector,team){
+async function loadGroupsScreen(collector,team,filterGroupIds){
   showScreen('screen-groups');
   document.getElementById('groups-collector-label').textContent=collector;
   document.getElementById('group-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
@@ -598,7 +743,7 @@ async function loadGroupsScreen(collector,team){
     });
   } catch(e){ toast('Offline — using last known state',3000); }
 
-  const groupIds = TEAM_GROUPS[team]||[];
+  const groupIds = filterGroupIds || TEAM_GROUPS[team]||[];
   const html = groupIds.map((gid,i)=>{
     const g = SCHEDULE.find(s=>s.id===gid);
     if(!g) return '';
@@ -1429,17 +1574,22 @@ function forceClearSession(){
   Object.keys(localStorage).filter(k=>k.startsWith('cached_items_')||k.startsWith('cached_route_'))
     .forEach(k=>localStorage.removeItem(k));
   document.getElementById('resume-banner').style.display='none';
-  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
   document.getElementById('group-section') && (document.getElementById('group-section').style.display='none');
+  selectedCollector=null; selectedTeam=null; _pinSelectedName=null;
+  showScreen('screen-collector');
   toast('✅ Session cleared');
 }
 
 function goHome(){
   currentGroupRun=null;currentGroupDef=null;currentItems=[];currentItem=null;
-  capturedGPS=null;nextGroupDef=null;selectedCollector=null;selectedTeam=null;
-  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('topbar-sub').textContent='Collector PWA';
-  showScreen('screen-collector');
+  capturedGPS=null;nextGroupDef=null;
+  if(selectedCollector){
+    showAreasScreen();
+  } else {
+    selectedTeam=null;
+    document.getElementById('topbar-sub').textContent='Collector PWA';
+    showScreen('screen-collector');
+  }
 }
 
 // ── OFFLINE FLUSH ─────────────────────────────────────────────────
