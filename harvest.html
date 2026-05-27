@@ -346,7 +346,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card-title">💰 Count coins</div>
     <div style="margin-bottom:12px">
       <div class="coin-label">Total coins <span>All coins in box</span></div>
-      <input type="number" class="coin-input" id="coin-total" step="1" aria-label="Total coins" step="1" aria-label="Total coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input" id="coin-total" step="1" aria-label="Total coins" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()">
     </div>
     <div style="margin-bottom:12px">
       <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
@@ -528,7 +528,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v7.5';
+const APP_VERSION = 'v7.6';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -838,7 +838,7 @@ function renderVendoList(){
     const cls=item.status==='harvested'?'done':item.status==='skipped'?'issue':'';
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
-    const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'2-digit'}):'—';
+    const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
     let mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:item.address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.address+', Zamboanga del Norte, Philippines')}`:'';
@@ -918,7 +918,8 @@ function openItem(idx){
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
-  document.getElementById('form-vmeta').textContent=`${currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${currentItem.last_harvest_date||'—'}`;
+  const fmtLastDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+  document.getElementById('form-vmeta').textContent=`${currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(currentItem.last_harvest_date)}`;
 
   // Directions
   const dirEl=document.getElementById('form-directions');
@@ -1022,7 +1023,7 @@ function calcNet(){
   const totalDeductions=free+saloy+freeCoins;
   const net=Math.max(0,total-totalDeductions);
   const spawn=net*0.75,customer=net*0.25;
-  document.getElementById('sum-free').textContent='-₱'+fmt(totalDeductions);
+  document.getElementById('sum-free').textContent=totalDeductions > 0 ? '-₱'+fmt(totalDeductions) : '-₱0';
   document.getElementById('sum-net').textContent='₱'+fmt(net);
   document.getElementById('sum-spawn').textContent='₱'+fmt(spawn);
   document.getElementById('sum-customer').textContent='₱'+fmt(customer);
