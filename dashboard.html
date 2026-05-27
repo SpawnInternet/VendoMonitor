@@ -913,6 +913,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab" id="hbtn-newvendo" onclick="hvShowTab('newvendo',this)" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;">🏭 New Vendo</button>
       <button class="hv-hvtab" id="hbtn-vnames" onclick="hvShowTab('vnames',this)">🔗 Vendo Names</button>
       <button class="hv-hvtab" id="hbtn-audited" onclick="hvShowTab('audited',this)" style="background:#fef2f2;border-color:#fca5a5;color:#dc2626;font-size:11px;">🤖 Claude Audited Vendos</button>
+      <button class="hv-hvtab" id="hbtn-activity" onclick="hvShowTab('activity',this)" style="background:#ecfdf5;border-color:#6ee7b7;color:#047857;font-size:11px;">🌾 Activity</button>
       <button class="hv-hvtab" id="hbtn-settings" onclick="hvShowTab('settings',this)" style="background:#f5f3ff;border-color:#ddd6fe;color:#7c3aed;font-size:11px;">⚙️ Settings</button>
     </div>
   </div>
@@ -1426,7 +1427,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 
   <!-- Edit Harvest Record -->
-  <div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:12px;padding:16px;">
+  <div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:12px;padding:16px;margin-bottom:14px;">
     <div style="font-size:12px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">💰 Edit Harvest Record Amounts</div>
     <div style="font-size:11px;color:#6b7280;margin-bottom:10px;">Changing coin amounts recalculates net, spawn share, and owner share. TG income window updates on next reconciliation refresh.</div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
@@ -1436,6 +1437,54 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     </div>
     <div id="set-harvest-results" style="max-height:320px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:7px;background:#f8fdf4;"></div>
   </div>
+
+  <!-- Collectors Management -->
+  <div style="background:#fff;border:1.5px solid #fde68a;border-radius:12px;padding:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.05em;">👥 Collectors &amp; PINs</div>
+      <button onclick="colAddNew()" style="padding:6px 14px;background:#f59e0b;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Add Collector</button>
+    </div>
+    <div style="font-size:11px;color:#6b7280;margin-bottom:10px;">Manage collector names and PINs used to log in to the Harvest PWA.</div>
+    <div id="col-list" style="margin-bottom:10px;"></div>
+    <!-- Add/Edit form -->
+    <div id="col-form" style="display:none;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:14px;margin-top:8px;">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:10px;" id="col-form-title">Add Collector</div>
+      <input type="hidden" id="col-edit-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:4px;">Name</div>
+          <input id="col-name-inp" type="text" placeholder="e.g. Carlona" style="width:100%;padding:8px 10px;border:1.5px solid #fde68a;border-radius:7px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;">
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:4px;">4-digit PIN</div>
+          <input id="col-pin-inp" type="text" maxlength="4" placeholder="0000" style="width:100%;padding:8px 10px;border:1.5px solid #fde68a;border-radius:7px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box;letter-spacing:4px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="colSave()" style="flex:1;padding:8px;background:#f59e0b;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">💾 Save</button>
+        <button onclick="colCancelForm()" style="flex:1;padding:8px;background:#f3f4f6;color:#6b7280;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+      </div>
+      <div id="col-form-msg" style="font-size:11px;margin-top:6px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ACTIVITY TAB PANEL -->
+<div id="hvtab-activity" class="hvtab-panel" style="display:none;padding:16px;">
+  <div style="font-size:16px;font-weight:700;color:#047857;margin-bottom:4px;">🌾 Harvest Activity</div>
+  <div style="font-size:11px;color:#6b7280;margin-bottom:14px;">Live view of all collector harvest runs — groups, vendos, coins, GPS, and photos.</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <select id="act-filter-collector" onchange="actLoad()" style="padding:7px 10px;border:1.5px solid #d1fae5;border-radius:7px;font-size:12px;font-family:inherit;outline:none;">
+      <option value="">All collectors</option>
+    </select>
+    <select id="act-filter-status" onchange="actLoad()" style="padding:7px 10px;border:1.5px solid #d1fae5;border-radius:7px;font-size:12px;font-family:inherit;outline:none;">
+      <option value="">All status</option>
+      <option value="active">🔵 Active</option>
+      <option value="completed">🟢 Completed</option>
+    </select>
+    <button onclick="actLoad()" style="padding:7px 14px;background:#047857;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Refresh</button>
+  </div>
+  <div id="act-runs" style=""></div>
 </div>
 
 <!-- REFRESH FAB -->
@@ -1918,7 +1967,7 @@ function hvShowTab(tab, btn) {
     newvendo: document.getElementById('hv-tab-newvendo'),
     audited: document.getElementById('hv-tab-audited'),
     settings: document.getElementById('hv-tab-settings'),
-    settings: document.getElementById('hv-tab-settings')
+    activity: document.getElementById('hvtab-activity')
   };
   // Use classList to force display:none (overcomes !important in CSS)
   const hide = el => { if (!el) return; el.classList.add('hv-hidden'); el.style.display = ''; };
@@ -1931,7 +1980,7 @@ function hvShowTab(tab, btn) {
   if (_aeld) _aeld.style.display = 'none';
   if (_rov)  _rov.style.display  = 'none';
   // Hide/show flex container elements
-  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, els.newvendo, els.settings, guide].forEach(hide);
+  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, els.newvendo, els.settings, els.activity, guide].forEach(hide);
   if (isRoute) {
     show(guide, ''); show(els.page, 'grid'); show(els.area, 'flex'); show(els.filt, 'flex');
     // Reset loading flag and reload vendos when switching back to route tab
@@ -1963,6 +2012,11 @@ function hvShowTab(tab, btn) {
   } else if (tab === 'settings') {
     show(els.settings, 'block');
     setInitSettings();
+    colLoad();
+  } else if (tab === 'activity') {
+    show(els.activity, 'block');
+    actLoad();
+    actLoadCollectorFilter();
   }
   if (tab === 'records') hvLoadRecordDates();
   if (tab === 'schedule') hvLoadSchedule();
@@ -13758,6 +13812,221 @@ window.joCopyBriefing=function(){
 };
 
 })();
+</script>
+
+
+<script>
+// ══════════════════════════════════════════════
+// COLLECTORS MANAGEMENT
+// ══════════════════════════════════════════════
+const _COLHDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
+
+async function colLoad(){
+  const el=document.getElementById('col-list');
+  if(!el)return;
+  el.innerHTML='<div style="color:#9ca3af;font-size:12px;padding:8px">Loading…</div>';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/collectors?order=id.asc`,{headers:_COLHDR});
+    const rows=await r.json();
+    if(!rows.length){el.innerHTML='<div style="color:#9ca3af;font-size:12px;padding:8px">No collectors yet.</div>';return;}
+    el.innerHTML=rows.map(c=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #fef3c7;background:${c.active?'#fff':'#f9fafb'}">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:${c.active?'#1f2937':'#9ca3af'}">${c.name}</div>
+          <div style="font-size:11px;color:#6b7280">PIN: <b style="letter-spacing:3px">${c.pin||'0000'}</b> · ${c.active?'<span style="color:#15803d">Active</span>':'<span style="color:#dc2626">Inactive</span>'}</div>
+        </div>
+        <button onclick="colEdit(${c.id},'${c.name}','${c.pin||'0000'}',${c.active})" style="padding:5px 10px;background:#fef3c7;border:1.5px solid #fde68a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:#92400e">✏️ Edit</button>
+        <button onclick="colToggle(${c.id},${c.active})" style="padding:5px 10px;background:${c.active?'#fee2e2':'#dcfce7'};border:1.5px solid ${c.active?'#fca5a5':'#86efac'};border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;color:${c.active?'#dc2626':'#15803d'}">${c.active?'Deactivate':'Activate'}</button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:#dc2626;font-size:12px;padding:8px">Error: '+e.message+'</div>';}
+}
+
+function colAddNew(){
+  document.getElementById('col-edit-id').value='';
+  document.getElementById('col-name-inp').value='';
+  document.getElementById('col-pin-inp').value='';
+  document.getElementById('col-form-title').textContent='Add Collector';
+  document.getElementById('col-form-msg').textContent='';
+  document.getElementById('col-form').style.display='';
+  document.getElementById('col-name-inp').focus();
+}
+
+function colEdit(id,name,pin,active){
+  document.getElementById('col-edit-id').value=id;
+  document.getElementById('col-name-inp').value=name;
+  document.getElementById('col-pin-inp').value=pin;
+  document.getElementById('col-form-title').textContent='Edit Collector — '+name;
+  document.getElementById('col-form-msg').textContent='';
+  document.getElementById('col-form').style.display='';
+  document.getElementById('col-pin-inp').focus();
+}
+
+function colCancelForm(){
+  document.getElementById('col-form').style.display='none';
+}
+
+async function colSave(){
+  const id=document.getElementById('col-edit-id').value;
+  const name=document.getElementById('col-name-inp').value.trim();
+  const pin=document.getElementById('col-pin-inp').value.trim();
+  const msg=document.getElementById('col-form-msg');
+  if(!name){msg.style.color='#dc2626';msg.textContent='Name is required';return;}
+  if(pin&&(pin.length!==4||!/^\d{4}$/.test(pin))){msg.style.color='#dc2626';msg.textContent='PIN must be exactly 4 digits';return;}
+  msg.style.color='#6b7280';msg.textContent='Saving…';
+  try{
+    if(id){
+      await fetch(`${_SB}/rest/v1/collectors?id=eq.${id}`,{method:'PATCH',headers:{..._COLHDR,'Prefer':'return=minimal'},body:JSON.stringify({name,pin:pin||'0000'})});
+    }else{
+      await fetch(`${_SB}/rest/v1/collectors`,{method:'POST',headers:{..._COLHDR,'Prefer':'return=minimal'},body:JSON.stringify({name,pin:pin||'0000',active:true})});
+    }
+    msg.style.color='#15803d';msg.textContent='✅ Saved!';
+    setTimeout(()=>{ colCancelForm(); colLoad(); },700);
+  }catch(e){msg.style.color='#dc2626';msg.textContent='Error: '+e.message;}
+}
+
+async function colToggle(id,currentActive){
+  if(!confirm((currentActive?'Deactivate':'Activate')+' this collector?'))return;
+  try{
+    await fetch(`${_SB}/rest/v1/collectors?id=eq.${id}`,{method:'PATCH',headers:{..._COLHDR,'Prefer':'return=minimal'},body:JSON.stringify({active:!currentActive})});
+    colLoad();
+  }catch(e){alert('Error: '+e.message);}
+}
+
+// ══════════════════════════════════════════════
+// HARVEST ACTIVITY TAB
+// ══════════════════════════════════════════════
+async function actLoadCollectorFilter(){
+  const sel=document.getElementById('act-filter-collector');
+  if(!sel||sel.options.length>1)return;
+  try{
+    const r=await fetch(`${_SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:_COLHDR});
+    const rows=await r.json();
+    rows.forEach(c=>{
+      const o=document.createElement('option');
+      o.value=c.name;o.textContent=c.name;
+      sel.appendChild(o);
+    });
+  }catch(e){}
+}
+
+async function actLoad(){
+  const el=document.getElementById('act-runs');
+  if(!el)return;
+  el.innerHTML='<div style="color:#9ca3af;font-size:12px;padding:16px;text-align:center">Loading…</div>';
+  const collector=document.getElementById('act-filter-collector').value;
+  const status=document.getElementById('act-filter-status').value;
+  let url=`${_SB}/rest/v1/harvest_groups?order=created_at.desc&limit=50`;
+  if(collector)url+=`&collector=eq.${encodeURIComponent(collector)}`;
+  if(status)url+=`&status=eq.${status}`;
+  try{
+    const r=await fetch(url,{headers:_COLHDR});
+    const runs=await r.json();
+    if(!runs.length){el.innerHTML='<div style="color:#9ca3af;font-size:12px;padding:16px;text-align:center">No harvest runs found.</div>';return;}
+    el.innerHTML=runs.map(run=>actRenderRun(run)).join('');
+  }catch(e){el.innerHTML='<div style="color:#dc2626;font-size:12px;padding:16px">Error: '+e.message+'</div>';}
+}
+
+function actRenderRun(run){
+  const pct=run.total_vendos>0?Math.round(((run.harvested_count||0)+(run.skipped_count||0))/run.total_vendos*100):0;
+  const statusColor=run.status==='completed'?'#15803d':run.status==='active'?'#1e3cb8':'#6b7280';
+  const statusBg=run.status==='completed'?'#dcfce7':run.status==='active'?'#dbeafe':'#f3f4f6';
+  const statusIcon=run.status==='completed'?'🟢':run.status==='active'?'🔵':'⏳';
+  const date=run.created_at?new Date(run.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+  return `<div style="background:#fff;border:1.5px solid #d1fae5;border-radius:12px;margin-bottom:10px;overflow:hidden">
+    <div style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px" onclick="actToggleItems(${run.id},this)">
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:700;color:#111827">${run.group_label||run.group_id} <span style="font-size:11px;font-weight:400;color:#6b7280">· ${run.collector}</span></div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">${date} · ${run.area||'—'}</div>
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-size:11px;color:#15803d">✅ ${run.harvested_count||0} harvested</span>
+          <span style="font-size:11px;color:#d97706">⏭ ${run.skipped_count||0} skipped</span>
+          <span style="font-size:11px;color:#1e3cb8">📍 ${run.gps_added||0} GPS</span>
+          <span style="font-size:11px;color:#7c3aed;font-weight:700">₱${(parseFloat(run.total_net)||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})} net</span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:4px;height:5px;margin-top:6px;overflow:hidden">
+          <div style="background:${statusColor};height:100%;width:${pct}%;border-radius:4px;transition:.3s"></div>
+        </div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">${pct}% of ${run.total_vendos} vendos</div>
+      </div>
+      <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">${statusIcon} ${run.status}</span>
+      <span style="font-size:14px;color:#9ca3af">▼</span>
+    </div>
+    <div id="act-items-${run.id}" style="display:none;border-top:1px solid #d1fae5;padding:10px 14px">
+      <div class="act-items-inner-${run.id}" style="color:#9ca3af;font-size:12px">Tap to load vendos…</div>
+    </div>
+  </div>`;
+}
+
+async function actToggleItems(runId, headerEl){
+  const el=document.getElementById('act-items-'+runId);
+  if(!el)return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  const arrow=headerEl.querySelector('span:last-child');
+  if(arrow)arrow.textContent=isOpen?'▼':'▲';
+  if(isOpen)return;
+  const inner=el.querySelector('.act-items-inner-'+runId);
+  if(inner&&inner.dataset.loaded)return;
+  if(inner)inner.innerHTML='<div style="color:#9ca3af;font-size:12px;text-align:center;padding:8px">Loading vendos…</div>';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/harvest_group_items?group_run_id=eq.${runId}&order=id.asc`,{headers:_COLHDR});
+    const items=await r.json();
+    if(!items.length){if(inner)inner.innerHTML='<div style="color:#9ca3af;font-size:12px">No items.</div>';return;}
+    const harvested=items.filter(i=>i.status==='harvested');
+    const skipped=items.filter(i=>i.status==='skipped');
+    const pending=items.filter(i=>i.status==='pending');
+    let html='';
+    if(harvested.length){
+      html+=`<div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">✅ Harvested (${harvested.length})</div>`;
+      html+=harvested.map(it=>actRenderItem(it)).join('');
+    }
+    if(skipped.length){
+      html+=`<div style="font-size:10px;font-weight:700;color:#d97706;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px">⏭ Skipped (${skipped.length})</div>`;
+      html+=skipped.map(it=>actRenderItem(it)).join('');
+    }
+    if(pending.length){
+      html+=`<div style="font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px">⏳ Pending (${pending.length})</div>`;
+      html+=pending.map(it=>actRenderItem(it)).join('');
+    }
+    if(inner){inner.innerHTML=html;inner.dataset.loaded='1';}
+  }catch(e){if(inner)inner.innerHTML='<div style="color:#dc2626;font-size:12px">Error: '+e.message+'</div>';}
+}
+
+function actRenderItem(it){
+  const name=it.sheet_name||it.tg_name||'—';
+  const net=(parseFloat(it.net_collectible)||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const total=(parseFloat(it.coins_total)||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const isHarvested=it.status==='harvested';
+  const isSkipped=it.status==='skipped';
+  const lat=it.lat_captured||it.lat;
+  const lng=it.lng_captured||it.lng;
+  const hasGPS=!!(lat&&lng);
+  const mapsUrl=hasGPS?`https://www.google.com/maps?q=${lat},${lng}`:'';
+  const harvestTime=it.harvested_at?new Date(it.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
+  return `<div style="display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #f3f4f6">
+    ${it.photo_url?`<img src="${it.photo_url}" onclick="actViewPhoto('${it.photo_url}')" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1.5px solid #d1fae5;cursor:pointer;flex-shrink:0">`:
+    `<div style="width:56px;height:56px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📷</div>`}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+      <div style="font-size:10px;color:#6b7280">VLAN ${it.vlan||'?'} · ${it.barangay||it.area||'—'}${harvestTime?' · '+harvestTime:''}</div>
+      ${isHarvested?`<div style="font-size:11px;color:#1e3cb8;margin-top:2px">Total: ₱${total} → Net: <b style="color:#15803d">₱${net}</b></div>`:''}
+      ${isSkipped&&it.collector_note?`<div style="font-size:11px;color:#d97706;margin-top:2px">Skip: ${it.collector_note}</div>`:''}
+      ${hasGPS?`<div style="margin-top:4px;display:flex;gap:6px;align-items:center">
+        <span style="font-size:10px;color:#0369a1;background:#e0f2fe;border-radius:4px;padding:2px 6px">📍 ${parseFloat(lat).toFixed(5)}, ${parseFloat(lng).toFixed(5)}${it.lat_captured?' (captured)':' (stored)'}</span>
+        <a href="${mapsUrl}" target="_blank" style="font-size:10px;color:#15803d;font-weight:700;text-decoration:none;background:#dcfce7;border-radius:4px;padding:2px 6px">🗺 Maps</a>
+      </div>`:''}
+      ${it.collector_note&&isHarvested?`<div style="font-size:10px;color:#6b7280;margin-top:2px;font-style:italic">"${it.collector_note}"</div>`:''}
+    </div>
+  </div>`;
+}
+
+function actViewPhoto(url){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  ov.innerHTML=`<img src="${url}" style="max-width:95vw;max-height:90vh;border-radius:10px;object-fit:contain"><div style="position:absolute;top:16px;right:20px;color:#fff;font-size:28px;cursor:pointer">✕</div>`;
+  ov.onclick=()=>document.body.removeChild(ov);
+  document.body.appendChild(ov);
+}
 </script>
 
 </body>
