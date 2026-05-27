@@ -565,15 +565,19 @@ function updateOnline(){
 window.addEventListener('online',updateOnline);
 window.addEventListener('offline',updateOnline);
 updateOnline();
-// Unregister any old service workers to prevent caching issues
+// Register service worker for offline support
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.getRegistrations().then(regs=>{
-    regs.forEach(r=>r.unregister());
-  });
+  navigator.serviceWorker.register('/VendoMonitor/sw.js')
+    .then(reg=>{
+      console.log('SW registered:', reg.scope);
+      // Check for updates on each load
+      reg.update();
+    })
+    .catch(err=>console.warn('SW registration failed:', err));
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.3';
+const APP_VERSION = 'v8.4';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -1578,11 +1582,12 @@ function hardReset(){
   );
   keysToRemove.forEach(k=>localStorage.removeItem(k));
   localStorage.setItem('harvest_app_version', APP_VERSION);
-  // Unregister service worker to force fresh load
+  // Clear SW cache and re-register on reload
   if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>{
       regs.forEach(r=>r.unregister());
     });
+    caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))));
   }
   toast('✅ App reset — reloading…', 2000);
   setTimeout(()=>location.reload(true), 2000);
