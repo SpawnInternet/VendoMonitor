@@ -358,8 +358,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <!-- Photo thumbnail after snap -->
     <div id="photo-thumb-wrap" style="display:none;margin-bottom:8px;position:relative">
-      <img id="photo-thumb" style="width:100%;border-radius:10px;max-height:220px;object-fit:cover;border:2px solid var(--green-mid)">
+      <img id="photo-thumb" style="width:100%;border-radius:10px;max-height:260px;object-fit:cover;border:2px solid var(--green-mid)">
       <button onclick="retakePhoto()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit">🔄 Retake</button>
+      <a id="photo-download-btn" href="#" download="spawn_photo.jpg" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit;text-decoration:none;font-weight:700">⬇ Save</a>
       <div id="photo-gps-badge" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600"></div>
     </div>
     <!-- Open camera button -->
@@ -577,7 +578,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.4';
+const APP_VERSION = 'v8.5';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -1215,12 +1216,78 @@ function closeCamera(){
   btn.style.display=''; btn.disabled=false; btn.textContent='📷 Open Camera & Capture GPS';
 }
 
+function stampOverlay(canvas, gps){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+
+  // Info lines
+  const vendoName=currentItem?(currentItem.sheet_name||currentItem.tg_name||'Unknown Vendo'):'Unknown Vendo';
+  const address=currentItem?(currentItem.address||currentItem.barangay||'—'):'—';
+  const vlan=currentItem?('VLAN '+(currentItem.vlan||'?')):'';
+  const collector=selectedCollector||'—';
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('en-PH',{year:'numeric',month:'2-digit',day:'2-digit'});
+  const timeStr=now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const coordStr=gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS pending…';
+
+  const lines=[
+    vendoName,
+    address,
+    vlan+' · '+collector,
+    dateStr+' '+timeStr,
+    coordStr,
+  ];
+
+  // Bottom bar
+  const fontSize=Math.max(16, Math.round(w/45));
+  const lineH=fontSize*1.55;
+  const padX=fontSize*0.8;
+  const barH=lineH*lines.length + fontSize*0.8;
+  const barY=h-barH;
+
+  // Semi-transparent black bar
+  ctx.fillStyle='rgba(0,0,0,0.62)';
+  ctx.fillRect(0,barY,w,barH);
+
+  // Text
+  ctx.font=`bold ${fontSize}px -apple-system,Arial,sans-serif`;
+  ctx.textBaseline='top';
+  lines.forEach((line,i)=>{
+    const y=barY + fontSize*0.4 + i*lineH;
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillText(line, padX+1, y+1);
+    // Main text — first line white+bold, rest light gray
+    ctx.fillStyle = i===0 ? '#ffffff' : i===4 ? '#4ade80' : '#e5e7eb';
+    ctx.fillText(line, padX, y);
+  });
+
+  // Spawn Internet watermark top-right
+  const wmSize=Math.max(11, Math.round(w/80));
+  ctx.font=`${wmSize}px Arial,sans-serif`;
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.textAlign='right';
+  ctx.textBaseline='top';
+  ctx.fillText('Spawn Internet', w-8, 8);
+  ctx.textAlign='left';
+}
+
 function snapPhoto(){
   const video=document.getElementById('camera-video');
   const canvas=document.getElementById('camera-canvas');
   canvas.width=video.videoWidth||1280;
   canvas.height=video.videoHeight||720;
-  canvas.getContext('2d').drawImage(video,0,0);
+  const ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0);
+
+  // Store clean frame for re-stamping after GPS
+  const cleanCanvas=document.createElement('canvas');
+  cleanCanvas.width=canvas.width; cleanCanvas.height=canvas.height;
+  cleanCanvas.getContext('2d').drawImage(video,0,0);
+  window._cleanPhotoCanvas=cleanCanvas;
+
+  // Stamp overlay immediately with GPS pending
+  stampOverlay(canvas, null);
 
   // Start GPS sampling at same moment as photo
   const lbl=document.getElementById('gps-status-lbl');
@@ -1233,14 +1300,37 @@ function snapPhoto(){
     document.getElementById('photo-thumb').src=url;
     document.getElementById('photo-thumb-wrap').style.display='';
     document.getElementById('photo-gps-badge').textContent='Getting GPS…';
+    const dl=document.getElementById('photo-download-btn');
+    if(dl){dl.href=url;dl.download=_photoFilename();}
     closeCamera();
-  },'image/jpeg',0.88);
+  },'image/jpeg',0.92);
 
-  // Best-of-3 GPS: collect up to 3 readings, pick most accurate
-  bestOfThreeGPS(lbl);
+  // Best-of-3 GPS — re-stamp once GPS is known
+  bestOfThreeGPS(lbl, (gps)=>{
+    // Re-draw from clean frame + new overlay
+    const ctx2=canvas.getContext('2d');
+    const src=window._cleanPhotoCanvas||canvas;
+    ctx2.drawImage(src,0,0);
+    stampOverlay(canvas, gps);
+    canvas.toBlob(blob=>{
+      capturedPhotoBlob=blob;
+      const url=URL.createObjectURL(blob);
+      document.getElementById('photo-thumb').src=url;
+      // Update download link
+      const dl=document.getElementById('photo-download-btn');
+      if(dl){dl.href=url; dl.download=_photoFilename();}
+    },'image/jpeg',0.92);
+  });
 }
 
-function bestOfThreeGPS(lbl){
+function _photoFilename(){
+  const name=(currentItem?(currentItem.sheet_name||currentItem.tg_name||'vendo'):'vendo').replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
+  const d=new Date();
+  const ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);
+  return `spawn_${name}_${ds}.jpg`;
+}
+
+function bestOfThreeGPS(lbl, onFinalized){
   if(!navigator.geolocation){
     lbl.className='gps-status err'; lbl.textContent='❌ GPS not supported'; return;
   }
@@ -1254,7 +1344,6 @@ function bestOfThreeGPS(lbl){
         readings.push({lat:pos.coords.latitude,lng:pos.coords.longitude,acc:pos.coords.accuracy});
         attempts++;
         if(attempts<MAX && pos.coords.accuracy>10){
-          // Still imprecise — try again after short wait
           setTimeout(tryOne,2000);
         } else {
           finalize();
@@ -1274,9 +1363,9 @@ function bestOfThreeGPS(lbl){
       lbl.className='gps-status err';
       lbl.textContent='❌ Could not get GPS — try outdoors or retry';
       document.getElementById('photo-gps-badge').textContent='No GPS';
+      if(onFinalized) onFinalized(null);
       return;
     }
-    // Pick reading with best (lowest) accuracy value
     const best=readings.reduce((a,b)=>a.acc<b.acc?a:b);
     capturedGPS={lat:best.lat,lng:best.lng};
     const accStr='±'+Math.round(best.acc)+'m';
@@ -1290,6 +1379,7 @@ function bestOfThreeGPS(lbl){
     actionsEl.style.display='flex';
     document.getElementById('gps-verify-a').href=`https://www.google.com/maps?q=${best.lat},${best.lng}`;
     toast(`📍 GPS locked — ${accStr}`,3000);
+    if(onFinalized) onFinalized(capturedGPS);
   }
 
   tryOne();
