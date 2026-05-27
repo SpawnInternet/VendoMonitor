@@ -578,7 +578,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.5';
+const APP_VERSION = 'v8.6';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -1343,18 +1343,21 @@ function bestOfThreeGPS(lbl, onFinalized){
       pos=>{
         readings.push({lat:pos.coords.latitude,lng:pos.coords.longitude,acc:pos.coords.accuracy});
         attempts++;
-        if(attempts<MAX && pos.coords.accuracy>10){
-          setTimeout(tryOne,2000);
+        // Accept immediately if accuracy is good enough (≤20m)
+        if(pos.coords.accuracy<=20){
+          finalize();
+        } else if(attempts<MAX){
+          setTimeout(tryOne,1500);
         } else {
           finalize();
         }
       },
       err=>{
         attempts++;
-        if(attempts<MAX) setTimeout(tryOne,2000);
+        if(attempts<MAX) setTimeout(tryOne,1500);
         else finalize();
       },
-      {enableHighAccuracy:true,timeout:12000,maximumAge:0}
+      {enableHighAccuracy:true,timeout:8000,maximumAge:0}
     );
   }
 
