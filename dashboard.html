@@ -549,7 +549,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="tab-btn active" onclick="showVTab('txns',this)">📝 Transactions</button>
       <button class="tab-btn" onclick="showVTab('chart',this)">📊 Monthly Chart</button>
       <button class="tab-btn" onclick="showVTab('suspicious',this)" id="sus-tab-btn" style="color:#dc2626;">⚠️ Suspicious</button>
-      <button class="tab-btn" onclick="showVTab('harvest',this);loadVendoHarvestRecords();" style="color:#15803d;">📋 Harvest</button>
+      <button class="tab-btn" onclick="showVTab('harvest',this);loadVendoHarvestRecords();cyclesLoad();" style="color:#15803d;">📋 Harvest</button>
     </div>
 
     <!-- Transactions tab -->
@@ -905,7 +905,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div class="hv-toprow">
     <div class="hv-title">🌾 Harvest</div>
     <div class="hv-tabs">
-      <button class="hv-hvtab on" id="hbtn-route" onclick="hvShowTab('route',this)">📋 Route builder</button>
+      <button class="hv-hvtab on" id="hbtn-cycles" onclick="hvShowTab('cycles',this)" style="background:#7c3aed;border-color:#7c3aed;color:#fff;">🔄 Cycles</button>
+      <button class="hv-hvtab" id="hbtn-route" onclick="hvShowTab('route',this)">📋 Route builder</button>
       <button class="hv-hvtab" id="hbtn-schedule" onclick="hvShowTab('schedule',this)">⏰ Schedule</button>
       <button class="hv-hvtab" id="hbtn-records" onclick="hvShowTab('records',this)">📊 Records</button>
       <button class="hv-hvtab" id="hbtn-recon" onclick="hvShowTab('recon',this)">⚖️ Reconcile</button>
@@ -952,8 +953,25 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <span style="font-size:9px;color:var(--mu);margin-left:4px;white-space:nowrap;" id="hv-sel-count">Loading…</span>
 </div>
 
+<!-- CYCLES TAB PANEL -->
+<div id="hv-tab-cycles" style="padding:14px;overflow-y:auto;height:calc(100vh - 132px);">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-size:15px;font-weight:800;color:#1e3a5f;">🔄 Harvest Cycles</div>
+      <div style="font-size:11px;color:#6b7280;">All cycles, groups, and progress. Updates live from Supabase.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="cyclesLoad()" style="padding:6px 14px;border-radius:8px;border:1.5px solid #7c3aed;background:#f5f3ff;color:#7c3aed;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🔄 Refresh</button>
+      <button onclick="cyclesNewCycle()" style="padding:6px 14px;border-radius:8px;border:1.5px solid #7c3aed;background:#7c3aed;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">➕ New Cycle</button>
+    </div>
+  </div>
+  <div id="cycles-body" style="display:flex;flex-direction:column;gap:16px;">
+    <div style="padding:24px;text-align:center;color:#9ca3af;font-size:12px;">Loading cycles…</div>
+  </div>
+</div>
+
 <!-- 3-COL PAGE -->
-<div class="hv-page" id="hv-route-page">
+<div class="hv-page" id="hv-route-page" style="display:none;">
 
   <!-- COL 1: ROUTE BUILDER -->
   <div class="hv-rc">
@@ -1919,7 +1937,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 const _SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const _KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
 
-let hvActiveTab = 'route';
+let hvActiveTab = 'cycles';
 let hvCurrentArea = 'all';
 let hvCurrentFilter = 'all';
 let hvSearchQ = '';
@@ -1956,6 +1974,7 @@ function hvShowTab(tab, btn) {
   if (fab) fab.classList.toggle('visible', isRoute);
   const guide = document.getElementById('hv-guide-bar');
   const els = {
+    cycles: document.getElementById('hv-tab-cycles'),
     page:   document.getElementById('hv-route-page'),
     area:   document.getElementById('hv-area-tabs'),
     filt:   document.getElementById('hv-filters'),
@@ -1980,8 +1999,11 @@ function hvShowTab(tab, btn) {
   if (_aeld) _aeld.style.display = 'none';
   if (_rov)  _rov.style.display  = 'none';
   // Hide/show flex container elements
-  [els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, els.newvendo, els.settings, els.activity, guide].forEach(hide);
-  if (isRoute) {
+  [els.cycles, els.page, els.area, els.filt, els.sched, els.rec, els.recon, els.vnames, els.addharvest, els.newvendo, els.settings, els.activity, guide].forEach(hide);
+  if (tab === 'cycles') {
+    show(els.cycles, 'block');
+    cyclesLoad();
+  } else if (isRoute) {
     show(guide, ''); show(els.page, 'grid'); show(els.area, 'flex'); show(els.filt, 'flex');
     // Reset loading flag and reload vendos when switching back to route tab
     window._hvLoading = false;
@@ -8004,6 +8026,156 @@ function toast(msg, dur) {
   setTimeout(() => { t.classList.remove('show'); }, dur||2500);
 }
 
+// ── CYCLES ────────────────────────────────────────────────────────
+async function cyclesLoad() {
+  const body = document.getElementById('cycles-body');
+  if (!body) return;
+  body.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;font-size:12px;">Loading…</div>';
+  try {
+    // Fetch cycles
+    const cyclesRes = await fetch(_SB + '/rest/v1/cycles?order=cycle_number.desc', { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const cycles = await cyclesRes.json();
+    if (!cycles.length) { body.innerHTML = '<div style="padding:24px;text-align:center;color:#9ca3af;">No cycles yet.</div>'; return; }
+
+    // Fetch all routes with cycle_id
+    const routesRes = await fetch(_SB + '/rest/v1/routes?select=id,route_code,group_label,collector,area,route_date,status,cycle_id&order=route_date.asc', { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const routes = await routesRes.json();
+
+    // Fetch route_items counts per route + harvested counts
+    const riRes = await fetch(_SB + '/rest/v1/route_items?select=id,route_id,status&limit=5000', { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const riAll = await riRes.json();
+
+    // Build item count map
+    const riByRoute = {};
+    riAll.forEach(ri => {
+      if (!riByRoute[ri.route_id]) riByRoute[ri.route_id] = { total: 0, done: 0 };
+      riByRoute[ri.route_id].total++;
+      if (ri.status === 'harvested') riByRoute[ri.route_id].done++;
+    });
+
+    body.innerHTML = cycles.map(cy => {
+      const cyRoutes = routes.filter(r => r.cycle_id === cy.id);
+      const totalVendos = cyRoutes.reduce((s, r) => s + (riByRoute[r.id]?.total || 0), 0);
+      const doneVendos  = cyRoutes.reduce((s, r) => s + (riByRoute[r.id]?.done  || 0), 0);
+      const pct = totalVendos ? Math.round(doneVendos / totalVendos * 100) : 0;
+      const statusColor = cy.status === 'active' ? '#16a34a' : '#6b7280';
+      const statusBg    = cy.status === 'active' ? '#dcfce7' : '#f3f4f6';
+
+      const groupCards = cyRoutes.map(r => {
+        const ri = riByRoute[r.id] || { total: 0, done: 0 };
+        const gPct = ri.total ? Math.round(ri.done / ri.total * 100) : 0;
+        const gColor = gPct === 100 ? '#16a34a' : gPct > 0 ? '#2563eb' : '#9ca3af';
+        return `<div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;min-width:180px;flex:1;">
+          <div style="font-size:11px;font-weight:800;color:#1e3a5f;margin-bottom:2px;">${r.group_label || r.route_code}</div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:6px;">👤 ${r.collector || '—'} · 📅 ${r.route_date || '—'}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="flex:1;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;">
+              <div style="height:100%;width:${gPct}%;background:${gColor};border-radius:3px;transition:.3s;"></div>
+            </div>
+            <span style="font-size:10px;font-weight:700;color:${gColor};min-width:32px;text-align:right;">${ri.done}/${ri.total}</span>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">
+            <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:#eff6ff;color:#1d4ed8;font-weight:700;">${r.route_code}</span>
+            <span style="font-size:9px;padding:1px 6px;border-radius:4px;background:${r.status==='completed'?'#dcfce7':r.status==='active'?'#fef9c3':'#f3f4f6'};color:${r.status==='completed'?'#15803d':r.status==='active'?'#854d0e':'#6b7280'};font-weight:700;">${r.status||'pending'}</span>
+          </div>
+        </div>`;
+      }).join('');
+
+      return `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:16px;font-weight:800;color:#1e3a5f;">Cycle ${cy.cycle_number} — ${cy.label}</span>
+              <span style="font-size:10px;padding:2px 8px;border-radius:20px;background:${statusBg};color:${statusColor};font-weight:700;">${cy.status.toUpperCase()}</span>
+            </div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">${cy.notes || ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:22px;font-weight:900;color:${pct===100?'#16a34a':'#1e3a5f'};">${pct}%</div>
+            <div style="font-size:10px;color:#6b7280;">${doneVendos} / ${totalVendos} vendos</div>
+          </div>
+        </div>
+        <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:12px;">
+          <div style="height:100%;width:${pct}%;background:${pct===100?'#16a34a':'#2563eb'};border-radius:4px;transition:.4s;"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">${groupCards}</div>
+        ${cy.status === 'active' && pct === 100 ? `<div style="margin-top:12px;padding:10px 14px;background:#dcfce7;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;font-weight:700;color:#15803d;">🎉 All groups complete!</span>
+          <button onclick="cyclesComplete(${cy.id})" style="padding:5px 12px;border-radius:7px;border:none;background:#15803d;color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Mark Complete & Start Next</button>
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:#dc2626;">Error loading cycles: ' + e.message + '</div>';
+  }
+}
+
+async function cyclesComplete(cycleId) {
+  if (!confirm('Mark this cycle as complete and create the next cycle?')) return;
+  try {
+    // Mark current cycle complete
+    await fetch(_SB + '/rest/v1/cycles?id=eq.' + cycleId, {
+      method: 'PATCH',
+      headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString().slice(0,10) })
+    });
+    // Get cycle info
+    const r = await fetch(_SB + '/rest/v1/cycles?id=eq.' + cycleId, { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const [cy] = await r.json();
+    // Get routes for this cycle
+    const rr = await fetch(_SB + '/rest/v1/routes?cycle_id=eq.' + cycleId, { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const prevRoutes = await rr.json();
+    // Create new cycle
+    const newLabel = 'Cycle ' + (cy.cycle_number + 1);
+    const nc = await fetch(_SB + '/rest/v1/cycles', {
+      method: 'POST',
+      headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ cycle_number: cy.cycle_number + 1, label: newLabel, status: 'active', started_at: new Date().toISOString().slice(0,10) })
+    });
+    const [newCy] = await nc.json();
+    // Clone routes for new cycle
+    for (const route of prevRoutes) {
+      const nr = await fetch(_SB + '/rest/v1/routes', {
+        method: 'POST',
+        headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ route_code: route.route_code + '-C' + newCy.cycle_number, area: route.area, collector: route.collector, group_label: route.group_label, status: 'pending', cycle_id: newCy.id, notes: 'Auto-created from Cycle ' + cy.cycle_number })
+      });
+      const [newRoute] = await nr.json();
+      // Clone route_items (vendo assignments only, no harvest data)
+      const ri = await fetch(_SB + '/rest/v1/route_items?route_id=eq.' + route.id + '&select=vendo_id,sheet_name,tg_name,area,vlan', { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+      const items = await ri.json();
+      if (items.length) {
+        const newItems = items.map(i => ({ route_id: newRoute.id, vendo_id: i.vendo_id, sheet_name: i.sheet_name, tg_name: i.tg_name, area: i.area, vlan: i.vlan }));
+        for (let i = 0; i < newItems.length; i += 100) {
+          await fetch(_SB + '/rest/v1/route_items', {
+            method: 'POST',
+            headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify(newItems.slice(i, i+100))
+          });
+        }
+      }
+    }
+    showToast('✅ Cycle ' + newCy.cycle_number + ' created!');
+    cyclesLoad();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function cyclesNewCycle() {
+  const label = prompt('Cycle label (e.g. "August 2026"):');
+  if (!label) return;
+  try {
+    const r = await fetch(_SB + '/rest/v1/cycles?order=cycle_number.desc&limit=1', { headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY } });
+    const [last] = await r.json();
+    const nextNum = last ? last.cycle_number + 1 : 1;
+    await fetch(_SB + '/rest/v1/cycles', {
+      method: 'POST',
+      headers: { apikey: _KEY, Authorization: 'Bearer ' + _KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ cycle_number: nextNum, label: label, status: 'active', started_at: new Date().toISOString().slice(0,10) })
+    });
+    showToast('✅ Cycle created!');
+    cyclesLoad();
+  } catch(e) { alert('Error: ' + e.message); }
+}
 
 </script>
 
