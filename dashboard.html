@@ -906,9 +906,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="hv-title">🌾 Harvest</div>
     <div class="hv-tabs">
       <button class="hv-hvtab on" id="hbtn-cycles" onclick="hvShowTab('cycles',this)" style="background:#7c3aed;border-color:#7c3aed;color:#fff;">🔄 Cycles</button>
-      <button class="hv-hvtab" id="hbtn-route" onclick="hvShowTab('route',this)">📋 Route builder</button>
       <button class="hv-hvtab" id="hbtn-schedule" onclick="hvShowTab('schedule',this)">⏰ Schedule</button>
-      <button class="hv-hvtab" id="hbtn-records" onclick="hvShowTab('records',this)">📊 Records</button>
+      <button class="hv-hvtab" id="hbtn-records" onclick="hvShowTab('records',this)">📋 Harvest Records</button>
       <button class="hv-hvtab" id="hbtn-recon" onclick="hvShowTab('recon',this)">⚖️ Reconcile</button>
       <button class="hv-hvtab" id="hbtn-addharvest" onclick="hvShowTab('addharvest',this)" style="background:#f0fdf4;border-color:#bbf7d0;color:#15803d;">➕ Add Harvest</button>
       <button class="hv-hvtab" id="hbtn-newvendo" onclick="hvShowTab('newvendo',this)" style="background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8;">🏭 New Vendo</button>
@@ -4921,10 +4920,12 @@ async function ahSubmit() {
       <div class="hvo-panel on" id="hvo-panel-harvests" style="padding:14px;min-height:0;">
         <div id="hvo-harvest-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px;"></div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+          <input type="text" id="hvo-hf-q" placeholder="🔍 Search vendo name..." oninput="hvoRenderHarvests()" style="flex:1;min-width:160px;padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
+          <select id="hvo-hf-month" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All months</option></select>
+          <select id="hvo-hf-area" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All areas</option></select>
+          <select id="hvo-hf-collector" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All collectors</option></select>
           <input type="date" id="hvo-hf-from" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
           <input type="date" id="hvo-hf-to" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
-          <input type="text" id="hvo-hf-q" placeholder="🔍 Search vendo, collector..." oninput="hvoRenderHarvests()" style="flex:1;min-width:180px;padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;">
-          <select id="hvo-hf-collector" onchange="hvoRenderHarvests()" style="padding:6px 10px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;font-size:11px;font-family:inherit;outline:none;background:#fff;"><option value="">All collectors</option></select>
           <button onclick="hvoClearFilters()" style="padding:6px 12px;border:1.5px solid rgba(30,60,200,.12);border-radius:7px;background:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ Clear</button>
         </div>
         <div id="hvo-harvest-table"><div style="text-align:center;padding:40px;color:#9ca3af;">Loading…</div></div>
@@ -5641,29 +5642,44 @@ function hvoMarkExplained(id, reopen) {
 function hvoPopCollector() {
   const sel = document.getElementById('hvo-hf-collector');
   const collectors = [...new Set(hvoHarvests.map(h => h.collector).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All collectors</option>' +
+  if (sel) sel.innerHTML = '<option value="">All collectors</option>' +
     collectors.map(c => `<option value="${c}">${c}</option>`).join('');
+  const mSel = document.getElementById('hvo-hf-month');
+  if (mSel) {
+    const months = [...new Set(hvoHarvests.map(h => (h.harvest_date||'').slice(0,7)).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+    mSel.innerHTML = '<option value="">All months</option>' +
+      months.map(m => { const d=new Date(m+'-02'); return `<option value="${m}">${d.toLocaleDateString('en-PH',{year:'numeric',month:'long'})}</option>`; }).join('');
+  }
+  const aSel = document.getElementById('hvo-hf-area');
+  if (aSel) {
+    const areas = [...new Set(hvoHarvests.map(h => h.area).filter(Boolean))].sort();
+    aSel.innerHTML = '<option value="">All areas</option>' +
+      areas.map(a => `<option value="${a}">${a}</option>`).join('');
+  }
 }
 
 function hvoClearFilters() {
-  document.getElementById('hvo-hf-from').value = '';
-  document.getElementById('hvo-hf-to').value = '';
-  document.getElementById('hvo-hf-q').value = '';
-  document.getElementById('hvo-hf-collector').value = '';
+  ['hvo-hf-from','hvo-hf-to','hvo-hf-q','hvo-hf-collector','hvo-hf-month','hvo-hf-area'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
   hvoRenderHarvests();
 }
 
 function hvoGetFiltered() {
-  const from = document.getElementById('hvo-hf-from').value;
-  const to   = document.getElementById('hvo-hf-to').value;
-  const q    = (document.getElementById('hvo-hf-q').value || '').toLowerCase();
-  const col  = document.getElementById('hvo-hf-collector').value;
+  const from  = document.getElementById('hvo-hf-from')?.value||'';
+  const to    = document.getElementById('hvo-hf-to')?.value||'';
+  const q     = (document.getElementById('hvo-hf-q')?.value||'').toLowerCase();
+  const col   = document.getElementById('hvo-hf-collector')?.value||'';
+  const month = document.getElementById('hvo-hf-month')?.value||'';
+  const area  = document.getElementById('hvo-hf-area')?.value||'';
   return hvoHarvests.filter(h => {
-    if (from && h.harvest_date < from) return false;
-    if (to   && h.harvest_date > to)   return false;
-    if (col  && h.collector !== col)    return false;
+    if (from  && h.harvest_date < from) return false;
+    if (to    && h.harvest_date > to)   return false;
+    if (col   && h.collector !== col)   return false;
+    if (month && !(h.harvest_date||'').startsWith(month)) return false;
+    if (area  && (h.area||'').toUpperCase() !== area.toUpperCase()) return false;
     if (q) {
-      const txt = ((h.vendo_name||'')+(h.tg_name||'')+(h.collector||'')+(h.route_code||'')).toLowerCase();
+      const txt = ((h.sheet_name||h.vendo_name||'')+(h.tg_name||'')+(h.collector||'')+(h.area||'')).toLowerCase();
       if (!txt.includes(q)) return false;
     }
     return true;
@@ -5688,58 +5704,153 @@ const _hvoPopData = {};
 function hvoRenderHarvests() {
   const rows = hvoGetFiltered();
   const container = document.getElementById('hvo-harvest-table');
-  if (!rows.length) { container.innerHTML = '<div class="hvo-loader">No harvest records found</div>'; return; }
+  if (!rows.length) { container.innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">No records found</div>'; return; }
 
-  const byDate = {};
-  rows.forEach(h => { const d = h.harvest_date; if (!byDate[d]) byDate[d]=[]; byDate[d].push(h); });
-  const dates = Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
+  rows.sort((a,b) => {
+    const d = (b.harvest_date||'').localeCompare(a.harvest_date||'');
+    return d !== 0 ? d : (a.sheet_name||a.vendo_name||'').localeCompare(b.sheet_name||b.vendo_name||'');
+  });
 
+  const totalCoins = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
+  const totalNet   = rows.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+  const totalSpawn = rows.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
 
+  const byMonth = {};
+  rows.forEach(h => { const m=(h.harvest_date||'').slice(0,7); if(!byMonth[m]) byMonth[m]=[]; byMonth[m].push(h); });
+  const months = Object.keys(byMonth).sort((a,b)=>b.localeCompare(a));
 
-  const totalNet = rows.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
-
-  // Summary chips
-  let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">'
-    + '<span style="padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;">📋 ' + rows.length + ' records</span>'
-    + '<span style="padding:4px 12px;border-radius:20px;background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700;">💰 Net: ' + fmt(totalNet) + '</span>'
-    + '<span style="padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;">🏢 Spawn: ' + fmt(totalNet*0.75) + '</span>'
-    + '<span style="padding:4px 12px;border-radius:20px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:700;">👤 Owner: ' + fmt(totalNet*0.25) + '</span>'
+  let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">'
+    + '<span style="padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;">'+rows.length+' records</span>'
+    + '<span style="padding:4px 12px;border-radius:20px;background:#f0f9ff;color:#0369a1;font-size:11px;font-weight:700;">🪙 '+fmt(totalCoins)+'</span>'
+    + '<span style="padding:4px 12px;border-radius:20px;background:#f0fdf4;color:#15803d;font-size:11px;font-weight:700;">Net '+fmt(totalNet)+'</span>'
+    + '<span style="padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;">Spawn '+fmt(totalSpawn)+'</span>'
     + '</div>';
 
-  // Stacked date blocks — no tabs
-  dates.forEach(date => {
-    const harv = byDate[date];
-    const byColl = {};
-    harv.forEach(h => { const c=h.collector||'—'; if(!byColl[c]) byColl[c]=[]; byColl[c].push(h); });
-    const dateNet = harv.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+  months.forEach(month => {
+    const mRows = byMonth[month];
+    const mCoins = mRows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
+    const mNet   = mRows.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
+    const mSpawn = mRows.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
+    const mLabel = new Date(month+'-02').toLocaleDateString('en-PH',{year:'numeric',month:'long'});
 
-    html += '<div style="border:2px solid #e5e7eb;border-radius:20px;padding:16px 18px;margin-bottom:14px;background:#fff;">'
-      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">'
-      + '<span style="font-size:15px;font-weight:800;color:#1a1d2e;">📅 ' + date + '</span>'
-      + '<span style="font-size:11px;color:#6b7280;">' + harv.length + ' record' + (harv.length!==1?'s':'') + ' · ' + Object.keys(byColl).length + ' collector' + (Object.keys(byColl).length!==1?'s':'') + '</span>'
-      + '<span style="margin-left:auto;font-size:13px;font-weight:700;color:#15803d;">Net: ' + fmt(dateNet) + '</span>'
-      + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">';
+    html += '<div style="margin-bottom:18px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px;">'
+      + '<div style="font-size:13px;font-weight:800;color:#1e3a5f;">'+mLabel+' <span style="font-size:11px;font-weight:400;color:#6b7280;">('+mRows.length+' records)</span></div>'
+      + '<div style="display:flex;gap:10px;font-size:11px;font-weight:700;">'
+      + '<span style="color:#0369a1;">'+fmt(mCoins)+'</span><span style="color:#15803d;">Net '+fmt(mNet)+'</span><span style="color:#1e3cb8;">Spawn '+fmt(mSpawn)+'</span>'
+      + '</div></div>'
+      + '<div style="overflow-x:auto;border-radius:10px;border:1.5px solid #e5e7eb;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px;background:#fff;">'
+      + '<thead><tr style="background:#eef2ff;">'
+      + ['#','Vendo Name','Area','Collector','Date','Total Coins','Free','Saloy','Old','Net','Spawn 75%','Owner 25%']
+          .map((h,i) => '<th style="padding:8px 10px;text-align:'+(i>=5?'right':'left')+';color:#1e3cb8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #c7d2fe;white-space:nowrap;">'+h+'</th>').join('')
+      + '</tr></thead><tbody>';
 
-    Object.entries(byColl).forEach(([coll, items]) => {
-      const cNet = items.reduce((s,h)=>s+(parseFloat(h.net_collectible)||0),0);
-      const icon = collSvg(coll);
-      const collId = 'hvc_' + date.replace(/-/g,'') + '_' + coll.replace(/[^a-z0-9]/gi,'');
-      _hvoPopData[collId] = items;
-      html += '<div data-collpop="' + collId + '" style="background:#fafbff;border:1.5px solid #e5e7eb;border-radius:14px;padding:14px 10px;cursor:pointer;text-align:center;transition:.15s;" onmouseover="this.style.borderColor=\'#1e3cb8\';this.style.background=\'#f0f4ff\'" onmouseout="this.style.borderColor=\'#e5e7eb\';this.style.background=\'#fafbff\'">'
-        + '<div style="margin-bottom:8px;">' + icon + '</div>'
-        + '<div style="font-size:12px;font-weight:700;color:#1a1d2e;margin-bottom:4px;">' + coll + '</div>'
-        + '<div style="font-size:10px;color:#6b7280;margin-bottom:8px;">' + items.length + ' vendo' + (items.length!==1?'s':'') + '</div>'
-        + '<div style="font-size:14px;font-weight:800;color:#15803d;">' + fmt(cNet) + '</div>'
-        + '<div style="font-size:9px;color:#6b7280;">net collectible</div>'
-        + '</div>';
+    mRows.forEach((h,i) => {
+      const name  = h.sheet_name||h.vendo_name||h.tg_name||'—';
+      const coins = parseFloat(h.coins_total||0);
+      const free  = parseFloat(h.coins_free||h.coins_free_time||h.coins_free_coins||0);
+      const saloy = parseFloat(h.coins_saloy||0);
+      const old   = parseFloat(h.coins_old||0);
+      const net   = parseFloat(h.net_collectible||0);
+      const spawn = parseFloat(h.spawn_share||0);
+      const owner = parseFloat(h.customer_share||0);
+      const bg    = i%2===0?'#fff':'#f9fafb';
+      html += '<tr data-hid="'+h.id+'" style="background:'+bg+';cursor:pointer;" onclick="hvoOpenHarvestDetail(this.dataset.hid*1)">'  
+        + '<td style="padding:7px 10px;color:#9ca3af;font-size:10px;">'+(i+1)+'</td>'
+        + '<td style="padding:7px 10px;font-weight:600;color:#1e3cb8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+name+'</td>'
+        + '<td style="padding:7px 10px;color:#374151;">'+(h.area||'—')+'</td>'
+        + '<td style="padding:7px 10px;color:#374151;">'+(h.collector||'—')+'</td>'
+        + '<td style="padding:7px 10px;white-space:nowrap;color:#374151;">'+(h.harvest_date||'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;font-weight:700;color:#0369a1;">'+fmt(coins)+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;color:#dc2626;">'+(free?fmt(free):'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;color:#d97706;">'+(saloy?fmt(saloy):'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;color:#9ca3af;">'+(old?fmt(old):'—')+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;font-weight:700;color:#15803d;">'+fmt(net)+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;font-weight:700;color:#1e3cb8;">'+fmt(spawn)+'</td>'
+        + '<td style="padding:7px 10px;text-align:right;color:#7c3aed;">'+fmt(owner)+'</td>'
+        + '</tr>';
     });
 
-    html += '</div></div>';
+    html += '<tr style="background:#eef2ff;font-weight:700;border-top:2px solid #c7d2fe;">'
+      + '<td colspan="5" style="padding:7px 10px;color:#1e3cb8;">Month Total</td>'
+      + '<td style="padding:7px 10px;text-align:right;color:#0369a1;">'+fmt(mCoins)+'</td>'
+      + '<td colspan="3"></td>'
+      + '<td style="padding:7px 10px;text-align:right;color:#15803d;">'+fmt(mNet)+'</td>'
+      + '<td style="padding:7px 10px;text-align:right;color:#1e3cb8;">'+fmt(mSpawn)+'</td>'
+      + '<td style="padding:7px 10px;text-align:right;color:#7c3aed;">'+fmt(mNet*0.25)+'</td>'
+      + '</tr></tbody></table></div></div>';
   });
 
   container.innerHTML = html;
 }
+
+async function hvoOpenHarvestDetail(id) {
+  let h = hvoHarvests.find(x => x.id === id);
+  if (!h) {
+    try {
+      const r = await fetch(SB_URL+'/rest/v1/harvests?id=eq.'+id+'&select=*', {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+      [h] = await r.json();
+    } catch(e) { return; }
+  }
+  if (!h) return;
+  const name  = h.sheet_name||h.vendo_name||h.tg_name||'—';
+  const f2    = v => '\u20b1'+Number(v||0).toLocaleString('en-PH',{minimumFractionDigits:2});
+  const coins = parseFloat(h.coins_total||0);
+  const free  = parseFloat(h.coins_free||h.coins_free_time||h.coins_free_coins||0);
+  const saloy = parseFloat(h.coins_saloy||0);
+  const old   = parseFloat(h.coins_old||0);
+  const net   = parseFloat(h.net_collectible||0);
+  const spawn = parseFloat(h.spawn_share||0);
+  const owner = parseFloat(h.customer_share||0);
+
+  document.getElementById('hvo-harvest-detail-pop')?.remove();
+  const pop = document.createElement('div');
+  pop.id = 'hvo-harvest-detail-pop';
+  Object.assign(pop.style, {position:'fixed',inset:'0',background:'rgba(0,0,0,.5)',zIndex:'19999',display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'});
+  pop.onclick = e => { if(e.target===pop) pop.remove(); };
+
+  const card = document.createElement('div');
+  Object.assign(card.style, {background:'#fff',borderRadius:'14px',width:'min(460px,100%)',maxHeight:'88vh',overflowY:'auto',boxShadow:'0 20px 60px rgba(0,0,0,.3)'});
+
+  const stat = (label, val, bg, border, color) =>
+    `<div style="background:${bg};border-left:3px solid ${border};border-radius:8px;padding:10px;"><div style="font-size:9px;font-weight:700;color:${border};text-transform:uppercase;">${label}</div><div style="font-size:16px;font-weight:700;color:${color};">${val}</div></div>`;
+
+  card.innerHTML =
+    `<div style="background:#1e3cb8;color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:flex-start;justify-content:space-between;">
+      <div>
+        <div style="font-size:15px;font-weight:700;">${name}</div>
+        <div style="font-size:11px;opacity:.8;margin-top:3px;">${[h.harvest_date,h.collector,h.area].filter(Boolean).join(' \u00b7 ')}</div>
+      </div>
+      <button id="hdd-close-x" style="width:30px;height:30px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:18px;cursor:pointer;line-height:1;">\u00d7</button>
+    </div>
+    <div style="padding:14px 16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+        ${stat('Total Coins',f2(coins),'#f0f9ff','#0369a1','#0369a1')}
+        ${stat('Net Collectible',f2(net),'#f0fdf4','#16a34a','#15803d')}
+        ${stat('Free Time',f2(free),'#fef2f2','#dc2626','#dc2626')}
+        ${stat('Saloy',f2(saloy),'#fefce8','#d97706','#d97706')}
+        ${stat('Old Coins',f2(old),'#fafbff','#9ca3af','#6b7280')}
+        ${stat('Spawn 75%',f2(spawn),'#eef2ff','#1e3cb8','#1e3cb8')}
+      </div>
+      <div style="background:#f9fafb;border-radius:8px;padding:10px 12px;font-size:11px;display:grid;gap:4px;">
+        ${h.tg_name?`<div><span style="color:#9ca3af;">TG Name:</span> <b>${h.tg_name}</b></div>`:''}
+        ${h.harvest_window_start?`<div><span style="color:#9ca3af;">Window:</span> ${h.harvest_window_start} \u2192 ${h.harvest_date||''}</div>`:''}
+        ${h.notes?`<div><span style="color:#9ca3af;">Notes:</span> ${h.notes}</div>`:''}
+        ${h.collector_note?`<div><span style="color:#9ca3af;">Collector note:</span> ${h.collector_note}</div>`:''}
+        ${h.photo_url?`<div style="margin-top:8px;"><img src="${h.photo_url}" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;" onerror="this.style.display='none'"></div>`:''}
+      </div>
+    </div>
+    <div style="padding:0 16px 16px;">
+      <button id="hdd-close-btn" style="width:100%;padding:9px;background:#f1f5f9;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:#374151;">Close</button>
+    </div>`;
+
+  pop.appendChild(card);
+  document.body.appendChild(pop);
+  card.querySelector('#hdd-close-x').onclick  = () => pop.remove();
+  card.querySelector('#hdd-close-btn').onclick = () => pop.remove();
+}
+
 
 function hvoShowDateTab(date, btn) {
   document.querySelectorAll('#hvo-date-tabs .hvo-dtab').forEach(b=>{
