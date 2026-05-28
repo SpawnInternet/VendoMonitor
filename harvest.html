@@ -614,19 +614,35 @@ window.addEventListener('DOMContentLoaded',()=>{
 let _pinCollectors = [];
 
 async function pinLoadCollectors(){
-  try{
-    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR});
-    _pinCollectors=await r.json();
-  }catch(e){
-    // Fallback hardcoded if offline
-    _pinCollectors=[{name:'Carlona',pin:'0000'},{name:'Gilbert',pin:'0000'},{name:'Tandoy',pin:'0000'}];
-  }
+  // Always show fallback immediately so collector isn't stuck on empty screen
+  const FALLBACK=[{name:'Carlona'},{name:'Gilbert'},{name:'Tandoy'},{name:'Ailyn'},{name:'Axcel'}];
   const el=document.getElementById('pin-name-list');
   if(!el)return;
-  el.innerHTML=_pinCollectors.map(c=>`
-    <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
-      <div class="collector-btn-name">${c.name}</div>
-    </div>`).join('');
+  const render=(list)=>{
+    el.innerHTML=list.map(c=>`
+      <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
+        <div class="collector-btn-name">${c.name}</div>
+      </div>`).join('');
+  };
+  // Show fallback immediately
+  render(FALLBACK);
+  // Then try to fetch real list with timeout
+  try{
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),5000);
+    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR,signal:ctrl.signal});
+    clearTimeout(tid);
+    const data=await r.json();
+    if(Array.isArray(data)&&data.length){
+      _pinCollectors=data;
+      render(data);
+    } else {
+      _pinCollectors=FALLBACK;
+    }
+  }catch(e){
+    _pinCollectors=FALLBACK;
+    // fallback already rendered
+  }
 }
 
 let _pinSelectedName=null;
