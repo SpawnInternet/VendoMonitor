@@ -829,48 +829,91 @@ async function startGroup(groupId){
       const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&order=id.asc`,{headers:HDR});
       currentItems=await rItems.json();
     } else {
-      // Build vendos from Excel data (VENDOS_DATA) enriched with Supabase ids/GPS/contact
-      const excelVendos = [];
-      const brngs = VENDOS_DATA[g.label] || {};
-      Object.entries(brngs).forEach(([barangay, vs]) => {
-        vs.forEach(v => excelVendos.push({...v, _barangay: barangay}));
-      });
-      if(!excelVendos.length){toast('No vendos found for this group');return;}
+      // Fetch vendos from Supabase route_items for this group's route
+      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos from database…</span></div>';
 
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Fetching vendo details…</span></div>';
-      // Enrich from Supabase vendos table — batch in chunks of 100 to avoid URL length limits
-      let sbMap = {};
+      // Find the route for this group (current cycle)
+      let vendos = [];
       try {
-        const names = excelVendos.map(v=>v.name).filter(Boolean);
-        const CHUNK = 80;
-        for(let ci=0; ci<names.length; ci+=CHUNK){
-          const batch = names.slice(ci,ci+CHUNK);
-          const encoded = batch.map(n=>'"'+n.replace(/"/g,'')+'"').join(',');
-          const rSB = await fetch(SB+'/rest/v1/vendos?sheet_name=in.('+encoded+')&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address&limit='+CHUNK,{headers:HDR});
-          if(rSB.ok){
-            const sbRows = await rSB.json();
-            if(Array.isArray(sbRows)) sbRows.forEach(r=>{ if(r.sheet_name) sbMap[r.sheet_name]=r; });
-          }
-          await new Promise(res=>setTimeout(res,30)); // small pause between chunks
-        }
-      } catch(e){ console.warn('Supabase enrich failed, using excel data only:', e.message); }
+        // Get active cycle
+        const rCycle = await fetch(`${SB}/rest/v1/cycles?status=eq.active&order=cycle_number.desc&limit=1`,{headers:HDR});
+        const cycles = await rCycle.json();
+        const cycleId = cycles.length ? cycles[0].id : null;
 
-      const vendos = excelVendos.map(v => {
-        const sb = sbMap[v.name] || {};
-        return {
-          id: sb.id || null,
-          sheet_name: v.name,
-          tg_name: sb.tg_name || null,
-          area: v.group,
-          vlan: sb.vlan || null,
-          address: v.address || sb.address || null,
-          barangay: v._barangay,
-          lat: sb.lat || v.lat || null,
-          lng: sb.lng || v.lng || null,
-          last_harvest_date: sb.last_harvest_date || null,
-          contact_number: sb.contact_number || v.contact || null,
-        };
-      });
+        // Get route for this group in current cycle
+        const routeQ = cycleId
+          ? `${SB}/rest/v1/routes?cycle_id=eq.${cycleId}&group_label=eq.${encodeURIComponent(g.label)}&limit=1`
+          : `${SB}/rest/v1/routes?group_label=eq.${encodeURIComponent(g.label)}&order=id.desc&limit=1`;
+        const rRoute = await fetch(routeQ,{headers:HDR});
+        const routes = await rRoute.json();
+
+        if(routes.length){
+          const routeId = routes[0].id;
+          // Fetch route_items with vendo details
+          let allItems = [];
+          let offset = 0;
+          while(true){
+            const rRI = await fetch(`${SB}/rest/v1/route_items?route_id=eq.${routeId}&select=vendo_id,sheet_name,tg_name,vlan,area&limit=500&offset=${offset}`,{headers:HDR});
+            const batch = await rRI.json();
+            if(!Array.isArray(batch)||!batch.length) break;
+            allItems.push(...batch);
+            if(batch.length<500) break;
+            offset+=500;
+          }
+
+          if(allItems.length){
+            // Enrich with GPS/contact from vendos table in chunks
+            document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Enriching '+allItems.length+' vendos…</span></div>';
+            const vendoIds = allItems.map(i=>i.vendo_id).filter(Boolean);
+            const sbMap = {};
+            const CHUNK = 100;
+            for(let ci=0;ci<vendoIds.length;ci+=CHUNK){
+              const batch = vendoIds.slice(ci,ci+CHUNK);
+              const rV = await fetch(`${SB}/rest/v1/vendos?id=in.(${batch.join(',')})&select=id,sheet_name,lat,lng,last_harvest_date,contact_number,address&limit=${CHUNK}`,{headers:HDR});
+              if(rV.ok){
+                const rows = await rV.json();
+                rows.forEach(r=>{ sbMap[r.id]=r; });
+              }
+            }
+            // Map to group centroids barangay
+            vendos = allItems.map(item=>{
+              const v = sbMap[item.vendo_id]||{};
+              return {
+                id: item.vendo_id||null,
+                sheet_name: item.sheet_name||v.sheet_name||null,
+                tg_name: item.tg_name||null,
+                area: item.area||g.label,
+                vlan: item.vlan||null,
+                address: v.address||null,
+                barangay: null,
+                lat: v.lat||null,
+                lng: v.lng||null,
+                last_harvest_date: v.last_harvest_date||null,
+                contact_number: v.contact_number||null,
+              };
+            });
+          }
+        }
+      } catch(e){ console.warn('Route fetch failed:', e.message); }
+
+      // Fallback: fetch directly from vendos by area if no route found
+      if(!vendos.length){
+        try {
+          document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Fetching vendos by area…</span></div>';
+          const area = g.areas && g.areas[0] ? g.areas[0] : g.label.split(' — ')[0].toUpperCase();
+          const rV = await fetch(`${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area)}&sheet_name=not.is.null&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address&limit=1000`,{headers:HDR});
+          if(rV.ok){
+            const rows = await rV.json();
+            vendos = rows.map(v=>({
+              id:v.id, sheet_name:v.sheet_name, tg_name:v.tg_name,
+              area:area, vlan:v.vlan, address:v.address, barangay:null,
+              lat:v.lat, lng:v.lng, last_harvest_date:v.last_harvest_date,
+              contact_number:v.contact_number
+            }));
+          }
+        } catch(e){ console.warn('Fallback fetch failed:', e.message); }
+      }
+
       if(!vendos.length){toast('No vendos found for this group');return;}
 
       document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group ('+vendos.length+' vendos)…</span></div>';
