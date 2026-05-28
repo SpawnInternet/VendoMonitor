@@ -692,7 +692,7 @@ async function pinSubmit(){
     // Success
     const collector=rows[0];
     selectedCollector=collector.name;
-    selectedTeam=collector.name==='Tandoy'?'TeamB':'TeamA';
+    selectedTeam=collector.team||( collector.name==='Tandoy'?'TeamB':'TeamA');
     document.getElementById('topbar-sub').textContent=collector.name;
     document.getElementById('pin-inp').value='';
     showAreasScreen();
@@ -701,7 +701,7 @@ async function pinSubmit(){
     const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&c.pin===pin);
     if(cached){
       selectedCollector=cached.name;
-      selectedTeam=cached.name==='Tandoy'?'TeamB':'TeamA';
+      selectedTeam=cached.team||(cached.name==='Tandoy'?'TeamB':'TeamA');
       document.getElementById('topbar-sub').textContent=cached.name;
       document.getElementById('pin-inp').value='';
       showAreasScreen();
@@ -755,8 +755,9 @@ function showAreasScreen(){
 
 function areaSelect(area){
   if(area.groups.length===1){
-    // Single group — go straight to vendos
-    startGroup(area.groups[0]);
+    // Route through loadGroupsScreen to enforce unlock check even for single-group areas
+    loadGroupsScreen(area.team, area.groups, area.label);
+    return;
   } else {
     // Multiple groups — show group list
     loadGroupsScreen(selectedCollector, selectedTeam, area.groups);
@@ -811,7 +812,7 @@ async function loadGroupsScreen(collector,team,filterGroupIds){
       <div class="gi-left">
         <div class="gi-name">${g.label}</div>
         <div class="gi-meta">${g.vendos} vendos · ${g.start.slice(5)} → ${g.end.slice(5)}</div>
-        ${isActive&&activeRun?`<div class="gi-meta" style="color:var(--blue);margin-top:2px">${activeRun.harvested_count} harvested, ${activeRun.total_vendos-(activeRun.harvested_count+activeRun.skipped_count)} remaining</div>`:''}
+        ${isActive&&activeRun?`<div class="gi-meta" style="color:var(--blue);margin-top:2px">${activeRun.harvested_count||0} harvested, ${(activeRun.total_vendos||0)-((activeRun.harvested_count||0)+(activeRun.skipped_count||0))} remaining</div>`:''}
       </div>
       <div class="gi-badge">${pill}</div>
     </div>`;
@@ -842,7 +843,7 @@ async function startGroup(groupId){
     if(existing.length){
       // Resume existing run
       currentGroupRun=existing[0];
-      const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&order=id.asc`,{headers:HDR});
+      const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status&order=id.asc`,{headers:HDR});
       currentItems=await rItems.json();
     } else {
       // Fetch vendos from Supabase route_items for this group's route
@@ -1028,7 +1029,8 @@ function clearSearch(){searchQuery='';document.getElementById('search-inp').valu
 
 function renderVendoList(){
   const all=currentItems;
-  all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(START_LAT,START_LNG,parseFloat(item.lat),parseFloat(item.lng)):null;});
+  const _initCentroid=(currentGroupDef&&GROUP_CENTROIDS[currentGroupDef.id])||{lat:START_LAT,lng:START_LNG};
+  all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
   const pending=all.filter(i=>i.status==='pending');
   const done=all.filter(i=>i.status==='harvested');
@@ -1492,7 +1494,7 @@ function captureGPS(){ openCamera(); }
 async function uploadPhoto(blob, vendoName){
   try {
     const ext='jpg';
-    const vendoId=currentItem&&currentItem.id?currentItem.id:null;
+    const vendoId=currentItem&&currentItem.vendo_id?currentItem.vendo_id:null;
     const safe=(vendoName||'vendo').replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
     const path=vendoId?`vendo-profiles/vendo_${vendoId}.jpg`:`${todayPHT()}/${safe}_${Date.now()}.${ext}`;
     const res=await fetch(`${SB}/storage/v1/object/harvest-photos/${path}`,{
@@ -1514,7 +1516,7 @@ function calcNet(){
   const totalDeductions=free+saloy+freeCoins;
   const net=Math.max(0,total-totalDeductions);
   const spawn=net*0.75,customer=net*0.25;
-  document.getElementById('sum-free').textContent=totalDeductions > 0 ? '-₱'+fmt(totalDeductions) : '-₱0';
+  docum// ent.getElementById('sum-free').textContent=totalDeductions > 0 ? '-₱'+fmt(totalDeductions) : '-₱0'; // dead UI element
   document.getElementById('sum-net').textContent='₱'+fmt(net);
   document.getElementById('sum-spawn').textContent='₱'+fmt(spawn);
   document.getElementById('sum-customer').textContent='₱'+fmt(customer);
