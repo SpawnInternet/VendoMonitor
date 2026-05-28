@@ -1,5 +1,5 @@
-// sw.js — Spawn Harvest PWA Service Worker v8.3
-const CACHE = 'spawn-harvest-v8.3';
+// sw.js — Spawn Harvest PWA Service Worker v9.0
+const CACHE = 'spawn-harvest-v9.0';
 const APP_SHELL = [
   '/VendoMonitor/harvest.html',
   '/VendoMonitor/manifest.json',
@@ -45,19 +45,16 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App shell — cache first, then network, update cache in background
+  // App shell — network first, fallback to cache
   e.respondWith(
-    caches.open(CACHE).then(cache =>
-      cache.match(e.request).then(cached => {
-        const networkFetch = fetch(e.request).then(response => {
-          if (response && response.status === 200) {
-            cache.put(e.request, response.clone());
-          }
-          return response;
-        }).catch(() => cached);
-        // Return cached immediately if available, else wait for network
-        return cached || networkFetch;
-      })
+    fetch(e.request).then(response => {
+      if (response && response.status === 200) {
+        const clone = response.clone();
+        caches.open(CACHE).then(cache => cache.put(e.request, clone));
+      }
+      return response;
+    }).catch(() =>
+      caches.match(e.request)
     )
   );
 });
