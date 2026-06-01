@@ -380,7 +380,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <!-- Coins -->
-  <input type="hidden" id="coin-old" value="0">
   <div class="card">
     <div class="card-title">💰 Count coins</div>
     <div style="margin-bottom:12px">
@@ -397,7 +396,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div style="margin-bottom:4px">
       <div class="coin-label" style="color:var(--red)">− Free time coins <span style="color:var(--muted)">Additional free coins deducted</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" aria-label="Free time coins additional" step="1" aria-label="Free time coins additional" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" aria-label="Free time coins additional" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="background:#f1f5f9;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:11px;color:var(--muted);line-height:1.7">
       Net = Total − Free time − Saloy − Free time coins
@@ -579,7 +578,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.6';
+const APP_VERSION = 'v8.7';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -758,10 +757,6 @@ function areaSelect(area){
   loadGroupsScreen(selectedCollector, selectedTeam, area.groups);
 }
 
-function selectCollector(el,name,team){
-  selectedCollector=name; selectedTeam=team;
-  loadGroupsScreen(name,team);
-}
 
 async function loadGroupsScreen(collector,team,filterGroupIds){
   showScreen('screen-groups');
@@ -926,6 +921,7 @@ async function startGroup(groupId){
       }
 
       if(!vendos.length){toast('No vendos found for this group');return;}
+      if(g && vendos.length < g.vendos * 0.9) toast(`⚠️ Only ${vendos.length}/${g.vendos} vendos loaded — route may be incomplete`, 5000);
 
       document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group ('+vendos.length+' vendos)…</span></div>';
       // Create harvest_groups row
@@ -1228,7 +1224,8 @@ function openItem(idx){
 
   if(currentItem.status==='harvested'){
     if(currentItem.coins_total) document.getElementById('coin-total').value=currentItem.coins_total;
-    if(currentItem.coins_free) document.getElementById('coin-free').value=currentItem.coins_free;
+    if(currentItem.coins_free_time !== undefined) document.getElementById('coin-free').value = currentItem.coins_free_time;
+    if(currentItem.coins_free_coins !== undefined) document.getElementById('coin-freecoins').value = currentItem.coins_free_coins;
     if(currentItem.coins_old) document.getElementById('coin-old').value=currentItem.coins_old;
     if(currentItem.coins_saloy) document.getElementById('coin-saloy').value=currentItem.coins_saloy;
     if(currentItem.collector_note) document.getElementById('note-inp').value=currentItem.collector_note;
@@ -1539,7 +1536,7 @@ async function submitHarvest(){
   // Update harvest_group_items
   const itemUpdate={
     status:'harvested',
-    coins_total:total,coins_free:free+freeCoins,coins_old:0,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
+    coins_total:total,coins_free:free+freeCoinscoins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
     net_collectible:net,spawn_share:spawn,customer_share:customer,
     harvested_at:now,collector_note:note,
   };
@@ -1561,7 +1558,7 @@ async function submitHarvest(){
     tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&currentGroupDef.id)||''),
-    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_old:0,coins_saloy:saloy,
+    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoinscoins_saloy:saloy,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
   };
 
@@ -1819,7 +1816,7 @@ async function flushQueue(){
           groupUpdates[q.groupRunId].skipped_count++;
         }
       }
-      syncLog=syncLog.map(s=>s.status==='queued'?{...s,status:'synced'}:s);
+      syncLog=syncLog.map(s=>s.ts===q.ts?{...s,status:'synced'}:s);
     } catch { remaining.push(q); }
   }
   for(const [runId,delta] of Object.entries(groupUpdates)){
