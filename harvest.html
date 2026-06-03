@@ -835,93 +835,39 @@ async function startGroup(groupId){
       const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status&order=id.asc`,{headers:HDR});
       currentItems=await rItems.json();
     } else {
-      // Fetch vendos from Supabase route_items for this group's route
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos from database…</span></div>';
+      // Fetch ALL vendos for this group's areas directly from vendos table
+      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
 
-      // Find the route for this group (current cycle)
       let vendos = [];
       try {
-        // Get active cycle
-        const rCycle = await fetch(`${SB}/rest/v1/cycles?status=eq.active&order=cycle_number.desc&limit=1`,{headers:HDR});
-        const cycles = await rCycle.json();
-        const cycleId = cycles.length ? cycles[0].id : null;
-
-        // Get route for this group in current cycle
-        const routeQ = cycleId
-          ? `${SB}/rest/v1/routes?cycle_id=eq.${cycleId}&group_label=eq.${encodeURIComponent(g.label)}&limit=1`
-          : `${SB}/rest/v1/routes?group_label=eq.${encodeURIComponent(g.label)}&order=id.desc&limit=1`;
-        const rRoute = await fetch(routeQ,{headers:HDR});
-        const routes = await rRoute.json();
-
-        if(routes.length){
-          const routeId = routes[0].id;
-          // Fetch route_items with vendo details
-          let allItems = [];
+        const areas = g.areas && g.areas.length ? g.areas : [g.label.split(' — ')[0].toUpperCase()];
+        // Fetch all areas for this group (some groups span 2 areas e.g. DIPOLOG+SINAMAN)
+        for(const area of areas){
           let offset = 0;
           while(true){
-            const rRI = await fetch(`${SB}/rest/v1/route_items?route_id=eq.${routeId}&select=vendo_id,sheet_name,tg_name,vlan,area&limit=500&offset=${offset}`,{headers:HDR});
-            const batch = await rRI.json();
+            const rV = await fetch(
+              `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area)}&sheet_name=not.is.null` +
+              `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address` +
+              `&limit=500&offset=${offset}`,
+              {headers:HDR}
+            );
+            if(!rV.ok) break;
+            const batch = await rV.json();
             if(!Array.isArray(batch)||!batch.length) break;
-            allItems.push(...batch);
-            if(batch.length<500) break;
-            offset+=500;
-          }
-
-          if(allItems.length){
-            // Enrich with GPS/contact from vendos table in chunks
-            document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Enriching '+allItems.length+' vendos…</span></div>';
-            const vendoIds = allItems.map(i=>i.vendo_id).filter(Boolean);
-            const sbMap = {};
-            const CHUNK = 100;
-            for(let ci=0;ci<vendoIds.length;ci+=CHUNK){
-              const batch = vendoIds.slice(ci,ci+CHUNK);
-              const rV = await fetch(`${SB}/rest/v1/vendos?id=in.(${batch.join(',')})&select=id,sheet_name,lat,lng,last_harvest_date,contact_number,address&limit=${CHUNK}`,{headers:HDR});
-              if(rV.ok){
-                const rows = await rV.json();
-                rows.forEach(r=>{ sbMap[r.id]=r; });
-              }
-            }
-            // Map to group centroids barangay
-            vendos = allItems.map(item=>{
-              const v = sbMap[item.vendo_id]||{};
-              return {
-                id: item.vendo_id||null,
-                sheet_name: item.sheet_name||v.sheet_name||null,
-                tg_name: item.tg_name||null,
-                area: item.area||g.label,
-                vlan: item.vlan||null,
-                address: v.address||null,
-                barangay: null,
-                lat: v.lat||null,
-                lng: v.lng||null,
-                last_harvest_date: v.last_harvest_date||null,
-                contact_number: v.contact_number||null,
-              };
-            });
-          }
-        }
-      } catch(e){ console.warn('Route fetch failed:', e.message); }
-
-      // Fallback: fetch directly from vendos by area if no route found
-      if(!vendos.length){
-        try {
-          document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Fetching vendos by area…</span></div>';
-          const area = g.areas && g.areas[0] ? g.areas[0] : g.label.split(' — ')[0].toUpperCase();
-          const rV = await fetch(`${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area)}&sheet_name=not.is.null&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address&limit=1000`,{headers:HDR});
-          if(rV.ok){
-            const rows = await rV.json();
-            vendos = rows.map(v=>({
+            vendos.push(...batch.map(v=>({
               id:v.id, sheet_name:v.sheet_name, tg_name:v.tg_name,
               area:area, vlan:v.vlan, address:v.address, barangay:null,
               lat:v.lat, lng:v.lng, last_harvest_date:v.last_harvest_date,
               contact_number:v.contact_number
-            }));
+            })));
+            if(batch.length<500) break;
+            offset+=500;
           }
-        } catch(e){ console.warn('Fallback fetch failed:', e.message); }
-      }
+        }
+      } catch(e){ console.warn('Vendo fetch failed:', e.message); }
 
       if(!vendos.length){toast('No vendos found for this group');return;}
-      if(g && vendos.length < g.vendos * 0.9) toast(`⚠️ Only ${vendos.length}/${g.vendos} vendos loaded — route may be incomplete`, 5000);
+      if(g && vendos.length < g.vendos * 0.9) toast(`⚠️ Only ${vendos.length}/${g.vendos} vendos loaded`, 4000);
 
       document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group ('+vendos.length+' vendos)…</span></div>';
       // Create harvest_groups row
@@ -950,7 +896,7 @@ async function startGroup(groupId){
         status:'pending'
       }));
 
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Saving route…</span></div>';
+      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group…</span></div>';
       // Insert in batches of 100
       for(let i=0;i<itemsToInsert.length;i+=100){
         const batchRes = await fetch(SB+'/rest/v1/harvest_group_items',{
@@ -1536,7 +1482,7 @@ async function submitHarvest(){
   // Update harvest_group_items
   const itemUpdate={
     status:'harvested',
-    coins_total:total,coins_free:free+freeCoinscoins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
+    coins_total:total,coins_free:free+freeCoins,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
     net_collectible:net,spawn_share:spawn,customer_share:customer,
     harvested_at:now,collector_note:note,
   };
@@ -1558,7 +1504,7 @@ async function submitHarvest(){
     tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&currentGroupDef.id)||''),
-    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoinscoins_saloy:saloy,
+    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
   };
 
@@ -1756,9 +1702,9 @@ function hardReset(){
 }
 
 function forceClearSession(){
-  ['harvest_session','cached_auto_route','harvest_last_group','harvest_last_code']
+  ['harvest_session','harvest_last_group','harvest_last_code']
     .forEach(k=>localStorage.removeItem(k));
-  Object.keys(localStorage).filter(k=>k.startsWith('cached_items_')||k.startsWith('cached_route_'))
+  Object.keys(localStorage).filter(k=>k.startsWith('cached_items_'))
     .forEach(k=>localStorage.removeItem(k));
   document.getElementById('resume-banner').style.display='none';
   document.getElementById('group-section') && (document.getElementById('group-section').style.display='none');
