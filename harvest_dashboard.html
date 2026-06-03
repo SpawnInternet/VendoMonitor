@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SPAWN Harvest Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1565c0;--blue-lt:#e8f0fe;--blue-dk:#0d47a1;
+  --green:#15803d;--green-lt:#dcfce7;
+  --red:#dc2626;--red-lt:#fef2f2;
+  --amber:#b45309;--amber-lt:#fffbeb;
+  --gray:#6b7280;--border:#e5e7eb;--bg:#f8fafc;--bg2:#fff;
+  --text:#111827;--muted:#6b7280;
+  --radius:8px;--shadow:0 1px 4px rgba(0,0,0,.08);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:13px;min-height:100vh}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--blue-dk);color:#fff;height:48px;display:flex;align-items:center;padding:0 16px;gap:12px;position:sticky;top:0;z-index:100}
+.topbar-title{font-size:15px;font-weight:700;letter-spacing:.02em}
+.topbar-sub{font-size:11px;opacity:.7;margin-left:4px}
+.topbar-spacer{flex:1}
+.live-dot{width:8px;height:8px;background:#4ade80;border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.live-label{font-size:11px;color:#4ade80}
+
+/* ── TABS ── */
+.tab-bar{background:#fff;border-bottom:1px solid var(--border);display:flex;padding:0 16px;position:sticky;top:48px;z-index:90}
+.tab-btn{padding:12px 18px;border:none;background:none;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-family:inherit;transition:.15s;white-space:nowrap}
+.tab-btn:hover{color:var(--blue)}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* ── PANELS ── */
+.panel{display:none;padding:12px 16px}
+.panel.active{display:block}
+
+/* ── TOOLBAR ── */
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.toolbar select,.toolbar input[type=text],.toolbar input[type=date]{
+  padding:5px 9px;border:1px solid var(--border);border-radius:var(--radius);
+  font-size:12px;font-family:inherit;background:#fff;color:var(--text);height:30px}
+.toolbar select:focus,.toolbar input:focus{outline:none;border-color:var(--blue)}
+.tb-label{font-size:11px;color:var(--muted);font-weight:500}
+.tb-spacer{flex:1}
+.btn{padding:5px 12px;border-radius:var(--radius);border:none;font-size:12px;font-family:inherit;cursor:pointer;font-weight:500;height:30px;transition:.12s}
+.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:var(--blue-dk)}
+.btn-gray{background:var(--border);color:var(--text)}.btn-gray:hover{background:#d1d5db}
+.btn-red{background:#fee2e2;color:var(--red)}.btn-red:hover{background:#fecaca}
+
+/* ── STAT CARDS ── */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:12px}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+.stat-val{font-size:22px;font-weight:700;color:var(--blue);line-height:1}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:3px;font-weight:500}
+.stat-sub{font-size:11px;color:var(--text);margin-top:2px}
+
+/* ── TABLE ── */
+.tbl-wrap{background:#fff;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.tbl-wrap table{width:100%;border-collapse:collapse}
+.tbl-wrap th{padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);background:#f0f4ff;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0}
+.tbl-wrap td{padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:11px;vertical-align:middle;white-space:nowrap}
+.tbl-wrap tr:hover td{background:#fafbff}
+.tbl-wrap tr.flagged td{background:#fef2f2}
+.tbl-wrap tr.warned td{background:#fffbeb}
+.tbl-wrap .tbl-scroll{overflow-y:auto;max-height:calc(100vh - 220px)}
+
+/* ── PILLS ── */
+.pill{display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;white-space:nowrap}
+.pill-green{background:var(--green-lt);color:var(--green)}
+.pill-amber{background:var(--amber-lt);color:var(--amber)}
+.pill-red{background:var(--red-lt);color:var(--red)}
+.pill-blue{background:var(--blue-lt);color:var(--blue)}
+.pill-gray{background:#f3f4f6;color:var(--gray)}
+
+/* ── LIVE FEED ── */
+.feed-wrap{background:#fff;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.feed-item{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;animation:fadein .4s ease}
+@keyframes fadein{from{background:#e8f0fe;opacity:.6}to{background:transparent;opacity:1}}
+.feed-time{font-size:10px;color:var(--muted);white-space:nowrap;padding-top:1px;min-width:44px}
+.feed-body{flex:1;min-width:0}
+.feed-name{font-weight:600;font-size:12px;color:var(--text)}
+.feed-meta{font-size:11px;color:var(--muted);margin-top:1px}
+.feed-coins{font-size:12px;font-weight:700;color:var(--green);white-space:nowrap}
+.feed-flag{font-size:11px;font-weight:700;color:var(--red);white-space:nowrap}
+
+/* ── RECON TABLE ── */
+.gap-neg{color:var(--red);font-weight:700}
+.gap-ok{color:var(--green)}
+.gap-warn{color:var(--amber);font-weight:600}
+.recon-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px}
+
+/* ── LOADING / EMPTY ── */
+.loading{text-align:center;padding:40px 20px;color:var(--muted)}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── INLINE EDIT ── */
+td.editable{cursor:pointer}
+td.editable:hover{background:#eff6ff!important}
+.edit-input{width:80px;padding:2px 5px;border:1px solid var(--blue);border-radius:4px;font-size:11px;font-family:inherit}
+
+/* ── COLLECTOR BADGE ── */
+.col-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#ede9fe;color:#6d28d9}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-title">SPAWN Harvest</div>
+  <div class="topbar-sub">Dashboard</div>
+  <div class="topbar-spacer"></div>
+  <div class="live-dot" id="live-dot"></div>
+  <div class="live-label" id="live-label">LIVE</div>
+</div>
+
+<!-- TABS -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('harvest',this)">📋 Harvest Table</button>
+  <button class="tab-btn" onclick="showTab('feed',this)">⚡ Live Feed</button>
+  <button class="tab-btn" onclick="showTab('recon',this)">🔍 Reconciliation</button>
+</div>
+
+<!-- ═══════════════ TAB 1: HARVEST TABLE ═══════════════ -->
+<div class="panel active" id="tab-harvest">
+  <div class="toolbar">
+    <select id="ht-area" onchange="htFilter()">
+      <option value="">All areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
+    </select>
+    <select id="ht-collector" onchange="htFilter()"><option value="">All collectors</option></select>
+    <select id="ht-status" onchange="htFilter()">
+      <option value="">All status</option>
+      <option value="done">Done</option>
+      <option value="pending">Pending</option>
+      <option value="skipped">Skipped</option>
+    </select>
+    <input type="text" id="ht-search" placeholder="Search vendo…" oninput="htFilter()" style="width:160px">
+    <div class="tb-spacer"></div>
+    <span id="ht-count" style="font-size:11px;color:var(--muted)"></span>
+    <button class="btn btn-gray" onclick="htLoad()">↺ Refresh</button>
+  </div>
+  <div class="stat-row" id="ht-stats"></div>
+  <div class="tbl-wrap">
+    <div class="tbl-scroll" id="ht-scroll">
+      <table>
+        <thead><tr>
+          <th>Vendo name</th><th>Area</th><th>Group</th>
+          <th>Collector</th><th>Coins total</th><th>Free</th><th>Saloy</th>
+          <th>Net</th><th>Status</th><th>Harvested at</th>
+        </tr></thead>
+        <tbody id="ht-tbody"><tr><td colspan="10" class="loading"><span class="spinner"></span>Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB 2: LIVE FEED ═══════════════ -->
+<div class="panel" id="tab-feed">
+  <div class="toolbar">
+    <div class="live-dot" style="animation:pulse 2s infinite"></div>
+    <span style="font-size:12px;font-weight:600;color:var(--green)">Live — updates as collectors submit</span>
+    <div class="tb-spacer"></div>
+    <span id="feed-count" style="font-size:11px;color:var(--muted)"></span>
+    <button class="btn btn-gray" onclick="feedClear()">Clear</button>
+  </div>
+  <div class="stat-row" id="feed-stats"></div>
+  <div class="feed-wrap" id="feed-list">
+    <div class="loading"><span class="spinner"></span>Waiting for submissions…</div>
+  </div>
+</div>
+
+<!-- ═══════════════ TAB 3: RECONCILIATION ═══════════════ -->
+<div class="panel" id="tab-recon">
+  <div class="toolbar">
+    <span class="tb-label">From</span>
+    <input type="date" id="rc-from">
+    <span class="tb-label">To</span>
+    <input type="date" id="rc-to">
+    <select id="rc-area" onchange="rcFilter()">
+      <option value="">All areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
+    </select>
+    <select id="rc-collector" onchange="rcFilter()"><option value="">All collectors</option></select>
+    <select id="rc-flag" onchange="rcFilter()">
+      <option value="">All flags</option>
+      <option value="alert">ALERT only</option>
+      <option value="warn">Warn only</option>
+      <option value="ok">OK only</option>
+    </select>
+    <button class="btn btn-blue" onclick="rcRun()">▶ Reconcile</button>
+    <div class="tb-spacer"></div>
+    <span id="rc-count" style="font-size:11px;color:var(--muted)"></span>
+  </div>
+  <div class="recon-sum" id="rc-stats"></div>
+  <div style="font-size:10px;color:var(--muted);margin-bottom:8px">
+    Flag thresholds: <span style="color:var(--red);font-weight:700">ALERT</span> = gap &gt; ₱500 OR gap% &gt; 20% &nbsp;|&nbsp;
+    <span style="color:var(--amber);font-weight:700">WARN</span> = one threshold breached
+  </div>
+  <div class="tbl-wrap">
+    <div class="tbl-scroll" id="rc-scroll">
+      <table>
+        <thead><tr>
+          <th>Vendo name</th><th>Area</th><th>Collector</th>
+          <th>Harvested</th><th>TG income</th><th>Gap (₱)</th><th>Gap (%)</th><th>Flag</th>
+        </tr></thead>
+        <tbody id="rc-tbody"><tr><td colspan="8" class="loading">Set date range and click Reconcile</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1f';
+const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+const SVC = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDRS= {'apikey':SVC,'Authorization':'Bearer '+SVC,'Content-Type':'application/json'};
+
+const php = v => v==null?'—':'₱'+Number(v).toLocaleString();
+const pct = (a,b) => b ? ((a/b)*100).toFixed(1)+'%' : '—';
+const fmt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
+const fmtT = ts => ts ? new Date(ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
+
+let activeTab = 'harvest';
+function showTab(id, btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  activeTab = id;
+}
+
+/* ══════════════════════════════════════════
+   HARVEST TABLE
+══════════════════════════════════════════ */
+let htAllRows = [];
+let htCollectors = new Set();
+
+async function htLoad(){
+  document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="10" class="loading"><span class="spinner"></span>Loading all harvests…</td></tr>';
+  htAllRows = [];
+  let offset = 0;
+  while(true){
+    const r = await fetch(
+      `${SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,vlan,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,lat_captured,lng_captured,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=1000&offset=${offset}`,
+      {headers:HDR}
+    );
+    const batch = await r.json();
+    if(!Array.isArray(batch)||!batch.length) break;
+    htAllRows.push(...batch);
+    if(batch.length < 1000) break;
+    offset += 1000;
+  }
+  // Collect unique collectors for filter dropdown
+  htCollectors = new Set(htAllRows.map(r=>r.harvest_groups?.collector).filter(Boolean));
+  const sel = document.getElementById('ht-collector');
+  const rcSel = document.getElementById('rc-collector');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">All collectors</option>';
+  rcSel.innerHTML = '<option value="">All collectors</option>';
+  [...htCollectors].sort().forEach(c=>{
+    sel.innerHTML += `<option${c===prev?' selected':''}>${c}</option>`;
+    rcSel.innerHTML += `<option>${c}</option>`;
+  });
+  htFilter();
+}
+
+function htFilter(){
+  const area = document.getElementById('ht-area').value;
+  const col  = document.getElementById('ht-collector').value;
+  const stat = document.getElementById('ht-status').value;
+  const q    = document.getElementById('ht-search').value.toLowerCase();
+
+  const rows = htAllRows.filter(r=>{
+    if(area && r.area !== area) return false;
+    if(col  && r.harvest_groups?.collector !== col) return false;
+    if(stat && r.status !== stat) return false;
+    if(q    && !(r.sheet_name||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const done    = rows.filter(r=>r.status==='done').length;
+  const pending = rows.filter(r=>r.status==='pending').length;
+  const totalCoins = rows.filter(r=>r.coins_total).reduce((s,r)=>s+Number(r.coins_total||0),0);
+  const totalNet   = rows.filter(r=>r.net_collectible).reduce((s,r)=>s+Number(r.net_collectible||0),0);
+
+  document.getElementById('ht-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${rows.length.toLocaleString()}</div><div class="stat-lbl">Vendos shown</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--green)">${done.toLocaleString()}</div><div class="stat-lbl">Done</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${pending.toLocaleString()}</div><div class="stat-lbl">Pending</div></div>
+    <div class="stat-card"><div class="stat-val">${php(totalCoins)}</div><div class="stat-lbl">Total coins</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--green)">${php(totalNet)}</div><div class="stat-lbl">Total net</div></div>
+  `;
+  document.getElementById('ht-count').textContent = rows.length.toLocaleString()+' rows';
+
+  const tb = document.getElementById('ht-tbody');
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="10" class="loading">No results</td></tr>'; return; }
+
+  tb.innerHTML = rows.slice(0,2000).map(r=>{
+    const col = r.harvest_groups?.collector||'—';
+    const grp = r.harvest_groups?.group_label||'—';
+    const st  = r.status==='done'
+      ? '<span class="pill pill-green">done</span>'
+      : r.status==='skipped'
+      ? '<span class="pill pill-gray">skipped</span>'
+      : '<span class="pill pill-amber">pending</span>';
+    return `<tr>
+      <td>${r.sheet_name||'—'}</td>
+      <td>${r.area||'—'}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis">${grp}</td>
+      <td><span class="col-badge">${col}</span></td>
+      <td>${r.coins_total!=null?php(r.coins_total):'—'}</td>
+      <td>${r.coins_free!=null?php(r.coins_free):'—'}</td>
+      <td>${r.coins_saloy!=null?php(r.coins_saloy):'—'}</td>
+      <td style="font-weight:600;color:var(--green)">${r.net_collectible!=null?php(r.net_collectible):'—'}</td>
+      <td>${st}</td>
+      <td style="color:var(--muted)">${fmt(r.harvested_at)}</td>
+    </tr>`;
+  }).join('');
+  if(rows.length > 2000){
+    tb.innerHTML += `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:8px;font-size:11px">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
+  }
+}
+
+/* ══════════════════════════════════════════
+   LIVE FEED — Supabase Realtime
+══════════════════════════════════════════ */
+let feedItems = [];
+let realtimeWs = null;
+
+function feedRender(){
+  const el = document.getElementById('feed-list');
+  const stats = document.getElementById('feed-stats');
+  if(!feedItems.length){
+    el.innerHTML = '<div class="loading"><span class="spinner"></span>Waiting for submissions…</div>';
+    stats.innerHTML = '';
+    document.getElementById('feed-count').textContent = '';
+    return;
+  }
+  document.getElementById('feed-count').textContent = feedItems.length+' submissions today';
+  const totalCoins = feedItems.reduce((s,i)=>s+Number(i.coins_total||0),0);
+  const totalNet   = feedItems.reduce((s,i)=>s+Number(i.net_collectible||0),0);
+  const collectors = [...new Set(feedItems.map(i=>i.collector).filter(Boolean))];
+  stats.innerHTML = `
+    <div class="stat-card"><div class="stat-val">${feedItems.length}</div><div class="stat-lbl">Submitted today</div></div>
+    <div class="stat-card"><div class="stat-val">${php(totalCoins)}</div><div class="stat-lbl">Coins collected</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--green)">${php(totalNet)}</div><div class="stat-lbl">Net today</div></div>
+    <div class="stat-card"><div class="stat-val">${collectors.length}</div><div class="stat-lbl">Active collectors</div></div>
+  `;
+  el.innerHTML = feedItems.slice(0,200).map(item=>{
+    const flagged = item._flagged;
+    return `<div class="feed-item">
+      <div class="feed-time">${fmtT(item.harvested_at)}</div>
+      <div class="feed-body">
+        <div class="feed-name">${item.sheet_name||'Unknown vendo'}</div>
+        <div class="feed-meta"><span class="col-badge">${item.collector||'—'}</span> &nbsp;${item.area||''} &nbsp;${item.group_label?'· '+item.group_label:''}</div>
+      </div>
+      ${item.coins_total!=null?`<div class="feed-coins">${php(item.coins_total)}</div>`:''}
+      ${flagged?`<div class="feed-flag">⚠</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function feedClear(){ feedItems=[]; feedRender(); }
+
+async function feedLoadToday(){
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const iso = today.toISOString();
+  try{
+    const r = await fetch(
+      `${SB}/rest/v1/harvest_group_items?harvested_at=gte.${iso}&status=eq.done&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
+      {headers:HDR}
+    );
+    const rows = await r.json();
+    if(Array.isArray(rows)){
+      feedItems = rows.map(r=>({...r,collector:r.harvest_groups?.collector,group_label:r.harvest_groups?.group_label}));
+      feedRender();
+    }
+  }catch(e){console.warn('Feed load error',e);}
+}
+
+function feedConnect(){
+  if(realtimeWs){ try{realtimeWs.close();}catch(e){} }
+  const wsUrl = `wss://cviraqfhphhsonjmrtvu.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=${KEY}`;
+  try{
+    realtimeWs = new WebSocket(wsUrl);
+    realtimeWs.onopen = ()=>{
+      realtimeWs.send(JSON.stringify({topic:'realtime:public:harvest_group_items',event:'phx_join',payload:{},ref:'1'}));
+      document.getElementById('live-dot').style.background='#4ade80';
+      document.getElementById('live-label').textContent='LIVE';
+    };
+    realtimeWs.onmessage = async (e)=>{
+      try{
+        const msg = JSON.parse(e.data);
+        if(msg.event==='INSERT'||msg.event==='UPDATE'){
+          const rec = msg.payload?.record;
+          if(rec && rec.status==='done' && rec.harvested_at){
+            // Fetch collector name from harvest_groups
+            let collector='', group_label='';
+            try{
+              const rg = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${rec.group_run_id}&select=collector,group_label&limit=1`,{headers:HDR});
+              const gd = await rg.json();
+              if(gd.length){ collector=gd[0].collector; group_label=gd[0].group_label; }
+            }catch(err){}
+            const item = {...rec, collector, group_label};
+            feedItems.unshift(item);
+            feedRender();
+            // Also refresh harvest table row if visible
+            if(activeTab==='harvest') htLoad();
+          }
+        }
+      }catch(err){}
+    };
+    realtimeWs.onclose = ()=>{
+      document.getElementById('live-dot').style.background='#f87171';
+      document.getElementById('live-label').textContent='RECONNECTING…';
+      setTimeout(feedConnect, 5000);
+    };
+    realtimeWs.onerror = ()=>{ try{realtimeWs.close();}catch(e){} };
+  }catch(err){
+    document.getElementById('live-dot').style.background='#f87171';
+    document.getElementById('live-label').textContent='OFFLINE';
+  }
+}
+
+/* ══════════════════════════════════════════
+   RECONCILIATION
+══════════════════════════════════════════ */
+let rcAllRows = [];
+
+function rcInitDates(){
+  const to = new Date();
+  const from = new Date(); from.setDate(from.getDate()-30);
+  document.getElementById('rc-to').value   = to.toISOString().slice(0,10);
+  document.getElementById('rc-from').value = from.toISOString().slice(0,10);
+}
+
+async function rcRun(){
+  const from = document.getElementById('rc-from').value;
+  const to   = document.getElementById('rc-to').value;
+  if(!from||!to){ alert('Please select a date range'); return; }
+
+  const toEnd = to + 'T23:59:59+08:00';
+  const fromStart = from + 'T00:00:00+08:00';
+
+  document.getElementById('rc-tbody').innerHTML = '<tr><td colspan="8" class="loading"><span class="spinner"></span>Loading harvests…</td></tr>';
+  document.getElementById('rc-stats').innerHTML = '';
+  rcAllRows = [];
+
+  // 1. Fetch all harvested items in date range
+  let offset = 0;
+  let harvestRows = [];
+  while(true){
+    const r = await fetch(
+      `${SB}/rest/v1/harvest_group_items?status=eq.done&harvested_at=gte.${fromStart}&harvested_at=lte.${toEnd}` +
+      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label,started_at)` +
+      `&order=harvested_at.desc&limit=1000&offset=${offset}`,
+      {headers:HDR}
+    );
+    const batch = await r.json();
+    if(!Array.isArray(batch)||!batch.length) break;
+    harvestRows.push(...batch);
+    if(batch.length<1000) break;
+    offset+=1000;
+  }
+
+  if(!harvestRows.length){
+    document.getElementById('rc-tbody').innerHTML = '<tr><td colspan="8" class="loading">No harvests found for this date range</td></tr>';
+    return;
+  }
+
+  document.getElementById('rc-tbody').innerHTML = `<tr><td colspan="8" class="loading"><span class="spinner"></span>Fetching TG income for ${harvestRows.length} harvests…</td></tr>`;
+
+  // 2. Get unique tg_names from vendos table for matched vendos
+  const vendoIds = [...new Set(harvestRows.map(r=>r.vendo_id).filter(Boolean))];
+  const tgMap = {}; // vendo_id → tg_name
+  for(let i=0;i<vendoIds.length;i+=200){
+    const batch = vendoIds.slice(i,i+200);
+    try{
+      const rv = await fetch(`${SB}/rest/v1/vendos?id=in.(${batch.join(',')})&select=id,tg_name&limit=200`,{headers:HDR});
+      const vd = await rv.json();
+      vd.forEach(v=>{ if(v.tg_name) tgMap[v.id]=v.tg_name; });
+    }catch(e){}
+  }
+
+  // 3. For each harvest row, fetch TG income
+  // Group by sheet_name+area to avoid duplicate fetches
+  const tgIncomeMap = {}; // tg_name → total income
+  const uniqueTgNames = [...new Set(Object.values(tgMap))].filter(Boolean);
+
+  document.getElementById('rc-tbody').innerHTML = `<tr><td colspan="8" class="loading"><span class="spinner"></span>Fetching TG income for ${uniqueTgNames.length} matched vendos…</td></tr>`;
+
+  for(const tg of uniqueTgNames){
+    let total = 0;
+    let offset2 = 0;
+    while(true){
+      try{
+        const rt = await fetch(
+          `${SB}/rest/v1/transactions?tg_name=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&created_at=gte.${fromStart}&created_at=lte.${toEnd}` +
+          `&select=amount&limit=1000&offset=${offset2}`,
+          {headers:HDR}
+        );
+        const td2 = await rt.json();
+        if(!Array.isArray(td2)||!td2.length) break;
+        total += td2.reduce((s,t)=>s+Number(t.amount||0),0);
+        if(td2.length<1000) break;
+        offset2+=1000;
+      }catch(e){ break; }
+    }
+    tgIncomeMap[tg] = total;
+  }
+
+  // 4. Build reconciliation rows
+  rcAllRows = harvestRows.map(row=>{
+    const tg = tgMap[row.vendo_id]||null;
+    const tgIncome = tg!=null ? (tgIncomeMap[tg]||0) : null;
+    const coins = Number(row.coins_total||0);
+    const gap = tgIncome!=null ? coins - tgIncome : null;
+    const gapPct = (tgIncome && tgIncome>0) ? Math.abs(gap)/tgIncome*100 : null;
+
+    let flag = 'ok';
+    if(gap!=null){
+      const overThresh = Math.abs(gap)>500;
+      const overPct    = gapPct!=null && gapPct>20;
+      if(overThresh && overPct) flag='alert';
+      else if(overThresh || overPct) flag='warn';
+    } else {
+      flag = 'nodata';
+    }
+
+    return {
+      ...row,
+      collector: row.harvest_groups?.collector||'—',
+      group_label: row.harvest_groups?.group_label||'—',
+      tg_name: tg,
+      tg_income: tgIncome,
+      gap,
+      gap_pct: gapPct,
+      flag
+    };
+  });
+
+  rcFilter();
+}
+
+function rcFilter(){
+  const area  = document.getElementById('rc-area').value;
+  const col   = document.getElementById('rc-collector').value;
+  const flag  = document.getElementById('rc-flag').value;
+
+  const rows = rcAllRows.filter(r=>{
+    if(area && r.area!==area) return false;
+    if(col  && r.collector!==col) return false;
+    if(flag && r.flag!==flag) return false;
+    return true;
+  });
+
+  const alerts  = rows.filter(r=>r.flag==='alert').length;
+  const warns   = rows.filter(r=>r.flag==='warn').length;
+  const oks     = rows.filter(r=>r.flag==='ok').length;
+  const totalGap= rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
+  const totalCoins = rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
+  const totalTG    = rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
+
+  document.getElementById('rc-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-val">${rows.length}</div><div class="stat-lbl">Harvests</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--red)">${alerts}</div><div class="stat-lbl">Alerts</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--amber)">${warns}</div><div class="stat-lbl">Warnings</div></div>
+    <div class="stat-card"><div class="stat-val" style="color:var(--green)">${oks}</div><div class="stat-lbl">Clean</div></div>
+    <div class="stat-card"><div class="stat-val">${php(totalCoins)}</div><div class="stat-lbl">Total coins</div></div>
+    <div class="stat-card"><div class="stat-val">${php(totalTG)}</div><div class="stat-lbl">TG income</div></div>
+    <div class="stat-card"><div class="stat-val ${totalGap<-500?'gap-neg':''}">${totalGap>=0?'+':''}${php(Math.abs(totalGap))}</div><div class="stat-lbl">Net gap</div></div>
+  `;
+  document.getElementById('rc-count').textContent = rows.length+' rows';
+
+  const tb = document.getElementById('rc-tbody');
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="8" class="loading">No results</td></tr>'; return; }
+
+  // Sort: alerts first, then warns, then ok
+  const order = {alert:0,warn:1,ok:2,nodata:3};
+  rows.sort((a,b)=>order[a.flag]-order[b.flag]||(a.gap!=null&&b.gap!=null?a.gap-b.gap:0));
+
+  tb.innerHTML = rows.slice(0,2000).map(r=>{
+    const trCls = r.flag==='alert'?'flagged':r.flag==='warn'?'warned':'';
+    const flagPill = r.flag==='alert'
+      ? '<span class="pill pill-red">ALERT</span>'
+      : r.flag==='warn'
+      ? '<span class="pill pill-amber">WARN</span>'
+      : r.flag==='nodata'
+      ? '<span class="pill pill-gray">no TG</span>'
+      : '<span class="pill pill-green">OK</span>';
+    const gapCls = r.gap==null?'':r.gap<-500?'gap-neg':r.gap<0?'gap-warn':'gap-ok';
+    return `<tr class="${trCls}">
+      <td>${r.sheet_name||'—'}</td>
+      <td>${r.area||'—'}</td>
+      <td><span class="col-badge">${r.collector}</span></td>
+      <td>${php(r.coins_total)}</td>
+      <td>${r.tg_income!=null?php(r.tg_income):'<span style="color:var(--muted)">not matched</span>'}</td>
+      <td class="${gapCls}">${r.gap!=null?(r.gap>=0?'+':'')+php(Math.abs(r.gap)):'—'}</td>
+      <td class="${gapCls}">${r.gap_pct!=null?r.gap_pct.toFixed(1)+'%':'—'}</td>
+      <td>${flagPill}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════
+   INIT
+══════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded',()=>{
+  rcInitDates();
+  htLoad();
+  feedLoadToday();
+  feedConnect();
+  // Auto-refresh harvest table every 60s
+  setInterval(()=>{ if(activeTab==='harvest') htLoad(); }, 60000);
+});
+</script>
+</body>
+</html>
