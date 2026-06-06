@@ -501,27 +501,13 @@ Object.entries(VENDOS_DATA).forEach(([group, brngs]) => {
   });
 });
 
-// ── SCHEDULE DEF ──────────────────────────────────────────────────
-const SCHEDULE = [
-  {id:'A1',label:'Dipolog — Group 1',team:'TeamA',areas:['DIPOLOG'],start:'2026-06-01',end:'2026-06-09',vendos:147},
-  {id:'A2',label:'Dipolog — Group 2',team:'TeamA',areas:['DIPOLOG'],start:'2026-06-10',end:'2026-06-16',vendos:92},
-  {id:'A3',label:'Dipolog — Group 3',team:'TeamA',areas:['DIPOLOG','SINAMAN'],start:'2026-06-17',end:'2026-06-22',vendos:95},
-  {id:'A4',label:'Sindangan',        team:'TeamA',areas:['SINDANGAN'],start:'2026-06-23',end:'2026-07-01',vendos:138},
-  {id:'A5',label:'Polanco',          team:'TeamA',areas:['POLANCO'],start:'2026-07-02',end:'2026-07-07',vendos:89},
-  {id:'A6',label:'Roxas',            team:'TeamA',areas:['ROXAS'],start:'2026-07-08',end:'2026-07-11',vendos:49},
-  {id:'B1',label:'Dapitan — Group 1',team:'TeamB',areas:['DAPITAN'],start:'2026-06-01',end:'2026-06-06',vendos:45},
-  {id:'B2',label:'Dapitan — Group 2',team:'TeamB',areas:['DAPITAN'],start:'2026-06-08',end:'2026-06-18',vendos:89},
-  {id:'B3',label:'Dapitan — Group 3',team:'TeamB',areas:['DAPITAN'],start:'2026-06-19',end:'2026-07-04',vendos:142},
-];
-const TEAM_GROUPS = {TeamA:['A1','A2','A3','A4','A5','A6'],TeamB:['B1','B2','B3']};
-
 // ── STATE ─────────────────────────────────────────────────────────
 let selectedCollector = null;
 let selectedTeam = null;
-let currentGroupRun = null;   // row from harvest_groups
-let currentGroupDef = null;   // from SCHEDULE
-let currentItems = [];        // harvest_group_items rows
-let currentItem = null;       // item being harvested
+let currentGroupRun = null;   // active harvest_groups row
+let currentGroupDef = null;   // permanent group def from DB {id, group_id, group_label, area, collector, team}
+let currentItems = [];        // harvest_group_items rows for current run
+let currentItem = null;
 let currentItemIdx = null;
 let capturedGPS = null;
 let offlineQueue = JSON.parse(localStorage.getItem('hq')||'[]');
@@ -530,14 +516,74 @@ let activeTab = 'pending';
 let searchQuery = '';
 let nextGroupDef = null;
 
-const START_LAT=8.5912285,START_LNG=123.3539253;
-const GROUP_CENTROIDS={
-  'A1':{lat:8.5912,lng:123.3539},'A2':{lat:8.5850,lng:123.3600},
-  'A3':{lat:8.5800,lng:123.3700},'A4':{lat:8.2400,lng:122.9940},
-  'A5':{lat:8.5050,lng:123.4800},'A6':{lat:7.9500,lng:123.0700},
-  'B1':{lat:8.6533,lng:123.4271},'B2':{lat:8.6533,lng:123.4271},
-  'B3':{lat:8.6533,lng:123.4271}
+// Permanent groups cache (loaded once per session from DB)
+let _permGroups = null; // array of harvest_groups rows that are the permanent group defs
+
+// Area centroids for GPS sort
+const AREA_CENTROIDS={
+  'DIPOLOG':{lat:8.5912,lng:123.3539},
+  'DAPITAN':{lat:8.6533,lng:123.4271},
+  'SINDANGAN':{lat:8.2400,lng:122.9940},
+  'POLANCO':{lat:8.5050,lng:123.4800},
+  'ROXAS':{lat:7.9500,lng:123.0700},
+  'SINAMAN':{lat:8.5800,lng:123.3700},
+  'MINAOG':{lat:8.4500,lng:123.3000},
+  'MIX AREAS':{lat:8.5912,lng:123.3539},
 };
+const START_LAT=8.5912285,START_LNG=123.3539253;
+
+// ── PERMANENT GROUP HELPERS ───────────────────────────────────────
+// Load all unique permanent groups from DB (deduplicated by group_id+area)
+async function loadPermGroups(forceRefresh=false){
+  if(_permGroups && !forceRefresh) return _permGroups;
+  const cached = localStorage.getItem('perm_groups');
+  const cachedAge = parseInt(localStorage.getItem('perm_groups_ts')||'0');
+  if(!forceRefresh && cached && (Date.now()-cachedAge < 6*3600*1000)){
+    _permGroups = JSON.parse(cached);
+    return _permGroups;
+  }
+  try {
+    // Fetch ALL harvest_groups rows — we treat them as permanent group defs
+    const r = await fetch(`${SB}/rest/v1/harvest_groups?order=area.asc,group_id.asc,id.asc&limit=200`,{headers:HDR});
+    const rows = await r.json();
+    // Deduplicate: keep one canonical row per (group_id, area) combo — prefer the one with most items
+    const map = {};
+    rows.forEach(row=>{
+      const key = (row.group_id||row.id)+'__'+(row.area||'');
+      if(!map[key]) map[key]=row;
+    });
+    _permGroups = Object.values(map);
+    localStorage.setItem('perm_groups', JSON.stringify(_permGroups));
+    localStorage.setItem('perm_groups_ts', Date.now().toString());
+    return _permGroups;
+  } catch(e){
+    console.warn('loadPermGroups failed:', e.message);
+    if(cached) _permGroups = JSON.parse(cached);
+    return _permGroups || [];
+  }
+}
+
+// Get unique areas that have permanent groups
+function getAreasFromGroups(groups){
+  const areas = [];
+  const seen = new Set();
+  const AREA_ICONS={'DIPOLOG':'🏙','DAPITAN':'🌊','SINDANGAN':'🏝','POLANCO':'🌿','ROXAS':'🌺','SINAMAN':'🌾','MINAOG':'⛰','MIX AREAS':'🗂'};
+  groups.forEach(g=>{
+    const a = g.area;
+    if(a && !seen.has(a)){
+      seen.add(a);
+      areas.push({id:a, label:a.charAt(0)+a.slice(1).toLowerCase(), icon:AREA_ICONS[a]||'📍'});
+    }
+  });
+  // Also add areas that exist in vendos but have no groups yet
+  const ALL_AREAS = ['DIPOLOG','DAPITAN','SINDANGAN','POLANCO','ROXAS','SINAMAN','MINAOG','MIX AREAS'];
+  ALL_AREAS.forEach(a=>{
+    if(!seen.has(a)){
+      areas.push({id:a, label:a.charAt(0)+a.slice(1).toLowerCase(), icon:AREA_ICONS[a]||'📍', noGroups:true});
+    }
+  });
+  return areas;
+}
 
 function haversine(la1,lo1,la2,lo2){const R=6371,dL=(la2-la1)*Math.PI/180,dLo=(lo2-lo1)*Math.PI/180,a=Math.sin(dL/2)**2+Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));}
 function fmtDist(km){return km<1?Math.round(km*1000)+' m':km.toFixed(1)+' km';}
@@ -578,7 +624,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v8.7';
+const APP_VERSION = 'v9.0';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -598,11 +644,10 @@ window.addEventListener('DOMContentLoaded',()=>{
 
   // Show resume banner only — never auto-start
   const saved = JSON.parse(localStorage.getItem('harvest_session')||'null');
-  const validGroup = saved && SCHEDULE.find(g=>g.id===saved.groupId);
-  if(saved && saved.collector && saved.groupRunId && validGroup){
+  if(saved && saved.collector && saved.groupRunId && saved.groupLabel){
     document.getElementById('resume-banner').style.display='';
     document.getElementById('resume-collector-name').textContent=saved.collector;
-    document.getElementById('resume-group-name').textContent=saved.groupLabel||validGroup.label||'—';
+    document.getElementById('resume-group-name').textContent=saved.groupLabel||'—';
   } else {
     localStorage.removeItem('harvest_session');
   }
@@ -724,234 +769,265 @@ function pinLogout(){
 }
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
-const AREAS = [
-  {id:'DIPOLOG', label:'Dipolog', icon:'🏙', groups:['A1','A2','A3']},
-  {id:'DAPITAN', label:'Dapitan', icon:'🌊', groups:['B1','B2','B3']},
-  {id:'SINDANGAN', label:'Sindangan', icon:'🏝', groups:['A4']},
-  {id:'POLANCO', label:'Polanco', icon:'🌿', groups:['A5']},
-  {id:'ROXAS', label:'Roxas', icon:'🌺', groups:['A6']},
-];
-
-function showAreasScreen(){
+async function showAreasScreen(){
   document.getElementById('areas-collector-name').textContent=selectedCollector;
-  document.getElementById('areas-list').innerHTML='';
-  AREAS.forEach(area=>{
-    const el=document.createElement('div');
-    el.className='group-item active-group';
-    el.style.cssText='cursor:pointer';
-    el.innerHTML=`
+  const listEl = document.getElementById('areas-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading areas…</span></div>';
+  showScreen('screen-areas');
+
+  const groups = await loadPermGroups();
+  const areas = getAreasFromGroups(groups);
+
+  listEl.innerHTML = areas.map(area=>{
+    const areaGroups = groups.filter(g=>g.area===area.id);
+    const groupCount = areaGroups.length;
+    const meta = area.noGroups ? 'No groups yet — tap to browse vendos' :
+      groupCount===1 ? '1 group' : groupCount+' groups';
+    return `<div class="group-item active-group" style="cursor:pointer" onclick="areaSelect(${JSON.stringify(JSON.stringify(area))})">
       <div class="gi-icon active" style="font-size:20px;width:44px;height:44px">${area.icon}</div>
       <div class="gi-left">
         <div class="gi-name">${area.label}</div>
-        <div class="gi-meta">${area.groups.length>1?area.groups.length+' groups':'1 group — tap to start'}</div>
+        <div class="gi-meta">${meta}</div>
       </div>
-      <div class="gi-badge"><span class="pill pill-blue">▶</span></div>`;
-    el.onclick=()=>areaSelect(area);
-    document.getElementById('areas-list').appendChild(el);
-  });
-  showScreen('screen-areas');
-}
-
-function areaSelect(area){
-  // Always route through loadGroupsScreen to enforce unlock check
-  loadGroupsScreen(selectedCollector, selectedTeam, area.groups);
-}
-
-
-async function loadGroupsScreen(collector,team,filterGroupIds){
-  showScreen('screen-groups');
-  document.getElementById('groups-collector-label').textContent=collector;
-  document.getElementById('group-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
-
-  // Fetch completed groups for this collector from DB
-  let completedIds = new Set();
-  let activeRun = null;
-  try {
-    const r = await fetch(`${SB}/rest/v1/harvest_groups?collector=eq.${encodeURIComponent(collector)}&order=created_at.asc`,{headers:HDR});
-    const runs = await r.json();
-    runs.forEach(run=>{
-      if(run.status==='completed') completedIds.add(run.group_id);
-      if(run.status==='active') activeRun=run;
-    });
-  } catch(e){ toast('Offline — using last known state',3000); }
-
-  const groupIds = filterGroupIds || TEAM_GROUPS[team]||[];
-  const html = groupIds.map((gid,i)=>{
-    const g = SCHEDULE.find(s=>s.id===gid);
-    if(!g) return '';
-    const isDone = completedIds.has(gid);
-    const isActive = activeRun&&activeRun.group_id===gid;
-    // unlock logic: first group always unlocked, subsequent only if prev is done
-    const prevDone = i===0 || completedIds.has(groupIds[i-1]);
-    const isLocked = !isDone && !isActive && !prevDone;
-
-    const today=todayPHT();
-    const dayNum=Math.max(1,Math.round((new Date(today)-new Date(g.start))/(86400000))+1);
-    const totalDays=Math.round((new Date(g.end)-new Date(g.start))/(86400000))+1;
-
-    let cls='group-item',icon='',iconCls='gi-icon',pill='';
-    if(isDone){cls+=' completed-group';iconCls+=' done';icon='✓';pill=`<span class="pill pill-green">Done</span>`;}
-    else if(isActive){cls+=' active-group';iconCls+=' active';icon='▶';pill=`<span class="pill pill-blue">Day ${Math.min(dayNum,totalDays)}/${totalDays}</span>`;}
-    else if(isLocked){cls+=' locked-group';iconCls+=' locked';icon='🔒';pill=`<span class="pill pill-gray">Locked</span>`;}
-    else{iconCls+=' active';icon='▶';pill=`<span class="pill pill-blue">Ready</span>`;}
-
-    const onclick=isLocked||isDone?'':'onclick="startGroup(\''+gid+'\')"';
-    return `<div class="${cls}" ${onclick}>
-      <div class="${iconCls}">${icon}</div>
-      <div class="gi-left">
-        <div class="gi-name">${g.label}</div>
-        <div class="gi-meta">${g.vendos} vendos · ${g.start.slice(5)} → ${g.end.slice(5)}</div>
-        ${isActive&&activeRun?`<div class="gi-meta" style="color:var(--blue);margin-top:2px">${activeRun.harvested_count||0} harvested, ${(activeRun.total_vendos||0)-((activeRun.harvested_count||0)+(activeRun.skipped_count||0))} remaining</div>`:''}
-      </div>
-      <div class="gi-badge">${pill}</div>
+      <div class="gi-badge"><span class="pill pill-blue">▶</span></div>
     </div>`;
   }).join('');
-  document.getElementById('group-list').innerHTML=html||'<div style="color:var(--muted);text-align:center;padding:24px">No groups found</div>';
 }
 
-// ── START / RESUME GROUP ──────────────────────────────────────────
-async function startGroup(groupId){
-  const g = SCHEDULE.find(s=>s.id===groupId);
-  if(!g){toast('Group not found');return;}
-  currentGroupDef=g;
+function areaSelect(areaJson){
+  const area = JSON.parse(areaJson);
+  loadGroupsScreen(selectedCollector, area);
+}
 
-  // Warn if before schedule window (but don't block)
-  const todayCheck = todayPHT();
-  if(todayCheck < g.start){
-    toast('⚠️ Schedule starts ' + g.start + ' — harvesting early', 4000);
+
+async function loadGroupsScreen(collector, area){
+  showScreen('screen-groups');
+  document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
+  const listEl = document.getElementById('group-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
+
+  const groups = await loadPermGroups();
+  const areaGroups = groups.filter(g=>g.area===area.id);
+
+  // Fetch vendo counts per permanent group from harvest_group_items
+  let countMap = {};
+  try {
+    const ids = areaGroups.map(g=>g.id).join(',');
+    if(ids){
+      const r = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids})&select=group_run_id,status`,{headers:HDR});
+      const rows = await r.json();
+      rows.forEach(row=>{
+        if(!countMap[row.group_run_id]) countMap[row.group_run_id]={total:0,harvested:0};
+        countMap[row.group_run_id].total++;
+        if(row.status==='harvested') countMap[row.group_run_id].harvested++;
+      });
+    }
+  } catch(e){ /* non-critical */ }
+
+  // All-vendos option for this area
+  let html = `<div class="group-item active-group" style="cursor:pointer;border-color:var(--teal);background:var(--teal-light)" onclick="startAllVendos(${JSON.stringify(JSON.stringify(area))})">
+    <div class="gi-icon active" style="background:var(--teal);font-size:18px;width:44px;height:44px">📋</div>
+    <div class="gi-left">
+      <div class="gi-name" style="color:var(--teal)">All Vendos — ${area.label}</div>
+      <div class="gi-meta">Browse all vendos in this area</div>
+    </div>
+    <div class="gi-badge"><span class="pill" style="background:var(--teal-light);color:var(--teal)">All</span></div>
+  </div>`;
+
+  if(!areaGroups.length){
+    html += '<div style="color:var(--muted);text-align:center;padding:24px">No groups yet for this area</div>';
+  } else {
+    areaGroups.forEach(g=>{
+      const counts = countMap[g.id]||{total:0,harvested:0};
+      const pct = counts.total ? Math.round(counts.harvested/counts.total*100) : 0;
+      const pill = counts.total ?
+        `<span class="pill ${pct===100?'pill-green':'pill-blue'}">${counts.harvested}/${counts.total}</span>` :
+        `<span class="pill pill-gray">No data</span>`;
+      const meta = counts.total ?
+        `${counts.total} vendos · ${pct}% harvested last run` :
+        `${g.group_label||g.group_id}`;
+      html += `<div class="group-item active-group" style="cursor:pointer" onclick="startGroup(${g.id})">
+        <div class="gi-icon active">▶</div>
+        <div class="gi-left">
+          <div class="gi-name">${g.group_label||g.group_id}</div>
+          <div class="gi-meta">${meta}</div>
+        </div>
+        <div class="gi-badge">${pill}</div>
+      </div>`;
+    });
   }
 
+  listEl.innerHTML = html;
+}
+
+// ── START GROUP (reuses permanent group items) ────────────────────
+async function startGroup(groupId){
+  // groupId is the harvest_groups.id (integer) of the permanent group row
   showScreen('screen-route');
-  document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
+  document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
 
   try {
-    // Check for existing active run
-    const rCheck = await fetch(`${SB}/rest/v1/harvest_groups?collector=eq.${encodeURIComponent(selectedCollector)}&group_id=eq.${groupId}&status=eq.active&limit=1`,{headers:HDR});
-    const existing = await rCheck.json();
-
-    if(existing.length){
-      // Resume existing run
-      currentGroupRun=existing[0];
-      const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status&order=id.asc`,{headers:HDR});
-      currentItems=await rItems.json();
-    } else {
-      // Fetch ALL vendos for this group's areas directly from vendos table
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
-
-      let vendos = [];
-      try {
-        const areas = g.areas && g.areas.length ? g.areas : [g.label.split(' — ')[0].toUpperCase()];
-        // Fetch all areas for this group (some groups span 2 areas e.g. DIPOLOG+SINAMAN)
-        for(const area of areas){
-          let offset = 0;
-          while(true){
-            const rV = await fetch(
-              `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area)}&sheet_name=not.is.null` +
-              `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address` +
-              `&limit=500&offset=${offset}`,
-              {headers:HDR}
-            );
-            if(!rV.ok) break;
-            const batch = await rV.json();
-            if(!Array.isArray(batch)||!batch.length) break;
-            vendos.push(...batch.map(v=>({
-              id:v.id, sheet_name:v.sheet_name, tg_name:v.tg_name,
-              area:area, vlan:v.vlan, address:v.address, barangay:null,
-              lat:v.lat, lng:v.lng, last_harvest_date:v.last_harvest_date,
-              contact_number:v.contact_number
-            })));
-            if(batch.length<500) break;
-            offset+=500;
-          }
-        }
-      } catch(e){ console.warn('Vendo fetch failed:', e.message); }
-
-      if(!vendos.length){toast('No vendos found for this group');return;}
-      if(g && vendos.length < g.vendos * 0.9) toast(`⚠️ Only ${vendos.length}/${g.vendos} vendos loaded`, 4000);
-
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group ('+vendos.length+' vendos)…</span></div>';
-      // Create harvest_groups row
-      const rG=await fetch(`${SB}/rest/v1/harvest_groups`,{
-        method:'POST',
-        headers:{...HDR,'Prefer':'return=representation'},
-        body:JSON.stringify({group_id:groupId,group_label:g.label,collector:selectedCollector,team:selectedTeam||'TeamA',area:g.areas.join(','),status:'active',total_vendos:vendos.length})
-      });
-      const gRows=await rG.json();
-      currentGroupRun=Array.isArray(gRows)?gRows[0]:gRows;
-
-      // Create harvest_group_items rows
-      const itemsToInsert=vendos.map(v=>({
-        group_run_id:currentGroupRun.id,
-        vendo_id:v.id||null,
-        sheet_name:v.sheet_name||null,
-        tg_name:v.tg_name||null,
-        area:v.area||null,
-        barangay:v.barangay||null,
-        vlan:v.vlan||null,
-        address:v.address||null,
-        lat:v.lat||null,
-        lng:v.lng||null,
-        last_harvest_date:v.last_harvest_date||null,
-        contact_number:v.contact_number||null,
-        status:'pending'
-      }));
-
-      document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Setting up group…</span></div>';
-      // Insert in batches of 100
-      for(let i=0;i<itemsToInsert.length;i+=100){
-        const batchRes = await fetch(SB+'/rest/v1/harvest_group_items',{
-          method:'POST',
-          headers:{...HDR,'Prefer':'return=minimal'},
-          body:JSON.stringify(itemsToInsert.slice(i,i+100))
-        });
-        if(!batchRes.ok){
-          const errText = await batchRes.text();
-          throw new Error('Insert items failed (batch '+i+'): '+errText.substring(0,200));
-        }
-      }
-      // Fetch back to get IDs (only fields needed for harvesting)
-      const rItems=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${currentGroupRun.id}&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status&order=id.asc`,{headers:HDR});
-      currentItems=await rItems.json();
-    }
+    // Fetch the permanent group row
+    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR});
+    const gRows = await rG.json();
+    if(!gRows.length){toast('Group not found');return;}
+    const g = gRows[0];
+    currentGroupDef = g;
+    currentGroupRun = g;
 
     // Save session
-    localStorage.setItem('harvest_session',JSON.stringify({collector:selectedCollector,team:selectedTeam,groupId,groupRunId:currentGroupRun.id,groupLabel:g.label}));
+    localStorage.setItem('harvest_session',JSON.stringify({
+      collector:selectedCollector,
+      groupId:groupId,
+      groupRunId:groupId,
+      groupLabel:g.group_label||g.group_id
+    }));
 
-    // Schedule badge
-    const today=todayPHT();
-    const dayNum=Math.max(1,Math.round((new Date(today)-new Date(g.start))/(86400000))+1);
-    const totalDays=Math.round((new Date(g.end)-new Date(g.start))/(86400000))+1;
-    document.getElementById('sched-group-name').textContent=g.label;
-    document.getElementById('sched-group-meta').textContent=`${selectedCollector} · ${g.start} → ${g.end}`;
-    document.getElementById('sched-day-num').textContent=Math.min(dayNum,totalDays)+'/'+totalDays;
-    document.getElementById('topbar-sub').textContent=g.label;
+    document.getElementById('topbar-sub').textContent=g.group_label||g.group_id;
+    document.getElementById('sched-group-name').textContent=g.group_label||g.group_id;
+    document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.area;
+    document.getElementById('sched-day-num').textContent=todayPHT().slice(5); // show MM-DD instead of day/total
 
+    // Fetch items, joining live last_harvest_date from vendos
+    document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
+    let allItems = [];
+    let offset = 0;
+    while(true){
+      const r = await fetch(
+        `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
+        `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+        `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      allItems.push(...batch);
+      if(batch.length<500) break;
+      offset+=500;
+    }
+
+    // Reset all statuses to pending for a new run (so we can re-harvest)
+    // But preserve last_harvest_date from vendos table for display
+    // Fetch fresh last_harvest_date for all vendos in this group
+    const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
+    let lhdMap = {};
+    if(vendoIds.length){
+      try {
+        for(let i=0;i<vendoIds.length;i+=200){
+          const batch = vendoIds.slice(i,i+200);
+          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${batch.join(',')})&select=id,last_harvest_date`,{headers:HDR});
+          const rows = await r.json();
+          rows.forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; });
+        }
+      } catch(e){ /* non-critical */ }
+    }
+
+    // Reset statuses to pending (new run), update last_harvest_date from live vendos
+    currentItems = allItems.map(item=>({
+      ...item,
+      status:'pending',
+      last_harvest_date: (item.vendo_id && lhdMap[item.vendo_id]) || item.last_harvest_date,
+      // Clear previous run's harvest data from display
+      coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
+    }));
+
+    // Update group run stats reset
+    if(navigator.onLine){
+      await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{
+        method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify({status:'active',harvested_count:0,skipped_count:0,total_net:0,started_at:new Date().toISOString()})
+      });
+      // Reset item statuses in DB too
+      await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`,{
+        method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify({status:'pending'})
+      });
+    }
+
+    currentGroupRun = {...g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
     activeTab='pending';
     renderVendoList();
 
   } catch(e){
     console.error('startGroup error:', e);
-    const errMsg = e.message || String(e);
     const errEl = document.getElementById('vendo-list');
-    errEl.innerHTML = '';
-    const div = document.createElement('div');
-    div.className = 'loading';
-    div.innerHTML = '<span style="color:var(--red);text-align:center;line-height:2">❌ ' + errMsg + '</span>';
-    const btn = document.createElement('button');
-    btn.textContent = '← Back';
-    btn.style.cssText = 'margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
-    btn.onclick = function(){ showScreen('screen-groups'); };
+    errEl.innerHTML='';
+    const div=document.createElement('div');
+    div.className='loading';
+    div.innerHTML='<span style="color:var(--red);text-align:center;line-height:2">❌ '+e.message+'</span>';
+    const btn=document.createElement('button');
+    btn.textContent='← Back';
+    btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+    btn.onclick=function(){ showAreasScreen(); };
     div.appendChild(btn);
     errEl.appendChild(div);
+  }
+}
+
+// ── ALL VENDOS MODE (no group filter) ─────────────────────────────
+async function startAllVendos(areaJson){
+  const area = JSON.parse(areaJson);
+  showScreen('screen-route');
+  document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading all vendos…</span></div>';
+
+  currentGroupDef = {group_label:'All — '+area.label, area:area.id, group_id:'ALL', id:null};
+  currentGroupRun = null;
+
+  document.getElementById('topbar-sub').textContent='All — '+area.label;
+  document.getElementById('sched-group-name').textContent='All Vendos';
+  document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+area.label;
+  document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
+
+  try {
+    let allVendos = [];
+    let offset = 0;
+    while(true){
+      const r = await fetch(
+        `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area.id)}`+
+        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address`+
+        `&order=sheet_name.asc&limit=500&offset=${offset}`,{headers:HDR}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      allVendos.push(...batch);
+      if(batch.length<500) break;
+      offset+=500;
+    }
+
+    currentItems = allVendos.map(v=>({
+      id: null, // no group_item id — submit goes direct to harvests + vendos
+      vendo_id: v.id,
+      sheet_name: v.sheet_name,
+      tg_name: v.tg_name,
+      vlan: v.vlan,
+      area: area.id,
+      barangay: null,
+      lat: v.lat,
+      lng: v.lng,
+      last_harvest_date: v.last_harvest_date,
+      contact_number: v.contact_number,
+      address: v.address,
+      status: 'pending'
+    }));
+
+    // Cache vendos locally for 24hrs
+    localStorage.setItem('cached_vendos_'+area.id, JSON.stringify({ts:Date.now(), data:currentItems}));
+
+    activeTab='pending';
+    renderVendoList();
+  } catch(e){
+    toast('❌ '+e.message, 4000);
   }
 }
 async function resumeSession(){
   const saved=JSON.parse(localStorage.getItem('harvest_session')||'null');
   if(!saved) return;
   selectedCollector=saved.collector;
-  selectedTeam=saved.team||'TeamA';
-  currentGroupDef=SCHEDULE.find(g=>g.id===saved.groupId);
-  await startGroup(saved.groupId);
+  if(saved.groupId && !isNaN(parseInt(saved.groupId))){
+    await startGroup(parseInt(saved.groupId));
+  } else {
+    localStorage.removeItem('harvest_session');
+    showAreasScreen();
+  }
 }
 
 // ── RENDER VENDO LIST ─────────────────────────────────────────────
@@ -965,7 +1041,7 @@ function clearSearch(){searchQuery='';document.getElementById('search-inp').valu
 
 function renderVendoList(){
   const all=currentItems;
-  const _initCentroid=(currentGroupDef&&GROUP_CENTROIDS[currentGroupDef.id])||{lat:START_LAT,lng:START_LNG};
+  const _area=currentGroupDef&&currentGroupDef.area;const _initCentroid=(currentGroupDef&&AREA_CENTROIDS[_area])||{lat:START_LAT,lng:START_LNG};
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
   const pending=all.filter(i=>i.status==='pending');
@@ -976,7 +1052,7 @@ function renderVendoList(){
   document.getElementById('rt-progress').style.width=pct+'%';
   document.getElementById('rt-done-cnt').textContent=doneCnt+' harvested';
   document.getElementById('rt-total-cnt').textContent=total+' total';
-  document.getElementById('rt-meta').textContent=`${selectedCollector} · ${currentGroupDef?.label||'—'} · ${total} vendos`;
+  document.getElementById('rt-meta').textContent=`${selectedCollector} · ${currentGroupDef?.group_label||currentGroupDef?.group_id||'—'} · ${total} vendos`;
   document.getElementById('cnt-pending').textContent=pending.length;
   document.getElementById('cnt-done').textContent=done.length;
   document.getElementById('cnt-issues').textContent=issues.length;
@@ -1006,7 +1082,7 @@ function renderVendoList(){
   // GPS sort — filter outliers > 15km from start point
   let sorted=false;
   if(activeTab!=='done'){
-    const centroid=(currentGroupDef&&GROUP_CENTROIDS[currentGroupDef.id])||{lat:START_LAT,lng:START_LNG};
+    const centroid=(currentGroupDef&&AREA_CENTROIDS[currentGroupDef.area])||{lat:START_LAT,lng:START_LNG};
     const MAX_DIST_KM=20;
     view.forEach(item=>{item._dist=(item.lat&&item.lng)?haversine(centroid.lat,centroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
     const withG=view.filter(i=>i._dist!==null&&i._dist<=MAX_DIST_KM),noG=view.filter(i=>i._dist===null||i._dist>MAX_DIST_KM);
@@ -1031,6 +1107,9 @@ function renderVendoList(){
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
     const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
+    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):999;
+    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince>45?'#dc2626':daysSince>30?'#d97706':'#15803d';
+    const lhdBadge=item.status!=='harvested'&&daysSince>30?'<span class="pill pill-red" style="font-size:8px">'+daysSince+'d ago</span>':'';
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
     let mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:item.address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.address+', Zamboanga del Norte, Philippines')}`:'';
@@ -1045,7 +1124,7 @@ function renderVendoList(){
         <div class="vi-name">${item.sheet_name||item.tg_name||'Unknown'}</div>
         <div class="vi-sub">${item.barangay||item.area||'—'}${item.vlan?' · VLAN '+item.vlan:''}</div>
         ${distBadge}
-        <div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:${item.last_harvest_date?'#15803d':'#9ca3af'}">${lastH}</b></div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:${lhdColor}">${lastH}</b> ${lhdBadge}</div>
         ${item.address?`<div style="font-size:10px;color:var(--muted);margin-top:1px">📍 ${item.address}</div>`:''}
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${gpsBadge}${contactBadge}</div>
         ${netLine}${noteLine}${gpsBtn}
@@ -1503,7 +1582,7 @@ async function submitHarvest(){
     vendo_name:ownerName||currentItem.sheet_name||currentItem.tg_name||'',
     tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
     area:currentItem.area||null,collector:selectedCollector,
-    route_code:'GRP-'+((currentGroupDef&&currentGroupDef.id)||''),
+    route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
     coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
   };
@@ -1621,8 +1700,8 @@ function showGateDone(){
   document.getElementById('gate-blocked-view').style.display='none';
   document.getElementById('gate-done-view').style.display='';
   const g=currentGroupDef;
-  document.getElementById('gate-group-name').textContent=(g?g.label:'Group')+' complete!';
-  document.getElementById('gate-sub').textContent='Every vendo has been recorded. Ready to unlock the next group.';
+  document.getElementById('gate-group-name').textContent=(g?(g.group_label||g.group_id||'Group'):'Group')+' complete!';
+  document.getElementById('gate-sub').textContent='Every vendo has been recorded. Group run complete!';
   const run=currentGroupRun||{};
   document.getElementById('gate-stats').innerHTML=`
     <div class="gate-stat"><div class="gate-stat-val" style="color:var(--green)">${run.harvested_count||0}</div><div class="gate-stat-lbl">Harvested</div></div>
@@ -1631,11 +1710,7 @@ function showGateDone(){
     <div class="gate-stat"><div class="gate-stat-val" style="color:var(--green)">₱${Math.round((parseFloat(run.total_net)||0)/1000)}k</div><div class="gate-stat-lbl">Net total</div></div>`;
 
   // Determine next group
-  if(g&&selectedTeam){
-    const ids=TEAM_GROUPS[selectedTeam]||[];
-    const idx=ids.indexOf(g.id);
-    nextGroupDef=idx>=0&&idx<ids.length-1?SCHEDULE.find(s=>s.id===ids[idx+1]):null;
-  }
+  nextGroupDef=null; // no auto-unlock in permanent group mode
   document.getElementById('unlock-btn').textContent=nextGroupDef?`🔓 Complete & unlock ${nextGroupDef.label}`:'🏁 Complete group (final)';
 }
 
@@ -1663,7 +1738,7 @@ async function completeGroupAndUnlock(){
 // ── RECEIPT ───────────────────────────────────────────────────────
 function showReceipt(){
   const run=currentGroupRun||{},g=currentGroupDef;
-  document.getElementById('receipt-sub').textContent=`${g?g.label:''} · ${selectedCollector}`;
+  document.getElementById('receipt-sub').textContent=`${g?(g.group_label||g.group_id||''):''}  · ${selectedCollector}`;
   document.getElementById('receipt-stats').innerHTML=`
     <div class="stat-box"><div class="stat-val" style="color:var(--green)">${run.harvested_count||0}</div><div class="stat-lbl">Harvested</div></div>
     <div class="stat-box"><div class="stat-val" style="color:var(--amber)">${run.skipped_count||0}</div><div class="stat-lbl">Skipped</div></div>
@@ -1682,6 +1757,7 @@ function showReceipt(){
 }
 function startNextGroup(){
   if(nextGroupDef) startGroup(nextGroupDef.id);
+  else showAreasScreen();
 }
 function hardReset(){
   // Clear ALL harvest-related localStorage
@@ -1720,6 +1796,7 @@ function topbarBack(){
   if(id==='screen-areas'){pinLogout();}
   else if(id==='screen-groups'){showAreasScreen();}
   else if(id==='screen-route'){showAreasScreen();}
+  else if(id==='screen-areas'){pinLogout();}
   else if(id==='screen-form'){backToRoute();}
   else if(id==='screen-gate'){showScreen('screen-route');}
   else if(id==='screen-receipt'){showAreasScreen();}
