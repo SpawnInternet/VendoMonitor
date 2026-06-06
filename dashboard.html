@@ -2798,7 +2798,7 @@ async function sb(table, params="", limit=1000) {
   try {
     const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=${limit}`, {
       headers: {...HDR, 'Statement-Timeout': '0'},
-      signal: AbortSignal.timeout(45000)
+      signal: AbortSignal.timeout(12000)
     });
     if (!r.ok) {
       const err = await r.text();
@@ -2809,7 +2809,10 @@ async function sb(table, params="", limit=1000) {
     return r.json();
   } catch(e) {
     sbFailCount++;
-    if (sbFailCount >= 2 && !sbOffline) { sbOffline = true; showConnError(e.message); }
+    const msg = e.name === 'TimeoutError' || e.name === 'AbortError'
+      ? 'Supabase is slow or unreachable — will retry automatically'
+      : e.message;
+    if (sbFailCount >= 2 && !sbOffline) { sbOffline = true; showConnError(msg); }
     return [];
   }
 }
@@ -2820,7 +2823,7 @@ async function sbAll(table, params="") {
     try {
       const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1000&offset=${offset}`, {
         headers: HDR,
-        signal: AbortSignal.timeout(30000)
+        signal: AbortSignal.timeout(10000)
       });
       if (!r.ok) { const err = await r.text(); throw new Error(`HTTP ${r.status}: ${err.slice(0,200)}`); }
       const rows = await r.json();
@@ -2851,7 +2854,10 @@ function showConnError(msg) {
 
 async function testConnection() {
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR });
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR, signal: ctrl.signal });
+    clearTimeout(tid);
     if (r.ok) {
       sbOffline = false;
       sbFailCount = 0;
@@ -2861,7 +2867,8 @@ async function testConnection() {
       showConnError(`HTTP ${r.status}`);
     }
   } catch(e) {
-    showConnError(e.message);
+    const msg = e.name === 'AbortError' ? 'Connection timed out (8s) — Supabase may be slow' : e.message;
+    showConnError(msg);
   }
 }
 
@@ -4366,7 +4373,7 @@ async function loadSkipped() {
   try {
     const r = await fetch(
       `${SB_URL}/rest/v1/skipped_by_vendo_mat?select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc&limit=1000`,
-      { headers: HDR, signal: AbortSignal.timeout(30000) }
+      { headers: HDR, signal: AbortSignal.timeout(10000) }
     );
     const vendoRows = r.ok ? await r.json() : [];
 
