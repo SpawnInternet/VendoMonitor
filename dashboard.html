@@ -312,7 +312,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <option value="2025">2025</option>
       <option value="all">All Years</option>
     </select>
-    <button class="btn p" style="font-size:11px;padding:4px 9px;background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);" onclick="loadDashboard()">⟳ Refresh</button>
+    <span id="cache-age" style="font-size:10px;color:rgba(255,255,255,.6);margin-right:6px;display:none"></span><button class="btn p" style="font-size:11px;padding:4px 9px;background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.3);" onclick="if(typeof apiInvalidate==='function')apiInvalidate();loadDashboard()">⟳ Refresh</button>
     <button onclick="slLogout()" style="padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(220,38,38,.3);color:#fff;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;" title="Logout">🔒 Logout</button>
   </div>
 </div>
@@ -2810,6 +2810,7 @@ async function sb(table, params="", limit=1000) {
     }
     sbOffline = false;
     sbFailCount = 0;
+    if (typeof updateCacheIndicator === 'function') updateCacheIndicator();
     return r.json();
   } catch(e) {
     sbFailCount++;
@@ -3112,7 +3113,9 @@ async function openVendoFromSearch(vendo, area) {
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
 async function loadDashboard() {
-  // Load modular overview tab
+  // Update cache indicator immediately
+  if (typeof updateCacheIndicator === 'function') updateCacheIndicator();
+  // Load modular overview tab (uses cache)
   if (typeof overviewLoad === 'function') {
     overviewLoad();
   }
