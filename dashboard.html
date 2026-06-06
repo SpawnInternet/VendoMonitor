@@ -2813,10 +2813,15 @@ async function sb(table, params="", limit=1000) {
     return r.json();
   } catch(e) {
     sbFailCount++;
-    const msg = e.name === 'TimeoutError' || e.name === 'AbortError'
-      ? 'Supabase is slow or unreachable — will retry automatically'
-      : e.message;
-    if (sbFailCount >= 3 && !sbOffline) { sbOffline = true; showConnError(msg); }
+    if (!sbOffline) {
+      if (!navigator.onLine) {
+        sbOffline = true;
+        showConnError('No internet connection');
+      } else if (sbFailCount >= 3) {
+        sbOffline = true;
+        showConnError('Cannot reach Supabase — check your connection');
+      }
+    }
     return [];
   }
 }
@@ -2851,6 +2856,8 @@ function hideConnError() {
   sbFailCount = 0;
 }
 
+// Only call this when GENUINELY offline or Supabase is truly down
+// Never call on slow first load — use sbFailCount guard
 function showConnError(msg) {
   let el = document.getElementById("conn-error-banner");
   if (!el) {
@@ -2864,24 +2871,29 @@ function showConnError(msg) {
 }
 
 async function testConnection() {
+  // If browser says offline — show immediately, no fetch needed
+  if (!navigator.onLine) {
+    showConnError('No internet connection');
+    return;
+  }
+  // If data already loaded successfully this session — skip the test
+  if (sbFailCount === 0 && !sbOffline) return;
+  // Run a lightweight ping
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=id&limit=1`, { headers: HDR, signal: ctrl.signal });
+    const r = await fetch(`${SB_URL}/rest/v1/summary_totals?select=id&limit=1`, { headers: HDR, signal: ctrl.signal });
     clearTimeout(tid);
     if (r.ok) {
-      sbOffline = false;
-      sbFailCount = 0;
-      const el = document.getElementById("conn-error-banner");
-      if (el) el.remove();
-    } else {
-      showConnError(`HTTP ${r.status}`);
+      hideConnError();
     }
+    // If not ok but not offline — silent fail, let sb() handle retries
   } catch(e) {
-    if (sbFailCount > 0) {
-      const msg = e.name === 'AbortError' ? 'Supabase is slow — will retry automatically' : e.message;
-      showConnError(msg);
+    // Only show banner if browser also confirms no internet
+    if (!navigator.onLine) {
+      showConnError('No internet connection');
     }
+    // Otherwise stay silent — may just be a slow moment
   }
 }
 
@@ -2913,6 +2925,16 @@ function _tickClock(){
 }
 _tickClock();
 setInterval(_tickClock,1000);
+
+// Browser online/offline events — most reliable signal
+window.addEventListener('offline', () => {
+  showConnError('No internet connection');
+});
+window.addEventListener('online', () => {
+  hideConnError();
+  // Reload data when connection restored
+  setTimeout(() => loadDashboard(), 1000);
+});
 
 // ── Navigation ────────────────────────────────────────────
 /* ── GLOBAL NAV HISTORY ── */
