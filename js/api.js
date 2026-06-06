@@ -49,6 +49,8 @@ async function apiLoad(force=false) {
   } catch(e) {
     // Edge Function not deployed or failed — fall back to direct DB
     console.warn("Edge Function unavailable, falling back to direct DB:", e.message);
+    // Suppress banner — we have a working fallback
+    if (typeof hideConnError === "function") hideConnError();
     const data = await apiFallback();
     _cache = data;
     _cacheTs = Date.now();
