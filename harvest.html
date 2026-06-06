@@ -230,7 +230,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="coin-label">4-digit PIN</div>
       <input type="password" inputmode="numeric" maxlength="4" id="pin-inp"
         placeholder="••••"
-        style="width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:28px;font-weight:700;letter-spacing:8px;text-align:center;font-family:inherit;outline:none;color:var(--text)"
+        style="width:100%;padding:14px 22px 14px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:28px;font-weight:700;letter-spacing:8px;text-align:center;font-family:monospace;outline:none;color:var(--text)"
         oninput="pinOnInput(this)" onkeydown="if(event.key==='Enter')pinSubmit()">
     </div>
     <button class="btn btn-blue" id="pin-login-btn" onclick="pinSubmit()" disabled>Login →</button>
@@ -624,7 +624,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v9.0';
+const APP_VERSION = 'v9.1';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=syncLog.length;
@@ -721,9 +721,13 @@ async function pinSubmit(){
   btn.disabled=true; btn.textContent='Checking…';
   errEl.style.display='none';
 
-  // Validate against DB
+  // Validate against DB with timeout
   try{
-    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&active=eq.true`,{headers:HDR});
+    const ctrl=new AbortController();
+    const tid=setTimeout(()=>ctrl.abort(),8000);
+    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&active=eq.true`,{headers:HDR,signal:ctrl.signal});
+    clearTimeout(tid);
+    if(!r.ok) throw new Error('Server error '+r.status);
     const rows=await r.json();
     if(!rows.length||rows[0].pin!==pin){
       errEl.textContent='❌ Wrong PIN — try again';
@@ -741,7 +745,7 @@ async function pinSubmit(){
     document.getElementById('pin-inp').value='';
     showAreasScreen();
   }catch(e){
-    // Offline fallback — check cached collectors
+    // Offline or timeout fallback — check cached collectors
     const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&c.pin===pin);
     if(cached){
       selectedCollector=cached.name;
@@ -750,7 +754,8 @@ async function pinSubmit(){
       document.getElementById('pin-inp').value='';
       showAreasScreen();
     }else{
-      errEl.textContent='❌ Wrong PIN or offline — try again';
+      const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN or offline — try again';
+      errEl.textContent=msg;
       errEl.style.display='';
       btn.disabled=false; btn.textContent='Login →';
     }
