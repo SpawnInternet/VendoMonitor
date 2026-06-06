@@ -2816,7 +2816,7 @@ async function sb(table, params="", limit=1000) {
     const msg = e.name === 'TimeoutError' || e.name === 'AbortError'
       ? 'Supabase is slow or unreachable — will retry automatically'
       : e.message;
-    if (sbFailCount >= 2 && !sbOffline) { sbOffline = true; showConnError(msg); }
+    if (sbFailCount >= 3 && !sbOffline) { sbOffline = true; showConnError(msg); }
     return [];
   }
 }
@@ -2842,6 +2842,13 @@ async function sbAll(table, params="") {
     }
   }
   return all;
+}
+
+function hideConnError() {
+  const el = document.getElementById("conn-error-banner");
+  if (el) el.remove();
+  sbOffline = false;
+  sbFailCount = 0;
 }
 
 function showConnError(msg) {
@@ -2871,8 +2878,10 @@ async function testConnection() {
       showConnError(`HTTP ${r.status}`);
     }
   } catch(e) {
-    const msg = e.name === 'AbortError' ? 'Connection timed out (8s) — Supabase may be slow' : e.message;
-    showConnError(msg);
+    if (sbFailCount > 0) {
+      const msg = e.name === 'AbortError' ? 'Supabase is slow — will retry automatically' : e.message;
+      showConnError(msg);
+    }
   }
 }
 
@@ -3088,6 +3097,7 @@ async function loadDashboard() {
     const totalVendos= new Set(vendos.map(v=>v.vendo)).size;
     const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
 
+    sbFailCount = 0; sbOffline = false; const _banner = document.getElementById("conn-error-banner"); if(_banner) _banner.remove();
     document.getElementById("dash-stats").innerHTML = `
       <div class="stat" style="border-bottom-color:#7c3aed" onclick="openVendoModal()"><div class="sl">Active Vendos</div><div class="sv pur">${totalVendos.toLocaleString()}</div><div style="font-size:9px;color:var(--mu);margin-top:2px">click to view all</div></div>
       <div class="stat" style="border-bottom-color:#1565c0"><div class="sl">Total Transactions</div><div class="sv blue">${totalTx.toLocaleString()}</div></div>
