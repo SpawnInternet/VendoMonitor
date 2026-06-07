@@ -1066,7 +1066,7 @@ async function htLoad(){
   let offset = 0;
   while(true){
     const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=1000&offset=${offset}`,
+      `${_SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
     const batch = await r.json();
@@ -1096,7 +1096,7 @@ function htFilter(){
   const rows = htAllRows.filter(r=>{
     if(area && r.area!==area) return false;
     if(col  && r.harvest_groups?.collector!==col) return false;
-    if(stat && r.status!==stat) return false;
+    if(stat && r.status!==stat && !(stat==="done" && r.status==="harvested")) return false;
     if(q    && !(r.sheet_name||'').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -1184,7 +1184,7 @@ async function lfLoadToday(){
   const today = new Date(); today.setHours(0,0,0,0);
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=eq.done&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=in.(done,harvested)&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)&order=harvested_at.desc&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -1260,7 +1260,7 @@ async function rcRun(){
   while(true){
     const r=await fetch(
       `${_SB}/rest/v1/harvest_group_items?status=eq.done&harvested_at=gte.${fromISO}&harvested_at=lte.${toISO}`+
-      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)`+
+      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)`+
       `&order=harvested_at.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
