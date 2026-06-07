@@ -3,6 +3,8 @@
 // localStorage cache: persistent across page reloads
 
 const EDGE_URL = `${SB_URL}/functions/v1/dashboard-summary`;
+const STORAGE_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/summary.json';
+const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 min — if JSON older than this, fall back to edge
 
 // TTLs
 const TTL_MAIN     = 5  * 60 * 1000;  // 5 min  — stats, trend, areas
@@ -105,7 +107,39 @@ async function apiLoad(force = false) {
 
 // ── Fetch from Edge Function (with direct DB fallback) ────────────
 async function _fetchFresh() {
-  // Try Edge Function first
+  // 1. Try Storage JSON cache first — fastest, no auth needed
+  try {
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(STORAGE_CACHE_URL + '?t=' + Math.floor(Date.now()/60000), { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (r.ok) {
+      const data = await r.json();
+      const age = Date.now() - new Date(data.generated_at || 0).getTime();
+      if (age < CACHE_MAX_AGE_MS) {
+        data._source = 'storage';
+        console.log('[API] Loaded from Storage cache, age:', Math.round(age/1000) + 's');
+        // Normalize field names to match what dashboard expects
+        if (!data.stats) {
+          data.stats = {
+            total_vendos: data.active_vendos || 0,
+            total_txns: data.total_transactions || 0,
+            total_sales: data.total_sales || 0,
+            today_sales: data.today_sales || 0,
+            suspicious_count: data.suspicious_count || 0,
+          };
+        }
+        if (!data.areas && data.area_cards) data.areas = data.area_cards;
+        if (!data.trend && data.trend) data.trend = data.trend;
+        return data;
+      }
+      console.log('[API] Storage cache stale (' + Math.round(age/60000) + 'min), trying edge...');
+    }
+  } catch(e) {
+    console.warn('[API] Storage fetch failed, trying edge:', e.message);
+  }
+
+  // 2. Try Edge Function
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
@@ -120,11 +154,11 @@ async function _fetchFresh() {
       return data;
     }
   } catch(e) {
-    console.warn('Edge Function failed, using direct DB:', e.message);
+    console.warn('[API] Edge Function failed, using direct DB:', e.message);
     if (typeof hideConnError === 'function') hideConnError();
   }
 
-  // Fallback: direct DB queries
+  // 3. Last resort: direct DB queries
   return await _fetchDirect();
 }
 
