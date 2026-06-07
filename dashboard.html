@@ -910,7 +910,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Harvest Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
-      <button class="hv-hvtab"    id="hbtn-history"  onclick="hvNewTab('history',this);if(!window._histLoaded)hiLoad()">📚 History</button>
+      <button class="hv-hvtab"    id="hbtn-history"  onclick="hvNewTab('history',this)">📚 History</button>
     </div>
   </div>
 </div>
@@ -1047,15 +1047,18 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon'].forEach(t=>{
+  ['htable','livefeed','recon','history'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
-    if(el) el.style.display = t===id ? '' : 'none';
+    if(!el) return;
+    if(t===id){ el.style.display = t==='history' ? 'grid' : ''; }
+    else { el.style.display = 'none'; }
   });
   btn.classList.add('on');
   hvNewActiveTab = id;
   if(id==='htable' && htAllRows.length===0) htLoad();
   if(id==='livefeed') lfConnect();
   if(id==='recon') rcInitDates();
+  if(id==='history' && !window._histLoaded) hiLoad();
 }
 
 /* ── HARVEST TABLE ── */
@@ -1394,7 +1397,7 @@ setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel
 
 
 <!-- ══ TAB: HISTORY ══ -->
-<div id="hvt-history" style="display:none;height:calc(100vh - 88px);display:none;overflow:hidden;display:grid;grid-template-columns:300px 1fr;">
+<div id="hvt-history" style="display:none;height:calc(100vh - 88px);overflow:hidden;grid-template-columns:300px 1fr;">
 
   <!-- LEFT: vendo list -->
   <div style="border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;">
@@ -7582,7 +7585,7 @@ async function hiLoad(){
   // fallback: query harvests directly
   try{
     const r=await fetch(SUPABASE_URL2+'/rest/v1/harvests?select=sheet_name,area,harvest_date,tg_name&order=sheet_name',
-      {headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     const rows=await r.json();
     // aggregate
     const map={};
@@ -7652,7 +7655,7 @@ async function hiSelectVendo(idx){
   try{
     const enc=encodeURIComponent(v.sheet_name);
     const r=await fetch(SUPABASE_URL2+`/rest/v1/harvests?sheet_name=eq.${enc}&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc`,
-      {headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     const rows=await r.json();
     document.getElementById('hi-ledger-count').textContent=rows.length+' records';
     hiRenderLedger(rows);
@@ -7705,18 +7708,6 @@ ${rows.map(r=>{
 </div>`;
 }
 
-function hvNewTab(name,btn){
-  document.querySelectorAll('.hv-hvtab').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  ['htable','livefeed','recon','history'].forEach(t=>{
-    const el=document.getElementById('hvt-'+t);
-    if(el) el.style.display=t===name?'':'none';
-    if(el && t===name){
-      if(t==='history') el.style.display='grid';
-      else el.style.display='block';
-    }
-  });
-}
 
 </script>
 </body>
