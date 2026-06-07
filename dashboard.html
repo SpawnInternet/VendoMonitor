@@ -910,6 +910,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Harvest Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
+      <button class="hv-hvtab"    id="hbtn-history"  onclick="hvNewTab('history',this);if(!window._histLoaded)hiLoad()">📚 History</button>
     </div>
   </div>
 </div>
@@ -1390,6 +1391,46 @@ setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel
 </div>
 
 
+
+
+<!-- ══ TAB: HISTORY ══ -->
+<div id="hvt-history" style="display:none;height:calc(100vh - 88px);display:none;overflow:hidden;display:grid;grid-template-columns:300px 1fr;">
+
+  <!-- LEFT: vendo list -->
+  <div style="border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:6px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--bg);">
+      <input id="hi-search" type="text" placeholder="Search vendo…" oninput="hiFilter()"
+        style="flex:1;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;font-family:inherit;outline:none;">
+      <select id="hi-area" onchange="hiFilter()"
+        style="padding:4px 6px;border:1px solid var(--bd);border-radius:6px;font-size:11px;font-family:inherit;background:#fff;">
+        <option value="">All areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
+      </select>
+    </div>
+    <div style="padding:3px 10px;border-bottom:1px solid var(--bd);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+      <span id="hi-vcount" style="font-size:10px;color:var(--mu);">Loading…</span>
+      <span style="font-size:10px;color:var(--mu);">📚 Tap a vendo to view ledger</span>
+    </div>
+    <div id="hi-list" style="flex:1;overflow-y:auto;"></div>
+  </div>
+
+  <!-- RIGHT: ledger -->
+  <div style="display:flex;flex-direction:column;overflow:hidden;">
+    <div id="hi-ledger-hdr" style="padding:8px 12px;border-bottom:1px solid var(--bd);flex-shrink:0;background:var(--bg);display:flex;align-items:center;gap:8px;">
+      <span style="font-size:13px;font-weight:700;color:var(--blue);" id="hi-ledger-name">Select a vendo</span>
+      <span id="hi-ledger-badge" style="display:none;font-size:10px;padding:1px 7px;border-radius:9px;background:#dcfce7;color:#15803d;border:1px solid #86efac;">TG matched</span>
+      <span style="flex:1"></span>
+      <span id="hi-ledger-count" style="font-size:10px;color:var(--mu);"></span>
+    </div>
+    <div id="hi-ledger-body" style="flex:1;overflow-y:auto;padding:12px;">
+      <div style="text-align:center;color:var(--mu);font-size:12px;padding:40px 0;">
+        Select a vendo on the left to view its full harvest ledger
+      </div>
+    </div>
+  </div>
+
+</div>
 
 <!-- ══ SKIPPED ══ -->
 
@@ -7524,7 +7565,160 @@ function actViewPhoto(url){
   <script src="js/shared.js"></script>
   <script src="js/api.js"></script>
   <script src="tabs/overview.js"></script>
-  <script src="tabs/harvest.js"></script>
+  <script src="tabs/harvest.js">
+// ═══ HISTORY TAB ═══
+window._histLoaded=false; window._hiData=[]; window._hiFiltered=[];
+const SUPABASE_URL2='https://cviraqfhphhsonjmrtvu.supabase.co';
+const CACHE_BUCKET='https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/history_summary.json';
+
+async function hiLoad(){
+  window._histLoaded=true;
+  document.getElementById('hi-vcount').textContent='Loading…';
+  try{
+    // Try cache first
+    const cr=await fetch(CACHE_BUCKET+'?t='+Date.now());
+    if(cr.ok){ const d=await cr.json(); hiPopulate(d); return; }
+  }catch(e){}
+  // fallback: query harvests directly
+  try{
+    const r=await fetch(SUPABASE_URL2+'/rest/v1/harvests?select=sheet_name,area,harvest_date,tg_name&order=sheet_name',
+      {headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+    const rows=await r.json();
+    // aggregate
+    const map={};
+    for(const row of rows){
+      const k=row.sheet_name||'(unnamed)';
+      if(!map[k]) map[k]={sheet_name:k,area:row.area,harvest_count:0,last_date:null,tg_name:row.tg_name};
+      map[k].harvest_count++;
+      if(!map[k].last_date||row.harvest_date>map[k].last_date) map[k].last_date=row.harvest_date;
+    }
+    hiPopulate(Object.values(map));
+  }catch(e){ document.getElementById('hi-vcount').textContent='Error loading'; }
+}
+
+function hiPopulate(data){
+  window._hiData=data.sort((a,b)=>(a.sheet_name||'').localeCompare(b.sheet_name||''));
+  hiFilter();
+}
+
+function hiFilter(){
+  const q=(document.getElementById('hi-search').value||'').toLowerCase();
+  const area=document.getElementById('hi-area').value;
+  window._hiFiltered=window._hiData.filter(v=>{
+    if(area && v.area!==area) return false;
+    if(q && !(v.sheet_name||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+  hiRender();
+}
+
+function hiRender(){
+  const list=document.getElementById('hi-list');
+  document.getElementById('hi-vcount').textContent=window._hiFiltered.length+' vendos';
+  if(!window._hiFiltered.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);font-size:11px;">No vendos found</div>';return;}
+  list.innerHTML=window._hiFiltered.map((v,i)=>{
+    const matched=v.tg_name?true:false;
+    const badge=matched
+      ?'<span style="font-size:9px;padding:1px 5px;border-radius:7px;background:#dcfce7;color:#15803d;border:1px solid #86efac;">TG✓</span>'
+      :'<span style="font-size:9px;padding:1px 5px;border-radius:7px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;">No TG</span>';
+    const lastDate=v.last_date?v.last_date.substring(0,10):'—';
+    const cnt=v.harvest_count||'?';
+    return `<div class="hi-row" data-idx="${i}" onclick="hiSelectVendo(${i})" style="padding:6px 10px;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--blue);">${v.sheet_name||'(unnamed)'}</div>
+        <div style="font-size:9px;color:var(--mu);margin-top:1px;">${v.area||'—'} &nbsp;·&nbsp; last: ${lastDate}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+        ${badge}
+        <span style="font-size:9px;color:var(--mu);">${cnt} records</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function hiSelectVendo(idx){
+  // highlight selected
+  document.querySelectorAll('.hi-row').forEach(r=>r.style.background='');
+  const selRow=document.querySelector(`.hi-row[data-idx="${idx}"]`);
+  if(selRow) selRow.style.background='#eff6ff';
+
+  const v=window._hiFiltered[idx];
+  document.getElementById('hi-ledger-name').textContent=v.sheet_name||'(unnamed)';
+  const badge=document.getElementById('hi-ledger-badge');
+  badge.style.display=v.tg_name?'inline':'none';
+  document.getElementById('hi-ledger-count').textContent='Loading ledger…';
+  document.getElementById('hi-ledger-body').innerHTML='<div style="text-align:center;color:var(--mu);font-size:11px;padding:30px 0;">Loading…</div>';
+
+  try{
+    const enc=encodeURIComponent(v.sheet_name);
+    const r=await fetch(SUPABASE_URL2+`/rest/v1/harvests?sheet_name=eq.${enc}&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc`,
+      {headers:{'apikey':SB_ANON,'Authorization':'Bearer '+SB_ANON}});
+    const rows=await r.json();
+    document.getElementById('hi-ledger-count').textContent=rows.length+' records';
+    hiRenderLedger(rows);
+  }catch(e){
+    document.getElementById('hi-ledger-body').innerHTML='<div style="color:var(--red);font-size:11px;padding:20px;">Error loading ledger</div>';
+  }
+}
+
+function hiRenderLedger(rows){
+  if(!rows.length){
+    document.getElementById('hi-ledger-body').innerHTML='<div style="text-align:center;color:var(--mu);font-size:11px;padding:30px 0;">No harvest records found</div>';
+    return;
+  }
+  const fmt=n=>n==null?'—':Number(n).toLocaleString();
+  const body=document.getElementById('hi-ledger-body');
+  body.innerHTML=`<div style="overflow-x:auto;">
+<table style="width:100%;border-collapse:collapse;font-size:11px;">
+<thead>
+<tr style="background:var(--bg);position:sticky;top:0;">
+  <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd);white-space:nowrap;">Date</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Total ₱</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Free</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Saloy</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Old</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Net</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Spawn 75%</th>
+  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Owner 25%</th>
+  <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd);">Collector</th>
+</tr>
+</thead>
+<tbody>
+${rows.map(r=>{
+  const isExcel=r.source==='excel';
+  const bg=isExcel?'background:#f9fafb;':'';
+  const collector=isExcel?'<span style="color:var(--mu);font-style:italic;">— Excel</span>':(r.collector||'—');
+  return `<tr style="${bg}border-bottom:1px solid rgba(0,0,0,.04);">
+    <td style="padding:4px 8px;white-space:nowrap;">${r.harvest_date||'—'}</td>
+    <td style="padding:4px 8px;text-align:right;font-weight:600;">${fmt(r.coins_total)}</td>
+    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_free)}</td>
+    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_saloy)}</td>
+    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_old)}</td>
+    <td style="padding:4px 8px;text-align:right;">${fmt(r.net_collectible)}</td>
+    <td style="padding:4px 8px;text-align:right;color:#15803d;">${fmt(r.spawn_share)}</td>
+    <td style="padding:4px 8px;text-align:right;color:#7c3aed;">${fmt(r.customer_share)}</td>
+    <td style="padding:4px 8px;">${collector}</td>
+  </tr>`;
+}).join('')}
+</tbody>
+</table>
+</div>`;
+}
+
+function hvNewTab(name,btn){
+  document.querySelectorAll('.hv-hvtab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  ['htable','livefeed','recon','history'].forEach(t=>{
+    const el=document.getElementById('hvt-'+t);
+    if(el) el.style.display=t===name?'':'none';
+    if(el && t===name){
+      if(t==='history') el.style.display='grid';
+      else el.style.display='block';
+    }
+  });
+}
+
+</script>
 </body>
 </html>
 
