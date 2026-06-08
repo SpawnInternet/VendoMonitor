@@ -3167,7 +3167,15 @@ async function loadDashboard() {
       sb("summary_by_vendo","order=sales.desc&select=vendo,area,sales,txn_count,today_sales,last_date",2000)
     ]);
 
-    allVendos = vendos;
+    // Use storage top20 data if live DB vendos query is empty
+    if(!vendos || !vendos.length) {
+      const cached = await apiLoad();
+      if(cached && cached.top20 && cached.top20.length) {
+        allVendos = cached.top20.map(v=>({vendo:v.tg_name||v.sheet_name,area:v.area,sales:v.total_amount||v.total_sales,txn_count:0,today_sales:0}));
+      }
+    } else {
+      allVendos = vendos;
+    }
     suspMap   = {};
     hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
 
