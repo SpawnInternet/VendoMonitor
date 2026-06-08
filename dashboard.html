@@ -3179,12 +3179,12 @@ async function loadDashboard() {
     suspMap   = {};
     hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
 
-    // Pull accurate totals from summary_totals (pre-aggregated, always correct)
-    const totRow     = await sb("summary_totals","",1);
-    const totalTx    = parseInt(totRow[0]?.txn_count  || areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0));
-    const totalSales = parseFloat(totRow[0]?.total_sales || areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0));
-    const todaySales = parseFloat(totRow[0]?.today_sales || areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0));
-    const totalVendos= new Set(vendos.map(v=>v.vendo)).size;
+    // Use storage cache stats — no DB query needed
+    const _stats     = _cached && _cached.stats ? _cached.stats : {};
+    const totalTx    = _stats.total_txns   || areas.reduce((s,a)=>s+parseInt(a.txn_count||0),0);
+    const totalSales = _stats.total_sales  || areas.reduce((s,a)=>s+parseFloat(a.total_sales||0),0);
+    const todaySales = _stats.today_sales  || areas.reduce((s,a)=>s+parseFloat(a.today_sales||0),0);
+    const totalVendos= _stats.total_vendos || allVendos.length;
     const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
 
     sbFailCount = 0; sbOffline = false; const _banner = document.getElementById("conn-error-banner"); if(_banner) _banner.remove();
