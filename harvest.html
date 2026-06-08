@@ -764,10 +764,12 @@ async function pinSubmit(){
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       showAreasScreen();
     }else{
-      const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN or offline — try again';
+      const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN — try again';
       errEl.textContent=msg;
       errEl.style.display='';
       btn.disabled=false; btn.textContent='Login →';
+      document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
+      pinCheckReady();
     }
   }
 }
@@ -1045,6 +1047,8 @@ async function resumeSession(){
   const saved=JSON.parse(localStorage.getItem('harvest_session')||'null');
   if(!saved) return;
   selectedCollector=saved.collector;
+  // Set topbar immediately so it shows the right name before async fetch
+  document.getElementById('topbar-sub').textContent=saved.groupLabel||saved.collector||'Loading…';
   if(saved.groupId && !isNaN(parseInt(saved.groupId))){
     await startGroup(parseInt(saved.groupId));
   } else {
@@ -1190,26 +1194,36 @@ function renderVendoList(){
     return headerHtml + itemsHtml + noGpsHtml2;
   };
 
-  let finalHtml = '';
-  let seqCounter = 0;
+  const listEl = document.getElementById('vendo-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+
+  // Split finalHtml into chunks of ~10 items for progressive rendering
+  // Build as array of strings first for chunking
+  const chunks=[];
   if(activeTab==='done'){
-    // Done tab: just flat list no barangay grouping needed
-    finalHtml = view.map((it,i)=>renderItem(it,i)).join('');
+    const items=view;
+    for(let i=0;i<items.length;i+=10) chunks.push(items.slice(i,i+10).map((it,j)=>renderItem(it,i+j)).join(''));
   } else {
-    Object.entries(byBarangay).forEach(([barangay, items])=>{
-      finalHtml += renderBarangaySection(barangay, items, seqCounter);
-      seqCounter += items.length;
+    // Already grouped by barangay — chunk by section
+    let seqC2=0;
+    Object.entries(byBarangay).forEach(([barangay,items])=>{
+      chunks.push(renderBarangaySection(barangay,items,seqC2));
+      seqC2+=items.length;
     });
   }
 
-  const listEl = document.getElementById('vendo-list');
-  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Rendering…</span></div>';
+  // Progressive append: first chunk immediate, rest via setTimeout(0)
   requestAnimationFrame(()=>{
-    requestAnimationFrame(()=>{
-      listEl.innerHTML=finalHtml;
-      // Cache items
-      if(currentGroupRun) localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems));
-    });
+    listEl.innerHTML='';
+    const appendChunk=(i)=>{
+      if(i>=chunks.length){
+        if(currentGroupRun) localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems));
+        return;
+      }
+      listEl.insertAdjacentHTML('beforeend',chunks[i]);
+      setTimeout(()=>appendChunk(i+1),0);
+    };
+    appendChunk(0);
   });
 }
 
