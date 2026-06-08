@@ -351,6 +351,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="coin-label">Contact number <span>Owner's phone</span></div>
         <input type="tel" class="text-input" id="contact-inp" aria-label="Contact number" placeholder="09XX XXX XXXX" autocomplete="off">
       </div>
+      <div style="margin-bottom:10px;position:relative">
+        <div class="coin-label">Telegram name <span>Search or confirm</span></div>
+        <input type="text" class="text-input" id="tg-name-inp" placeholder="Search TG name..." autocomplete="off" oninput="tgSearch(this.value)" onfocus="tgSearch(this.value)">
+        <div id="tg-suggested" style="display:none;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-top:4px;font-size:12px;">
+          <span style="color:#92400e;font-weight:600;">Suggested: </span>
+          <span id="tg-suggest-val" style="color:#1e293b;font-weight:600;"></span>
+          <button onclick="tgConfirmSuggested()" style="margin-left:8px;padding:2px 10px;background:#d97706;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;font-family:inherit;">Use this</button>
+        </div>
+        <div id="tg-dropdown" style="display:none;position:absolute;left:0;right:0;background:#fff;border:1.5px solid #86efac;border-radius:8px;z-index:100;max-height:180px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>
+      </div>
+      <div style="margin-bottom:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div class="coin-label">VLAN <span>Network ID</span></div>
+          <input type="number" class="text-input" id="vlan-inp" placeholder="e.g. 32" min="1" max="4096" inputmode="numeric" autocomplete="off">
+        </div>
+        <div>
+          <div class="coin-label">Voucher <span style="color:#9ca3af">Coming soon</span></div>
+          <input type="text" class="text-input" id="voucher-inp" placeholder="Not yet active" disabled style="opacity:.5;cursor:not-allowed;">
+        </div>
+      </div>
       <!-- Camera / GPS — only shown in edit mode -->
       <div class="coin-label">📷 Update Photo + GPS <span>Stand next to the vendo</span></div>
       <div style="background:#fef3c7;border-left:3px solid #d97706;border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#92400e;line-height:1.5;">
@@ -1248,6 +1268,10 @@ function openItem(idx){
   document.getElementById('contact-display').textContent=currentItem.contact_number||'—';
   document.getElementById('owner-name-inp').value=currentItem.sheet_name||'';
   document.getElementById('contact-inp').value=currentItem.contact_number||'';
+  const tgInp=document.getElementById('tg-name-inp');if(tgInp)tgInp.value=currentItem.tg_name||'';
+  const vlanInp=document.getElementById('vlan-inp');if(vlanInp)vlanInp.value=currentItem.vlan||'';
+  const tgSug=document.getElementById('tg-suggested');const tgSugVal=document.getElementById('tg-suggest-val');
+  if(tgSug&&tgSugVal){const showSug=currentItem.tg_name_suggested&&!currentItem.tg_name;tgSug.style.display=showSug?'':'none';if(showSug)tgSugVal.textContent=currentItem.tg_name_suggested;}
   document.getElementById('owner-edit').style.display='none';
   document.getElementById('owner-display').style.display='';
   const edb=document.getElementById('edit-details-btn');if(edb){edb.textContent='✏️ Edit';edb.style.color='';}
@@ -1582,6 +1606,52 @@ function calcNet(){
 }
 
 // ── SUBMIT HARVEST ────────────────────────────────────────────────
+// TG NAME SEARCH
+var _tgNamesCache=null;
+function _loadTgNames(cb){
+  if(_tgNamesCache){cb(_tgNamesCache);return;}
+  fetch(SB+'/rest/v1/transactions?select=vendo&is_skipped=eq.false&limit=50000',{headers:HDR})
+    .then(r=>r.json()).then(rows=>{
+      var s=new Set(rows.map(function(x){return x.vendo;}).filter(Boolean));
+      _tgNamesCache=[...s].sort();
+      cb(_tgNamesCache);
+    }).catch(function(){_tgNamesCache=[];cb([]);});
+}
+function tgFuzzy(sheet,list){
+  var a=(sheet||'').toLowerCase().replace(/[^a-z0-9 ]/g,'');
+  return list.map(function(t){
+    var b=t.toLowerCase().replace(/[^a-z0-9 ]/g,''),score=0;
+    if(a===b)score=100;
+    else if(b.indexOf(a)>=0||a.indexOf(b)>=0)score=80;
+    else{var aw=a.split(' '),bw=b.split(' ');var c=aw.filter(function(w){return w.length>2&&bw.some(function(bww){return bww.indexOf(w)>=0||w.indexOf(bww)>=0;});});if(c.length)score=Math.min(70,30+c.length*20);}
+    return{t:t,score:score};
+  }).filter(function(x){return x.score>0;}).sort(function(a,b){return b.score-a.score;}).slice(0,8);
+}
+function tgSearch(q){
+  _loadTgNames(function(names){
+    var dd=document.getElementById('tg-dropdown');
+    var items=q&&q.length>1?names.filter(function(t){return t.toLowerCase().indexOf(q.toLowerCase())>=0;}).slice(0,10).map(function(t){return{t:t,score:0};}):(currentItem?tgFuzzy(currentItem.sheet_name||'',names):[]);
+    if(!items.length){dd.style.display='none';return;}
+    dd.innerHTML=items.map(function(x){return '<div onclick="tgSelect(\''+x.t.replace(/'/g,"\\'")+'\')" style="padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid #f3f4f6;color:#1e293b;">'+x.t+(x.score?'<span style="float:right;font-size:10px;color:#9ca3af">'+x.score+'%</span>':'')+'</div>';}).join('');
+    dd.style.display='block';
+  });
+}
+function tgSelect(val){
+  var inp=document.getElementById('tg-name-inp');if(inp)inp.value=val;
+  var dd=document.getElementById('tg-dropdown');if(dd)dd.style.display='none';
+}
+function tgConfirmSuggested(){
+  var sug=document.getElementById('tg-suggest-val');
+  var inp=document.getElementById('tg-name-inp');
+  if(sug&&inp)inp.value=sug.textContent;
+  var s=document.getElementById('tg-suggested');if(s)s.style.display='none';
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest||(!e.target.closest('#tg-name-inp')&&!e.target.closest('#tg-dropdown'))){
+    var dd=document.getElementById('tg-dropdown');if(dd)dd.style.display='none';
+  }
+});
+
 async function submitHarvest(){
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
@@ -1597,6 +1667,8 @@ async function submitHarvest(){
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
   const contact=(document.getElementById('contact-inp').value||'').trim();
+  const tgNameEdit=(document.getElementById('tg-name-inp')||{}).value||'';
+  const vlanEdit=parseInt((document.getElementById('vlan-inp')||{}).value||'0')||null;
   const note=(document.getElementById('note-inp').value||'').trim()||null;
   const prevHadGPS=!!(currentItem.lat&&currentItem.lng);
   const prevHadContact=!!currentItem.contact_number;
