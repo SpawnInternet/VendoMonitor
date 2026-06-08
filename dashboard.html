@@ -3492,15 +3492,7 @@ async function loadDashboard() {
     });
     if(trend.length) document.getElementById("trend-range").textContent=`${trend[0].date} — ${trend[trend.length-1].date}`;
 
-    // Area chart
-    try {
-    const colors=["#1565c0","#1D9E75","#F5C518","#7B5EA7","#E85D24","#4A90D9","#d97706","#dc2626"];
-    if(areaChart) areaChart.destroy();
-    areaChart = new Chart(document.getElementById("area-chart"),{
-      type:"bar",
-      data:{labels:areas.map(a=>a.area),datasets:[{data:areas.map(a=>parseFloat(a.total_sales||0)),backgroundColor:colors}]},
-      options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>"₱"+(v/1000).toFixed(0)+"K"}}}}
-    });
+    // Area chart handled by overviewLoad() — skip duplicate chart creation here
 
     // Today by area — show all areas with today_sales > 0, MIX AREAS at bottom labeled separately
     const todayByArea = areas.filter(a=>parseFloat(a.today_sales||0)>0)
