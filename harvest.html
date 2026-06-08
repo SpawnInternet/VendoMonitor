@@ -340,12 +340,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <div id="contact-display" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
         </div>
       </div>
+      <div style="background:var(--bg);border-radius:8px;padding:9px 12px;margin-bottom:8px">
+        <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Owner name</div>
+        <div id="owner-name-real-display" style="font-size:14px;font-weight:600;color:var(--text)">—</div>
+      </div>
     </div>
     <!-- Edit mode -->
     <div id="owner-edit" style="display:none">
       <div style="margin-bottom:10px">
-        <div class="coin-label">Owner name <span>Confirm or correct</span></div>
-        <input type="text" class="text-input" id="owner-name-inp" aria-label="Owner name" placeholder="e.g. Juan dela Cruz" autocomplete="off">
+        <div class="coin-label">Store / Vendo name <span>Location name</span></div>
+        <input type="text" class="text-input" id="owner-name-inp" aria-label="Store name" placeholder="e.g. Aling Maria Sari-Sari" autocomplete="off">
+      </div>
+      <div style="margin-bottom:10px">
+        <div class="coin-label">Owner name <span>Person's real name</span></div>
+        <input type="text" class="text-input" id="owner-real-name-inp" aria-label="Owner real name" placeholder="e.g. Maria Santos" autocomplete="off">
       </div>
       <div style="margin-bottom:10px">
         <div class="coin-label">Contact number <span>Owner's phone</span></div>
@@ -940,7 +948,7 @@ async function startGroup(groupId){
     while(true){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
-        `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+        `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
         `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
       );
       const batch = await r.json();
@@ -1124,7 +1132,7 @@ function renderVendoList(){
   }
 
   let view=activeTab==='done'?done:activeTab==='issues'?issues:pending;
-  if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
+  if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
 
   // GPS sort — filter outliers > 15km from start point
   let sorted=false;
@@ -1268,6 +1276,8 @@ function openItem(idx){
   document.getElementById('contact-display').textContent=currentItem.contact_number||'—';
   document.getElementById('owner-name-inp').value=currentItem.sheet_name||'';
   document.getElementById('contact-inp').value=currentItem.contact_number||'';
+  const ownReal=document.getElementById('owner-real-name-inp');if(ownReal)ownReal.value=currentItem.owner_name||'';
+  const ownRealDisp=document.getElementById('owner-name-real-display');if(ownRealDisp)ownRealDisp.textContent=currentItem.owner_name||'—';
   const tgInp=document.getElementById('tg-name-inp');if(tgInp)tgInp.value=currentItem.tg_name||'';
   const vlanInp=document.getElementById('vlan-inp');if(vlanInp)vlanInp.value=currentItem.vlan||'';
   const tgSug=document.getElementById('tg-suggested');const tgSugVal=document.getElementById('tg-suggest-val');
@@ -1333,6 +1343,7 @@ function toggleOwnerEdit(){
   if(isEditing){
     document.getElementById('owner-name-display').textContent=document.getElementById('owner-name-inp').value.trim()||'—';
     document.getElementById('contact-display').textContent=document.getElementById('contact-inp').value.trim()||'—';
+    const orn=document.getElementById('owner-real-name-inp');const ornd=document.getElementById('owner-name-real-display');if(orn&&ornd)ornd.textContent=orn.value.trim()||'—';
     ed.style.display='none';dp.style.display='';btn.textContent='✏️ Edit';btn.style.color='';
     // Hide GPS status when closing edit
     document.getElementById('gps-status-lbl').style.display='none';
@@ -1666,6 +1677,7 @@ async function submitHarvest(){
   const spawn=net*0.75,customer=net*0.25;
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
+  const ownerRealName=(document.getElementById('owner-real-name-inp')||{}).value||'';
   const contact=(document.getElementById('contact-inp').value||'').trim();
   const tgNameEdit=(document.getElementById('tg-name-inp')||{}).value||'';
   const vlanEdit=parseInt((document.getElementById('vlan-inp')||{}).value||'0')||null;
