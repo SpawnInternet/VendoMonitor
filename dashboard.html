@@ -2848,27 +2848,10 @@ async function sb(table, params="", limit=1000) {
     return r.json();
   } catch(e) {
     sbFailCount++;
-    if (!sbOffline) {
-      if (!navigator.onLine) {
-        // Condition 1: Browser confirms no internet
-        sbOffline = true;
-        showConnError('No internet connection');
-      } else if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-        // Condition 2: Request timed out — Supabase not responding
-        // Only show after 3 timeouts in a row (not just a slow first load)
-        if (sbFailCount >= 5) {
-          sbOffline = true;
-          showConnError('Cannot connect to Supabase — server not responding');
-        }
-      } else if (e.message && e.message.includes('HTTP 5')) {
-        // Condition 3: Supabase returned 5xx — server error
-        sbOffline = true;
-        showConnError('Supabase server error — retrying automatically');
-      } else if (sbFailCount >= 5) {
-        // Condition 4: 5+ other failures in a row
-        sbOffline = true;
-        showConnError('Cannot connect to Supabase');
-      }
+    // Banner only for true offline — dashboard uses Storage so sb() failures are non-critical
+    if (!sbOffline && !navigator.onLine) {
+      sbOffline = true;
+      showConnError('No internet connection');
     }
     return [];
   }
