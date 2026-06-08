@@ -910,6 +910,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Harvest Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
+      <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
     </div>
   </div>
 </div>
@@ -1047,7 +1048,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon'].forEach(t=>{
+  ['htable','livefeed','recon','settings'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -1056,6 +1057,7 @@ function hvNewTab(id, btn){
   if(id==='htable' && htAllRows.length===0) htLoad();
   if(id==='livefeed') lfConnect();
   if(id==='recon') rcInitDates();
+  if(id==='settings') csLoad();
 }
 
 
@@ -1066,11 +1068,11 @@ async function htShowVendoProfile(name, area) {
     modal.id = 'vp-modal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
     modal.innerHTML = '<div id="vp-inner" style="background:#fff;border-radius:12px;width:100%;max-width:860px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.18);position:relative;">'
-      +'<div style="padding:14px 18px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">'
-      +'<div><div id="vp-title" style="font-size:16px;font-weight:700;color:#1e293b;"></div><div id="vp-sub" style="font-size:11px;color:#6b7280;margin-top:2px;"></div></div>'
+      +'<div style="padding:14px 18px;background:linear-gradient(135deg,#1565c0,#1976d2);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">'
+      +'<div><div id="vp-title" style="font-size:16px;font-weight:700;color:#fff;"></div><div id="vp-sub" style="font-size:11px;color:rgba(255,255,255,.75);margin-top:2px;"></div></div>'
       +'<div style="display:flex;gap:8px;align-items:center;">'
-      +'<button id="vp-edit-btn" onclick="vpToggleEdit()" style="height:30px;padding:0 12px;font-size:12px;border:1px solid #d1d5db;border-radius:6px;background:white;cursor:pointer;color:#374151;">Edit</button>'
-      +'<button onclick="document.getElementById(\'vp-modal\').style.display=\'none\'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af;line-height:1;">&#x2715;</button>'
+      +'<button id="vp-edit-btn" onclick="vpToggleEdit()" style="height:30px;padding:0 12px;font-size:12px;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:rgba(255,255,255,.15);cursor:pointer;color:#fff;">Edit</button>'
+      +'<button onclick="document.getElementById(\'vp-modal\').style.display=\'none\'" style="background:none;border:none;font-size:20px;cursor:pointer;color:rgba(255,255,255,.8);line-height:1;">&#x2715;</button>'
       +'</div></div>'
       +'<div id="vp-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;flex-shrink:0;">'
       +'<button class="vp-tab" onclick="vpTab(\'info\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid #1565c0;color:#1565c0;font-weight:600;">Info</button>'
@@ -1168,6 +1170,7 @@ async function vpRenderRecon(){
 }
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
+  const pw=prompt('Admin password:');if(pw!=='101510'){toast('Wrong password');return;}
   const u={};['sheet_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
@@ -1201,7 +1204,7 @@ async function vpExecutePullout(){
   const v=window._vpVendo;
   const pw=(document.getElementById('vp-po-pw')||{}).value||'';
   const reason=(document.getElementById('vp-po-reason')||{}).value||'';
-  if(pw!=='spawn2026'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
+  if(pw!=='101510'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
   try{
     const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
     if(r.ok){vpCancelPullout();window._vpVendo.status='pulled_out';toast('Vendo pulled out');vpRenderInfo();}
@@ -1574,6 +1577,47 @@ setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel
 
 </div>
 
+<div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="max-width:600px;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:16px;">⚙️ Collector Settings</div>
+
+    <!-- Collector list -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+      <div style="padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:#1565c0;">Collectors</span>
+        <button onclick="csShowAdd()" style="height:28px;padding:0 12px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;">+ Add Collector</button>
+      </div>
+      <div id="cs-list" style="padding:8px 0;">
+        <div style="padding:12px 16px;text-align:center;color:#9ca3af;font-size:13px;">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Add collector form (hidden) -->
+    <div id="cs-add-form" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:16px;margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;color:#15803d;margin-bottom:12px;">Add New Collector</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">Name</label><input id="cs-new-name" placeholder="Collector name" style="width:100%;height:34px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">PIN (4 digits)</label><input id="cs-new-pin" type="password" placeholder="0000" maxlength="4" style="width:100%;height:34px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">Area</label><input id="cs-new-area" placeholder="e.g. DIPOLOG" style="width:100%;height:34px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>
+        <div><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">Admin password</label><input id="cs-new-pw" type="password" placeholder="Required" style="width:100%;height:34px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="csSaveNew()" style="height:32px;padding:0 16px;background:#15803d;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button>
+        <button onclick="document.getElementById('cs-add-form').style.display='none'" style="height:32px;padding:0 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Today's collector performance -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+      <div style="padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;">
+        <span style="font-size:13px;font-weight:600;color:#15803d;">Today's Collector Performance</span>
+      </div>
+      <div id="cs-perf" style="padding:8px 0;">
+        <div style="padding:12px 16px;text-align:center;color:#9ca3af;font-size:13px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 
 <!-- ══ SKIPPED ══ -->
@@ -3280,6 +3324,102 @@ async function openVendoFromSearch(vendo, area) {
 // ══════════════════════════════════════════════════════════
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
+async function csLoad() {
+  try {
+    const [collectors, todayHarvests] = await Promise.all([
+      sb('collectors', 'select=id,name,pin,area,active&order=name.asc', 100),
+      sb('harvest_group_items', 'select=status,net_collectible,harvest_groups!group_run_id(collector)&status=eq.harvested', 2000)
+    ]);
+    csRenderList(collectors);
+    csRenderPerf(collectors, todayHarvests);
+  } catch(e) {
+    document.getElementById('cs-list').innerHTML = '<div style="padding:12px 16px;color:#dc2626;font-size:13px;">Error: '+e.message+'</div>';
+  }
+}
+
+function csRenderList(collectors) {
+  const el = document.getElementById('cs-list');
+  if(!collectors||!collectors.length){el.innerHTML='<div style="padding:12px 16px;text-align:center;color:#9ca3af;font-size:13px;">No collectors found</div>';return;}
+  el.innerHTML = collectors.map(c=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #f3f4f6;">
+      <div style="width:36px;height:36px;background:${c.active?'#dbeafe':'#f3f4f6'};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${c.active?'#1565c0':'#9ca3af'};">${(c.name||'?')[0].toUpperCase()}</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:600;color:#1e293b;">${c.name}</div>
+        <div style="font-size:11px;color:#6b7280;">${c.area||'—'} · PIN: ${'●'.repeat(4)}</div>
+      </div>
+      <span style="background:${c.active?'#dcfce7':'#f3f4f6'};color:${c.active?'#15803d':'#6b7280'};padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">${c.active?'Active':'Inactive'}</span>
+      <button onclick="csChangePin(${c.id},'${(c.name||'').replace(/'/g,"\'")}')" style="height:28px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Change PIN</button>
+      <button onclick="csRemove(${c.id},'${(c.name||'').replace(/'/g,"\'")}')" style="height:28px;padding:0 10px;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#dc2626;">Remove</button>
+    </div>`).join('');
+}
+
+function csRenderPerf(collectors, harvests) {
+  const el = document.getElementById('cs-perf');
+  const byCollector = {};
+  (harvests||[]).forEach(h => {
+    const col = h.harvest_groups?.collector || '—';
+    if(!byCollector[col]) byCollector[col] = {count:0, net:0};
+    byCollector[col].count++;
+    byCollector[col].net += Number(h.net_collectible||0);
+  });
+  const sorted = Object.entries(byCollector).sort((a,b)=>b[1].count-a[1].count);
+  if(!sorted.length){el.innerHTML='<div style="padding:12px 16px;text-align:center;color:#9ca3af;font-size:13px;">No harvests today yet</div>';return;}
+  const maxCount = sorted[0][1].count||1;
+  el.innerHTML = sorted.map(([name,d],i)=>`
+    <div style="padding:10px 16px;border-bottom:1px solid #f3f4f6;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+        <span style="font-size:13px;font-weight:600;color:#1e293b;">${i===0?'🏆 ':''}${name}</span>
+        <span style="font-size:12px;color:#15803d;font-weight:600;">${d.count} harvested · ${_php(d.net)}</span>
+      </div>
+      <div style="background:#f3f4f6;border-radius:4px;height:6px;overflow:hidden;">
+        <div style="background:${i===0?'#15803d':i===1?'#1565c0':'#d97706'};height:100%;width:${Math.round(d.count/maxCount*100)}%;border-radius:4px;transition:width .3s;"></div>
+      </div>
+    </div>`).join('');
+}
+
+function csShowAdd() {
+  document.getElementById('cs-add-form').style.display = 'block';
+  document.getElementById('cs-new-name').focus();
+}
+
+async function csSaveNew() {
+  const name = document.getElementById('cs-new-name').value.trim();
+  const pin  = document.getElementById('cs-new-pin').value.trim();
+  const area = document.getElementById('cs-new-area').value.trim();
+  const pw   = document.getElementById('cs-new-pw').value.trim();
+  if(pw!=='101510'){toast('Wrong admin password');return;}
+  if(!name){toast('Name required');return;}
+  if(pin&&(pin.length!==4||isNaN(pin))){toast('PIN must be 4 digits');return;}
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/collectors',{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({name,pin:pin||'0000',area:area||null,active:true})});
+    if(r.ok){document.getElementById('cs-add-form').style.display='none';document.getElementById('cs-new-name').value='';document.getElementById('cs-new-pin').value='';document.getElementById('cs-new-area').value='';document.getElementById('cs-new-pw').value='';toast('Collector added!');csLoad();}
+    else toast('Save failed — check table exists');
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function csChangePin(id, name) {
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
+  const newPin = prompt('New PIN for '+name+' (4 digits):');
+  if(!newPin||newPin.length!==4||isNaN(newPin)){toast('PIN must be 4 digits');return;}
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/collectors?id=eq.'+id,{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({pin:newPin})});
+    if(r.ok){toast('PIN updated for '+name);csLoad();}
+    else toast('Update failed');
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function csRemove(id, name) {
+  const pw = prompt('Admin password to remove '+name+':');
+  if(pw!=='101510'){toast('Wrong password');return;}
+  if(!confirm('Remove collector '+name+'? This cannot be undone.'))return;
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/collectors?id=eq.'+id,{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({active:false})});
+    if(r.ok){toast(name+' deactivated');csLoad();}
+    else toast('Update failed');
+  }catch(e){toast('Error: '+e.message);}
+}
+
 async function loadDashboard() {
   // Update cache indicator immediately
   if (typeof updateCacheIndicator === 'function') updateCacheIndicator();
