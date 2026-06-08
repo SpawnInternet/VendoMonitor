@@ -232,6 +232,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         placeholder="••••"
         style="width:100%;padding:14px 22px 14px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:28px;font-weight:700;letter-spacing:8px;text-align:center;font-family:monospace;outline:none;color:var(--text)"
         oninput="pinOnInput(this)" onkeydown="if(event.key==='Enter')pinSubmit()">
+      <div id="pin-dots" style="display:flex;justify-content:center;gap:10px;margin-top:8px">
+        <div id="pd1" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:background .15s"></div>
+        <div id="pd2" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:background .15s"></div>
+        <div id="pd3" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:background .15s"></div>
+        <div id="pd4" style="width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:background .15s"></div>
+      </div>
     </div>
     <button class="btn btn-blue" id="pin-login-btn" onclick="pinSubmit()" disabled>Login →</button>
     <div id="pin-error" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
@@ -596,8 +602,8 @@ function showScreen(id){
   const backBtn=document.getElementById('topbar-back');
   const logoutBtn=document.getElementById('topbar-logout');
   const noBack=['screen-collector'];
-  if(backBtn) backBtn.style.display=noBack.includes(id)?'none':'';
-  if(logoutBtn) logoutBtn.style.display=noBack.includes(id)?'none':'';
+  if(backBtn) backBtn.style.display=noBack.includes(id)?'none':'inline-block';
+  if(logoutBtn) logoutBtn.style.display=noBack.includes(id)?'none':'inline-block';
 }
 function toast(msg,dur=2500){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
 function todayPHT(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());}
@@ -627,9 +633,7 @@ if('serviceWorker' in navigator){
 const APP_VERSION = 'v9.1';
 
 window.addEventListener('DOMContentLoaded',()=>{
-  document.getElementById('cnt-sync').textContent=syncLog.length;
-
-  // ALWAYS start on collector screen — never auto-navigate
+  document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
   showScreen('screen-collector');
   pinLoadCollectors();
 
@@ -702,6 +706,12 @@ function pinSelectName(el,name){
 function pinOnInput(inp){
   // Numbers only
   inp.value=inp.value.replace(/[^0-9]/g,'');
+  // Update dot indicators
+  const len=inp.value.length;
+  [1,2,3,4].forEach(i=>{
+    const d=document.getElementById('pd'+i);
+    if(d){d.style.background=i<=len?'var(--blue)':'transparent';d.style.borderColor=i<=len?'var(--blue)':'var(--border)';}
+  });
   pinCheckReady();
 }
 
@@ -733,7 +743,7 @@ async function pinSubmit(){
       errEl.textContent='❌ Wrong PIN — try again';
       errEl.style.display='';
       btn.disabled=false; btn.textContent='Login →';
-      document.getElementById('pin-inp').value='';
+      document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       pinCheckReady();
       return;
     }
@@ -742,7 +752,7 @@ async function pinSubmit(){
     selectedCollector=collector.name;
     selectedTeam=collector.team||( collector.name==='Tandoy'?'TeamB':'TeamA');
     document.getElementById('topbar-sub').textContent=collector.name;
-    document.getElementById('pin-inp').value='';
+    document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
     showAreasScreen();
   }catch(e){
     // Offline or timeout fallback — check cached collectors
@@ -751,7 +761,7 @@ async function pinSubmit(){
       selectedCollector=cached.name;
       selectedTeam=cached.team||(cached.name==='Tandoy'?'TeamB':'TeamA');
       document.getElementById('topbar-sub').textContent=cached.name;
-      document.getElementById('pin-inp').value='';
+      document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       showAreasScreen();
     }else{
       const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN or offline — try again';
@@ -766,7 +776,7 @@ function pinLogout(){
   selectedCollector=null; selectedTeam=null;
   _pinSelectedName=null;
   document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('pin-inp').value='';
+  document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
   document.getElementById('pin-error').style.display='none';
   document.getElementById('topbar-sub').textContent='Collector PWA';
   pinCheckReady();
@@ -776,6 +786,7 @@ function pinLogout(){
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
 async function showAreasScreen(){
   document.getElementById('areas-collector-name').textContent=selectedCollector;
+  document.getElementById('topbar-sub').textContent=selectedCollector||'Collector PWA';
   const listEl = document.getElementById('areas-list');
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading areas…</span></div>';
   showScreen('screen-areas');
@@ -783,20 +794,27 @@ async function showAreasScreen(){
   const groups = await loadPermGroups();
   const areas = getAreasFromGroups(groups);
 
-  listEl.innerHTML = areas.map(area=>{
-    const areaGroups = groups.filter(g=>g.area===area.id);
+  const items = areas.map(area=>{
+    const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
     const groupCount = areaGroups.length;
     const meta = area.noGroups ? 'No groups yet — tap to browse vendos' :
       groupCount===1 ? '1 group' : groupCount+' groups';
-    return `<div class="group-item active-group" style="cursor:pointer" onclick="areaSelect(${JSON.stringify(JSON.stringify(area))})">
+    return {area, meta};
+  });
+  listEl.innerHTML = items.map(({area, meta})=>`<div class="group-item active-group" style="cursor:pointer" data-area="${encodeURIComponent(JSON.stringify(area))}">
       <div class="gi-icon active" style="font-size:20px;width:44px;height:44px">${area.icon}</div>
       <div class="gi-left">
         <div class="gi-name">${area.label}</div>
         <div class="gi-meta">${meta}</div>
       </div>
       <div class="gi-badge"><span class="pill pill-blue">▶</span></div>
-    </div>`;
-  }).join('');
+    </div>`).join('');
+  listEl.querySelectorAll('[data-area]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const area = JSON.parse(decodeURIComponent(el.dataset.area));
+      loadGroupsScreen(selectedCollector, area);
+    });
+  });
 }
 
 function areaSelect(areaJson){
@@ -812,7 +830,7 @@ async function loadGroupsScreen(collector, area){
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
 
   const groups = await loadPermGroups();
-  const areaGroups = groups.filter(g=>g.area===area.id);
+  const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
 
   // Fetch vendo counts per permanent group from harvest_group_items
   let countMap = {};
@@ -1061,7 +1079,7 @@ function renderVendoList(){
   document.getElementById('cnt-pending').textContent=pending.length;
   document.getElementById('cnt-done').textContent=done.length;
   document.getElementById('cnt-issues').textContent=issues.length;
-  document.getElementById('cnt-sync').textContent=syncLog.length;
+  document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
 
   const allTouched=(pending.length===0);
   document.getElementById('finish-btn').style.display=allTouched&&total>0?'':'none';
@@ -1184,9 +1202,15 @@ function renderVendoList(){
     });
   }
 
-  document.getElementById('vendo-list').innerHTML=finalHtml;
-  // Cache items
-  if(currentGroupRun) localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems));
+  const listEl = document.getElementById('vendo-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Rendering…</span></div>';
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      listEl.innerHTML=finalHtml;
+      // Cache items
+      if(currentGroupRun) localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems));
+    });
+  });
 }
 
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
