@@ -56,7 +56,7 @@ function overviewRender(data) {
   const tData = trend.map(r => parseFloat(r.total_sales || 0));
   const tCtx = document.getElementById("trend-chart").getContext("2d");
   if (_overviewChart) { _overviewChart.destroy(); _overviewChart = null; }
-  Chart.getChart("trend-chart")?.destroy();
+  { const ec = document.getElementById("trend-chart"); if(ec) Chart.getChart(ec)?.destroy(); }
   _overviewChart = new Chart(tCtx, {
     type: "line",
     data: {
@@ -76,7 +76,7 @@ function overviewRender(data) {
   // ── Area sales chart ──────────────────────────────────────────
   const aCtx = document.getElementById("area-chart").getContext("2d");
   if (_areaChart) { _areaChart.destroy(); _areaChart = null; }
-  Chart.getChart("area-chart")?.destroy();
+  { const ec = document.getElementById("area-chart"); if(ec) Chart.getChart(ec)?.destroy(); }
   const COLORS = ["#1565c0","#16a34a","#7c3aed","#dc2626","#d97706","#0891b2","#9d174d","#374151"];
   _areaChart = new Chart(aCtx, {
     type: "bar",
