@@ -1,16 +1,16 @@
 // ── SPAWN INTERNET — API LAYER + CACHE ───────────────────────────
-// Memory cache: fast, session-only
-// localStorage cache: persistent across page reloads
+// Storage bucket → edge function only. NO direct DB fallback.
+// DB is reserved for: bot writes, live feed, history, reconciliation.
 
 const EDGE_URL = `${SB_URL}/functions/v1/dashboard-summary`;
 const STORAGE_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/summary.json';
-const CACHE_MAX_AGE_MS = 10 * 60 * 1000; // 10 min — if JSON older than this, fall back to edge
+const CACHE_MAX_AGE_MS = 35 * 60 * 1000; // 35 min — matches 30-min cron + buffer
 
 // TTLs
-const TTL_MAIN     = 5  * 60 * 1000;  // 5 min  — stats, trend, areas
-const TTL_VENDOS   = 24 * 60 * 60 * 1000; // 24hr — vendo list
-const TTL_HARVEST  = 5  * 60 * 1000;  // 5 min  — harvest summary
-const TTL_RECENT   = 30 * 1000;        // 30 sec — live feed
+const TTL_MAIN   = 30 * 60 * 1000; // 30 min — overview stats (from storage)
+const TTL_VENDOS = 24 * 60 * 60 * 1000; // 24hr — vendo list
+const TTL_HARVEST = 5 * 60 * 1000;  // 5 min — harvest summary
+const TTL_RECENT  = 30 * 1000;       // 30 sec — live feed
 
 // Memory cache (cleared on page close)
 const _mem = {};
@@ -19,7 +19,7 @@ const _mem = {};
 function lsSet(key, data) {
   try {
     localStorage.setItem('spawn_' + key, JSON.stringify({ ts: Date.now(), data }));
-  } catch(e) { /* storage full — ignore */ }
+  } catch(e) {}
 }
 
 function lsGet(key, ttl) {
@@ -27,15 +27,13 @@ function lsGet(key, ttl) {
     const raw = localStorage.getItem('spawn_' + key);
     if (!raw) return null;
     const { ts, data } = JSON.parse(raw);
-    if (Date.now() - ts > ttl) return null; // expired
+    if (Date.now() - ts > ttl) return null;
     return data;
   } catch(e) { return null; }
 }
 
 function lsClear() {
-  Object.keys(localStorage)
-    .filter(k => k.startsWith('spawn_'))
-    .forEach(k => localStorage.removeItem(k));
+  Object.keys(localStorage).filter(k => k.startsWith('spawn_')).forEach(k => localStorage.removeItem(k));
   Object.keys(_mem).forEach(k => delete _mem[k]);
   toast('Cache cleared — reloading...');
   setTimeout(() => loadDashboard(), 500);
@@ -64,29 +62,27 @@ let _fetching = false;
 let _fetchCallbacks = [];
 
 async function apiLoad(force = false) {
-  // 1. Memory cache — fastest (same session)
+  // 1. Memory cache — instant (same session)
   if (!force && _mem._data && (Date.now() - _mem._ts < TTL_MAIN)) {
     updateCacheIndicator();
     return _mem._data;
   }
 
-  // 2. localStorage cache — survives page reload
+  // 2. localStorage cache — survives page reload (30 min TTL)
   if (!force) {
     const cached = lsGet('main', TTL_MAIN);
     if (cached) {
       _mem._data = cached;
       _mem._ts = Date.now();
       updateCacheIndicator();
-      // Refresh in background silently
-      setTimeout(() => apiLoad(true), 100);
+      // Refresh from storage in background silently
+      setTimeout(() => apiLoad(true), 200);
       return cached;
     }
   }
 
   // 3. Deduplicate concurrent fetches
-  if (_fetching) {
-    return new Promise(resolve => _fetchCallbacks.push(resolve));
-  }
+  if (_fetching) return new Promise(resolve => _fetchCallbacks.push(resolve));
   _fetching = true;
 
   const data = await _fetchFresh();
@@ -96,7 +92,7 @@ async function apiLoad(force = false) {
     _mem._ts = Date.now();
     lsSet('main', data);
     updateCacheIndicator();
-    hideConnError();
+    if (typeof hideConnError === 'function') hideConnError();
   }
 
   _fetching = false;
@@ -105,9 +101,10 @@ async function apiLoad(force = false) {
   return data;
 }
 
-// ── Fetch from Edge Function (with direct DB fallback) ────────────
+// ── Fetch: Storage bucket first, edge function fallback ───────────
+// NEVER hits DB directly — DB is for bot writes only
 async function _fetchFresh() {
-  // 1. Try Storage JSON cache first — fastest, no auth needed
+  // 1. Storage bucket — pre-built every 30 min by cron, zero DB load
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 8000);
@@ -118,28 +115,30 @@ async function _fetchFresh() {
       const age = Date.now() - new Date(data.generated_at || 0).getTime();
       if (age < CACHE_MAX_AGE_MS) {
         data._source = 'storage';
-        console.log('[API] Loaded from Storage cache, age:', Math.round(age/1000) + 's');
-        // Normalize field names to match what dashboard expects
-        if (!data.stats) {
+        data._age_min = Math.round(age / 60000);
+        // Normalize field names
+        if (!data.stats && data.active_vendos !== undefined) {
           data.stats = {
             total_vendos: data.active_vendos || 0,
             total_txns: data.total_transactions || 0,
             total_sales: data.total_sales || 0,
             today_sales: data.today_sales || 0,
+            today_txns: data.today_txns || 0,
             suspicious_count: data.suspicious_count || 0,
           };
         }
         if (!data.areas && data.area_cards) data.areas = data.area_cards;
         if (!data.trend && data.trend_data) data.trend = data.trend_data;
+        console.log('[API] Storage hit, age:', data._age_min + 'min');
         return data;
       }
-      console.log('[API] Storage cache stale (' + Math.round(age/60000) + 'min), trying edge...');
+      console.log('[API] Storage stale (' + Math.round(age/60000) + 'min), trying edge...');
     }
   } catch(e) {
-    console.warn('[API] Storage fetch failed, trying edge:', e.message);
+    console.warn('[API] Storage fetch failed:', e.message);
   }
 
-  // 2. Try Edge Function
+  // 2. Edge function — has its own 5-min memory cache, reads Storage internally
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 15000);
@@ -151,79 +150,33 @@ async function _fetchFresh() {
     if (r.ok) {
       const data = await r.json();
       data._source = 'edge';
+      console.log('[API] Edge function hit');
       return data;
     }
   } catch(e) {
-    console.warn('[API] Edge Function failed, using direct DB:', e.message);
-    if (typeof hideConnError === 'function') hideConnError();
+    console.warn('[API] Edge function failed:', e.message);
   }
 
-  // 3. Last resort: direct DB queries
-  return await _fetchDirect();
-}
-
-// ── Direct DB fallback ────────────────────────────────────────────
-async function _fetchDirect() {
+  // 3. Return stale localStorage if available (better than nothing)
   try {
-    const today = todayPHT();
-    const overdueDate = new Date();
-    overdueDate.setDate(overdueDate.getDate() - 30);
-    const overdueStr = overdueDate.toISOString().slice(0, 10);
-
-    const [totals, areas, trend, recent, suspicious, harvests, overdue] = await Promise.all([
-      sb('summary_totals', 'order=updated_at.desc', 1),
-      sb('summary_by_area', 'order=total_sales.desc'),
-      sb('trend_7day_mat', 'order=date.asc', 7).catch(() => sb('trend_7day', 'order=date.asc', 7)),
-      sb('transactions', `date=eq.${today}&is_skipped=eq.false&order=created_at.desc`, 30),
-      sb('hacked_summary_mat', 'order=txn_count.desc', 50),
-      sb('harvest_groups', 'order=started_at.desc', 20),
-      sb('vendos', `last_harvest_date=lt.${overdueStr}&select=id,sheet_name,tg_name,area,vlan,last_harvest_date&order=last_harvest_date.asc.nullsfirst`, 100),
-    ]);
-
-    // Harvest group items
-    let harvestItems = [];
-    const groupIds = harvests.map(h => h.id).filter(Boolean);
-    if (groupIds.length) {
-      harvestItems = await sb('harvest_group_items',
-        `group_run_id=in.(${groupIds.join(',')})&select=group_run_id,status,net_collectible`, 2000);
+    const raw = localStorage.getItem('spawn_main');
+    if (raw) {
+      const { data } = JSON.parse(raw);
+      if (data) {
+        data._source = 'stale_cache';
+        console.warn('[API] Serving stale localStorage cache — DB not queried');
+        return data;
+      }
     }
+  } catch(e) {}
 
-    const harvestSummary = harvests.map(hg => {
-      const items = harvestItems.filter(i => i.group_run_id === hg.id);
-      const done = items.filter(i => i.status === 'harvested').length;
-      const skipped = items.filter(i => i.status === 'skipped').length;
-      const net = items.reduce((s, i) => s + (parseFloat(i.net_collectible) || 0), 0);
-      return { ...hg, items_total: items.length, items_done: done, items_skipped: skipped, net_total: net };
-    });
-
-    const areaData = areas || [];
-    const totRow = totals[0] || {};
-
-    return {
-      stats: {
-        total_vendos: totRow.total_vendos || 0,
-        total_txns: totRow.txn_count || 0,
-        total_sales: totRow.total_sales || 0,
-        today_sales: areaData.reduce((s, a) => s + parseFloat(a.today_sales || 0), 0),
-        today_txns: areaData.reduce((s, a) => s + parseInt(a.today_txns || 0), 0),
-        suspicious_count: suspicious.reduce((s, h) => s + parseInt(h.txn_count || 0), 0),
-      },
-      trend, areas: areaData, recent, suspicious,
-      harvest_summary: harvestSummary,
-      overdue_vendos: overdue,
-      _source: 'direct',
-      _ts: Date.now(),
-    };
-    // Data loaded successfully — clear any spurious connection error banner
-    if (typeof hideConnError === 'function') hideConnError();
-  } catch(e) {
-    console.error('Direct DB fallback failed:', e);
-    return null;
-  }
+  // 4. Nothing available — return null, show empty state
+  console.error('[API] All sources failed — no data available');
+  return null;
 }
 
 // ── Per-tab cached fetchers ───────────────────────────────────────
-// Vendos list — 24hr cache (rarely changes)
+// Vendos list — 24hr cache
 async function apiGetVendos(area, force = false) {
   const key = 'vendos_' + (area || 'all');
   if (!force) {
@@ -247,8 +200,7 @@ async function apiGetRecent(force = false) {
     if (mem && Date.now() - mem.ts < TTL_RECENT) return mem.data;
   }
   const today = todayPHT();
-  const data = await sb('transactions',
-    `date=eq.${today}&is_skipped=eq.false&order=created_at.desc`, 30);
+  const data = await sb('transactions', `date=eq.${today}&is_skipped=eq.false&order=created_at.desc`, 30);
   _mem[key] = { ts: Date.now(), data };
   return data;
 }
@@ -267,32 +219,27 @@ async function apiGetHarvestItems(groupId, force = false) {
   return data;
 }
 
-// ── Invalidate specific cache keys ───────────────────────────────
+// ── Invalidate cache ──────────────────────────────────────────────
 function apiInvalidate(key) {
   if (key) {
     delete _mem[key];
     localStorage.removeItem('spawn_' + key);
   } else {
-    // Invalidate main data only (not vendos — those are slow to refetch)
     delete _mem._data;
     delete _mem._ts;
     localStorage.removeItem('spawn_main');
   }
 }
 
-// ── Auto-refresh every 5 minutes ─────────────────────────────────
+// ── Auto-refresh every 30 min (matches cron) ──────────────────────
 setInterval(async () => {
-  // Only refresh if tab is visible
   if (document.hidden) return;
   apiInvalidate();
   const data = await apiLoad(true);
-  if (data && typeof overviewRender === 'function') {
-    overviewRender(data);
-  }
+  if (data && typeof overviewRender === 'function') overviewRender(data);
   updateCacheIndicator();
 }, TTL_MAIN);
 
-// Stop refreshing when tab hidden, resume when visible
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && _mem._ts && Date.now() - _mem._ts > TTL_MAIN) {
     apiLoad(true).then(data => {
