@@ -910,7 +910,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Harvest Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
-      <button class="hv-hvtab"    id="hbtn-history"  onclick="hvNewTab('history',this)">📚 History</button>
     </div>
   </div>
 </div>
@@ -1035,9 +1034,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <script>
 /* ══ HARVEST PANEL v8 — Harvest Table + Live Feed + Reconciliation ══ */
 
-const _SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const _KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
-const _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
+// Aliases — var to avoid redeclaration errors
+var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
+var _KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
 
 const _php = v => v==null?'—':'₱'+Number(v).toLocaleString();
 const _fmt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
@@ -1047,18 +1047,15 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','history'].forEach(t=>{
+  ['htable','livefeed','recon'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
-    if(!el) return;
-    if(t===id){ el.style.display = t==='history' ? 'grid' : ''; }
-    else { el.style.display = 'none'; }
+    if(el) el.style.display = t===id ? '' : 'none';
   });
   btn.classList.add('on');
   hvNewActiveTab = id;
   if(id==='htable' && htAllRows.length===0) htLoad();
   if(id==='livefeed') lfConnect();
   if(id==='recon') rcInitDates();
-  if(id==='history' && !window._histLoaded) hiLoad();
 }
 
 /* ── HARVEST TABLE ── */
@@ -1067,17 +1064,50 @@ let htAllRows = [];
 async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="10" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
-  let offset = 0;
-  while(true){
-    const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
-      {headers:_HDR}
-    );
-    const batch = await r.json();
-    if(!Array.isArray(batch)||!batch.length) break;
-    htAllRows.push(...batch);
-    if(batch.length<1000) break;
-    offset+=1000;
+  const _HT_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/harvest_table.json';
+  // 1. localStorage — instant on repeat visits (5 min TTL)
+  try {
+    const ls = localStorage.getItem('spawn_ht');
+    if(ls){
+      const {ts, rows} = JSON.parse(ls);
+      if(rows && rows.length && (Date.now()-ts) < 5*60*1000){
+        htAllRows = rows;
+        htFilter();
+        document.getElementById('ht-tbody').innerHTML='';
+        // silently refresh from bucket in background
+        fetch(_HT_URL+'?t='+Date.now()).then(r=>r.json()).then(d=>{ if(d.rows&&d.rows.length){ htAllRows=d.rows; try{localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:d.rows}));}catch(e){} htFilter(); }}).catch(()=>{});
+        return;
+      }
+    }
+  } catch(e){}
+  // 2. Storage bucket — pre-built JSON, fast public CDN fetch
+  try {
+    const r = await fetch(_HT_URL+'?t='+Math.floor(Date.now()/60000));
+    if(r.ok){
+      const d = await r.json();
+      if(d.rows && d.rows.length){
+        htAllRows = d.rows;
+        try{ localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:htAllRows})); }catch(e){}
+        htFilter();
+        return; // done — no DB needed
+      }
+    }
+  } catch(e){ console.warn('bucket fetch failed',e); }
+  // 3. Fallback: direct DB (only if bucket missing/empty)
+  if(!htAllRows.length){
+    let offset = 0;
+    while(true){
+      const r = await fetch(
+        `${_SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        {headers:{..._HDR,'Prefer':'count=none'}}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      htAllRows.push(...batch);
+      if(batch.length<1000) break;
+      offset+=1000;
+    }
+    try{ localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:htAllRows})); }catch(e){}
   }
   const collectors = [...new Set(htAllRows.map(r=>r.harvest_groups?.collector).filter(Boolean))].sort();
   const htSel = document.getElementById('ht-collector');
@@ -1100,7 +1130,7 @@ function htFilter(){
   const rows = htAllRows.filter(r=>{
     if(area && r.area!==area) return false;
     if(col  && r.harvest_groups?.collector!==col) return false;
-    if(stat && r.status!==stat && !(stat==="done" && r.status==="harvested")) return false;
+    if(stat && r.status!==stat) return false;
     if(q    && !(r.sheet_name||'').toLowerCase().includes(q)) return false;
     return true;
   });
@@ -1188,7 +1218,7 @@ async function lfLoadToday(){
   const today = new Date(); today.setHours(0,0,0,0);
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=in.(done,harvested)&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=eq.done&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -1264,7 +1294,7 @@ async function rcRun(){
   while(true){
     const r=await fetch(
       `${_SB}/rest/v1/harvest_group_items?status=eq.done&harvested_at=gte.${fromISO}&harvested_at=lte.${toISO}`+
-      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!harvest_group_items_group_run_id_fkey(collector,group_label)`+
+      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)`+
       `&order=harvested_at.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
@@ -1394,46 +1424,6 @@ setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel
 </div>
 
 
-
-
-<!-- ══ TAB: HISTORY ══ -->
-<div id="hvt-history" style="display:none;height:calc(100vh - 88px);overflow:hidden;grid-template-columns:300px 1fr;">
-
-  <!-- LEFT: vendo list -->
-  <div style="border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;">
-    <div style="padding:6px 10px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--bg);">
-      <input id="hi-search" type="text" placeholder="Search vendo…" oninput="hiFilter()"
-        style="flex:1;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;font-size:11px;font-family:inherit;outline:none;">
-      <select id="hi-area" onchange="hiFilter()"
-        style="padding:4px 6px;border:1px solid var(--bd);border-radius:6px;font-size:11px;font-family:inherit;background:#fff;">
-        <option value="">All areas</option>
-        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-        <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
-      </select>
-    </div>
-    <div style="padding:3px 10px;border-bottom:1px solid var(--bd);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
-      <span id="hi-vcount" style="font-size:10px;color:var(--mu);">Loading…</span>
-      <span style="font-size:10px;color:var(--mu);">📚 Tap a vendo to view ledger</span>
-    </div>
-    <div id="hi-list" style="flex:1;overflow-y:auto;"></div>
-  </div>
-
-  <!-- RIGHT: ledger -->
-  <div style="display:flex;flex-direction:column;overflow:hidden;">
-    <div id="hi-ledger-hdr" style="padding:8px 12px;border-bottom:1px solid var(--bd);flex-shrink:0;background:var(--bg);display:flex;align-items:center;gap:8px;">
-      <span style="font-size:13px;font-weight:700;color:var(--blue);" id="hi-ledger-name">Select a vendo</span>
-      <span id="hi-ledger-badge" style="display:none;font-size:10px;padding:1px 7px;border-radius:9px;background:#dcfce7;color:#15803d;border:1px solid #86efac;">TG matched</span>
-      <span style="flex:1"></span>
-      <span id="hi-ledger-count" style="font-size:10px;color:var(--mu);"></span>
-    </div>
-    <div id="hi-ledger-body" style="flex:1;overflow-y:auto;padding:12px;">
-      <div style="text-align:center;color:var(--mu);font-size:12px;padding:40px 0;">
-        Select a vendo on the left to view its full harvest ledger
-      </div>
-    </div>
-  </div>
-
-</div>
 
 <!-- ══ SKIPPED ══ -->
 
@@ -2803,9 +2793,10 @@ async function importConfirmAll() {
 // ══════════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════════
-const SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
-const HDR = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
+// Config — var (not const) so shared.js can also declare without conflict
+var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+var HDR = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` };
 
 let currentYear   = "2026";
 let allVendos     = [];
@@ -2865,7 +2856,7 @@ async function sb(table, params="", limit=1000) {
       } else if (e.name === 'TimeoutError' || e.name === 'AbortError') {
         // Condition 2: Request timed out — Supabase not responding
         // Only show after 3 timeouts in a row (not just a slow first load)
-        if (sbFailCount >= 3) {
+        if (sbFailCount >= 5) {
           sbOffline = true;
           showConnError('Cannot connect to Supabase — server not responding');
         }
@@ -2873,8 +2864,8 @@ async function sb(table, params="", limit=1000) {
         // Condition 3: Supabase returned 5xx — server error
         sbOffline = true;
         showConnError('Supabase server error — retrying automatically');
-      } else if (sbFailCount >= 3) {
-        // Condition 4: 3+ other failures in a row
+      } else if (sbFailCount >= 5) {
+        // Condition 4: 5+ other failures in a row
         sbOffline = true;
         showConnError('Cannot connect to Supabase');
       }
@@ -7568,148 +7559,7 @@ function actViewPhoto(url){
   <script src="js/shared.js"></script>
   <script src="js/api.js"></script>
   <script src="tabs/overview.js"></script>
-  <script src="tabs/harvest.js">
-// ═══ HISTORY TAB ═══
-window._histLoaded=false; window._hiData=[]; window._hiFiltered=[];
-const SUPABASE_URL2='https://cviraqfhphhsonjmrtvu.supabase.co';
-const CACHE_BUCKET='https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/history_summary.json';
-
-async function hiLoad(){
-  window._histLoaded=true;
-  document.getElementById('hi-vcount').textContent='Loading…';
-  try{
-    // Try cache first
-    const cr=await fetch(CACHE_BUCKET+'?t='+Date.now());
-    if(cr.ok){ const d=await cr.json(); hiPopulate(d); return; }
-  }catch(e){}
-  // fallback: query harvests directly
-  try{
-    const r=await fetch(SUPABASE_URL2+'/rest/v1/harvests?select=sheet_name,area,harvest_date,tg_name&order=sheet_name',
-      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-    const rows=await r.json();
-    // aggregate
-    const map={};
-    for(const row of rows){
-      const k=row.sheet_name||'(unnamed)';
-      if(!map[k]) map[k]={sheet_name:k,area:row.area,harvest_count:0,last_date:null,tg_name:row.tg_name};
-      map[k].harvest_count++;
-      if(!map[k].last_date||row.harvest_date>map[k].last_date) map[k].last_date=row.harvest_date;
-    }
-    hiPopulate(Object.values(map));
-  }catch(e){ document.getElementById('hi-vcount').textContent='Error loading'; }
-}
-
-function hiPopulate(data){
-  window._hiData=data.sort((a,b)=>(a.sheet_name||'').localeCompare(b.sheet_name||''));
-  hiFilter();
-}
-
-function hiFilter(){
-  const q=(document.getElementById('hi-search').value||'').toLowerCase();
-  const area=document.getElementById('hi-area').value;
-  window._hiFiltered=window._hiData.filter(v=>{
-    if(area && v.area!==area) return false;
-    if(q && !(v.sheet_name||'').toLowerCase().includes(q)) return false;
-    return true;
-  });
-  hiRender();
-}
-
-function hiRender(){
-  const list=document.getElementById('hi-list');
-  document.getElementById('hi-vcount').textContent=window._hiFiltered.length+' vendos';
-  if(!window._hiFiltered.length){list.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);font-size:11px;">No vendos found</div>';return;}
-  list.innerHTML=window._hiFiltered.map((v,i)=>{
-    const matched=v.tg_name?true:false;
-    const badge=matched
-      ?'<span style="font-size:9px;padding:1px 5px;border-radius:7px;background:#dcfce7;color:#15803d;border:1px solid #86efac;">TG✓</span>'
-      :'<span style="font-size:9px;padding:1px 5px;border-radius:7px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;">No TG</span>';
-    const lastDate=v.last_date?v.last_date.substring(0,10):'—';
-    const cnt=v.harvest_count||'?';
-    return `<div class="hi-row" data-idx="${i}" onclick="hiSelectVendo(${i})" style="padding:6px 10px;border-bottom:1px solid rgba(0,0,0,.05);cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;">
-      <div>
-        <div style="font-size:11px;font-weight:600;color:var(--blue);">${v.sheet_name||'(unnamed)'}</div>
-        <div style="font-size:9px;color:var(--mu);margin-top:1px;">${v.area||'—'} &nbsp;·&nbsp; last: ${lastDate}</div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
-        ${badge}
-        <span style="font-size:9px;color:var(--mu);">${cnt} records</span>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function hiSelectVendo(idx){
-  // highlight selected
-  document.querySelectorAll('.hi-row').forEach(r=>r.style.background='');
-  const selRow=document.querySelector(`.hi-row[data-idx="${idx}"]`);
-  if(selRow) selRow.style.background='#eff6ff';
-
-  const v=window._hiFiltered[idx];
-  document.getElementById('hi-ledger-name').textContent=v.sheet_name||'(unnamed)';
-  const badge=document.getElementById('hi-ledger-badge');
-  badge.style.display=v.tg_name?'inline':'none';
-  document.getElementById('hi-ledger-count').textContent='Loading ledger…';
-  document.getElementById('hi-ledger-body').innerHTML='<div style="text-align:center;color:var(--mu);font-size:11px;padding:30px 0;">Loading…</div>';
-
-  try{
-    const enc=encodeURIComponent(v.sheet_name);
-    const r=await fetch(SUPABASE_URL2+`/rest/v1/harvests?sheet_name=eq.${enc}&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc`,
-      {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
-    const rows=await r.json();
-    document.getElementById('hi-ledger-count').textContent=rows.length+' records';
-    hiRenderLedger(rows);
-  }catch(e){
-    document.getElementById('hi-ledger-body').innerHTML='<div style="color:var(--red);font-size:11px;padding:20px;">Error loading ledger</div>';
-  }
-}
-
-function hiRenderLedger(rows){
-  if(!rows.length){
-    document.getElementById('hi-ledger-body').innerHTML='<div style="text-align:center;color:var(--mu);font-size:11px;padding:30px 0;">No harvest records found</div>';
-    return;
-  }
-  const fmt=n=>n==null?'—':Number(n).toLocaleString();
-  const body=document.getElementById('hi-ledger-body');
-  body.innerHTML=`<div style="overflow-x:auto;">
-<table style="width:100%;border-collapse:collapse;font-size:11px;">
-<thead>
-<tr style="background:var(--bg);position:sticky;top:0;">
-  <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd);white-space:nowrap;">Date</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Total ₱</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Free</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Saloy</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Old</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Net</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Spawn 75%</th>
-  <th style="padding:5px 8px;text-align:right;border-bottom:1px solid var(--bd);">Owner 25%</th>
-  <th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd);">Collector</th>
-</tr>
-</thead>
-<tbody>
-${rows.map(r=>{
-  const isExcel=r.source==='excel';
-  const bg=isExcel?'background:#f9fafb;':'';
-  const collector=isExcel?'<span style="color:var(--mu);font-style:italic;">— Excel</span>':(r.collector||'—');
-  return `<tr style="${bg}border-bottom:1px solid rgba(0,0,0,.04);">
-    <td style="padding:4px 8px;white-space:nowrap;">${r.harvest_date||'—'}</td>
-    <td style="padding:4px 8px;text-align:right;font-weight:600;">${fmt(r.coins_total)}</td>
-    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_free)}</td>
-    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_saloy)}</td>
-    <td style="padding:4px 8px;text-align:right;color:var(--mu);">${fmt(r.coins_old)}</td>
-    <td style="padding:4px 8px;text-align:right;">${fmt(r.net_collectible)}</td>
-    <td style="padding:4px 8px;text-align:right;color:#15803d;">${fmt(r.spawn_share)}</td>
-    <td style="padding:4px 8px;text-align:right;color:#7c3aed;">${fmt(r.customer_share)}</td>
-    <td style="padding:4px 8px;">${collector}</td>
-  </tr>`;
-}).join('')}
-</tbody>
-</table>
-</div>`;
-}
-
-
-</script>
+  <script src="tabs/harvest.js"></script>
 </body>
 </html>
 
