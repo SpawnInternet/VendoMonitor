@@ -117,9 +117,9 @@ async function _fetchFresh() {
         data._source = 'storage';
         data._age_min = Math.round(age / 60000);
         // Normalize field names
-        if (!data.stats && data.active_vendos !== undefined) {
+        if (!data.stats) {
           data.stats = {
-            total_vendos: data.active_vendos || 0,
+            total_vendos: data.active_vendos || data.total_vendos || 0,
             total_txns: data.total_transactions || 0,
             total_sales: data.total_sales || 0,
             today_sales: data.today_sales || 0,
@@ -130,6 +130,8 @@ async function _fetchFresh() {
         if (!data.areas && data.area_cards) data.areas = data.area_cards;
         if (!data.trend && data.trend_data) data.trend = data.trend_data;
         // Sanity check — if all zeros, data is bad, try edge
+        // Patch total_vendos if missing
+        if (data.stats && !data.stats.total_vendos && data.active_vendos) data.stats.total_vendos = data.active_vendos;
         const s = data.stats || {};
         if (!s.total_txns && !s.total_sales && !s.total_vendos) {
           console.warn('[API] Storage has zero stats — data bad, trying edge...');
