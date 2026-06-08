@@ -2,10 +2,10 @@
 // Version: 1.0.0
 // Loaded by dashboard.html before all other scripts
 
-const SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
-const HDR = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
-const AREAS = ["DIPOLOG","DAPITAN","SINDANGAN","POLANCO","ROXAS","SINAMAN","MINAOG","MIX AREAS"];
+var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+var HDR = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
+var AREAS = ["DIPOLOG","DAPITAN","SINDANGAN","POLANCO","ROXAS","SINAMAN","MINAOG","MIX AREAS"];
 
 // ── Supabase fetch helpers ─────────────────────────────────────────
 async function sb(table, params="", limit=1000) {
