@@ -3234,18 +3234,11 @@ async function loadDashboard() {
         <div style="font-size:9px;color:#16a34a;margin-top:1px">↑ ${fmt(mixArea.today_sales)}</div>
       </div>` : '');
 
-    // Top 20 — ensure allVendos is set
-    if (!allVendos || !allVendos.length) {
-      const _d = await apiLoad();
-      if (_d && _d.all_vendos && _d.all_vendos.length) allVendos = _d.all_vendos;
-    }
-    // Top 20 — ensure allVendos populated from storage cache
-    if (!allVendos || !allVendos.length) {
-      const _d2 = await apiLoad();
-      if (_d2 && _d2.all_vendos && _d2.all_vendos.length) allVendos = _d2.all_vendos;
-    }
-    const top20h = allVendos.slice(0,20);
-    const top20l = [...allVendos].sort((a,b)=>(a.sales||0)-(b.sales||0)).slice(0,20);
+    // Top 20 — use vendos directly (already loaded from storage above)
+    const _vendorList = (vendos && vendos.length) ? vendos : allVendos;
+    const top20h = (_vendorList||[]).slice(0,20);
+    const top20l = [...(_vendorList||[])].sort((a,b)=>parseFloat(a.sales||0)-parseFloat(b.sales||0)).slice(0,20);
+    if (_vendorList && _vendorList.length) allVendos = _vendorList;
     const mkItem = (v,i,isLow) => `
       <div class="top10-item" onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')">
         <span style="font-weight:700;color:${!isLow&&i<3?'#d97706':'var(--mu)'};min-width:18px;font-size:11px">${i+1}</span>
