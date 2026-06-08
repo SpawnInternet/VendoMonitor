@@ -3153,7 +3153,6 @@ async function loadDashboard() {
     console.log('[VENDOS]', '_apiData keys:', _apiData ? Object.keys(_apiData) : 'null', 'all_vendos:', _apiData?.all_vendos?.length, 'vendos:', vendos?.length);
 
     // Prefer storage cache all_vendos (no DB query needed)
-    console.log("[CHECKPOINT 1: after _cached]");
     const _cached = await apiLoad();
     if(_cached && _cached.all_vendos && _cached.all_vendos.length) {
       allVendos = _cached.all_vendos;
@@ -3162,7 +3161,6 @@ async function loadDashboard() {
     } else if(_cached && _cached.top20 && _cached.top20.length) {
       allVendos = _cached.top20.map(v=>({vendo:v.tg_name||v.sheet_name,area:v.area,sales:v.total_amount||v.total_sales,txn_count:0,today_sales:0}));
     }
-    console.log("[CHECKPOINT 2: after suspMap]");
     suspMap   = {};
     hacked.forEach(h => { suspMap[h.vendo] = parseInt(h.txn_count||0); });
 
@@ -3174,7 +3172,6 @@ async function loadDashboard() {
     const totalVendos= _stats.total_vendos || allVendos.length;
     const hackedCnt  = hacked.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
 
-    console.log("[CHECKPOINT 3: after sbFailCount reset]");
     sbFailCount = 0; sbOffline = false; const _banner = document.getElementById("conn-error-banner"); if(_banner) _banner.remove();
     document.getElementById("dash-stats").innerHTML = `
       <div class="stat" style="border-bottom-color:#7c3aed" onclick="openVendoModal()"><div class="sl">Active Vendos</div><div class="sv pur">${totalVendos.toLocaleString()}</div><div style="font-size:9px;color:var(--mu);margin-top:2px">click to view all</div></div>
@@ -3192,10 +3189,8 @@ async function loadDashboard() {
       if(nb)nb.textContent=hackedCnt>999?Math.round(hackedCnt/1000)+'k':hackedCnt;
     }
 
-    // 7-day trend + area chart + top20 — all in one try/catch
-    try {
+    // 7-day trend
     const tDates = trend.map(t=>{ const d=new Date(t.date); return d.toLocaleDateString("en-PH",{month:"short",day:"numeric"}); });
-    console.log("[CHECKPOINT 4: before trend chart]");
     if(trendChart) trendChart.destroy();
     try{ Chart.getChart(document.getElementById("trend-chart"))?.destroy(); }catch(e){}
     trendChart = new Chart(document.getElementById("trend-chart"),{
@@ -3205,7 +3200,6 @@ async function loadDashboard() {
     });
     if(trend.length) document.getElementById("trend-range").textContent=`${trend[0].date} — ${trend[trend.length-1].date}`;
 
-    console.log("[CHECKPOINT 5: before area chart try]");
     // Area chart
     try {
     const colors=["#1565c0","#1D9E75","#F5C518","#7B5EA7","#E85D24","#4A90D9","#d97706","#dc2626"];
