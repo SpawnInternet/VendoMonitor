@@ -21,9 +21,10 @@ async function sb(table, params="", limit=1000) {
     return await r.json();
   } catch(e) {
     clearTimeout(tid);
-    const msg = e.name === "AbortError" || e.name === "TimeoutError"
-      ? "Supabase is slow — retrying" : e.message;
-    showConnError(msg);
+    // Only show banner if truly offline — never for slow/timeout
+    if (!navigator.onLine && typeof showConnError === 'function') {
+      showConnError('No internet connection');
+    }
     return [];
   }
 }
