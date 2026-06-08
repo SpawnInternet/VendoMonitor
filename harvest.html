@@ -924,11 +924,12 @@ async function startGroup(groupId){
   const cachedRaw = localStorage.getItem(CACHE_KEY);
   const cachedTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
   const CACHE_TTL = 24*3600*1000;
-  const cacheHit = cachedRaw && (Date.now()-cachedTs < CACHE_TTL);
+  const _cachedParsed = cachedRaw ? JSON.parse(cachedRaw) : null;
+  const cacheHit = _cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0 && (Date.now()-cachedTs < CACHE_TTL);
 
   if(cacheHit){
     // Serve from cache instantly — no network needed
-    const cached = JSON.parse(cachedRaw);
+    const cached = _cachedParsed;
     currentGroupDef = cached.g;
     currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
     currentItems = cached.items;
@@ -994,9 +995,11 @@ async function startGroup(groupId){
       coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
     }));
 
-    // Save to cache
-    localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
-    localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+    // Save to cache (only if we actually got items)
+    if(currentItems.length > 0){
+      localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
+      localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+    }
 
     // Reset DB stats (background, don't await)
     if(navigator.onLine){
