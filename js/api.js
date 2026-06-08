@@ -129,8 +129,14 @@ async function _fetchFresh() {
         }
         if (!data.areas && data.area_cards) data.areas = data.area_cards;
         if (!data.trend && data.trend_data) data.trend = data.trend_data;
-        console.log('[API] Storage hit, age:', data._age_min + 'min');
-        return data;
+        // Sanity check — if all zeros, data is bad, try edge
+        const s = data.stats || {};
+        if (!s.total_txns && !s.total_sales && !s.total_vendos) {
+          console.warn('[API] Storage has zero stats — data bad, trying edge...');
+        } else {
+          console.log('[API] Storage hit, age:', data._age_min + 'min');
+          return data;
+        }
       }
       console.log('[API] Storage stale (' + Math.round(age/60000) + 'min), trying edge...');
     }
