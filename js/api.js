@@ -130,7 +130,7 @@ async function _fetchFresh() {
           };
         }
         if (!data.areas && data.area_cards) data.areas = data.area_cards;
-        if (!data.trend && data.trend) data.trend = data.trend;
+        if (!data.trend && data.trend_data) data.trend = data.trend_data;
         return data;
       }
       console.log('[API] Storage cache stale (' + Math.round(age/60000) + 'min), trying edge...');
@@ -214,6 +214,8 @@ async function _fetchDirect() {
       _source: 'direct',
       _ts: Date.now(),
     };
+    // Data loaded successfully — clear any spurious connection error banner
+    if (typeof hideConnError === 'function') hideConnError();
   } catch(e) {
     console.error('Direct DB fallback failed:', e);
     return null;
