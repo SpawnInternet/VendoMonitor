@@ -33,6 +33,8 @@ function lsGet(key, ttl) {
       const age = Date.now() - new Date(data.generated_at).getTime();
       if (age > 2 * 24 * 60 * 60 * 1000) { localStorage.removeItem('spawn_' + key); return null; }
     }
+    // Discard if missing all_vendos (old cache format)
+    if (key === 'main' && data && !data.all_vendos) { localStorage.removeItem('spawn_main'); return null; }
     return data;
   } catch(e) { return null; }
 }
