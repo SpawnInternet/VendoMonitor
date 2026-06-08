@@ -915,36 +915,56 @@ async function loadGroupsScreen(collector, area){
 
 // ── START GROUP (reuses permanent group items) ────────────────────
 async function startGroup(groupId){
-  // groupId is the harvest_groups.id (integer) of the permanent group row
   showScreen('screen-route');
-  document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
+  const listEl = document.getElementById('vendo-list');
 
+  // ── Try cache first (24h TTL) ──────────────────────────────────
+  const CACHE_KEY = 'grp_cache_'+groupId;
+  const CACHE_TS_KEY = 'grp_cache_ts_'+groupId;
+  const cachedRaw = localStorage.getItem(CACHE_KEY);
+  const cachedTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
+  const CACHE_TTL = 24*3600*1000;
+  const cacheHit = cachedRaw && (Date.now()-cachedTs < CACHE_TTL);
+
+  if(cacheHit){
+    // Serve from cache instantly — no network needed
+    const cached = JSON.parse(cachedRaw);
+    currentGroupDef = cached.g;
+    currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    currentItems = cached.items;
+    document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+cached.g.area;
+    document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
+    localStorage.setItem('harvest_session',JSON.stringify({
+      collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
+    }));
+    activeTab='pending';
+    renderVendoList();
+    // Background: refresh last_harvest_date silently
+    _refreshLHD(groupId);
+    return;
+  }
+
+  // ── Cold load ─────────────────────────────────────────────────
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
   try {
-    // Fetch the permanent group row
     const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR});
     const gRows = await rG.json();
     if(!gRows.length){toast('Group not found');return;}
     const g = gRows[0];
     currentGroupDef = g;
-    currentGroupRun = g;
 
-    // Save session
     localStorage.setItem('harvest_session',JSON.stringify({
-      collector:selectedCollector,
-      groupId:groupId,
-      groupRunId:groupId,
-      groupLabel:g.group_label||g.group_id
+      collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:g.group_label||g.group_id
     }));
-
     document.getElementById('topbar-sub').textContent=g.group_label||g.group_id;
     document.getElementById('sched-group-name').textContent=g.group_label||g.group_id;
     document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.area;
-    document.getElementById('sched-day-num').textContent=todayPHT().slice(5); // show MM-DD instead of day/total
+    document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
 
-    // Fetch items, joining live last_harvest_date from vendos
-    document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
-    let allItems = [];
-    let offset = 0;
+    listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
+    let allItems = [], offset = 0;
     while(true){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
@@ -958,42 +978,30 @@ async function startGroup(groupId){
       offset+=500;
     }
 
-    // Reset all statuses to pending for a new run (so we can re-harvest)
-    // But preserve last_harvest_date from vendos table for display
-    // Fetch fresh last_harvest_date for all vendos in this group
+    // Fetch fresh last_harvest_date
     const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
     let lhdMap = {};
-    if(vendoIds.length){
-      try {
-        for(let i=0;i<vendoIds.length;i+=200){
-          const batch = vendoIds.slice(i,i+200);
-          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${batch.join(',')})&select=id,last_harvest_date`,{headers:HDR});
-          const rows = await r.json();
-          rows.forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; });
-        }
-      } catch(e){ /* non-critical */ }
+    for(let i=0;i<vendoIds.length;i+=200){
+      try{
+        const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
+        (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; });
+      }catch(e){}
     }
 
-    // Reset statuses to pending (new run), update last_harvest_date from live vendos
     currentItems = allItems.map(item=>({
-      ...item,
-      status:'pending',
-      last_harvest_date: (item.vendo_id && lhdMap[item.vendo_id]) || item.last_harvest_date,
-      // Clear previous run's harvest data from display
+      ...item, status:'pending',
+      last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
       coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
     }));
 
-    // Update group run stats reset
+    // Save to cache
+    localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
+    localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+
+    // Reset DB stats (background, don't await)
     if(navigator.onLine){
-      await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{
-        method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
-        body:JSON.stringify({status:'active',harvested_count:0,skipped_count:0,total_net:0,started_at:new Date().toISOString()})
-      });
-      // Reset item statuses in DB too
-      await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`,{
-        method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
-        body:JSON.stringify({status:'pending'})
-      });
+      fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:0,skipped_count:0,total_net:0,started_at:new Date().toISOString()})});
+      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
     }
 
     currentGroupRun = {...g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
@@ -1002,8 +1010,7 @@ async function startGroup(groupId){
 
   } catch(e){
     console.error('startGroup error:', e);
-    const errEl = document.getElementById('vendo-list');
-    errEl.innerHTML='';
+    listEl.innerHTML='';
     const div=document.createElement('div');
     div.className='loading';
     div.innerHTML='<span style="color:var(--red);text-align:center;line-height:2">❌ '+e.message+'</span>';
@@ -1012,8 +1019,42 @@ async function startGroup(groupId){
     btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
     btn.onclick=function(){ showAreasScreen(); };
     div.appendChild(btn);
-    errEl.appendChild(div);
+    listEl.appendChild(div);
   }
+}
+
+// Background-refresh last_harvest_date without blocking UI
+async function _refreshLHD(groupId){
+  try{
+    const CACHE_KEY='grp_cache_'+groupId;
+    const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+    if(!cached) return;
+    const vendoIds=cached.items.filter(i=>i.vendo_id).map(i=>i.vendo_id);
+    let lhdMap={};
+    for(let i=0;i<vendoIds.length;i+=200){
+      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
+      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date;});
+    }
+    // Update cache and currentItems
+    let changed=false;
+    cached.items=cached.items.map(item=>{
+      const fresh=item.vendo_id&&lhdMap[item.vendo_id];
+      if(fresh&&fresh!==item.last_harvest_date){changed=true;return{...item,last_harvest_date:fresh};}
+      return item;
+    });
+    if(changed){
+      localStorage.setItem(CACHE_KEY,JSON.stringify(cached));
+      localStorage.setItem('grp_cache_ts_'+groupId,Date.now().toString());
+      // Update live display if this group is still active
+      if(currentGroupRun&&currentGroupRun.id===groupId){
+        currentItems=currentItems.map(item=>{
+          const fresh=item.vendo_id&&lhdMap[item.vendo_id];
+          return fresh&&fresh!==item.last_harvest_date?{...item,last_harvest_date:fresh}:item;
+        });
+        renderVendoList();
+      }
+    }
+  }catch(e){console.warn('_refreshLHD:',e.message);}
 }
 
 // ── ALL VENDOS MODE (no group filter) ─────────────────────────────
@@ -1764,6 +1805,8 @@ async function submitHarvest(){
     if(syncLog.length>100) syncLog=syncLog.slice(0,100);
     localStorage.setItem('hs',JSON.stringify(syncLog));
     localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
+    // Invalidate group cache so next open fetches fresh last_harvest_date
+    if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
 
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
     toast(navigator.onLine?'✅ Saved!':'⚡ Saved offline');
