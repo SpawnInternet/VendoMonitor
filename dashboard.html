@@ -3239,7 +3239,11 @@ async function loadDashboard() {
       const _d = await apiLoad();
       if (_d && _d.all_vendos && _d.all_vendos.length) allVendos = _d.all_vendos;
     }
-    // Top 20 strongest + weakest
+    // Top 20 — ensure allVendos populated from storage cache
+    if (!allVendos || !allVendos.length) {
+      const _d2 = await apiLoad();
+      if (_d2 && _d2.all_vendos && _d2.all_vendos.length) allVendos = _d2.all_vendos;
+    }
     const top20h = allVendos.slice(0,20);
     const top20l = [...allVendos].sort((a,b)=>(a.sales||0)-(b.sales||0)).slice(0,20);
     const mkItem = (v,i,isLow) => `
