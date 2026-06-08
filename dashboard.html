@@ -3189,9 +3189,11 @@ async function loadDashboard() {
       if(nb)nb.textContent=hackedCnt>999?Math.round(hackedCnt/1000)+'k':hackedCnt;
     }
 
-    // 7-day trend
+    // 7-day trend + area chart + top20 — all in one try/catch
+    try {
     const tDates = trend.map(t=>{ const d=new Date(t.date); return d.toLocaleDateString("en-PH",{month:"short",day:"numeric"}); });
     if(trendChart) trendChart.destroy();
+    try{ Chart.getChart(document.getElementById("trend-chart"))?.destroy(); }catch(e){}
     trendChart = new Chart(document.getElementById("trend-chart"),{
       type:"bar",
       data:{labels:tDates,datasets:[{label:"Sales",data:trend.map(t=>parseFloat(t.total_sales||0)),backgroundColor:"#1565c0",borderRadius:4}]},
