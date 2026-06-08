@@ -28,6 +28,11 @@ function lsGet(key, ttl) {
     if (!raw) return null;
     const { ts, data } = JSON.parse(raw);
     if (Date.now() - ts > ttl) return null;
+    // Extra check: if data has generated_at older than 2 days, discard
+    if (data && data.generated_at) {
+      const age = Date.now() - new Date(data.generated_at).getTime();
+      if (age > 2 * 24 * 60 * 60 * 1000) { localStorage.removeItem('spawn_' + key); return null; }
+    }
     return data;
   } catch(e) { return null; }
 }
