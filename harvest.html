@@ -1491,15 +1491,17 @@ function stampOverlay(canvas, gps){
 function snapPhoto(){
   const video=document.getElementById('camera-video');
   const canvas=document.getElementById('camera-canvas');
-  canvas.width=video.videoWidth||1280;
-  canvas.height=video.videoHeight||720;
+  const MAX_W=960;
+  const rawW=video.videoWidth||1280, rawH=video.videoHeight||720;
+  const scale=rawW>MAX_W?MAX_W/rawW:1;
+  canvas.width=Math.round(rawW*scale); canvas.height=Math.round(rawH*scale);
   const ctx=canvas.getContext('2d');
-  ctx.drawImage(video,0,0);
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
   // Store clean frame for re-stamping after GPS
   const cleanCanvas=document.createElement('canvas');
   cleanCanvas.width=canvas.width; cleanCanvas.height=canvas.height;
-  cleanCanvas.getContext('2d').drawImage(video,0,0);
+  cleanCanvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
   window._cleanPhotoCanvas=cleanCanvas;
 
   // Stamp overlay immediately with GPS pending
@@ -1519,14 +1521,14 @@ function snapPhoto(){
     const dl=document.getElementById('photo-download-btn');
     if(dl){dl.href=url;dl.download=_photoFilename();}
     closeCamera();
-  },'image/jpeg',0.92);
+  },'image/jpeg',0.85);
 
   // Best-of-3 GPS — re-stamp once GPS is known
   bestOfThreeGPS(lbl, (gps)=>{
     // Re-draw from clean frame + new overlay
     const ctx2=canvas.getContext('2d');
     const src=window._cleanPhotoCanvas||canvas;
-    ctx2.drawImage(src,0,0);
+    ctx2.drawImage(src,0,0,canvas.width,canvas.height);
     stampOverlay(canvas, gps);
     canvas.toBlob(blob=>{
       capturedPhotoBlob=blob;
@@ -1535,7 +1537,7 @@ function snapPhoto(){
       // Update download link
       const dl=document.getElementById('photo-download-btn');
       if(dl){dl.href=url; dl.download=_photoFilename();}
-    },'image/jpeg',0.92);
+    },'image/jpeg',0.85);
   });
 }
 
