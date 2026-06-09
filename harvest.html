@@ -100,6 +100,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tabs{display:flex;border-radius:10px;overflow:hidden;border:1.5px solid var(--border);margin-bottom:12px;background:#fff}
 .tab{flex:1;padding:11px 4px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;border:none;background:transparent;font-family:inherit;color:var(--muted);transition:.15s}
 .tab.active{background:var(--blue);color:#fff}
+.tab.active.tab-green{background:var(--green)}
+.tab.active.tab-amber{background:#d97706}
+.tab.active.tab-gray{background:#6b7280}
 .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;border-radius:9px;font-size:10px;font-weight:700;margin-left:4px;padding:0 3px}
 .tab.active .tab-badge{background:rgba(255,255,255,.25);color:#fff}
 .tab:not(.active) .tab-badge{background:var(--border);color:var(--muted)}
@@ -302,10 +305,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <span id="search-clear" onclick="clearSearch()" style="display:none;font-size:14px;color:var(--muted);cursor:pointer">✕</span>
   </div>
   <div class="tabs">
-    <button class="tab active" id="tab-pending" onclick="switchTab('pending')">⏳ Pending<span class="tab-badge" id="cnt-pending">0</span></button>
-    <button class="tab" id="tab-done" onclick="switchTab('done')">✅ Done<span class="tab-badge" id="cnt-done">0</span></button>
-    <button class="tab" id="tab-issues" onclick="switchTab('issues')">⏸ Issues<span class="tab-badge" id="cnt-issues">0</span></button>
-    <button class="tab" id="tab-sync" onclick="switchTab('sync')" style="font-size:11px">📡 Sync<span class="tab-badge" id="cnt-sync">0</span></button>
+    <button class="tab active" id="tab-pending" onclick="switchTab('pending')">Pending<span class="tab-badge" id="cnt-pending">0</span></button>
+    <button class="tab tab-green" id="tab-done" onclick="switchTab('done')">Done<span class="tab-badge" id="cnt-done">0</span></button>
+    <button class="tab tab-amber" id="tab-issues" onclick="switchTab('issues')">Issues<span class="tab-badge" id="cnt-issues">0</span></button>
+    <button class="tab tab-gray" id="tab-sync" onclick="switchTab('sync')" style="font-size:11px">Sync<span class="tab-badge" id="cnt-sync">0</span></button>
   </div>
   <div class="sort-info" id="sort-info" style="display:none">📍 GPS-optimized — each stop is closest to previous</div>
   <div id="vendo-list"></div>
@@ -1143,7 +1146,11 @@ function renderVendoList(){
   const _area=currentGroupDef&&currentGroupDef.area;const _initCentroid=(currentGroupDef&&AREA_CENTROIDS[_area])||{lat:START_LAT,lng:START_LNG};
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
-  const pending=all.filter(i=>i.status==='pending');
+  const pending=all.filter(i=>i.status==='pending').sort((a,b)=>{
+    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):9999;
+    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):9999;
+    return db-da;
+  });
   const done=all.filter(i=>i.status==='harvested');
   const issues=all.filter(i=>i.status==='skipped');
   const total=all.length,doneCnt=done.length,pct=total?Math.round(doneCnt/total*100):0;
@@ -1207,12 +1214,13 @@ function renderVendoList(){
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
     const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
     const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):999;
-    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince>45?'#dc2626':daysSince>30?'#d97706':'#15803d';
-    const lhdBadge=item.status!=='harvested'&&daysSince>30?'<span class="pill pill-red" style="font-size:8px">'+daysSince+'d ago</span>':'';
+    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#1e3cb8':'#15803d';
+    const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
+    const lhdBadge=item.status!=='harvested'?'<span class="pill '+daysBadgeCls+'" style="font-size:9px;font-weight:800">'+daysSince+'d</span>':'';
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
-    let mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:item.address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(item.address+', Zamboanga del Norte, Philippines')}`:'';
-    const gpsBtn=mapsUrl?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#0284c7;color:#fff;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;margin-top:4px">📍 Directions</a>`:'';
+    const mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:'';
+    const gpsBtn=mapsUrl?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#0284c7;color:#fff;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;margin-top:4px">📍 GPS</a>`:'';
     const gpsBadge=item.lat&&item.lng?'':'<span class="pill pill-orange" style="font-size:8px">No GPS</span>';
     const contactBadge=item.contact_number?'':'<span class="pill pill-amber" style="font-size:8px">No contact</span>';
     const netLine=item.status==='harvested'?`<div style="font-size:10px;color:#16a34a;margin-top:2px">Net: ₱${fmt(item.net_collectible)}</div>`:'';
