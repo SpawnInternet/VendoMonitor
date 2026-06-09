@@ -899,7 +899,7 @@ async function loadGroupsScreen(collector, area){
       const meta = counts.total ?
         `${counts.total} vendos · ${pct}% harvested last run` :
         `${g.group_label||g.group_id}`;
-      html += `<div class="group-item active-group" style="cursor:pointer" onclick="startGroup(${g.id})">
+      html += `<div class="group-item active-group" style="cursor:pointer" onclick="startGroup(${JSON.stringify(g.id)})">
         <div class="gi-icon active">▶</div>
         <div class="gi-left">
           <div class="gi-name">${g.group_label||g.group_id}</div>
@@ -1121,8 +1121,8 @@ async function resumeSession(){
   selectedCollector=saved.collector;
   // Set topbar immediately so it shows the right name before async fetch
   document.getElementById('topbar-sub').textContent=saved.groupLabel||saved.collector||'Loading…';
-  if(saved.groupId && !isNaN(parseInt(saved.groupId))){
-    await startGroup(parseInt(saved.groupId));
+  if(saved.groupId){
+    await startGroup(saved.groupId);
   } else {
     localStorage.removeItem('harvest_session');
     showAreasScreen();
