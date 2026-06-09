@@ -1526,12 +1526,19 @@ async function saveVendoDetails(){
     if(ownerName) vendoUpdate.owner_name=ownerName;
     if(tgName) vendoUpdate.tg_name=tgName;
 
-    // Save to vendos table
+    // Save to vendos table — queue if offline
     if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
-      await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
-        method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
-        body:JSON.stringify(vendoUpdate)
-      });
+      if(navigator.onLine){
+        await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+          method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
+          body:JSON.stringify(vendoUpdate)
+        });
+      } else {
+        // Queue for later sync
+        offlineQueue.push({type:'vendoUpdate',vendoId:currentItem.vendo_id,vendoUpdate,ts:Date.now()});
+        localStorage.setItem('hq',JSON.stringify(offlineQueue));
+        toast('⚡ Saved offline — will sync when connected',3000);
+      }
     }
 
     // Also save to current item in memory
@@ -2152,6 +2159,8 @@ async function flushQueue(){
           if(q.vendoUpdate&&q.vendoUpdate.contact_number) groupUpdates[q.groupRunId].contacts_added++;
           groupUpdates[q.groupRunId].total_net+=parseFloat(q.harvestRecord.net_collectible||0);
         }
+      } else if(q.type==='vendoUpdate'&&q.vendoId){
+        await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
       } else if(q.type==='skip'&&q.itemId){
         await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
         if(q.groupRunId){
