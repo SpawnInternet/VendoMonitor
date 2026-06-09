@@ -1220,7 +1220,9 @@ function renderVendoList(){
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
     const mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:'';
-    const gpsBtn=mapsUrl?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#0284c7;color:#fff;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;margin-top:4px">📍 GPS</a>`:'';
+    const gpsBtn=mapsUrl
+      ?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#0284c7;color:#fff;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;margin-top:4px">📍 GPS</a>`
+      :`<button onclick="event.stopPropagation();toast('No GPS recorded — capture GPS when harvesting.',3000)" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#e5e7eb;color:#9ca3af;border:none;border-radius:6px;font-size:10px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:4px">📍 No GPS</button>`;
     const gpsBadge=item.lat&&item.lng?'':'<span class="pill pill-orange" style="font-size:8px">No GPS</span>';
     const contactBadge=item.contact_number?'':'<span class="pill pill-amber" style="font-size:8px">No contact</span>';
     const netLine=item.status==='harvested'?`<div style="font-size:10px;color:#16a34a;margin-top:2px">Net: ₱${fmt(item.net_collectible)}</div>`:'';
@@ -1320,8 +1322,10 @@ function openItem(idx){
   if(currentItem.lat&&currentItem.lng){
     const url=`https://www.google.com/maps/dir/?api=1&destination=${currentItem.lat},${currentItem.lng}`;
     dirEl.innerHTML=`<div style="font-size:11px;color:#0369a1;margin-bottom:5px">📍 ${currentItem.address||currentItem.lat+', '+currentItem.lng}</div><a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#0284c7;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none">📍 Open in Google Maps</a>`;
-    dirEl.style.display='';
-  } else { dirEl.style.display='none'; }
+  } else {
+    dirEl.innerHTML=`<button onclick="toast('No GPS recorded for this vendo — capture GPS when harvesting to enable directions.',3500)" style="width:100%;padding:8px 16px;background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">📍 No GPS recorded</button>`;
+  }
+  dirEl.style.display='';
 
   // Pre-fill owner info
   document.getElementById('owner-name-display').textContent=currentItem.sheet_name||'—';
