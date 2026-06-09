@@ -302,16 +302,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <span id="rt-total-cnt">0 total</span>
     </div>
   </div>
-  <div class="search-bar">
+  <div class="search-bar" id="search-bar">
     <span style="color:var(--muted);font-size:14px">🔍</span>
-    <input type="text" id="search-inp" aria-label="Search vendo name" aria-label="Search vendo name" placeholder="Search vendo name…" oninput="onSearch(this.value)" autocomplete="off">
+    <input type="text" id="search-inp" aria-label="Search vendo name" placeholder="Search vendo name…" oninput="onSearch(this.value)" autocomplete="off">
     <span id="search-clear" onclick="clearSearch()" style="display:none;font-size:14px;color:var(--muted);cursor:pointer">✕</span>
+  </div>
+  <div id="history-search-bar" style="display:none;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="color:var(--muted);font-size:14px">🔍</span>
+      <input type="search" id="hist-search-inp" placeholder="Search vendo or date (e.g. Jun 3, 2026)…" oninput="renderHistory()" autocomplete="off" style="flex:1;border:none;outline:none;font-size:14px;font-family:inherit;color:var(--text);background:transparent">
+    </div>
   </div>
   <div class="tabs">
     <button class="tab active" id="tab-pending" onclick="switchTab('pending')">Pending<span class="tab-badge" id="cnt-pending">0</span></button>
     <button class="tab tab-green" id="tab-done" onclick="switchTab('done')">Done<span class="tab-badge" id="cnt-done">0</span></button>
     <button class="tab tab-amber" id="tab-issues" onclick="switchTab('issues')">Issues<span class="tab-badge" id="cnt-issues">0</span></button>
     <button class="tab tab-gray" id="tab-sync" onclick="switchTab('sync')" style="font-size:11px">Sync<span class="tab-badge" id="cnt-sync">0</span></button>
+    <button class="tab" id="tab-history" onclick="switchTab('history')" style="font-size:11px;background:linear-gradient(135deg,#1e3cb8,#4f46e5);color:#fff" >History</button>
   </div>
   <div class="sort-info" id="sort-info" style="display:none">📍 GPS-optimized — each stop is closest to previous</div>
   <div id="vendo-list"></div>
@@ -1138,7 +1145,16 @@ async function resumeSession(){
 // ── RENDER VENDO LIST ─────────────────────────────────────────────
 function switchTab(tab){
   activeTab=tab;
-  ['pending','done','issues','sync'].forEach(t=>{document.getElementById('tab-'+t).classList.toggle('active',t===tab);});
+  ['pending','done','issues','sync','history'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el) el.classList.toggle('active',t===tab);
+  });
+  const isHist=tab==='history';
+  const sb=document.getElementById('search-bar');
+  const hb=document.getElementById('history-search-bar');
+  if(sb) sb.style.display=isHist?'none':'';
+  if(hb) hb.style.display=isHist?'':'none';
+  if(isHist){renderHistory();return;}
   renderVendoList();
 }
 function onSearch(v){if(!currentGroupRun||!currentItems.length) return;searchQuery=v.trim().toLowerCase();document.getElementById('search-clear').style.display=v?'inline':'none';renderVendoList();}
@@ -1821,6 +1837,7 @@ async function submitHarvest(){
     if(syncLog.length>100) syncLog=syncLog.slice(0,100);
     localStorage.setItem('hs',JSON.stringify(syncLog));
     localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
+    _histCache=null; // Invalidate history cache
     // Invalidate group cache so next open fetches fresh last_harvest_date
     if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
 
@@ -2052,6 +2069,93 @@ async function flushQueue(){
 function clearResume(){
   localStorage.removeItem('harvest_session');
   document.getElementById('resume-banner').style.display='none';
+}
+
+// ── HARVEST HISTORY ───────────────────────────────────────────────
+let _histCache = null;
+async function renderHistory(){
+  const listEl=document.getElementById('vendo-list');
+  const q=(document.getElementById('hist-search-inp')?.value||'').toLowerCase().trim();
+
+  // Load from DB if not cached
+  if(!_histCache){
+    listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading history…</span></div>';
+    try{
+      const r=await fetch(
+        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&order=harvest_date.desc&limit=500`,
+        {headers:HDR}
+      );
+      _histCache=await r.json();
+    }catch(e){
+      listEl.innerHTML='<div class="loading"><span style="color:var(--red)">❌ Could not load history</span></div>';
+      return;
+    }
+  }
+
+  // Filter
+  let rows=_histCache||[];
+  if(q) rows=rows.filter(r=>{
+    const name=(r.sheet_name||r.vendo_name||'').toLowerCase();
+    const date=r.harvest_date||'';
+    const dateFormatted=date?new Date(date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}).toLowerCase():'';
+    return name.includes(q)||date.includes(q)||dateFormatted.includes(q)||
+           (r.collector_note||'').toLowerCase().includes(q);
+  });
+
+  if(!rows.length){
+    listEl.innerHTML=`<div class="loading"><span>${q?'No results for "'+q+'"':'No harvest history yet.'}</span></div>`;
+    return;
+  }
+
+  // Group by harvest_date
+  const byDate={};
+  rows.forEach(r=>{
+    const d=r.harvest_date||'Unknown';
+    if(!byDate[d]) byDate[d]=[];
+    byDate[d].push(r);
+  });
+
+  let html='';
+  Object.entries(byDate).forEach(([date,items])=>{
+    const dateLabel=date!=='Unknown'
+      ?new Date(date+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'})
+      :'Unknown date';
+    const dayNet=items.reduce((s,i)=>s+parseFloat(i.net_collectible||0),0);
+    const daySpawn=items.reduce((s,i)=>s+parseFloat(i.spawn_share||0),0);
+
+    html+=`<div style="margin-bottom:4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 4px">
+        <div style="font-size:12px;font-weight:700;color:var(--blue)">${dateLabel}</div>
+        <div style="text-align:right">
+          <div style="font-size:11px;font-weight:700;color:var(--green)">₱${fmt(dayNet)} net</div>
+          <div style="font-size:9px;color:var(--muted)">${items.length} vendo${items.length>1?'s':''}</div>
+        </div>
+      </div>`;
+
+    items.forEach(item=>{
+      const net=parseFloat(item.net_collectible||0);
+      const note=item.collector_note?`<div style="font-size:10px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-top:3px">📝 ${item.collector_note}</div>`:'';
+      html+=`<div class="vendo-item done" style="cursor:default;margin-bottom:6px">
+        <div class="vi-seq" style="background:#86efac;color:#15803d;font-size:10px">✓</div>
+        <div class="vi-left" style="flex:1">
+          <div class="vi-name">${item.sheet_name||item.vendo_name||'—'}</div>
+          <div class="vi-sub">${item.area||'—'}${item.route_code?' · '+item.route_code:''}</div>
+          ${note}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:700;color:#15803d">₱${fmt(net)}</div>
+          <div style="font-size:9px;color:var(--muted)">Spawn ₱${fmt(parseFloat(item.spawn_share||0))}</div>
+        </div>
+      </div>`;
+    });
+
+    html+=`<div style="display:flex;justify-content:flex-end;padding:4px 4px 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+      <div style="font-size:11px;color:var(--muted)">Day total: <b style="color:var(--blue)">₱${fmt(dayNet)}</b> · Spawn: <b style="color:var(--green)">₱${fmt(daySpawn)}</b></div>
+    </div>`;
+    html+='</div>';
+  });
+
+  listEl.innerHTML=html;
 }
 </script>
 </body>
