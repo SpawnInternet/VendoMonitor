@@ -3204,7 +3204,7 @@ function gUpdateBackBtn(id) {
 
 function showP(id, btn) {
   // Hide all fixed overlays when switching panels
-  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){
+  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings'].forEach(function(oid){
     var oel=document.getElementById(oid); if(oel) oel.style.display='none';
   });
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
@@ -3262,10 +3262,10 @@ function globalSearch(q) {
   // Primary: match TG name from allVendos (transaction-based)
   let results = allVendos.filter(v => v.vendo.toLowerCase().includes(ql)).slice(0, 10);
 
-  // Secondary: if fewer than 5 results, also search sheet_name in _vnAll registry
+  // Secondary: if fewer than 5 results, also search sheet_name in allVendos registry
   // and cross-reference to allVendos by tg_name
-  if (results.length < 5 && _vnAll && _vnAll.length) {
-    const sheetMatches = _vnAll.filter(v =>
+  if (results.length < 5 && allVendos && allVendos.length) {
+    const sheetMatches = allVendos.filter(v =>
       v.sheet_name && v.sheet_name.toLowerCase().includes(ql) && v.tg_name
     );
     for (const sm of sheetMatches) {
@@ -3287,7 +3287,7 @@ function globalSearch(q) {
     </div>` +
     results.map(v => {
       // Find sheet_name label if available
-      const reg = _vnAll ? _vnAll.find(x => x.tg_name === v.vendo) : null;
+      const reg = allVendos ? allVendos.find(x => x.tg_name === v.vendo) : null;
       const sheetLabel = reg && reg.sheet_name ? `<span style="color:#7c3aed;font-size:10px;margin-left:6px;">📋 ${reg.sheet_name}</span>` : '';
       return `
     <div onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')"
