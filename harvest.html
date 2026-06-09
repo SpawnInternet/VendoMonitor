@@ -290,8 +290,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="sched-banner-meta" id="sched-group-meta">—</div>
     </div>
     <div class="sched-banner-day">
-      <div class="sched-day-num" id="sched-day-num">—</div>
-      <div class="sched-day-lbl">day</div>
+      <div class="sched-day-num" id="sched-day-num">0</div>
+      <div class="sched-day-lbl">harvested</div>
     </div>
   </div>
   <div class="route-header">
@@ -942,7 +942,7 @@ async function startGroup(groupId){
     document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+cached.g.area;
-    document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
+    /* sched-day-num updated in renderVendoList */
     localStorage.setItem('harvest_session',JSON.stringify({
       collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
     }));
@@ -968,7 +968,7 @@ async function startGroup(groupId){
     document.getElementById('topbar-sub').textContent=g.group_label||g.group_id;
     document.getElementById('sched-group-name').textContent=g.group_label||g.group_id;
     document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.area;
-    document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
+    /* sched-day-num updated in renderVendoList */
 
     listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
     let allItems = [], offset = 0;
@@ -1078,7 +1078,7 @@ async function startAllVendos(areaJson){
   document.getElementById('topbar-sub').textContent='All — '+area.label;
   document.getElementById('sched-group-name').textContent='All Vendos';
   document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+area.label;
-  document.getElementById('sched-day-num').textContent=todayPHT().slice(5);
+  /* sched-day-num updated in renderVendoList */
 
   try {
     let allVendos = [];
@@ -1150,8 +1150,8 @@ function renderVendoList(){
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
   const pending=all.filter(i=>i.status==='pending').sort((a,b)=>{
-    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):9999;
-    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):9999;
+    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):99999;
+    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):99999;
     return db-da;
   });
   const done=all.filter(i=>i.status==='harvested');
@@ -1164,6 +1164,7 @@ function renderVendoList(){
   document.getElementById('rt-meta').textContent=`${selectedCollector} · ${currentGroupDef?.group_label||currentGroupDef?.group_id||'—'} · ${total} vendos`;
   document.getElementById('cnt-pending').textContent=pending.length;
   document.getElementById('cnt-done').textContent=done.length;
+  document.getElementById('sched-day-num').textContent=done.length;
   document.getElementById('cnt-issues').textContent=issues.length;
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
 
@@ -1216,10 +1217,10 @@ function renderVendoList(){
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
     const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
-    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):999;
-    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#1e3cb8':'#15803d';
-    const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
-    const lhdBadge=item.status!=='harvested'?'<span class="pill '+daysBadgeCls+'" style="font-size:9px;font-weight:800">'+daysSince+'d</span>':'';
+    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):null;
+    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince===null?'#6b7280':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#1e3cb8':'#15803d';
+    const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince===null?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
+    const lhdBadge=item.status!=='harvested'?(daysSince===null?'<span class="pill pill-gray" style="font-size:10px;font-weight:900;padding:2px 7px">Never</span>':'<span class="pill '+daysBadgeCls+'" style="font-size:10px;font-weight:900;padding:2px 7px">'+daysSince+'d</span>'):'';
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
     const mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:'';
@@ -1238,7 +1239,7 @@ function renderVendoList(){
         ${distBadge}
         <div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:${lhdColor}">${lastH}</b> ${lhdBadge}</div>
         ${item.address?`<div style="font-size:10px;color:var(--muted);margin-top:1px">📍 ${item.address}</div>`:''}
-        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${gpsBadge}${contactBadge}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${contactBadge}</div>
         ${netLine}${noteLine}${gpsBtn}
       </div>
       <div style="flex-shrink:0;margin-left:8px">${pill}</div>
