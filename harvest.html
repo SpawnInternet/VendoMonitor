@@ -1426,18 +1426,77 @@ function toggleOwnerEdit(){
   const ed=document.getElementById('owner-edit'),dp=document.getElementById('owner-display'),btn=document.getElementById('edit-details-btn');
   const isEditing=ed.style.display!=='none';
   if(isEditing){
-    document.getElementById('owner-name-display').textContent=currentItem&&currentItem.sheet_name||'—';
-    document.getElementById('contact-display').textContent=document.getElementById('contact-inp').value.trim()||'—';
-    const orn=document.getElementById('owner-real-name-inp');const ornd=document.getElementById('owner-name-real-display');if(orn&&ornd)ornd.textContent=orn.value.trim()||'—';
-    ed.style.display='none';dp.style.display='';btn.textContent='✏️ Edit';btn.style.color='';
-    // Hide GPS status when closing edit
-    document.getElementById('gps-status-lbl').style.display='none';
-    document.getElementById('gps-actions').style.display='none';
+    // If photo was taken — require GPS before closing
+    if(capturedPhotoBlob && !capturedGPS){
+      toast('⚠️ GPS not yet locked — wait for GPS or retake photo outdoors',4000);
+      return;
+    }
+    // If photo was taken — save photo+GPS to vendo immediately
+    if(capturedPhotoBlob){
+      saveVendoDetails();
+      return; // saveVendoDetails closes edit mode after saving
+    }
+    // No photo taken — just close edit mode normally
+    _closeOwnerEdit();
   } else {
     ed.style.display='';dp.style.display='none';btn.textContent='✓ Done';btn.style.color='var(--green)';
     document.getElementById('owner-name-inp').focus();
-    // Show GPS status when opening edit
     document.getElementById('gps-status-lbl').style.display='';
+  }
+}
+
+function _closeOwnerEdit(){
+  const ed=document.getElementById('owner-edit'),dp=document.getElementById('owner-display'),btn=document.getElementById('edit-details-btn');
+  document.getElementById('owner-name-display').textContent=currentItem&&currentItem.sheet_name||'—';
+  document.getElementById('contact-display').textContent=document.getElementById('contact-inp').value.trim()||'—';
+  const orn=document.getElementById('owner-real-name-inp');const ornd=document.getElementById('owner-name-real-display');if(orn&&ornd)ornd.textContent=orn.value.trim()||'—';
+  ed.style.display='none';dp.style.display='';btn.textContent='✏️ Edit';btn.style.color='';
+  document.getElementById('gps-status-lbl').style.display='none';
+  document.getElementById('gps-actions').style.display='none';
+}
+
+async function saveVendoDetails(){
+  const btn=document.getElementById('edit-details-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const contact=document.getElementById('contact-inp')?.value.trim()||'';
+    const ownerName=document.getElementById('owner-real-name-inp')?.value.trim()||'';
+    const tgName=document.getElementById('tg-name-inp')?.value.trim()||'';
+    let photoUrl=null;
+
+    // Upload photo
+    if(capturedPhotoBlob && navigator.onLine){
+      photoUrl = await uploadPhoto(capturedPhotoBlob, currentItem.sheet_name||currentItem.tg_name||'vendo');
+    }
+
+    // Build update
+    const vendoUpdate={};
+    if(capturedGPS){vendoUpdate.lat=capturedGPS.lat; vendoUpdate.lng=capturedGPS.lng;}
+    if(photoUrl) vendoUpdate.photo_url=photoUrl;
+    if(contact) vendoUpdate.contact_number=contact;
+    if(ownerName) vendoUpdate.owner_name=ownerName;
+    if(tgName) vendoUpdate.tg_name=tgName;
+
+    // Save to vendos table
+    if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
+      await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+        method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify(vendoUpdate)
+      });
+    }
+
+    // Also save to current item in memory
+    if(capturedGPS){currentItem.lat_captured=capturedGPS.lat; currentItem.lng_captured=capturedGPS.lng; currentItem.lat=capturedGPS.lat; currentItem.lng=capturedGPS.lng;}
+    if(photoUrl) currentItem.photo_url=photoUrl;
+    if(contact) currentItem.contact_number=contact;
+    if(ownerName) currentItem.owner_name=ownerName;
+
+    toast(photoUrl?'✅ Photo, GPS & details saved to vendo':'✅ Details saved',3000);
+    _closeOwnerEdit();
+  } catch(e){
+    toast('❌ Save failed: '+e.message, 4000);
+  } finally{
+    btn.disabled=false; btn.textContent='✓ Done'; btn.style.color='var(--green)';
   }
 }
 // ── CAMERA + GPS ──────────────────────────────────────────────────
