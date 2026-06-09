@@ -663,15 +663,16 @@ function getAreasFromGroups(groups){
   const areas = [];
   const seen = new Set();
   const AREA_ICONS={'DIPOLOG':'🏙','DAPITAN':'🌊','SINDANGAN':'🏝','POLANCO':'🌿','ROXAS':'🌺','SINAMAN':'🌾','MINAOG':'⛰','MIX AREAS':'🗂'};
+  const HIDDEN_AREAS = ['MIX AREAS','MINAOG','SINAMAN'];
   groups.forEach(g=>{
     const a = g.area;
-    if(a && !seen.has(a)){
+    if(a && !seen.has(a) && !HIDDEN_AREAS.includes(a)){
       seen.add(a);
       areas.push({id:a, label:a.charAt(0)+a.slice(1).toLowerCase(), icon:AREA_ICONS[a]||'📍'});
     }
   });
   // Also add areas that exist in vendos but have no groups yet
-  const ALL_AREAS = ['DIPOLOG','DAPITAN','SINDANGAN','POLANCO','ROXAS','SINAMAN','MINAOG','MIX AREAS'];
+  const ALL_AREAS = ['DIPOLOG','DAPITAN','SINDANGAN','POLANCO','ROXAS'];
   ALL_AREAS.forEach(a=>{
     if(!seen.has(a)){
       areas.push({id:a, label:a.charAt(0)+a.slice(1).toLowerCase(), icon:AREA_ICONS[a]||'📍', noGroups:true});
