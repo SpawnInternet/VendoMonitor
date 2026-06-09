@@ -417,8 +417,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="owner-name-inp" style="padding:10px 12px;background:#f3f4f6;border-radius:8px;font-size:14px;color:#6b7280;font-weight:600;border:1.5px solid #e5e7eb;"></div>
       </div>
       <div style="margin-bottom:10px">
-        <div class="coin-label">Address <span style="color:#9ca3af">From records</span></div>
-        <div id="address-edit-display" style="padding:10px 12px;background:#f3f4f6;border-radius:8px;font-size:13px;color:#6b7280;font-weight:500;border:1.5px solid #e5e7eb;min-height:40px;">—</div>
+        <div class="coin-label">Address <span>Location / landmark</span></div>
+        <textarea class="text-input" id="address-inp" rows="2" placeholder="e.g. Purok 1, Dicayas, Dipolog City" autocomplete="off" style="resize:none;line-height:1.4"></textarea>
       </div>
       <div style="margin-bottom:10px">
         <div class="coin-label">Owner name <span>Person's real name</span></div>
@@ -1418,8 +1418,8 @@ function openItem(idx){
   document.getElementById('contact-display').textContent=currentItem.contact_number||'—';
   const addrDisp=document.getElementById('address-display');
   if(addrDisp) addrDisp.textContent=currentItem.address||'—';
-  const addrEdit=document.getElementById('address-edit-display');
-  if(addrEdit) addrEdit.textContent=currentItem.address||'—';
+  const addrInp=document.getElementById('address-inp');
+  if(addrInp) addrInp.value=currentItem.address||'';
   const snEl=document.getElementById('owner-name-inp');if(snEl){if(snEl.tagName==='INPUT')snEl.value=currentItem.sheet_name||'';else snEl.textContent=currentItem.sheet_name||'—';}
   document.getElementById('contact-inp').value=currentItem.contact_number||'';
   const ownReal=document.getElementById('owner-real-name-inp');if(ownReal)ownReal.value=currentItem.owner_name||'';
@@ -1523,6 +1523,7 @@ async function saveVendoDetails(){
     const contact=document.getElementById('contact-inp')?.value.trim()||'';
     const ownerName=document.getElementById('owner-real-name-inp')?.value.trim()||'';
     const tgName=document.getElementById('tg-name-inp')?.value.trim()||'';
+    const addressEdit=document.getElementById('address-inp')?.value.trim()||'';
     let photoUrl=null;
 
     // Upload photo
@@ -1537,6 +1538,7 @@ async function saveVendoDetails(){
     if(contact) vendoUpdate.contact_number=contact;
     if(ownerName) vendoUpdate.owner_name=ownerName;
     if(tgName) vendoUpdate.tg_name=tgName;
+    if(addressEdit) vendoUpdate.address=addressEdit;
 
     // Save to vendos table — queue if offline
     if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
@@ -1558,6 +1560,7 @@ async function saveVendoDetails(){
     if(photoUrl) currentItem.photo_url=photoUrl;
     if(contact) currentItem.contact_number=contact;
     if(ownerName) currentItem.owner_name=ownerName;
+    if(addressEdit){currentItem.address=addressEdit;const ad=document.getElementById('address-display');if(ad)ad.textContent=addressEdit;}
 
     toast(photoUrl?'✅ Photo, GPS & details saved to vendo':'✅ Details saved',3000);
     _closeOwnerEdit();
@@ -1909,6 +1912,8 @@ async function submitHarvest(){
   if(ownerName&&ownerName!==currentItem.sheet_name) vendoUpdate.sheet_name=ownerName;
   if(contact) vendoUpdate.contact_number=contact;
   if(ownerRealName) vendoUpdate.owner_name=ownerRealName;
+  const addressSubmit=(document.getElementById('address-inp')?.value||'').trim();
+  if(addressSubmit) vendoUpdate.address=addressSubmit;
 
   // Also save to harvests table
   const harvestRecord={
