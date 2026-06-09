@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Spawn Collect</title>
+<link rel="manifest" href="/VendoMonitor/sub-manifest.json">
+<meta name="theme-color" content="#1e2d5a">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --blue:#1e3cb8;--navy:#1e2d5a;--green:#15803d;--red:#dc2626;--amber:#d97706;
+  --bg:#f0f4ff;--card:#fff;--border:#e0e4f0;--text:#1e2d5a;--muted:#8b99b8;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+
+/* TOPBAR */
+.topbar{background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:8px}
+.topbar-logo{font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;gap:7px}
+.topbar-sub{font-size:10px;color:#93c5fd;margin-top:1px}
+.tb-right{display:flex;align-items:center;gap:8px}
+.online-dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
+.offline-dot{background:#ef4444}
+.online-label{font-size:10px;color:#93c5fd;font-weight:600}
+.btn-logout{background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+
+/* CARDS */
+.card{background:var(--card);border-radius:16px;padding:16px;border:0.5px solid var(--border);margin-bottom:12px}
+.card-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.btn{width:100%;padding:13px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+.btn:active{transform:scale(.98)}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:disabled{background:#e0e4f0;color:var(--muted)}
+.btn-green{background:var(--green);color:#fff}
+.btn-gray{background:#f0f4ff;color:var(--muted);border:1px solid var(--border)}
+.text-input{width:100%;padding:12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;outline:none;color:var(--text);background:#f7f9ff}
+.text-input:focus{border-color:var(--blue)}
+.coin-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between}
+
+/* LOGIN */
+.login-bg{background:var(--bg);padding:0 16px 20px}
+.collector-btn{background:#f7f9ff;border:1.5px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:.15s;font-family:inherit}
+.collector-btn.selected{border-color:var(--blue);background:#eff6ff}
+.collector-btn.selected .col-av{background:var(--blue)!important;color:#fff!important}
+.collector-btn.selected .cname{color:var(--blue)}
+.col-av{width:40px;height:40px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:var(--navy);margin:0 auto 8px;transition:.15s}
+.cname{font-size:14px;font-weight:700;color:var(--navy)}
+.cteam{font-size:10px;color:var(--muted);margin-top:2px}
+.pd{width:14px;height:14px;border-radius:50%;border:2px solid #d1d5db;background:transparent;transition:.2s}
+.pd.on{background:var(--blue);border-color:var(--blue);transform:scale(1.15)}
+
+/* AREA TABS */
+.area-tabs{display:flex;gap:6px;overflow-x:auto;padding:12px 16px 0;scrollbar-width:none}
+.area-tabs::-webkit-scrollbar{display:none}
+.area-tab{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1.5px solid var(--border);background:#fff;color:var(--muted);cursor:pointer;transition:.15s}
+.area-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+/* SUBSCRIBER LIST */
+.sub-list{flex:1;overflow-y:auto;padding:10px 16px 80px}
+.sub-card{background:#fff;border-radius:14px;padding:14px;border:0.5px solid var(--border);margin-bottom:8px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:12px}
+.sub-card:active{transform:scale(.99)}
+.sub-card.paid-this-month{border-color:#86efac;background:#f0fdf4}
+.sub-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;flex-shrink:0}
+.sub-name{font-size:14px;font-weight:700;color:var(--navy);line-height:1.2}
+.sub-addr{font-size:11px;color:var(--muted);margin-top:2px}
+.sub-right{margin-left:auto;text-align:right;flex-shrink:0}
+.due-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;display:inline-block}
+.badge-green{background:#dcfce7;color:#15803d}
+.badge-red{background:#fee2e2;color:#dc2626}
+.badge-amber{background:#fef3c7;color:#d97706}
+.badge-gray{background:#f1f5f9;color:#64748b}
+.paid-check{font-size:18px;color:#22c55e}
+
+/* SEARCH */
+.search-wrap{padding:10px 16px 0;position:relative}
+.search-inp{width:100%;padding:11px 14px 11px 36px;border:1.5px solid var(--border);border-radius:12px;font-size:14px;font-family:inherit;outline:none;background:#fff}
+.search-inp:focus{border-color:var(--blue)}
+.search-icon{position:absolute;left:26px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:16px;pointer-events:none}
+
+/* PAYMENT MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:flex-end;justify-content:center}
+.modal{background:#fff;border-radius:20px 20px 0 0;padding:20px 16px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto}
+.modal-handle{width:40px;height:4px;background:#e0e4f0;border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:17px;font-weight:800;color:var(--navy);margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+.amount-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.amount-btn{padding:12px 8px;background:#f0f4ff;border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-weight:700;color:var(--navy);cursor:pointer;text-align:center;transition:.15s;font-family:inherit}
+.amount-btn:active{transform:scale(.97)}
+.amount-btn.sel{background:#eff6ff;border-color:var(--blue);color:var(--blue)}
+.history-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px}
+.history-row:last-child{border:none}
+
+/* SUMMARY BAR */
+.summary-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:0.5px solid var(--border);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;z-index:99}
+.summary-total{font-size:13px;color:var(--muted)}
+.summary-amount{font-size:18px;font-weight:800;color:var(--navy)}
+.summary-count{font-size:11px;color:var(--green);font-weight:700}
+
+.toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#1e2d5a;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ── SCREEN 1: LOGIN ── -->
+<div class="screen active" id="screen-login">
+  <div class="login-bg">
+    <div style="text-align:center;padding:28px 0 16px">
+      <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
+        style="width:72px;height:72px;object-fit:contain;border-radius:50%;display:block;margin:0 auto 10px">
+      <div style="font-size:22px;font-weight:800;color:var(--navy)">Spawn Collect</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Subscriber payment collection</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Collector</div>
+      <div id="col-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">4-digit PIN</div>
+      <div style="display:flex;justify-content:center;gap:16px;margin:4px 0 12px">
+        <div class="pd" id="pd1"></div><div class="pd" id="pd2"></div>
+        <div class="pd" id="pd3"></div><div class="pd" id="pd4"></div>
+      </div>
+      <input type="password" inputmode="numeric" maxlength="4" id="pin-inp"
+        placeholder="••••"
+        style="width:100%;padding:13px;border:1.5px solid var(--border);border-radius:10px;font-size:26px;font-weight:700;letter-spacing:10px;text-align:center;font-family:monospace;outline:none;color:var(--navy);background:#f7f9ff"
+        oninput="onPinInput(this)">
+      <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:10px">Login →</button>
+      <div id="pin-err" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
+    </div>
+
+    <div style="text-align:center;padding-top:4px">
+      <span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Reset</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCREEN 2: MAIN ── -->
+<div class="screen" id="screen-main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <img src="/VendoMonitor/spawn-logo.png" alt="" style="width:22px;height:22px;object-fit:contain;border-radius:50%">
+      <div>
+        <div class="topbar-logo">Spawn Collect</div>
+        <div class="topbar-sub" id="tb-collector">—</div>
+      </div>
+    </div>
+    <div class="tb-right">
+      <div style="display:flex;align-items:center;gap:4px">
+        <div class="online-dot" id="online-dot"></div>
+        <div class="online-label" id="online-label">Online</div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="area-tabs" id="area-tabs"></div>
+
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-inp" type="text" id="search-inp" placeholder="Search subscriber..." oninput="renderList()">
+  </div>
+
+  <div class="sub-list" id="sub-list"></div>
+
+  <div class="summary-bar">
+    <div>
+      <div class="summary-total">Today's collection</div>
+      <div class="summary-amount" id="summary-amount">₱0</div>
+    </div>
+    <div style="text-align:right">
+      <div class="summary-count" id="summary-count">0 paid</div>
+      <div style="font-size:10px;color:var(--muted)" id="summary-date"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAYMENT MODAL -->
+<div class="modal-overlay" id="modal-overlay" style="display:none" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-name">—</div>
+    <div class="modal-sub" id="modal-info">—</div>
+
+    <div class="card-label">Quick amount</div>
+    <div class="amount-grid" id="amount-grid"></div>
+
+    <div style="margin-bottom:14px">
+      <div class="coin-label">Amount <span>Edit if different</span></div>
+      <input type="number" inputmode="decimal" class="text-input" id="amount-inp" placeholder="0.00" oninput="onAmountInput()">
+    </div>
+
+    <div style="margin-bottom:14px">
+      <div class="coin-label">Month <span>Which month</span></div>
+      <input type="month" class="text-input" id="month-inp">
+    </div>
+
+    <div style="margin-bottom:16px">
+      <div class="coin-label">Note <span>Optional</span></div>
+      <input type="text" class="text-input" id="note-inp" placeholder="e.g. partial, gcash...">
+    </div>
+
+    <button class="btn btn-green" id="pay-btn" onclick="submitPayment()">✓ Record Payment</button>
+    <button class="btn btn-gray" onclick="closeModal()" style="margin-top:8px">Cancel</button>
+
+    <div id="modal-history" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<script>
+const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDR={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+
+const AREAS=['ALL','DIPOLOG','DAPITAN','ROXAS','POLANCO','SINDANGAN'];
+const AREA_COLORS={'DIPOLOG':'#1e3cb8','DAPITAN':'#0f766e','ROXAS':'#b45309','POLANCO':'#7c3aed','SINDANGAN':'#be123c','UNKNOWN':'#64748b'};
+const QUICK_AMOUNTS=[500,800,1000,1200,1300,1500,1800,2000,2500];
+
+let _collector='', _collectors=[], _subscribers=[], _payments=[], _currentSub=null;
+let _area='ALL', _offline=false, _offlineQueue=[];
+let _selectedName='';
+
+const FALLBACK_COLLECTORS=[
+  {name:'Ailyn',pin:'2730',team:'Admin'},
+  {name:'Axcel',pin:'4053',team:'Team B'},
+  {name:'Gilbert',pin:'4331',team:'Team A'},
+  {name:'Tandoy',pin:'8609',team:'Team B'}
+];
+
+// ── UTILS ──
+function toast(msg,dur=2500){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+function fmt(n){return '₱'+parseFloat(n||0).toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:2});}
+function today(){return new Date().toISOString().split('T')[0];}
+function thisMonth(){return today().slice(0,7);}
+
+// ── ONLINE/OFFLINE ──
+function updateOnline(){
+  _offline=!navigator.onLine;
+  const dot=document.getElementById('online-dot');
+  const lbl=document.getElementById('online-label');
+  if(dot){dot.className=_offline?'offline-dot online-dot':'online-dot';}
+  if(lbl)lbl.textContent=_offline?'Offline':'Online';
+}
+window.addEventListener('online',()=>{updateOnline();flushQueue();});
+window.addEventListener('offline',updateOnline);
+
+// ── LOGIN ──
+async function loadCollectors(){
+  const el=document.getElementById('col-list');
+  const render=list=>{
+    el.innerHTML=list.map(c=>`
+      <div class="collector-btn" data-name="${c.name}" onclick="selectCollector(this,'${c.name}')">
+        <div class="col-av" style="background:#e8edf8;color:var(--navy)">${c.name[0]}</div>
+        <div class="cname">${c.name}</div>
+        <div class="cteam">${c.team||''}</div>
+      </div>`).join('');
+  };
+  render(FALLBACK_COLLECTORS);
+  try{
+    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR});
+    const data=await r.json();
+    if(Array.isArray(data)&&data.length){_collectors=data;render(data);}
+    else _collectors=FALLBACK_COLLECTORS;
+  }catch{_collectors=FALLBACK_COLLECTORS;}
+}
+
+function selectCollector(el,name){
+  _selectedName=name;
+  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function onPinInput(inp){
+  const v=inp.value;
+  for(let i=1;i<=4;i++){
+    const d=document.getElementById('pd'+i);
+    d.classList.toggle('on',i<=v.length);
+  }
+  document.getElementById('login-btn').disabled=v.length<4||!_selectedName;
+  document.getElementById('pin-err').style.display='none';
+}
+
+async function doLogin(){
+  const pin=document.getElementById('pin-inp').value;
+  const list=_collectors.length?_collectors:FALLBACK_COLLECTORS;
+  const match=list.find(c=>c.name===_selectedName&&String(c.pin)===pin);
+  if(!match){
+    document.getElementById('pin-err').textContent='Wrong PIN. Try again.';
+    document.getElementById('pin-err').style.display='block';
+    document.getElementById('pin-inp').value='';
+    for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
+    return;
+  }
+  _collector=match.name;
+  localStorage.setItem('sc_collector',_collector);
+  document.getElementById('tb-collector').textContent=_collector;
+  showScreen('screen-main');
+  await loadData();
+}
+
+function doLogout(){
+  _collector='';_subscribers=[];_payments=[];
+  localStorage.removeItem('sc_collector');
+  document.getElementById('pin-inp').value='';
+  for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
+  document.getElementById('login-btn').disabled=true;
+  document.querySelectorAll('.collector-btn').forEach(b=>b.classList.remove('selected'));
+  _selectedName='';
+  showScreen('screen-login');
+}
+
+function hardReset(){
+  localStorage.clear();location.reload();
+}
+
+// ── DATA LOAD ──
+async function loadData(){
+  toast('Loading subscribers...',2000);
+  try{
+    const r=await fetch(`${SB}/rest/v1/subscribers?status=eq.active&order=name.asc&limit=500`,{headers:HDR});
+    _subscribers=await r.json();
+  }catch{_subscribers=JSON.parse(localStorage.getItem('sc_subs')||'[]');}
+  localStorage.setItem('sc_subs',JSON.stringify(_subscribers));
+
+  try{
+    const r=await fetch(`${SB}/rest/v1/subscriber_payments?payment_date=gte.${today().slice(0,7)+'-01'}&order=created_at.desc&limit=500`,{headers:HDR});
+    _payments=await r.json();
+  }catch{_payments=JSON.parse(localStorage.getItem('sc_payments')||'[]');}
+  localStorage.setItem('sc_payments',JSON.stringify(_payments));
+
+  buildAreaTabs();
+  renderList();
+  updateSummary();
+}
+
+// ── AREA TABS ──
+function buildAreaTabs(){
+  const counts={ALL:_subscribers.length};
+  AREAS.slice(1).forEach(a=>counts[a]=_subscribers.filter(s=>s.area===a).length);
+  document.getElementById('area-tabs').innerHTML=AREAS.map(a=>
+    `<div class="area-tab${a===_area?' active':''}" onclick="setArea('${a}')">${a} ${counts[a]||0}</div>`
+  ).join('');
+}
+
+function setArea(a){
+  _area=a;
+  buildAreaTabs();
+  renderList();
+}
+
+// ── SUBSCRIBER LIST ──
+function renderList(){
+  const q=(document.getElementById('search-inp')?.value||'').toLowerCase().trim();
+  const today_ym=thisMonth();
+
+  let list=_subscribers.filter(s=>{
+    if(_area!=='ALL'&&s.area!==_area)return false;
+    if(q&&!(s.name.toLowerCase().includes(q)||(s.address||'').toLowerCase().includes(q)))return false;
+    return true;
+  });
+
+  // Sort: unpaid first, then by due_day
+  list.sort((a,b)=>{
+    const aPaid=_payments.some(p=>p.subscriber_id===a.id&&p.month_year===today_ym);
+    const bPaid=_payments.some(p=>p.subscriber_id===b.id&&p.month_year===today_ym);
+    if(aPaid&&!bPaid)return 1;
+    if(!aPaid&&bPaid)return -1;
+    return (a.due_day||99)-(b.due_day||99);
+  });
+
+  const today_d=new Date().getDate();
+
+  document.getElementById('sub-list').innerHTML=list.length?list.map(s=>{
+    const paid=_payments.some(p=>p.subscriber_id===s.id&&p.month_year===today_ym);
+    const color=AREA_COLORS[s.area]||'#64748b';
+    const initials=s.name.split(' ').slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+    let badge='';
+    if(paid){
+      badge='<span class="due-badge badge-green">Paid</span>';
+    } else if(s.due_day){
+      const diff=s.due_day-today_d;
+      if(diff<0)badge=`<span class="due-badge badge-red">${Math.abs(diff)}d late</span>`;
+      else if(diff===0)badge='<span class="due-badge badge-amber">Due today</span>';
+      else if(diff<=5)badge=`<span class="due-badge badge-amber">Due in ${diff}d</span>`;
+      else badge=`<span class="due-badge badge-gray">Due ${s.due_day}</span>`;
+    }
+    return `<div class="sub-card${paid?' paid-this-month':''}" onclick="openModal(${s.id})">
+      <div class="sub-av" style="background:${color}">${initials}</div>
+      <div style="flex:1;min-width:0">
+        <div class="sub-name">${s.name}</div>
+        <div class="sub-addr">${s.address||s.area||'—'}</div>
+      </div>
+      <div class="sub-right">
+        ${paid?'<div class="paid-check">✓</div>':badge}
+        ${s.due_day&&!paid?`<div style="font-size:10px;color:var(--muted);margin-top:3px">Day ${s.due_day}</div>`:''}
+      </div>
+    </div>`;
+  }).join(''):'<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">No subscribers found</div>';
+}
+
+// ── PAYMENT MODAL ──
+function openModal(subId){
+  _currentSub=_subscribers.find(s=>s.id===subId);
+  if(!_currentSub)return;
+
+  document.getElementById('modal-name').textContent=_currentSub.name;
+  document.getElementById('modal-info').textContent=(_currentSub.address||_currentSub.area||'')+((_currentSub.phone)?(' · '+_currentSub.phone):'');
+
+  // Quick amounts
+  document.getElementById('amount-grid').innerHTML=QUICK_AMOUNTS.map(a=>
+    `<button class="amount-btn" onclick="selectAmount(${a},this)">${fmt(a)}</button>`
+  ).join('');
+
+  // Reset fields
+  document.getElementById('amount-inp').value='';
+  document.getElementById('month-inp').value=thisMonth();
+  document.getElementById('note-inp').value='';
+
+  // History
+  const hist=_payments.filter(p=>p.subscriber_id===subId).slice(0,6);
+  document.getElementById('modal-history').innerHTML=hist.length?`
+    <div class="card-label">Recent payments</div>
+    ${hist.map(p=>`<div class="history-row">
+      <span>${p.month_year}</span>
+      <span style="font-weight:700;color:var(--navy)">${fmt(p.amount)}</span>
+      <span style="color:var(--muted)">${p.collector||''}</span>
+    </div>`).join('')}`:'';
+
+  document.getElementById('modal-overlay').style.display='flex';
+}
+
+function selectAmount(amt,el){
+  document.querySelectorAll('.amount-btn').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+  document.getElementById('amount-inp').value=amt;
+}
+
+function onAmountInput(){
+  document.querySelectorAll('.amount-btn').forEach(b=>b.classList.remove('sel'));
+}
+
+function closeModal(e){
+  if(!e||e.target===document.getElementById('modal-overlay')){
+    document.getElementById('modal-overlay').style.display='none';
+    _currentSub=null;
+  }
+}
+
+async function submitPayment(){
+  if(!_currentSub)return;
+  const amount=parseFloat(document.getElementById('amount-inp').value);
+  if(!amount||amount<=0){toast('⚠️ Enter an amount');return;}
+  const month_year=document.getElementById('month-inp').value||thisMonth();
+  const note=document.getElementById('note-inp').value.trim()||null;
+
+  const record={
+    subscriber_id:_currentSub.id,
+    subscriber_name:_currentSub.name,
+    area:_currentSub.area,
+    amount,
+    payment_date:today(),
+    month_year,
+    collector:_collector,
+    note,
+  };
+
+  const btn=document.getElementById('pay-btn');
+  btn.disabled=true;btn.textContent='Saving...';
+
+  if(navigator.onLine){
+    try{
+      const r=await fetch(`${SB}/rest/v1/subscriber_payments`,{
+        method:'POST',headers:{...HDR,'Prefer':'return=representation'},
+        body:JSON.stringify(record)
+      });
+      const data=await r.json();
+      if(Array.isArray(data)&&data.length){
+        _payments.unshift(data[0]);
+        localStorage.setItem('sc_payments',JSON.stringify(_payments));
+        toast('✅ Payment recorded!');
+      }
+    }catch(e){
+      record._offline=true;
+      _offlineQueue.push(record);
+      localStorage.setItem('sc_queue',JSON.stringify(_offlineQueue));
+      _payments.unshift({...record,id:Date.now()});
+      toast('⚡ Saved offline — will sync');
+    }
+  } else {
+    record._offline=true;
+    _offlineQueue.push(record);
+    localStorage.setItem('sc_queue',JSON.stringify(_offlineQueue));
+    _payments.unshift({...record,id:Date.now()});
+    localStorage.setItem('sc_payments',JSON.stringify(_payments));
+    toast('⚡ Saved offline — will sync');
+  }
+
+  btn.disabled=false;btn.textContent='✓ Record Payment';
+  closeModal();
+  renderList();
+  updateSummary();
+}
+
+async function flushQueue(){
+  const q=JSON.parse(localStorage.getItem('sc_queue')||'[]');
+  if(!q.length)return;
+  const remaining=[];
+  for(const rec of q){
+    try{
+      delete rec._offline;
+      const r=await fetch(`${SB}/rest/v1/subscriber_payments`,{
+        method:'POST',headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify(rec)
+      });
+      if(!r.ok)remaining.push(rec);
+    }catch{remaining.push(rec);}
+  }
+  localStorage.setItem('sc_queue',JSON.stringify(remaining));
+  if(remaining.length<q.length)toast(`✅ Synced ${q.length-remaining.length} payments`);
+}
+
+// ── SUMMARY BAR ──
+function updateSummary(){
+  const today_ym=thisMonth();
+  const todayPay=_payments.filter(p=>p.payment_date===today()&&p.collector===_collector);
+  const total=todayPay.reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  document.getElementById('summary-amount').textContent=fmt(total);
+  document.getElementById('summary-count').textContent=todayPay.length+' paid today';
+  document.getElementById('summary-date').textContent=new Date().toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+}
+
+// ── SCREEN SWITCH ──
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ── INIT ──
+window.addEventListener('load',async()=>{
+  updateOnline();
+  _offlineQueue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
+  await loadCollectors();
+  // Auto-resume session
+  const saved=localStorage.getItem('sc_collector');
+  if(saved){
+    _collector=saved;
+    document.getElementById('tb-collector').textContent=_collector;
+    showScreen('screen-main');
+    await loadData();
+    if(navigator.onLine)flushQueue();
+  }
+});
+</script>
+</body>
+</html>
