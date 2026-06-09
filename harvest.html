@@ -34,7 +34,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sync-badge{font-size:9px;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.2);display:flex;align-items:center;gap:4px}
 .sync-dot{width:6px;height:6px;border-radius:50%;background:#4ade80}
 .sync-dot.off{background:#f87171}
-.offline-banner{background:var(--amber);color:#fff;text-align:center;padding:6px;font-size:11px;font-weight:700;display:none}
+.offline-banner{background:#dc2626;color:#fff;text-align:center;padding:8px;font-size:12px;font-weight:700;display:none;letter-spacing:.02em}
 .offline-banner.show{display:block}
 .card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px}
 .card-title{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
@@ -199,7 +199,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </head>
 <body>
 
-<div class="offline-banner" id="offline-banner">⚡ Offline — submissions will sync when connected</div>
+<div class="offline-banner" id="offline-banner">🔴 No internet — harvests will sync when back online</div>
 
 <div class="topbar">
   <div style="display:flex;align-items:center">
@@ -654,6 +654,10 @@ function updateOnline(){
   document.getElementById('sync-dot').className='sync-dot'+(ok?'':' off');
   document.getElementById('sync-label').textContent=ok?'Online':'Offline';
   document.getElementById('offline-banner').className='offline-banner'+(ok?'':' show');
+  const dot=document.getElementById('conn-dot');
+  if(dot){dot.style.background=ok?'#4ade80':'#dc2626';dot.title=ok?'Online':'Offline';}
+  const connLbl=document.getElementById('conn-lbl');
+  if(connLbl){connLbl.textContent=ok?'Online':'Offline';}
   if(ok&&offlineQueue.length) flushQueue();
 }
 window.addEventListener('online',updateOnline);
@@ -912,11 +916,13 @@ async function loadGroupsScreen(collector, area){
       const meta = counts.total ?
         `${counts.total} vendos · ${pct}% harvested last run` :
         `${g.group_label||g.group_id}`;
+      const brgy = g.barangays ? `<div style="font-size:10px;color:#0369a1;margin-top:2px;font-weight:600">${g.barangays}</div>` : '';
       html += `<div class="group-item active-group" style="cursor:pointer" onclick="startGroup(${g.id})">
         <div class="gi-icon active">▶</div>
         <div class="gi-left">
           <div class="gi-name">${g.group_label||g.group_id}</div>
           <div class="gi-meta">${meta}</div>
+          ${brgy}
         </div>
         <div class="gi-badge">${pill}</div>
       </div>`;
@@ -948,7 +954,7 @@ async function startGroup(groupId){
     currentItems = cached.items;
     document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
-    document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+cached.g.area;
+    document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
     /* sched-day-num updated in renderVendoList */
     localStorage.setItem('harvest_session',JSON.stringify({
       collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
@@ -974,7 +980,7 @@ async function startGroup(groupId){
     }));
     document.getElementById('topbar-sub').textContent=g.group_label||g.group_id;
     document.getElementById('sched-group-name').textContent=g.group_label||g.group_id;
-    document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+g.area;
+    document.getElementById('sched-group-meta').textContent=(g.barangays?g.barangays+' · ':'')+selectedCollector;
     /* sched-day-num updated in renderVendoList */
 
     listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
