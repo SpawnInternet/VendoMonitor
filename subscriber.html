@@ -36,6 +36,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* LOGIN */
 .login-bg{background:var(--bg);padding:0 16px 20px}
 .cbtn{background:#f7f9ff;border:1.5px solid var(--border);border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;transition:.15s;font-family:inherit}
+#col-list .cbtn:last-child:nth-child(odd){grid-column:1/-1;}
 .cbtn.sel{border-color:var(--blue);background:#eff6ff}
 .cbtn.sel .cav{background:var(--blue)!important;color:#fff!important}
 .cbtn.sel .cname{color:var(--blue)}
@@ -319,6 +320,7 @@ window.addEventListener('offline',setOnline);
 // ── LOGIN ──
 async function loadCols(){
   const el=document.getElementById('col-list');
+  if(!el){console.warn('col-list not found');return;}
   const rnd=list=>{
     el.innerHTML=list.map(c=>`
       <div class="cbtn" data-name="${c.name}" onclick="selCol(this,'${c.name}')">
@@ -736,7 +738,7 @@ async function flushQ(){
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 
 // ── INIT ──
-window.addEventListener('load',async()=>{
+async function init(){
   setOnline();
   _queue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
   await loadCols();
@@ -746,7 +748,8 @@ window.addEventListener('load',async()=>{
     showScreen('screen-main');await loadData();
     if(navigator.onLine)flushQ();
   }
-});
+}
+document.addEventListener('DOMContentLoaded',init);
 </script>
 </body>
 </html>
