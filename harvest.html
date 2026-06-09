@@ -838,7 +838,9 @@ async function showAreasScreen(){
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading areas…</span></div>';
   showScreen('screen-areas');
 
-  const groups = await loadPermGroups();
+  const allGroups = await loadPermGroups();
+  // Only show groups assigned to this collector (or unassigned)
+  const groups = allGroups.filter(g => !g.collector || g.collector === selectedCollector);
   const areas = getAreasFromGroups(groups);
 
   const items = areas.map(area=>{
@@ -876,7 +878,9 @@ async function loadGroupsScreen(collector, area){
   const listEl = document.getElementById('group-list');
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
 
-  const groups = await loadPermGroups();
+  const allGroups2 = await loadPermGroups();
+  // Only show groups assigned to this collector (or unassigned)
+  const groups = allGroups2.filter(g => !g.collector || g.collector === collector);
   const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
 
   // Fetch vendo counts per permanent group from harvest_group_items
