@@ -980,17 +980,48 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- ══ TAB: LIVE FEED ══ -->
-<div id="hvt-livefeed" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-    <div id="lf-dot" style="width:8px;height:8px;background:#16a34a;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;"></div>
-    <span style="font-size:12px;font-weight:600;color:#15803d;" id="lf-status">Harvest Records</span>
-    <span style="flex:1"></span>
-    <span id="lf-count" style="font-size:11px;color:var(--mu)"></span>
-    <button onclick="lfItems=[];lfRender();" style="padding:5px 10px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;">Clear</button>
+<div id="hvt-livefeed" style="display:none;overflow-y:auto;height:calc(100vh - 88px);">
+  <!-- Mode tabs -->
+  <div style="display:flex;border-bottom:2px solid #e5e7eb;background:#f8faff;flex-shrink:0;">
+    <button id="lf-mode-today" onclick="lfSetMode('today')"
+      style="padding:10px 20px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid #1565c0;color:#1565c0;margin-bottom:-2px;display:flex;align-items:center;gap:6px;">
+      <div id="lf-dot" style="width:8px;height:8px;background:#16a34a;border-radius:50%;flex-shrink:0;"></div>
+      <span id="lf-status">Today</span>
+    </button>
+    <button id="lf-mode-history" onclick="lfSetMode('history')"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#6b7280;margin-bottom:-2px;">
+      📅 Past Records
+    </button>
   </div>
-  <div id="lf-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
-  <div id="lf-list" style="background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden;">
-    <div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Waiting for submissions…</div>
+
+  <!-- TODAY panel -->
+  <div id="lf-panel-today" style="padding:12px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <input id="lf-search" oninput="lfRender()" placeholder="🔍 Search vendo, collector…"
+        style="padding:5px 10px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;width:220px;">
+      <span style="flex:1"></span>
+      <span id="lf-count" style="font-size:11px;color:var(--mu)"></span>
+    </div>
+    <div id="lf-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
+    <div id="lf-list" style="background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden;">
+      <div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Loading today's records…</div>
+    </div>
+  </div>
+
+  <!-- HISTORY panel -->
+  <div id="lf-panel-history" style="display:none;padding:12px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <input type="date" id="lf-hist-date" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
+      <button onclick="lfLoadHistoryDate()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#1565c0;color:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;font-weight:600;">Load</button>
+      <input id="lf-hist-search" oninput="lfHistRender()" placeholder="🔍 Search…"
+        style="padding:5px 10px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;width:200px;">
+      <span style="flex:1"></span>
+      <span id="lf-hist-count" style="font-size:11px;color:var(--mu)"></span>
+    </div>
+    <div id="lf-hist-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
+    <div id="lf-hist-list" style="background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden;">
+      <div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Pick a date and click Load.</div>
+    </div>
   </div>
 </div>
 
@@ -1639,32 +1670,50 @@ let lfItems = [];
 let lfWs = null;
 let lfConnected = false;
 
-function lfRender(){
-  const el = document.getElementById('lf-list');
-  const stats = document.getElementById('lf-stats');
-  document.getElementById('lf-count').textContent = lfItems.length ? lfItems.length+' records' : '';
-  if(!lfItems.length){
-    el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Waiting for submissions…</div>';
-    stats.innerHTML=''; return;
+let lfMode = 'today';
+let lfHistItems = [];
+
+function lfSetMode(mode){
+  lfMode = mode;
+  const isToday = mode==='today';
+  document.getElementById('lf-panel-today').style.display = isToday?'':'none';
+  document.getElementById('lf-panel-history').style.display = isToday?'none':'';
+  document.getElementById('lf-mode-today').style.borderBottomColor = isToday?'#1565c0':'transparent';
+  document.getElementById('lf-mode-today').style.color = isToday?'#1565c0':'#6b7280';
+  document.getElementById('lf-mode-history').style.borderBottomColor = isToday?'transparent':'#1565c0';
+  document.getElementById('lf-mode-history').style.color = isToday?'#6b7280':'#1565c0';
+  if(mode==='history' && !document.getElementById('lf-hist-date').value){
+    // Default to yesterday
+    const d=new Date(); d.setDate(d.getDate()-1);
+    document.getElementById('lf-hist-date').value=d.toISOString().slice(0,10);
   }
-  const tC = lfItems.reduce((s,i)=>s+Number(i.coins_total||0),0);
-  const tN = lfItems.reduce((s,i)=>s+Number(i.net_collectible||0),0);
-  const cols = [...new Set(lfItems.map(i=>i.collector).filter(Boolean))];
-  stats.innerHTML = [
-    ['#1565c0', lfItems.length, 'Total records'],
-    ['#1565c0', _php(tC), 'Coins collected'],
-    ['#15803d', _php(tN), 'Net today'],
-    ['#1565c0', cols.length, 'Active collectors'],
+}
+
+function lfRenderRows(items, elId, statsId, countId, searchId){
+  const el=document.getElementById(elId);
+  const stats=document.getElementById(statsId);
+  const q=(document.getElementById(searchId)?.value||'').toLowerCase().trim();
+  const filtered=q?items.filter(i=>(i.sheet_name||'').toLowerCase().includes(q)||(i.collector||'').toLowerCase().includes(q)||(i.area||'').toLowerCase().includes(q)):items;
+  document.getElementById(countId).textContent=filtered.length+' records';
+  if(!filtered.length){el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">No records found.</div>';stats.innerHTML='';return;}
+  const tC=filtered.reduce((s,i)=>s+Number(i.coins_total||0),0);
+  const tN=filtered.reduce((s,i)=>s+Number(i.net_collectible||0),0);
+  const cols=[...new Set(filtered.map(i=>i.collector).filter(Boolean))];
+  stats.innerHTML=[
+    ['#1565c0',filtered.length,'Total records'],
+    ['#1565c0',_php(tC),'Coins collected'],
+    ['#15803d',_php(tN),'Net collectible'],
+    ['#1565c0',cols.length,'Collectors'],
   ].map(([c,v,l])=>`<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;">
     <div style="font-size:20px;font-weight:700;color:${c};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
   </div>`).join('');
-  el.innerHTML = lfItems.slice(0,500).map((item,i)=>{
-    const dateStr = item.harvest_date||item.harvested_at?.slice(0,10)||'';
-    return `<div onclick="lfShowDetail(${i})" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
-      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:2px;min-width:60px;">${dateStr}</div>
+  el.innerHTML=filtered.slice(0,500).map((item,i)=>{
+    const timeStr=item.harvested_at?new Date(item.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
+    return `<div onclick="lfShowDetail(${lfItems.indexOf(item)>=0?lfItems.indexOf(item):i})" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:2px;min-width:50px;">${timeStr}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:12px;">${item.sheet_name||`<span style="color:#9ca3af;font-style:italic;">unmatched</span>`}</div>
+        <div style="font-weight:600;font-size:12px;">${item.sheet_name||'<span style="color:#9ca3af;font-style:italic;">unmatched</span>'}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:1px;">
           <span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${item.collector||'—'}</span>
           &nbsp;${item.area||''}
@@ -1678,10 +1727,25 @@ function lfRender(){
   }).join('');
 }
 
+function lfRender(){ lfRenderRows(lfItems,'lf-list','lf-stats','lf-count','lf-search'); }
+function lfHistRender(){ lfRenderRows(lfHistItems,'lf-hist-list','lf-hist-stats','lf-hist-count','lf-hist-search'); }
+
+async function lfLoadHistoryDate(){
+  const date=document.getElementById('lf-hist-date').value;
+  if(!date) return;
+  document.getElementById('lf-hist-list').innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Loading…</div>';
+  document.getElementById('lf-hist-stats').innerHTML='';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,{headers:_HDR});
+    lfHistItems=await r.json();
+    lfHistRender();
+  }catch(e){document.getElementById('lf-hist-list').innerHTML=`<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;}
+}
+
 async function lfLoadToday(){
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvests?select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,
+      `${_SB}/rest/v1/harvests?harvest_date=eq.${new Date().toISOString().slice(0,10)}&select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
