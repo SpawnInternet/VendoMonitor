@@ -439,25 +439,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <!-- Stat cards -->
   <div class="stats" id="dash-stats" style="margin-bottom:7px;"></div>
 
-  <!-- Dashboard search bar -->
-  <div style="display:flex;gap:8px;margin-bottom:7px;align-items:center;">
-    <div style="flex:1;position:relative;">
-      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;">🔍</span>
-      <input type="text" id="dash-search" placeholder="Search vendo name, area, owner..." oninput="dashSearch(this.value)"
-        style="width:100%;padding:7px 12px 7px 32px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
-        onfocus="this.style.borderColor='#1565c0'" onblur="this.style.borderColor='var(--bd)'">
-    </div>
-    <select id="dash-area-filter" onchange="dashSearch(document.getElementById('dash-search').value)"
-      style="padding:7px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:12px;font-family:inherit;background:#fff;outline:none;">
-      <option value="">All Areas</option>
-      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
-      <option>MINAOG</option><option>MIX AREAS</option>
-    </select>
-  </div>
-  <!-- Search results dropdown -->
-  <div id="dash-search-results" style="display:none;background:#fff;border:1.5px solid #1565c0;border-radius:10px;margin-bottom:7px;max-height:320px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>
-
   <!-- Suspicious alert banner -->
   <div id="suspicious-alert" style="display:none;background:#fee2e2;border:1px solid #fecaca;border-radius:7px;padding:6px 12px;margin-bottom:7px;align-items:center;gap:10px;">
     <span>🚨</span>
@@ -948,10 +929,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     </select>
     <select id="ht-status" onchange="htFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
       <option value="">All status</option>
-      <option value="done">Done</option><option value="pending">Pending</option><option value="skipped">Skipped</option>
+      <option value="harvested">Harvested</option><option value="pending">Pending</option><option value="skipped">Skipped</option>
     </select>
-    <input type="text" id="ht-search" placeholder="Search vendo…" oninput="htFilter()"
-      style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;width:150px;height:30px;">
+    <input type="text" id="ht-search" placeholder="🔍 Search vendo name, owner, area…" oninput="htFilter()"
+      style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;width:220px;height:30px;">
     <span style="flex:1"></span>
     <span id="ht-count" style="font-size:11px;color:var(--mu)"></span>
     <button onclick="htLoad()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;">↺ Refresh</button>
@@ -1267,12 +1248,12 @@ async function htLoad(){
       }
     }
   } catch(e){ console.warn('bucket fetch failed',e); }
-  // 3. Fallback: direct DB (only if bucket missing/empty)
+  // 3. Fallback: direct DB — query harvests table for actual collector
   if(!htAllRows.length){
     let offset = 0;
     while(true){
       const r = await fetch(
-        `${_SB}/rest/v1/harvest_group_items?select=id,vendo_id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        `${_SB}/rest/v1/harvest_group_items?select=id,vendo_id,sheet_name,tg_name,owner_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
         {headers:{..._HDR,'Prefer':'count=none'}}
       );
       const batch = await r.json();
@@ -1281,9 +1262,23 @@ async function htLoad(){
       if(batch.length<1000) break;
       offset+=1000;
     }
+    // Enrich with actual collector from harvests table
+    const harvestedIds = htAllRows.filter(r=>r.vendo_id&&r.status==='harvested').map(r=>r.vendo_id);
+    if(harvestedIds.length){
+      try{
+        const rh = await fetch(
+          `${_SB}/rest/v1/harvests?select=vendo_id,collector,harvest_date&vendo_id=in.(${[...new Set(harvestedIds)].slice(0,200).join(',')})&order=harvested_at.desc&limit=500`,
+          {headers:_HDR}
+        );
+        const hrows = await rh.json();
+        const collectorMap = {};
+        (hrows||[]).forEach(h=>{ if(!collectorMap[h.vendo_id]) collectorMap[h.vendo_id]=h.collector; });
+        htAllRows = htAllRows.map(r=>({...r, actual_collector: collectorMap[r.vendo_id]||null}));
+      }catch(e){}
+    }
     try{ localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:htAllRows})); }catch(e){}
   }
-  const collectors = [...new Set(htAllRows.map(r=>r.harvest_groups?.collector).filter(Boolean))].sort();
+  const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.harvest_groups?.collector).filter(Boolean))].sort();
   const htSel = document.getElementById('ht-collector');
   const rcSel = document.getElementById('rc-collector');
   const prev = htSel.value;
@@ -1303,9 +1298,13 @@ function htFilter(){
   const q    = (document.getElementById('ht-search').value||'').toLowerCase();
   const rows = htAllRows.filter(r=>{
     if(area && r.area!==area) return false;
-    if(col  && r.harvest_groups?.collector!==col) return false;
+    const actualCol = r.actual_collector||r.harvest_groups?.collector||'';
+    if(col  && actualCol!==col) return false;
     if(stat && r.status!==stat) return false;
-    if(q    && !(r.sheet_name||'').toLowerCase().includes(q)) return false;
+    if(q){
+      const hay = ((r.sheet_name||'')+(r.tg_name||'')+(r.owner_name||'')+(r.area||'')).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
     return true;
   });
   const done = rows.filter(r=>r.status==='harvested').length;
