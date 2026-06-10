@@ -9,14 +9,38 @@ async function harvestTabLoad() {
 
   el.innerHTML = '<div style="font-size:12px;color:var(--mu);padding:4px 0 8px">Loading collector summary...</div>';
 
-  // Use cached data from apiLoad
-  const data = await apiLoad();
-  if (!data || !data.harvest_summary) {
-    el.innerHTML = '';
-    return;
-  }
+  // Fetch harvest_groups LIVE — bypasses cache so counts reflect submissions instantly
+  try {
+    const r = await fetch(
+      `${SB_URL}/rest/v1/harvest_groups?select=id,group_id,group_label,collector,area,total_vendos,harvested_count,skipped_count,total_net,status&status=eq.active&order=group_id.asc`,
+      { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const groups = await r.json();
 
-  harvestSummaryRender(data.harvest_summary, data.overdue_vendos || []);
+    // Also fetch overdue from cached data (non-critical)
+    const cached = await apiLoad();
+    const overdue = (cached && cached.overdue_vendos) || [];
+
+    // Normalize to match harvestSummaryRender expected shape
+    const normalized = groups.map(g => ({
+      ...g,
+      items_total:   g.total_vendos    || 0,
+      items_done:    g.harvested_count || 0,
+      items_skipped: g.skipped_count   || 0,
+      net_total:     g.total_net       || 0,
+    }));
+
+    harvestSummaryRender(normalized, overdue);
+  } catch(e) {
+    console.warn('[harvestTabLoad] live fetch failed, falling back to cache:', e.message);
+    const data = await apiLoad();
+    if (data && data.harvest_summary) {
+      harvestSummaryRender(data.harvest_summary, data.overdue_vendos || []);
+    } else {
+      el.innerHTML = '';
+    }
+  }
 
   // Also trigger the existing harvest table load
   if (typeof htLoad === 'function') htLoad();
