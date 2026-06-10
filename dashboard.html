@@ -1044,7 +1044,7 @@ var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
 var _KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
 var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
 
-const _php = v => v==null?'—':'₱'+Number(v).toLocaleString();
+const _php = v => v==null?'—':'₱'+Math.round(Number(v)).toLocaleString();
 const _fmt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
 const _fmtT = ts => ts ? new Date(ts).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
 
@@ -1406,7 +1406,7 @@ async function htLoad(){
     const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/300000));
     if (rc.ok) {
       const d = await rc.json();
-      if (d.rows && d.rows.length) {
+      if (d.rows && d.rows.length && d.rows.length > 500) {
         htAllRows = d.rows;
         // Background refresh from DB if cache older than 10 min
         const age = Date.now() - new Date(d.generated_at||0).getTime();
@@ -3582,7 +3582,7 @@ async function testConnection() {
 }
 
 // ── Helpers ───────────────────────────────────────────────
-const fmt = n => "₱" + Number(n||0).toLocaleString();
+const fmt = n => "₱" + Math.round(Number(n||0)).toLocaleString();
 const esc = s => (s||"").replace(/'/g,"\\'").replace(/"/g,"&quot;");
 function yf(y) {
   if (!y || y==="all") return "";
