@@ -192,7 +192,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .sl-footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:18px;}
 </style>
 <div id="spawn-login-screen">
-  <div class="sl-card">
+  <!-- Login view -->
+  <div class="sl-card" id="sl-login-view">
     <div class="sl-logo">
       <div class="sl-logo-icon">🌐</div>
       <div class="sl-logo-title">Spawn Internetan</div>
@@ -200,7 +201,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     </div>
     <div class="sl-field">
       <label>Username</label>
-      <input type="text" id="sl-user" placeholder="admin" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('sl-pass').focus()">
+      <input type="text" id="sl-user" placeholder="spawn" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('sl-pass').focus()">
     </div>
     <div class="sl-field">
       <label>Password</label>
@@ -210,13 +211,50 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="sl-error" id="sl-error">Incorrect username or password</div>
     <div class="sl-footer">Session expires after 24 hours</div>
   </div>
+  <!-- Pending approval view -->
+  <div class="sl-card" id="sl-pending-view" style="display:none;text-align:center;">
+    <div class="sl-logo">
+      <div class="sl-logo-icon">⏳</div>
+      <div class="sl-logo-title">Waiting for Approval</div>
+      <div class="sl-logo-sub">Your device needs to be approved by the admin</div>
+    </div>
+    <div style="background:rgba(255,255,255,.1);border-radius:10px;padding:14px;margin:16px 0;font-size:12px;color:rgba(255,255,255,.8);">
+      <div id="sl-device-info" style="margin-bottom:8px;"></div>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);">Go to Settings → Device Approvals to approve</div>
+    </div>
+    <div id="sl-pending-status" style="font-size:13px;color:#fde68a;margin-bottom:12px;">🔄 Checking status…</div>
+    <button onclick="slCheckApproval()" class="sl-btn" style="background:rgba(255,255,255,.15);">Check Again</button>
+    <div class="sl-footer" id="sl-device-id-display"></div>
+  </div>
 </div>
 <script>
 (function(){
   const SL_KEY='spawn_admin_auth';
   const SL_USER='spawn';
   const SL_PASS='SpawnNet@2026!';
-  const SL_TTL=24*60*60*1000; // 24 hours
+  const SL_TTL=24*60*60*1000;
+  const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+  const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM0MDQ4MDIsImV4cCI6MjA1ODk4MDgwMn0.1Nf1cVMSnFkFMDFRzDFUsxbvZy2vBFJnFOdOthHxq9k';
+
+  // Generate stable device ID
+  function getDeviceId(){
+    let id=localStorage.getItem('spawn_device_id');
+    if(!id){
+      id='dev_'+Math.random().toString(36).slice(2)+Date.now().toString(36);
+      localStorage.setItem('spawn_device_id',id);
+    }
+    return id;
+  }
+
+  function getDeviceName(){
+    const ua=navigator.userAgent;
+    if(/iPhone/.test(ua)) return 'iPhone';
+    if(/iPad/.test(ua)) return 'iPad';
+    if(/Android/.test(ua)) return 'Android';
+    if(/Windows/.test(ua)) return 'Windows PC';
+    if(/Mac/.test(ua)) return 'Mac';
+    return 'Unknown Device';
+  }
 
   function slCheck(){
     try{
@@ -226,29 +264,85 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         return;
       }
     }catch(e){}
-    // Not logged in or expired — show login, hide body content
     document.getElementById('spawn-login-screen').classList.remove('hidden');
   }
 
-  window.slLogin=function(){
+  window.slLogin=async function(){
     const u=(document.getElementById('sl-user').value||'').trim();
     const p=(document.getElementById('sl-pass').value||'').trim();
     const err=document.getElementById('sl-error');
     if(u===SL_USER && p===SL_PASS){
-      localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
-      document.getElementById('spawn-login-screen').classList.add('hidden');
-      err.classList.remove('show');
+      // Check device approval
+      const devId=getDeviceId();
+      const devName=getDeviceName()+' · '+new Date().toLocaleDateString('en-PH');
+      try{
+        const r=await fetch(`${SB}/rest/v1/device_approvals?device_id=eq.${devId}&select=status`,
+          {headers:{apikey:ANON,Authorization:'Bearer '+ANON}});
+        const rows=await r.json();
+        if(rows.length && rows[0].status==='approved'){
+          // Device approved — grant access
+          localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
+          document.getElementById('spawn-login-screen').classList.add('hidden');
+          err.classList.remove('show');
+          return;
+        } else if(rows.length && rows[0].status==='denied'){
+          err.textContent='This device has been denied access.';
+          err.classList.add('show');
+          return;
+        } else if(!rows.length){
+          // New device — register and request approval
+          await fetch(`${SB}/rest/v1/device_approvals`,{
+            method:'POST',
+            headers:{apikey:ANON,Authorization:'Bearer '+ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+            body:JSON.stringify({device_id:devId,device_name:devName,browser:navigator.userAgent.slice(0,100),status:'pending'})
+          });
+        }
+        // Show pending screen
+        document.getElementById('sl-login-view').style.display='none';
+        document.getElementById('sl-pending-view').style.display='';
+        document.getElementById('sl-device-info').textContent='Device: '+getDeviceName();
+        document.getElementById('sl-device-id-display').textContent='ID: '+devId.slice(0,16)+'…';
+        window._slDevId=devId;
+        slCheckApproval();
+        // Poll every 5 seconds
+        window._slPollInterval=setInterval(slCheckApproval,5000);
+      }catch(e){
+        // If DB unreachable, fall back to password-only
+        localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
+        document.getElementById('spawn-login-screen').classList.add('hidden');
+      }
     } else {
+      err.textContent='Incorrect username or password';
       err.classList.add('show');
       document.getElementById('sl-pass').value='';
       document.getElementById('sl-pass').focus();
-      // Shake animation
-      const card=document.querySelector('.sl-card');
-      card.style.animation='none';
+      const card=document.getElementById('sl-login-view');
       card.style.transform='translateX(-8px)';
       setTimeout(()=>{card.style.transform='translateX(8px)';},80);
       setTimeout(()=>{card.style.transform='';},160);
     }
+  };
+
+  window.slCheckApproval=async function(){
+    const devId=window._slDevId||getDeviceId();
+    try{
+      const r=await fetch(`${SB}/rest/v1/device_approvals?device_id=eq.${devId}&select=status`,
+        {headers:{apikey:ANON,Authorization:'Bearer '+ANON}});
+      const rows=await r.json();
+      const status=(rows[0]||{}).status||'pending';
+      const el=document.getElementById('sl-pending-status');
+      if(status==='approved'){
+        clearInterval(window._slPollInterval);
+        localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
+        if(el) el.textContent='✅ Approved! Loading…';
+        setTimeout(()=>{ document.getElementById('spawn-login-screen').classList.add('hidden'); },800);
+      } else if(status==='denied'){
+        clearInterval(window._slPollInterval);
+        if(el) el.textContent='❌ Access denied by admin.';
+      } else {
+        if(el) el.textContent='⏳ Pending approval… (checking every 5s)';
+      }
+    }catch(e){}
   };
 
   window.slLogout=function(){
@@ -1134,7 +1228,7 @@ function hvNewTab(id, btn){
     if(rcAllRows.length) rcFilter(); // already loaded this session — just re-render
     else rcRun(); // first open — fetch
   }
-  if(id==='settings') csLoad();
+  if(id==='settings'){ csLoad(); daLoad(); }
 }
 
 
@@ -2380,6 +2474,17 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="max-width:600px;">
     <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:16px;">⚙️ Collector Settings</div>
+
+    <!-- Device Approvals -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:20px;">
+      <div style="padding:12px 16px;background:#f8faff;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:13px;font-weight:700;color:#1e293b;">🔐 Device Approvals</div>
+        <button onclick="daLoad()" style="padding:3px 10px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;">↺ Refresh</button>
+      </div>
+      <div id="da-list" style="padding:12px;">
+        <div style="color:#6b7280;font-size:12px;text-align:center;padding:10px;">Loading…</div>
+      </div>
+    </div>
 
     <!-- Collector list -->
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:20px;">
@@ -9216,6 +9321,57 @@ async function nmUnlink(id){
       nmRender();
     } else toast('Unlink failed');
   }catch(e){toast('Error: '+e.message);}
+}
+
+
+/* ══ DEVICE APPROVALS ══ */
+async function daLoad(){
+  const el=document.getElementById('da-list');
+  if(!el) return;
+  el.innerHTML='<div style="color:#6b7280;font-size:12px;text-align:center;padding:10px;">Loading…</div>';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/device_approvals?order=requested_at.desc&limit=50`,{headers:_HDR});
+    const rows=await r.json();
+    if(!rows.length){el.innerHTML='<div style="color:#6b7280;font-size:12px;text-align:center;padding:10px;">No device requests yet.</div>';return;}
+    el.innerHTML=rows.map(d=>{
+      const statusColor=d.status==='approved'?'#15803d':d.status==='denied'?'#dc2626':'#d97706';
+      const statusBg=d.status==='approved'?'#dcfce7':d.status==='denied'?'#fee2e2':'#fef9c3';
+      const statusLabel=d.status==='approved'?'✅ Approved':d.status==='denied'?'❌ Denied':'⏳ Pending';
+      const time=new Date(d.requested_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;color:#1e293b;">${d.device_name||'Unknown Device'}</div>
+          <div style="font-size:10px;color:#6b7280;margin-top:1px;">${time} · ID: ${(d.device_id||'').slice(0,16)}…</div>
+        </div>
+        <span style="background:${statusBg};color:${statusColor};padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;">${statusLabel}</span>
+        ${d.status==='pending'?`
+          <button onclick="daApprove('${d.id}')" style="padding:4px 10px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">✅ Approve</button>
+          <button onclick="daDeny('${d.id}')" style="padding:4px 10px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">❌ Deny</button>
+        `:`<button onclick="daDelete('${d.id}')" style="padding:4px 8px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;border-radius:6px;font-size:10px;cursor:pointer;">Remove</button>`}
+      </div>`;
+    }).join('');
+  }catch(e){el.innerHTML=`<div style="color:#dc2626;font-size:12px;">Error: ${e.message}</div>`;}
+}
+
+async function daApprove(id){
+  await fetch(`${_SB}/rest/v1/device_approvals?id=eq.${id}`,{
+    method:'PATCH',headers:{..._HDR,'Prefer':'return=minimal'},
+    body:JSON.stringify({status:'approved',approved_at:new Date().toISOString(),approved_by:'admin'})
+  });
+  toast('✅ Device approved!'); daLoad();
+}
+
+async function daDeny(id){
+  await fetch(`${_SB}/rest/v1/device_approvals?id=eq.${id}`,{
+    method:'PATCH',headers:{..._HDR,'Prefer':'return=minimal'},
+    body:JSON.stringify({status:'denied'})
+  });
+  toast('Device denied'); daLoad();
+}
+
+async function daDelete(id){
+  await fetch(`${_SB}/rest/v1/device_approvals?id=eq.${id}`,{method:'DELETE',headers:_HDR});
+  daLoad();
 }
 
 </script>
