@@ -480,14 +480,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">System</span>
     </button>
 
-    <!-- Names Match -->
-    <button onclick="showP('names',this);nmLoad()" data-panel="names">
-      <div class="ni" style="background:#f0fdf4">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="4" stroke="#15803d" stroke-width="2" fill="none"/><path d="M3 20c0-3.3 2.7-6 6-6" stroke="#15803d" stroke-width="2" stroke-linecap="round"/><path d="M14 15l2 2 4-4" stroke="#15803d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <span class="nl" style="color:#15803d">Names</span>
-    </button>
-
     <!-- Import -->
     <button onclick="showP('import',this);importInit()" data-panel="import">
       <div class="ni" style="background:#fef3c7">
@@ -1027,6 +1019,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
+      <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -2471,6 +2464,39 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
   <div id="progress-content"><div style="padding:30px;text-align:center;color:#6b7280;">Loading…</div></div>
 </div>
 
+<div id="hvt-names" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;">🔗 Name Matching</div>
+    <div style="display:flex;gap:6px;">
+      <button id="nm-filter-all" onclick="nmSetFilter('all')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #1565c0;background:#1565c0;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">All</button>
+      <button id="nm-filter-matched" onclick="nmSetFilter('matched')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;">✅ Matched</button>
+      <button id="nm-filter-unmatched" onclick="nmSetFilter('unmatched')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;">⚠ Unmatched</button>
+    </div>
+    <input id="nm-search" oninput="nmRender()" placeholder="🔍 Search name…"
+      style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;height:30px;width:200px;">
+    <span style="flex:1"></span>
+    <span id="nm-count" style="font-size:11px;color:#6b7280;"></span>
+    <button onclick="nmLoad()" style="padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
+  </div>
+  <div id="nm-stats" style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"></div>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:#f8faff;">
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Excel / Sheet Name</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">TG Name</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Area</th>
+          <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #e5e7eb;color:#374151;">Status</th>
+          <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #e5e7eb;color:#374151;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="nm-tbody">
+        <tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="max-width:600px;">
     <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:16px;">⚙️ Collector Settings</div>
@@ -2873,43 +2899,7 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
 </div>
 
 <!-- ══ IMPORT PANEL ══ -->
-<!-- ══ NAMES MATCH ══ -->
-<div id="panel-names" class="panel">
-  <div style="padding:12px;">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-      <div style="font-size:15px;font-weight:700;color:#1e293b;">🔗 Name Matching</div>
-      <div style="display:flex;gap:6px;">
-        <button id="nm-filter-all" onclick="nmSetFilter('all')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #1565c0;background:#1565c0;color:#fff;font-size:11px;font-weight:700;cursor:pointer;">All</button>
-        <button id="nm-filter-matched" onclick="nmSetFilter('matched')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;">✅ Matched</button>
-        <button id="nm-filter-unmatched" onclick="nmSetFilter('unmatched')" style="padding:4px 12px;border-radius:6px;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:600;cursor:pointer;">⚠ Unmatched</button>
-      </div>
-      <input id="nm-search" oninput="nmRender()" placeholder="🔍 Search name…"
-        style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;height:30px;width:200px;">
-      <span style="flex:1"></span>
-      <span id="nm-count" style="font-size:11px;color:#6b7280;"></span>
-      <button onclick="nmLoad()" style="padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
-    </div>
-    <div id="nm-stats" style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"></div>
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead>
-          <tr style="background:#f8faff;">
-            <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Excel / Sheet Name</th>
-            <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">TG Name</th>
-            <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #e5e7eb;color:#374151;">Area</th>
-            <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #e5e7eb;color:#374151;">Status</th>
-            <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #e5e7eb;color:#374151;">Action</th>
-          </tr>
-        </thead>
-        <tbody id="nm-tbody">
-          <tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<div id="panel-import" class="panel">
+<div id="panel-import"<div id="panel-import" class="panel">
 <style>
 #panel-import .imp-tabs{display:flex;gap:0;border-bottom:2px solid #e8eeff;margin-bottom:14px}
 #panel-import .imp-tab{padding:8px 18px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:#6b7394;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit;transition:all .15s}
