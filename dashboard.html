@@ -942,10 +942,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <select id="ht-collector" onchange="htFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
       <option value="">All collectors</option>
     </select>
-    <select id="ht-status" onchange="htFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
-      <option value="">All status</option>
-      <option value="harvested">Harvested</option><option value="pending">Pending</option><option value="skipped">Skipped</option>
-    </select>
+
     <input type="text" id="ht-search" placeholder="🔍 Search vendo name, owner, area…" oninput="htFilter()"
       style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;width:220px;height:30px;">
     <span style="flex:1"></span>
@@ -997,7 +994,12 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- ══ TAB: PERFORMANCE ══ -->
 <div id="hvt-perf" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
-  <div id="perf-content" style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Click Performance tab to load</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+    <label style="font-size:12px;font-weight:600;color:var(--mu);">Month:</label>
+    <input type="month" id="perf-month" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;" onchange="perfLoad()">
+    <button onclick="document.getElementById('perf-month').value='';perfLoad()" style="padding:5px 10px;border:1px solid var(--bd);border-radius:7px;font-size:12px;cursor:pointer;background:#fff;font-family:inherit;">All time</button>
+  </div>
+  <div id="perf-content" style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Select a month or click All time</div>
 </div>
 
 <!-- ══ TAB: RECONCILIATION ══ -->
@@ -1028,6 +1030,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <span style="color:#b45309;font-weight:700;">WARN</span> = one threshold breached &nbsp;|&nbsp;
     <span style="color:#15803d;font-weight:700;">OK</span> = clean
   </div>
+  <div id="rc-collector-summary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:6px;margin-bottom:10px;"></div>
   <div id="rc-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
   <div style="background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden;">
     <div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 300px);">
@@ -1281,23 +1284,36 @@ async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // Direct DB — query harvests table
+  // Query ALL vendos + their last harvest data
   try {
     let offset = 0;
     while(true){
       const r = await fetch(
-        `${_SB}/rest/v1/harvests?select=id,vendo_id,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,status,photo_url,collector_note&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        `${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,last_harvest_date,status&status=eq.active&order=last_harvest_date.desc.nullslast&limit=1000&offset=${offset}`,
         {headers:{..._HDR,'Prefer':'count=none'}}
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
-      htAllRows.push(...batch.map(r=>({
-        ...r,
-        actual_collector: r.collector||null,
-        sheet_name: r.sheet_name||r.tg_name||r.vendo_name||'—',
-      })));
+      htAllRows.push(...batch);
       if(batch.length<1000) break;
       offset+=1000;
+    }
+    // Enrich with last harvest details
+    const vendoIds = htAllRows.map(v=>v.id).filter(Boolean);
+    for(let i=0;i<vendoIds.length;i+=200){
+      try{
+        const rh = await fetch(
+          `${_SB}/rest/v1/harvests?vendo_id=in.(${vendoIds.slice(i,i+200).join(',')})&select=vendo_id,collector,harvest_date,spawn_share,net_collectible,harvested_at&order=harvest_date.desc&limit=200`,
+          {headers:_HDR}
+        );
+        const hrows = await rh.json();
+        const hmap = {};
+        (hrows||[]).forEach(h=>{ if(!hmap[h.vendo_id]) hmap[h.vendo_id]=h; });
+        htAllRows = htAllRows.map(v=>{
+          const h = hmap[v.id]||{};
+          return {...v, actual_collector:h.collector||null, harvest_date:h.harvest_date||null, spawn_share:h.spawn_share||null, net_collectible:h.net_collectible||null, harvested_at:h.harvested_at||null};
+        });
+      }catch(e){}
     }
   } catch(e){
     console.warn('htLoad error',e);
@@ -1332,21 +1348,21 @@ function htFilter(){
     if(area && r.area!==area) return false;
     const actualCol = r.actual_collector||r.harvest_groups?.collector||'';
     if(col  && actualCol!==col) return false;
-    if(stat && r.status!==stat) return false;
+    // status filter not applicable for vendos table
     if(q){
       const hay = ((r.sheet_name||'')+(r.tg_name||'')+(r.owner_name||'')+(r.area||'')).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
   });
-  const done = rows.filter(r=>r.status==='harvested').length;
-  const pend = rows.filter(r=>r.status==='pending').length;
+  const done = rows.filter(r=>r.harvest_date).length;
+  const pend = rows.filter(r=>!r.harvest_date).length;
   const tCoins = rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
   const tNet   = rows.reduce((s,r)=>s+Number(r.net_collectible||0),0);
   document.getElementById('ht-stats').innerHTML = [
     ['stat-blue', rows.length.toLocaleString(), 'Vendos shown'],
-    ['stat-grn',  done.toLocaleString(), 'Done'],
-    ['stat-amb',  pend.toLocaleString(), 'Pending'],
+    ['stat-grn',  done.toLocaleString(), 'Harvested'],
+    ['stat-amb',  pend.toLocaleString(), 'Never harvested'],
   ].map(([cl,v,l])=>`<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;">
     <div style="font-size:20px;font-weight:700;color:${cl==='stat-grn'?'#15803d':cl==='stat-amb'?'#b45309':'#1565c0'};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
@@ -1360,11 +1376,11 @@ function htFilter(){
     const daysColor = days===null?'#9ca3af':days>30?'#dc2626':days>14?'#d97706':'#15803d';
     const daysStr = days===null?'—':`<span style="font-weight:700;color:${daysColor}">${days}d ago</span>`;
     const spawn = r.spawn_share!=null?'<span style="font-weight:700;color:#15803d;font-size:13px;">'+_php(r.spawn_share)+'</span>':'—';
-    return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
+    return `<tr data-id="${r.id||''}" data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="cursor:pointer" onclick="htShowVendoFromRow(this)">
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;">${r.sheet_name||r.tg_name||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col}</span></td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'<span style="color:#d1d5db">never</span>'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col||'—'}</span></td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${daysStr}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${spawn}</td>
     </tr>`;
@@ -1567,6 +1583,31 @@ function rcFilter(){
     if(flag&&r.flag!==flag) return false;
     return true;
   });
+  // Group summary by collector
+  const byCollector={};
+  rows.forEach(r=>{
+    const c=r.actual_collector||r.collector||'Unknown';
+    if(!byCollector[c]) byCollector[c]={count:0,alerts:0,warns:0,gap:0,spawn:0};
+    byCollector[c].count++;
+    if(r.flag==='alert') byCollector[c].alerts++;
+    if(r.flag==='warn') byCollector[c].warns++;
+    if(r.gap!=null) byCollector[c].gap+=r.gap;
+    byCollector[c].spawn+=parseFloat(r.spawn_share||0);
+  });
+  const collSummary=document.getElementById('rc-collector-summary');
+  if(collSummary){
+    collSummary.innerHTML=Object.entries(byCollector).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,s])=>{
+      const gapColor=s.gap<-500?'#dc2626':s.gap<0?'#d97706':'#15803d';
+      return `<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:10px;">
+        <span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">${name}</span>
+        <span style="font-size:11px;color:var(--mu);">${s.count} harvests</span>
+        ${s.alerts?`<span style="background:#fee2e2;color:#dc2626;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">${s.alerts} ALERT</span>`:''}
+        ${s.warns?`<span style="background:#fef9c3;color:#b45309;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;">${s.warns} WARN</span>`:''}
+        <span style="margin-left:auto;font-size:12px;font-weight:700;color:${gapColor};">gap ${s.gap>=0?'+':''}${_php(Math.abs(s.gap))}</span>
+        <span style="font-size:12px;font-weight:700;color:#15803d;">${_php(s.spawn)} spawn</span>
+      </div>`;
+    }).join('');
+  }
   const alerts=rows.filter(r=>r.flag==='alert').length;
   const warns =rows.filter(r=>r.flag==='warn').length;
   const oks   =rows.filter(r=>r.flag==='ok').length;
@@ -3373,6 +3414,84 @@ async function openVendoFromSearch(vendo, area) {
 
 // ══════════════════════════════════════════════════════════
 
+
+// ── VENDO POPUP — monthly harvest breakdown ───────────────────────
+async function htShowVendoFromRow(tr) {
+  const vendoId = tr.dataset.id;
+  const name = tr.dataset.tg;
+  const area = tr.dataset.area;
+  if (!vendoId && !name) return;
+
+  const modal = document.getElementById('hd-modal');
+  document.getElementById('hd-name').textContent = name||'Unknown';
+  document.getElementById('hd-sub').textContent = area||'';
+  document.getElementById('hd-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
+  modal.style.display = 'flex';
+
+  try {
+    // Fetch all harvests for this vendo
+    let url = vendoId
+      ? `${_SB}/rest/v1/harvests?vendo_id=eq.${vendoId}&select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100`
+      : `${_SB}/rest/v1/harvests?sheet_name=eq.${encodeURIComponent(name)}&select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100`;
+    const r = await fetch(url, {headers:_HDR});
+    const harvests = await r.json();
+
+    if (!harvests.length) {
+      document.getElementById('hd-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">No harvest records yet.</div>';
+      return;
+    }
+
+    // Group by month
+    const byMonth = {};
+    harvests.forEach(h => {
+      const m = (h.harvest_date||'').slice(0,7);
+      if (!byMonth[m]) byMonth[m] = [];
+      byMonth[m].push(h);
+    });
+
+    let html = '';
+    Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([month, rows]) => {
+      const mNet   = rows.reduce((s,r)=>s+parseFloat(r.net_collectible||0),0);
+      const mSpawn = rows.reduce((s,r)=>s+parseFloat(r.spawn_share||0),0);
+      const mOwner = rows.reduce((s,r)=>s+parseFloat(r.customer_share||0),0);
+      html += `<div style="margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:#1565c0;background:#f0f7ff;padding:6px 10px;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;">
+          <span>${month}</span>
+          <span style="color:#15803d;font-weight:700">${_php(mSpawn)} spawn</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead><tr style="background:#f9fafb;">
+            <th style="padding:5px 8px;text-align:left;color:var(--mu);">Date</th>
+            <th style="padding:5px 8px;text-align:right;color:var(--mu);">Net</th>
+            <th style="padding:5px 8px;text-align:right;color:#15803d;font-weight:700;">Spawn 75%</th>
+            <th style="padding:5px 8px;text-align:right;color:#7c3aed;">Owner 25%</th>
+            <th style="padding:5px 8px;text-align:left;color:var(--mu);">Collector</th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(h=>`<tr>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.harvest_date||'—'}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${_php(h.net_collectible)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700;color:#15803d;">${_php(h.spawn_share)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;color:#7c3aed;">${_php(h.customer_share)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 5px;border-radius:4px;font-size:10px;">${h.collector||'—'}</span></td>
+            </tr>`).join('')}
+            <tr style="background:#f0fdf4;font-weight:700;">
+              <td style="padding:5px 8px;">TOTAL (${rows.length})</td>
+              <td style="padding:5px 8px;text-align:right;">${_php(mNet)}</td>
+              <td style="padding:5px 8px;text-align:right;color:#15803d;">${_php(mSpawn)}</td>
+              <td style="padding:5px 8px;text-align:right;color:#7c3aed;">${_php(mOwner)}</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+    });
+    document.getElementById('hd-body').innerHTML = html;
+  } catch(e) {
+    document.getElementById('hd-body').innerHTML = '<div style="padding:20px;color:#dc2626;">Error: '+e.message+'</div>';
+  }
+}
+
 // ── HARVEST DETAIL POPUP ──────────────────────────────────────────
 function lfShowDetail(idx) {
   const item = lfItems[idx];
@@ -3413,10 +3532,10 @@ async function perfLoad() {
   const el = document.getElementById('perf-content');
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
   try {
-    const r = await fetch(
-      `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area&order=harvest_date.desc&limit=1000`,
-      {headers: _HDR}
-    );
+    const monthSel = document.getElementById('perf-month')?.value||'';
+    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area&order=harvest_date.desc&limit=1000`;
+    if(monthSel) perfUrl += `&harvest_date=gte.${monthSel}-01&harvest_date=lte.${monthSel}-31`;
+    const r = await fetch(perfUrl, {headers: _HDR});
     const rows = await r.json();
     if (!rows.length) { el.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);">No data.</div>'; return; }
 
