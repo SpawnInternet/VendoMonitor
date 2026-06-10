@@ -923,7 +923,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="hv-tabs" id="hv-main-tabs">
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
-      <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
+      <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates();rcRun()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -1018,12 +1018,12 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <select id="rc-collector" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
       <option value="">All collectors</option>
     </select>
-    <button onclick="rcRun()" style="padding:5px 14px;border-radius:7px;border:none;background:#1565c0;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;height:30px;">▶ Reconcile</button>
+
     <span style="flex:1"></span>
     <span id="rc-count" style="font-size:11px;color:var(--mu)"></span>
   </div>
   <div style="font-size:10px;color:var(--mu);margin-bottom:10px;">
-    Formula: <b>True Deficit = TG Income − (Coins Total + Saloy)</b> &nbsp;|&nbsp;
+    Formula: <b>True Deficit = TG Income − Coins Total</b> (coins_total includes saloy) · window = harvest_window_start → harvest_date &nbsp;|&nbsp;
     <span style="color:#dc2626;font-weight:700;">🔴 ALERT</span> &gt;₱500 &amp; &gt;20% &nbsp;
     <span style="color:#d97706;font-weight:700;">⚠ WARN</span> one threshold &nbsp;
     <span style="color:#15803d;font-weight:700;">✅ OK</span> clean
@@ -1575,12 +1575,30 @@ async function rcRun(){
   // Fetch TG income per tg_name
   const uniqueTg=[...new Set(Object.values(tgMap))];
   const tgIncomeMap={};
+  // Build per-tg window map using harvest_window_start
+  const tgWindowMap={};
+  harvestRows.forEach(r=>{
+    const tg=tgMap[r.id];
+    if(!tg) return;
+    const ws=r.harvest_window_start||from;
+    const we=r.harvest_date||to;
+    // Use earliest window start and latest date if same tg appears multiple times
+    if(!tgWindowMap[tg]||ws<tgWindowMap[tg].start) {
+      if(!tgWindowMap[tg]) tgWindowMap[tg]={start:ws,end:we};
+      else tgWindowMap[tg].start=ws;
+    }
+    if(we>tgWindowMap[tg].end) tgWindowMap[tg].end=we;
+  });
+
   for(const tg of uniqueTg){
+    const win=tgWindowMap[tg]||{start:from,end:to};
+    const wsISO=win.start+'T00:00:00+08:00';
+    const weISO=win.end+'T23:59:59+08:00';
     let total=0,off2=0;
     while(true){
       try{
         const rt=await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&created_at=gte.${fromISO}&created_at=lte.${toISO}&select=amount&limit=1000&offset=${off2}`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&created_at=gte.${wsISO}&created_at=lte.${weISO}&select=amount&limit=1000&offset=${off2}`,
           {headers:_HDR}
         );
         const td=await rt.json();
@@ -1599,10 +1617,9 @@ async function rcRun(){
     const tg=tgMap[row.id]||null;
     const tgInc=tg!=null?(tgIncomeMap[tg]||0):null;
     const coins=Number(row.coins_total||0);
-    const saloy=Number(row.coins_saloy||0);
-    const compareAmt=coins+saloy; // what TG should have recorded
-    const gap=tgInc!=null?tgInc-compareAmt:null; // positive=surplus TG, negative=deficit
-    const gapPct=(compareAmt>0&&gap!=null)?Math.abs(gap)/compareAmt*100:null;
+    // coins_total already includes saloy — compare directly with TG income
+    const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
+    const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
     const overAmt=gap!=null&&Math.abs(gap)>500;
     const overPct=gapPct!=null&&gapPct>20;
     const flag=gap==null?'nodata':overAmt&&overPct?'alert':overAmt||overPct?'warn':'ok';
@@ -1750,7 +1767,6 @@ function rcFilter(){
             <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Area</th>
             <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Date</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Coins</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Saloy</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">TG Income</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">True Gap</th>
             <th style="padding:5px 8px;text-align:center;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Flag</th>
@@ -1765,7 +1781,6 @@ function rcFilter(){
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.harvest_date||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtP(h.coins_total)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${Number(h.coins_saloy||0)>0?fmtP(h.coins_saloy):'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag)}</td>
