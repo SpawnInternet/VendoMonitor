@@ -14,7 +14,7 @@ async function harvestTabLoad() {
 
     // Fetch today's harvests live — include spawn_share and sheet_name for breakdown
     const r = await fetch(
-      `${SB_URL}/rest/v1/harvests?harvest_date=eq.${today}&select=collector,net_collectible,spawn_share,coins_total,sheet_name,tg_name,area&order=collector.asc`,
+      `${SB_URL}/rest/v1/harvests?harvest_date=eq.${today}&select=collector,net_collectible,spawn_share,coins_total,sheet_name,tg_name,area,tg_income,recon_gap,recon_flag&order=collector.asc`,
       { headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}` } }
     );
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -53,9 +53,11 @@ function harvestSummaryRenderLive(rows, totalPending, overdue) {
   _collectorRows = {};
   rows.forEach(r => {
     const c = r.collector || 'Unknown';
-    if (!byCollector[c]) byCollector[c] = { done: 0, spawn: 0 };
+    if (!byCollector[c]) byCollector[c] = { done: 0, spawn: 0, coins: 0, tg: 0 };
     byCollector[c].done  += 1;
     byCollector[c].spawn += parseFloat(r.spawn_share || 0);
+    byCollector[c].coins += parseFloat(r.coins_total || 0);
+    byCollector[c].tg    += parseFloat(r.tg_income || 0);
     if (!_collectorRows[c]) _collectorRows[c] = [];
     _collectorRows[c].push(r);
   });
@@ -82,7 +84,12 @@ function harvestSummaryRenderLive(rows, totalPending, overdue) {
           <div style="font-weight:600;font-size:13px;color:${color}">${name}</div>
           <div style="font-size:11px;font-weight:600;color:#16a34a">${fmtPeso(s.spawn)}</div>
         </div>
-        <div style="font-size:10px;color:var(--mu)">${s.done} harvested today</div>
+        <div style="font-size:10px;color:var(--mu);margin-bottom:4px">${s.done} harvested today</div>
+        <div style="display:flex;gap:6px;font-size:10px;flex-wrap:wrap;">
+          <span style="color:#6b7280;">Coins: <b style="color:#1565c0">${fmtPeso(s.coins)}</b></span>
+          ${s.tg>0 ? `<span style="color:#6b7280">TG: <b style="color:#15803d">${fmtPeso(s.tg)}</b></span>` : ''}
+          ${s.tg>0 ? (() => { const gap=s.tg-s.coins; const gc=gap>100?'#dc2626':gap<-100?'#b45309':'#15803d'; const label=gap>100?'Short':gap<-100?'Surplus':'OK'; return `<span style="color:${gc};font-weight:700">${label}</span>`; })() : ''}
+        </div>
       </div>`;
   }).join('');
 
