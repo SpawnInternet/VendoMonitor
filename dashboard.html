@@ -923,7 +923,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="hv-tabs" id="hv-main-tabs">
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
-      <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates();rcRun()">🔍 Reconciliation</button>
+      <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -1060,7 +1060,11 @@ function hvNewTab(id, btn){
   hvNewActiveTab = id;
   if(id==='htable' && htAllRows.length===0) htLoad();
   if(id==='livefeed') lfConnect();
-  if(id==='recon') rcInitDates();
+  if(id==='recon'){
+    rcInitDates();
+    const el=document.getElementById('rc-content');
+    if(el&&!el.dataset.loaded) el.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">Set date range and click 🔄 Refresh to load reconciliation data.</div>';
+  }
   if(id==='settings') csLoad();
 }
 
@@ -2080,7 +2084,7 @@ function rcFilter(){
 })();
 
 setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel-harvest')?.classList.contains('active')) htLoad(); }, 60000);
-setInterval(()=>{ if(hvNewActiveTab==='recon' && document.getElementById('panel-harvest')?.classList.contains('active')) rcRun(); }, 300000);
+// auto-refresh removed — user clicks Refresh manually
 </script>
 
 </div>
