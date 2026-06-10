@@ -1007,9 +1007,9 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <div id="hvt-recon" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
     <span style="font-size:11px;color:var(--mu);font-weight:500;">From</span>
-    <input type="date" id="rc-from" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
+    <input type="date" id="rc-from" onchange="rcRun()" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
     <span style="font-size:11px;color:var(--mu);font-weight:500;">To</span>
-    <input type="date" id="rc-to" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
+    <input type="date" id="rc-to" onchange="rcRun()" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
     <select id="rc-area" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
       <option value="">All areas</option>
       <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
@@ -1021,6 +1021,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
     <span style="flex:1"></span>
     <span id="rc-count" style="font-size:11px;color:var(--mu)"></span>
+    <button onclick="rcRunFresh(document.getElementById('rc-from').value,document.getElementById('rc-to').value)" style="padding:3px 10px;border:1px solid var(--bd);border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:var(--blue);font-family:inherit;">🔄 Refresh</button>
   </div>
   <div style="font-size:10px;color:var(--mu);margin-bottom:10px;">
     Formula: <b>True Deficit = TG Income − Coins Total</b> (coins_total includes saloy) · window = harvest_window_start → harvest_date &nbsp;|&nbsp;
@@ -1031,7 +1032,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <!-- hidden selects kept for compatibility -->
   <select id="rc-flag" style="display:none"><option value="">All flags</option></select>
   <div id="rc-content" style="display:flex;flex-direction:column;gap:12px;">
-    <div style="padding:30px;text-align:center;color:var(--mu);font-size:13px;">Set date range and click Reconcile</div>
+    <div style="padding:30px;text-align:center;color:var(--mu);font-size:13px;"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</div>
   </div>
 </div>
 
@@ -1547,7 +1548,6 @@ let rcAllRows = [];
 let rcDatesInited = false;
 
 function rcInitDates(){
-  if(rcDatesInited) return;
   const to = new Date(), from = new Date();
   from.setDate(from.getDate()-30);
   document.getElementById('rc-to').value   = to.toISOString().slice(0,10);
@@ -1568,7 +1568,7 @@ async function rcRun(){
   rcAllRows=[];
   // Try bucket cache first
   const _RC_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
-  try {
+  if (!rcBypassCache) try {
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
       const d = await rc.json();
@@ -1707,7 +1707,13 @@ async function rcRun(){
   } catch(e) { console.error('rcRun error',e); document.getElementById('rc-content').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>'; }
 }
 
-async function rcRunFresh(from,to,fromISO,toISO,el){ await rcRun(); }
+let rcBypassCache = false;
+async function rcRunFresh(from,to,fromISO,toISO,el){ 
+  rcBypassCache = true;
+  rcAllRows = [];
+  await rcRun();
+  rcBypassCache = false;
+}
 function rcFilter(){
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
@@ -1896,6 +1902,7 @@ function rcFilter(){
 })();
 
 setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel-harvest')?.classList.contains('active')) htLoad(); }, 60000);
+setInterval(()=>{ if(hvNewActiveTab==='recon' && document.getElementById('panel-harvest')?.classList.contains('active')) rcRun(); }, 300000);
 </script>
 
 </div>
