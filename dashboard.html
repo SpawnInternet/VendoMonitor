@@ -1308,7 +1308,15 @@ async function htLoad(){
         const age = Date.now() - new Date(d.generated_at||0).getTime();
         if (age > 10*60*1000) htRebuildCache();
         document.getElementById('ht-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
-        return; // fast path
+        // fast path — still need to populate collectors and render
+        const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
+        const htSel = document.getElementById('ht-collector');
+        const rcSel = document.getElementById('rc-collector');
+        if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
+        if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
+        htFilter();
+        if (age > 10*60*1000) htRebuildCache();
+        return;
       }
     }
   } catch(e) {}
