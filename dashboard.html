@@ -501,6 +501,20 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 
+<!-- ── HARVEST DETAIL MODAL ── -->
+<div id="hd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;width:90%;max-width:480px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3);">
+    <div style="background:#1565c0;color:#fff;padding:14px 16px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div id="hd-name" style="font-weight:700;font-size:15px;"></div>
+        <div id="hd-sub" style="font-size:11px;opacity:.8;margin-top:2px;"></div>
+      </div>
+      <button onclick="document.getElementById('hd-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div id="hd-body" style="padding:16px;"></div>
+  </div>
+</div>
+
 <!-- ══ VENDOS ══ -->
 <div id="panel-vendos" class="panel">
   <div id="view-vlist">
@@ -908,9 +922,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="hv-title">🌾 Harvest</div>
     <div class="hv-tabs" id="hv-main-tabs">
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos Table</button>
-      <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
+      <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
+      <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);perfLoad()">🏅 Performance</button>
     </div>
   </div>
 </div>
@@ -969,7 +984,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <div id="hvt-livefeed" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
     <div id="lf-dot" style="width:8px;height:8px;background:#16a34a;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;"></div>
-    <span style="font-size:12px;font-weight:600;color:#15803d;" id="lf-status">Live — updates as collectors submit</span>
+    <span style="font-size:12px;font-weight:600;color:#15803d;" id="lf-status">Harvest Records</span>
     <span style="flex:1"></span>
     <span id="lf-count" style="font-size:11px;color:var(--mu)"></span>
     <button onclick="lfItems=[];lfRender();" style="padding:5px 10px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;">Clear</button>
@@ -978,6 +993,11 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div id="lf-list" style="background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden;">
     <div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Waiting for submissions…</div>
   </div>
+</div>
+
+<!-- ══ TAB: PERFORMANCE ══ -->
+<div id="hvt-perf" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div id="perf-content" style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Click Performance tab to load</div>
 </div>
 
 <!-- ══ TAB: RECONCILIATION ══ -->
@@ -1048,7 +1068,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -1360,7 +1380,7 @@ let lfConnected = false;
 function lfRender(){
   const el = document.getElementById('lf-list');
   const stats = document.getElementById('lf-stats');
-  document.getElementById('lf-count').textContent = lfItems.length ? lfItems.length+' submissions today' : '';
+  document.getElementById('lf-count').textContent = lfItems.length ? lfItems.length+' records' : '';
   if(!lfItems.length){
     el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">Waiting for submissions…</div>';
     stats.innerHTML=''; return;
@@ -1369,7 +1389,7 @@ function lfRender(){
   const tN = lfItems.reduce((s,i)=>s+Number(i.net_collectible||0),0);
   const cols = [...new Set(lfItems.map(i=>i.collector).filter(Boolean))];
   stats.innerHTML = [
-    ['#1565c0', lfItems.length, 'Submitted today'],
+    ['#1565c0', lfItems.length, 'Total records'],
     ['#1565c0', _php(tC), 'Coins collected'],
     ['#15803d', _php(tN), 'Net today'],
     ['#1565c0', cols.length, 'Active collectors'],
@@ -1377,12 +1397,12 @@ function lfRender(){
     <div style="font-size:20px;font-weight:700;color:${c};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
   </div>`).join('');
-  el.innerHTML = lfItems.slice(0,500).map(item=>{
+  el.innerHTML = lfItems.slice(0,500).map((item,i)=>{
     const dateStr = item.harvest_date||item.harvested_at?.slice(0,10)||'';
-    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;">
-      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:1px;min-width:55px;">${dateStr}</div>
+    return `<div onclick="lfShowDetail(${i})" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:2px;min-width:60px;">${dateStr}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:12px;">${item.sheet_name||'Unknown'}</div>
+        <div style="font-weight:600;font-size:12px;">${item.sheet_name||item.tg_name||'Unknown'}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:1px;">
           <span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${item.collector||'—'}</span>
           &nbsp;${item.area||''}
@@ -1399,7 +1419,7 @@ function lfRender(){
 async function lfLoadToday(){
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvests?select=id,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,harvest_date,collector&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvests?select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -1571,7 +1591,7 @@ function rcFilter(){
   const ord={alert:0,warn:1,ok:2,nodata:3};
   rows.sort((a,b)=>ord[a.flag]-ord[b.flag]);
   tb.innerHTML=rows.slice(0,2000).map(r=>{
-    const bgRow=r.flag==='alert'?'background:#fef2f2;':r.flag==='warn'?'background:#fffbeb;':'';
+    const bgRow=r.flag==='alert'?'background:#fef2f2;':r.flag==='warn'?'background:#fffbeb;':r.flag==='nodata'?'background:#f9fafb;':'';
     const fp=r.flag==='alert'
       ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">ALERT</span>'
       :r.flag==='warn'
@@ -3352,6 +3372,112 @@ async function openVendoFromSearch(vendo, area) {
 }
 
 // ══════════════════════════════════════════════════════════
+
+// ── HARVEST DETAIL POPUP ──────────────────────────────────────────
+function lfShowDetail(idx) {
+  const item = lfItems[idx];
+  if (!item) return;
+  const modal = document.getElementById('hd-modal');
+  document.getElementById('hd-name').textContent = item.sheet_name||item.tg_name||'Unknown';
+  document.getElementById('hd-sub').textContent = (item.area||'') + (item.harvest_date?' · '+item.harvest_date:'') + (item.collector?' · '+item.collector:'');
+  const rows = [
+    ['Collector', item.collector||'—'],
+    ['Area', item.area||'—'],
+    ['Harvest Date', item.harvest_date||'—'],
+    ['TG Name', item.tg_name||'—'],
+    ['Coins Total', item.coins_total!=null?_php(item.coins_total):'—'],
+    ['Free', item.coins_free!=null?_php(item.coins_free):'—'],
+    ['Saloy', item.coins_saloy!=null?_php(item.coins_saloy):'—'],
+    ['Old', item.coins_old!=null?_php(item.coins_old):'—'],
+    ['Net Collectible', item.net_collectible!=null?'<b>'+_php(item.net_collectible)+'</b>':'—'],
+    ['Spawn Share (75%)', item.spawn_share!=null?'<b style="color:#15803d;font-size:15px;">'+_php(item.spawn_share)+'</b>':'—'],
+    ['Owner Share (25%)', item.customer_share!=null?_php(item.customer_share):'—'],
+    ['Note', item.collector_note||'—'],
+  ];
+  let body = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  rows.forEach(([l,v])=>{
+    body+=`<tr><td style="padding:7px 8px;color:#6b7280;font-size:11px;font-weight:500;width:140px;border-bottom:1px solid #f3f4f6;">${l}</td><td style="padding:7px 8px;border-bottom:1px solid #f3f4f6;">${v}</td></tr>`;
+  });
+  body+='</table>';
+  if(item.photo_url){
+    body+=`<div style="margin-top:12px;text-align:center;"><img src="${item.photo_url}" style="max-width:100%;border-radius:10px;border:1px solid #e5e7eb;" onerror="this.style.display='none'"></div>`;
+  }
+  document.getElementById('hd-body').innerHTML = body;
+  modal.style.display = 'flex';
+}
+// close modal on backdrop click
+document.getElementById('hd-modal').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+
+// ── COLLECTOR PERFORMANCE ─────────────────────────────────────────
+async function perfLoad() {
+  const el = document.getElementById('perf-content');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
+  try {
+    const r = await fetch(
+      `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area&order=harvest_date.desc&limit=1000`,
+      {headers: _HDR}
+    );
+    const rows = await r.json();
+    if (!rows.length) { el.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);">No data.</div>'; return; }
+
+    // Group by collector
+    const byCol = {};
+    rows.forEach(r => {
+      const c = r.collector||'Unknown';
+      if (!byCol[c]) byCol[c] = { count:0, net:0, spawn:0, coins:0, dates:new Set() };
+      byCol[c].count++;
+      byCol[c].net   += parseFloat(r.net_collectible||0);
+      byCol[c].spawn += parseFloat(r.spawn_share||0);
+      byCol[c].coins += parseFloat(r.coins_total||0);
+      byCol[c].dates.add(r.harvest_date);
+    });
+
+    // Sort by spawn share desc
+    const sorted = Object.entries(byCol).sort((a,b)=>b[1].spawn-a[1].spawn);
+    const medals = ['🥇','🥈','🥉'];
+
+    el.innerHTML = `
+      <div style="margin-bottom:12px;font-size:11px;color:var(--mu);">Based on all ${rows.length} harvest records · ranked by Spawn Share</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
+        ${sorted.map(([name,s],i)=>{
+          const days = s.dates.size;
+          const avg = days ? (s.spawn/s.count).toFixed(0) : 0;
+          const medal = medals[i]||'';
+          return `<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="font-size:22px;">${medal||'🏅'}</div>
+              <div>
+                <div style="font-weight:700;font-size:14px;">${name}</div>
+                <div style="font-size:10px;color:var(--mu);">${s.count} harvests · ${days} days active</div>
+              </div>
+              <div style="margin-left:auto;text-align:right;">
+                <div style="font-size:16px;font-weight:700;color:#15803d;">${_php(s.spawn)}</div>
+                <div style="font-size:9px;color:var(--mu);">total spawn</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;">
+              <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;">
+                <div style="font-weight:700;color:#15803d;">${_php(s.net)}</div>
+                <div style="color:var(--mu);font-size:9px;">Total net</div>
+              </div>
+              <div style="background:#eff6ff;border-radius:6px;padding:6px 8px;">
+                <div style="font-weight:700;color:#1565c0;">${_php(s.coins)}</div>
+                <div style="color:var(--mu);font-size:9px;">Total coins</div>
+              </div>
+              <div style="background:#f5f3ff;border-radius:6px;padding:6px 8px;">
+                <div style="font-weight:700;color:#7c3aed;">${_php(avg)}</div>
+                <div style="color:var(--mu);font-size:9px;">Avg per harvest</div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';
+  }
+}
+
+// ── FIX hvNewTab to include perf ─────────────────────────────────
 // DASHBOARD SEARCH
 // ══════════════════════════════════════════════════════════
 let _dashSearchTimer = null;
@@ -3419,7 +3545,7 @@ async function csLoad() {
   try {
     const [collectors, todayHarvests] = await Promise.all([
       sb('collectors', 'select=id,name,pin,area,active&order=name.asc', 100),
-      sb('harvest_group_items', 'select=status,net_collectible,harvest_groups!group_run_id(collector)&status=eq.harvested', 2000)
+      sb('harvests', 'select=collector,net_collectible,spawn_share,harvest_date&order=harvest_date.desc', 2000)
     ]);
     csRenderList(collectors);
     csRenderPerf(collectors, todayHarvests);
