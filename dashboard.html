@@ -925,7 +925,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
-      <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);perfLoad()">🏅 Performance</button>
+      <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
   </div>
 </div>
@@ -3567,10 +3567,16 @@ async function perfLoad() {
   try {
     const monthSel = document.getElementById('perf-month')?.value||'';
     let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area&order=harvest_date.desc&limit=1000`;
-    if(monthSel) perfUrl += `&harvest_date=gte.${monthSel}-01&harvest_date=lte.${monthSel}-31`;
+    if(monthSel){
+      // Get first and last day of selected month properly
+      const [yr,mo] = monthSel.split('-').map(Number);
+      const firstDay = `${yr}-${String(mo).padStart(2,'0')}-01`;
+      const lastDay = new Date(yr,mo,0).toISOString().slice(0,10); // last day of month
+      perfUrl += `&harvest_date=gte.${firstDay}&harvest_date=lte.${lastDay}`;
+    }
     const r = await fetch(perfUrl, {headers: _HDR});
     const rows = await r.json();
-    if (!rows.length) { el.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);">No data.</div>'; return; }
+    if (!Array.isArray(rows)||!rows.length) { el.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);">No data for this period.</div>'; return; }
 
     // Group by collector
     const byCol = {};
