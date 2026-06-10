@@ -2217,6 +2217,34 @@ async function loadProgress(){
       html += `</div>`;
     });
 
+    // Fetch recent PWA logs
+    const rL = await fetch(`${_SB}/rest/v1/pwa_logs?order=created_at.desc&limit=20`,{headers:_HDR});
+    const logs = await rL.json();
+    if(logs.length){
+      html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+        <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;">🔧 PWA Logs <span style="font-size:10px;font-weight:400;opacity:.7;">(last 20)</span></div>
+        <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <thead><tr style="background:#f8faff;">
+            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Time</th>
+            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Collector</th>
+            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Type</th>
+            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Message</th>
+          </tr></thead><tbody>`;
+      logs.forEach(log=>{
+        const tc=log.log_type==='error'?'#dc2626':log.log_type==='sync'?'#15803d':'#6b7280';
+        const bg=log.log_type==='error'?'#fef2f2':'';
+        const t=new Date(log.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        html+=`<tr style="background:${bg}">
+          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#6b7280;">${t}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;font-weight:600;">${log.collector||'—'}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;"><span style="color:${tc};font-weight:700;">${log.log_type}</span></td>
+          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;">${log.message||'—'}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+    }
+
     el.innerHTML = html;
     document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   } catch(e){
