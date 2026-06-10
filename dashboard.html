@@ -1498,6 +1498,51 @@ function lfConnect(){
 }
 
 /* ── RECONCILIATION ── */
+
+// ── RECONCILIATION CONFIRM / NOTES ───────────────────────────────
+async function rcConfirmRow(id, btn) {
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: {..._HDR, 'Prefer': 'return=minimal'},
+      body: JSON.stringify({ reconcile_status: 'ok' })
+    });
+    if (r.ok) {
+      const row = rcAllRows.find(r=>r.id===id);
+      if (row) row.reconcile_status = 'ok';
+      // Re-render just this cell
+      const cell = btn.closest('td');
+      cell.innerHTML = `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ Confirmed</span>
+        <button onclick="rcClearConfirm(${id})" style="margin-left:4px;border:none;background:none;cursor:pointer;font-size:10px;color:#9ca3af;">✕</button>
+        <div style="margin-top:4px;"><input id="rcnote-${id}" placeholder="Add note…" value=""
+          style="width:100%;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:10px;font-family:inherit;"
+          onblur="rcSaveNote(${id},this.value)"></div>`;
+    } else { btn.disabled=false; btn.textContent='✅ OK'; }
+  } catch(e) { btn.disabled=false; btn.textContent='✅ OK'; }
+}
+async function rcClearConfirm(id) {
+  await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
+    method: 'PATCH', headers: {..._HDR, 'Prefer': 'return=minimal'},
+    body: JSON.stringify({ reconcile_status: null })
+  });
+  const row = rcAllRows.find(r=>r.id===id);
+  if (row) row.reconcile_status = null;
+  rcFilter();
+}
+async function rcSaveNote(id, val) {
+  await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
+    method: 'PATCH', headers: {..._HDR, 'Prefer': 'return=minimal'},
+    body: JSON.stringify({ admin_notes: val||null })
+  });
+  const row = rcAllRows.find(r=>r.id===id);
+  if (row) row.admin_notes = val||null;
+  // Flash saved
+  const inp = document.getElementById('rcnote-'+id);
+  if (inp) { inp.style.borderColor='#16a34a'; setTimeout(()=>{ if(inp) inp.style.borderColor='#e5e7eb'; }, 1000); }
+}
+
 let rcAllRows = [];
 let rcDatesInited = false;
 
@@ -1519,14 +1564,31 @@ async function rcRun(){
   const fromISO = from+'T00:00:00+08:00';
   const toISO   = to  +'T23:59:59+08:00';
   const el = document.getElementById('rc-content');
-  el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading harvests…</div>';
   document.getElementById('rc-count').textContent='';
   rcAllRows=[];
+  // Try bucket cache first
+  const _RC_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
+  try {
+    const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
+    if (rc.ok) {
+      const d = await rc.json();
+      if (d.rows && d.rows.length && d.from === from && d.to === to) {
+        rcAllRows = d.rows;
+        const age = Math.round((Date.now() - new Date(d.generated_at||0).getTime())/60000);
+        document.getElementById('rc-count').textContent = rcAllRows.length + ' harvests · cache ' + age + 'min ago';
+        rcFilter();
+        // Refresh in background if older than 5min
+        if (age > 5) setTimeout(()=>rcRunFresh(from,to,fromISO,toISO,el), 100);
+        return;
+      }
+    }
+  } catch(e) {}
+  el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading harvests…</div>';
   let harvestRows=[], offset=0;
   while(true){
     const r=await fetch(
       `${_SB}/rest/v1/harvests?harvest_date=gte.${from}&harvest_date=lte.${to}`+
-      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code`+
+      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code,admin_notes,reconcile_status`+
       `&order=harvest_date.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
@@ -1632,10 +1694,20 @@ async function rcRun(){
     };
   });
 
+  // Write to bucket cache
+  try {
+    const cachePayload = JSON.stringify({ rows: rcAllRows, from, to, generated_at: new Date().toISOString() });
+    await fetch(`${_SB}/functions/v1/write-recon-cache`, {
+      method: 'POST',
+      headers: { 'x-cache-secret': 'spawn-cache-2026', apikey: _KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rows: rcAllRows, from, to })
+    });
+  } catch(e) {}
   rcFilter();
   } catch(e) { console.error('rcRun error',e); document.getElementById('rc-content').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>'; }
 }
 
+async function rcRunFresh(from,to,fromISO,toISO,el){ await rcRun(); }
 function rcFilter(){
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
@@ -1771,6 +1843,7 @@ function rcFilter(){
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">TG Income</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">True Gap</th>
             <th style="padding:5px 8px;text-align:center;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Flag</th>
+            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Confirm / Note</th>
           </tr></thead>
           <tbody>
           ${rd.rows.map(h=>{
@@ -1786,6 +1859,17 @@ function rcFilter(){
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;min-width:180px;">
+                ${h.reconcile_status==='ok'
+                  ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ Confirmed</span>
+                     <button onclick="rcClearConfirm(${h.id})" style="margin-left:4px;border:none;background:none;cursor:pointer;font-size:10px;color:#9ca3af;">✕</button>`
+                  : `<button onclick="rcConfirmRow(${h.id},this)" style="padding:2px 8px;border-radius:6px;border:1px solid #16a34a;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:600;cursor:pointer;">✅ OK</button>`}
+                <div style="margin-top:4px;">
+                  <input id="rcnote-${h.id}" placeholder="Add note…" value="${(h.admin_notes||'').replace(/"/g,'&quot;')}"
+                    style="width:100%;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:10px;font-family:inherit;"
+                    onblur="rcSaveNote(${h.id},this.value)">
+                </div>
+              </td>
             </tr>`;
           }).join('')}
           </tbody>
