@@ -924,6 +924,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
+      <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
+      <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -2132,8 +2134,119 @@ function rcFilter(){
 
 setInterval(()=>{ if(hvNewActiveTab==='htable' && document.getElementById('panel-harvest')?.classList.contains('active')) htLoad(); }, 60000);
 // auto-refresh removed — user clicks Refresh manually
+
+async function loadProgress(){
+  const el = document.getElementById('progress-content');
+  el.innerHTML = '<div style="padding:30px;text-align:center;color:#6b7280;">Loading…</div>';
+  document.getElementById('progress-updated').textContent = '';
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    // Get all active + recently completed group runs today
+    const rG = await fetch(`${_SB}/rest/v1/harvest_groups?started_at=gte.${today}T00:00:00+08:00&select=id,group_id,collector,area,status,started_at,harvested_count,skipped_count,total_net&order=started_at.desc&limit=20`,{headers:_HDR});
+    const runs = await rG.json();
+    if(!runs.length){
+      el.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">No harvest sessions today yet.</div>';
+      return;
+    }
+    // Get items for all runs
+    const runIds = runs.map(r=>r.id);
+    const rI = await fetch(`${_SB}/rest/v1/harvest_group_items?group_run_id=in.(${runIds.join(',')})&select=group_run_id,vendo_id,sheet_name,tg_name,area,status,coins_total,spawn_share,harvested_at,collector_note&order=id.asc&limit=2000`,{headers:_HDR});
+    const items = await rI.json();
+    // Group items by run
+    const itemsByRun = {};
+    items.forEach(i=>{ if(!itemsByRun[i.group_run_id]) itemsByRun[i.group_run_id]=[]; itemsByRun[i.group_run_id].push(i); });
+
+    let html = '';
+    runs.forEach(run => {
+      const ritems = itemsByRun[run.id]||[];
+      const done = ritems.filter(i=>i.status==='harvested');
+      const pending = ritems.filter(i=>i.status!=='harvested'&&i.status!=='skipped');
+      const skipped = ritems.filter(i=>i.status==='skipped');
+      const total = ritems.length;
+      const pct = total>0?Math.round(done.length/total*100):0;
+      const isActive = run.status==='active';
+      const statusColor = isActive?'#15803d':'#6b7280';
+      const statusBg = isActive?'#dcfce7':'#f3f4f6';
+      const statusLabel = isActive?'🟢 Active':'✅ Completed';
+
+      html += `<div style="background:#fff;border:1.5px solid ${isActive?'#86efac':'#e5e7eb'};border-radius:12px;margin-bottom:14px;overflow:hidden;">
+        <!-- Header -->
+        <div style="background:${isActive?'linear-gradient(135deg,#15803d,#16a34a)':'linear-gradient(135deg,#475569,#64748b)'};color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:15px;font-weight:700;">👤 ${run.collector||'Unknown'}</div>
+          <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:8px;font-size:11px;">${statusLabel}</span>
+          <span style="font-size:11px;opacity:.8;">${run.group_id||run.area||''}</span>
+          <div style="margin-left:auto;display:flex;gap:14px;text-align:right;">
+            <div><div style="font-size:10px;opacity:.7;">Done</div><div style="font-size:14px;font-weight:700;">${done.length}/${total}</div></div>
+            <div><div style="font-size:10px;opacity:.7;">Spawn</div><div style="font-size:14px;font-weight:700;">₱${Math.round(done.reduce((s,i)=>s+(parseFloat(i.spawn_share)||0),0)).toLocaleString()}</div></div>
+          </div>
+        </div>
+        <!-- Progress bar -->
+        <div style="height:6px;background:#e5e7eb;">
+          <div style="height:6px;background:${isActive?'#16a34a':'#64748b'};width:${pct}%;transition:width .3s;"></div>
+        </div>
+        <!-- Stats row -->
+        <div style="padding:8px 14px;display:flex;gap:16px;font-size:11px;color:#6b7280;background:#f8faff;border-bottom:1px solid #e5e7eb;">
+          <span>✅ Done: <b style="color:#15803d">${done.length}</b></span>
+          <span>⏳ Pending: <b style="color:#d97706">${pending.length}</b></span>
+          <span>⏭ Skipped: <b style="color:#6b7280">${skipped.length}</b></span>
+          <span style="margin-left:auto;">${new Date(run.started_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</span>
+        </div>`;
+
+      // Pending vendos
+      if(pending.length){
+        html += `<div style="padding:8px 12px;">
+          <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:6px;text-transform:uppercase;">⏳ Pending (${pending.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
+        pending.forEach(i=>{
+          html += `<span style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:3px 8px;font-size:11px;color:#92400e;">${i.sheet_name||i.tg_name||'?'}</span>`;
+        });
+        html += `</div></div>`;
+      }
+
+      // Done vendos
+      if(done.length){
+        html += `<div style="padding:8px 12px;border-top:1px solid #f3f4f6;">
+          <div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;text-transform:uppercase;">✅ Done (${done.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
+        done.forEach(i=>{
+          html += `<span style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;font-size:11px;color:#15803d;" title="₱${Math.round(i.spawn_share||0)}">${i.sheet_name||i.tg_name||'?'} <span style="opacity:.6;">₱${Math.round(i.spawn_share||0)}</span></span>`;
+        });
+        html += `</div></div>`;
+      }
+
+      html += `</div>`;
+    });
+
+    el.innerHTML = html;
+    document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+  } catch(e){
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;
+  }
+}
+
+// Auto-refresh progress every 30 seconds when tab is active
+setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
+
 </script>
 
+</div>
+
+<div id="hvt-progress" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;">📱 Live Harvest Progress</div>
+    <button onclick="loadProgress()" style="padding:4px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;height:30px;">↺ Refresh</button>
+    <span id="progress-updated" style="font-size:11px;color:#6b7280;"></span>
+  </div>
+  <div id="progress-content"><div style="padding:30px;text-align:center;color:#6b7280;">Loading…</div></div>
+</div>
+
+<div id="hvt-progress" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;">📱 Live Harvest Progress</div>
+    <button onclick="loadProgress()" style="padding:4px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;height:30px;">↺ Refresh</button>
+    <span id="progress-updated" style="font-size:11px;color:#6b7280;"></span>
+  </div>
+  <div id="progress-content"><div style="padding:30px;text-align:center;color:#6b7280;">Loading…</div></div>
 </div>
 
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
