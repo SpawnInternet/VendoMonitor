@@ -1261,8 +1261,8 @@ async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // 3. Fallback: direct DB — query harvests table for actual collector
-  if(!htAllRows.length){
+  // Direct DB — query harvests table
+  try {
     let offset = 0;
     while(true){
       const r = await fetch(
@@ -1271,7 +1271,6 @@ async function htLoad(){
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
-      // Normalize: map harvests fields so htFilter/htRender work
       htAllRows.push(...batch.map(r=>({
         ...r,
         actual_collector: r.collector||null,
@@ -1280,6 +1279,7 @@ async function htLoad(){
       if(batch.length<1000) break;
       offset+=1000;
     }
+  } catch(e){ console.warn('htLoad error',e); }
   const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
   const htSel = document.getElementById('ht-collector');
   const rcSel = document.getElementById('rc-collector');
