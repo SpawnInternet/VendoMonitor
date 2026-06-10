@@ -1532,6 +1532,7 @@ function rcInitDates(){
 }
 
 async function rcRun(){
+  try {
   const from = document.getElementById('rc-from').value;
   const to   = document.getElementById('rc-to').value;
   if(!from||!to){ alert('Please select a date range'); return; }
@@ -1602,6 +1603,7 @@ async function rcRun(){
     return {...row,collector:row.actual_collector||row.collector||'—',tg_name:tg||row.tg_name||null,tg_income:tgInc,gap,gap_pct:gapPct,flag};
   });
   rcFilter();
+  } catch(e) { console.error('rcRun error',e); document.getElementById('rc-tbody').innerHTML='<tr><td colspan="8" style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</td></tr>'; }
 }
 
 function rcFilter(){
@@ -3556,7 +3558,7 @@ function lfShowDetail(idx) {
   modal.style.display = 'flex';
 }
 // close modal on backdrop click
-document.getElementById('hd-modal').addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
+document.getElementById('hd-modal')?.addEventListener('click', function(e){ if(e.target===this) this.style.display='none'; });
 
 // ── COLLECTOR PERFORMANCE ─────────────────────────────────────────
 async function perfLoad() {
