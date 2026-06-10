@@ -1634,28 +1634,18 @@ async function rcRun(){
   }
   harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.sheet_name&&sheetTgMap[r.sheet_name]) tgMap[r.id]=sheetTgMap[r.sheet_name]; });
 
-  // Fetch TG income per tg_name
-  const uniqueTg=[...new Set(Object.values(tgMap))];
-  const tgIncomeMap={};
-  // Build per-tg window map using harvest_window_start
-  const tgWindowMap={};
-  harvestRows.forEach(r=>{
-    const tg=tgMap[r.id];
-    if(!tg) return;
-    const ws=r.harvest_window_start||from;
-    const we=r.harvest_date||to;
-    // Use earliest window start and latest date if same tg appears multiple times
-    if(!tgWindowMap[tg]||ws<tgWindowMap[tg].start) {
-      if(!tgWindowMap[tg]) tgWindowMap[tg]={start:ws,end:we};
-      else tgWindowMap[tg].start=ws;
-    }
-    if(we>tgWindowMap[tg].end) tgWindowMap[tg].end=we;
-  });
-
-  for(const tg of uniqueTg){
-    const win=tgWindowMap[tg]||{start:from,end:to};
-    const wsISO=win.start+'T00:00:00+08:00';
-    const weISO=win.end+'T23:59:59+08:00';
+  // Fetch TG income per harvest row using each row's own window
+  // Key: "tg_name|window_start|harvest_date" to dedupe identical windows
+  const tgRowIncomeMap={};
+  for(const row of harvestRows){
+    const tg=tgMap[row.id];
+    if(!tg) continue;
+    const ws=row.harvest_window_start||from;
+    const we=row.harvest_date||to;
+    const key=tg+'|'+ws+'|'+we;
+    if(key in tgRowIncomeMap) continue; // already fetched this exact window
+    const wsISO=ws+'T00:00:00+08:00';
+    const weISO=we+'T23:59:59+08:00';
     let total=0,off2=0;
     while(true){
       try{
@@ -1670,14 +1660,18 @@ async function rcRun(){
         off2+=1000;
       }catch(e){break;}
     }
-    tgIncomeMap[tg]=total;
+    tgRowIncomeMap[key]=total;
   }
+  const tgIncomeMap={}; // legacy compat placeholder
 
   // Build final rows with true deficit formula
   // True deficit = TG income - (coins_total + saloy)
   rcAllRows=harvestRows.map(row=>{
     const tg=tgMap[row.id]||null;
-    const tgInc=tg!=null?(tgIncomeMap[tg]||0):null;
+    const ws=row.harvest_window_start||from;
+    const we=row.harvest_date||to;
+    const rowKey=tg ? tg+'|'+ws+'|'+we : null;
+    const tgInc=rowKey!=null?(tgRowIncomeMap[rowKey]??null):null;
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
     const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
