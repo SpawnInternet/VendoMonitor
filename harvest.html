@@ -1083,6 +1083,7 @@ async function startGroup(groupId){
 
   } catch(e){
     console.error('startGroup error:', e);
+    pwLog('error','startGroup failed',{group:groupId,error:e.message});
     listEl.innerHTML='';
     const div=document.createElement('div');
     div.className='loading';
@@ -2182,7 +2183,10 @@ async function flushQueue(){
         }
       }
       syncLog=syncLog.map(s=>s.ts===q.ts?{...s,status:'synced'}:s);
-    } catch { remaining.push(q); }
+    } catch(e) {
+      remaining.push(q);
+      pwLog('error', 'Sync failed: '+q.type, {item_id:q.itemId, error:e.message});
+    }
   }
   for(const [runId,delta] of Object.entries(groupUpdates)){
     try {
@@ -2202,12 +2206,33 @@ async function flushQueue(){
   offlineQueue=remaining;
   localStorage.setItem('hq',JSON.stringify(offlineQueue));
   localStorage.setItem('hs',JSON.stringify(syncLog));
-  if(!remaining.length) toast('✅ All synced!',3000);
+  if(!remaining.length){
+    toast('✅ All synced!',3000);
+    pwLog('sync','All items synced',{count:offlineQueue.length+remaining.length});
+  }
 }
 
 function clearResume(){
   localStorage.removeItem('harvest_session');
   document.getElementById('resume-banner').style.display='none';
+}
+
+// ── PWA LOGGER — writes to pwa_logs table ─────────────────────────
+async function pwLog(type, message, details){
+  try {
+    const device = navigator.userAgent.slice(0,80);
+    await fetch(`${SB}/rest/v1/pwa_logs`, {
+      method:'POST',
+      headers:{...HDR,'Prefer':'return=minimal'},
+      body:JSON.stringify({
+        collector: selectedCollector||'unknown',
+        device,
+        log_type: type,
+        message,
+        details: details||null
+      })
+    });
+  } catch(e){} // never block on logging
 }
 
 // ── HARVEST HISTORY ───────────────────────────────────────────────
