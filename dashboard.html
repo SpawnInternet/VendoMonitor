@@ -1279,17 +1279,27 @@ async function htLoad(){
       if(batch.length<1000) break;
       offset+=1000;
     }
-  } catch(e){ console.warn('htLoad error',e); }
+  } catch(e){
+    console.warn('htLoad error',e);
+    document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#dc2626;">Error loading: '+e.message+'</td></tr>';
+    return;
+  }
+  if(!htAllRows.length){
+    document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--mu);">No harvest records found.</td></tr>';
+    return;
+  }
   const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
   const htSel = document.getElementById('ht-collector');
   const rcSel = document.getElementById('rc-collector');
-  const prev = htSel.value;
-  htSel.innerHTML = '<option value="">All collectors</option>';
-  rcSel.innerHTML = '<option value="">All collectors</option>';
-  collectors.forEach(c=>{
-    htSel.innerHTML += `<option${c===prev?' selected':''}>${c}</option>`;
-    rcSel.innerHTML += `<option>${c}</option>`;
-  });
+  if(htSel){
+    const prev = htSel.value;
+    htSel.innerHTML = '<option value="">All collectors</option>';
+    collectors.forEach(c=>{ htSel.innerHTML += `<option${c===prev?' selected':''}>${c}</option>`; });
+  }
+  if(rcSel){
+    rcSel.innerHTML = '<option value="">All collectors</option>';
+    collectors.forEach(c=>{ rcSel.innerHTML += `<option>${c}</option>`; });
+  }
   htFilter();
 }
 
