@@ -1388,7 +1388,7 @@ function htFilter(){
     const daysStr = days===null?'—':`<span style="font-weight:700;color:${daysColor}">${days}d ago</span>`;
     const spawn = r.spawn_share!=null?'<span style="font-weight:700;color:#15803d;font-size:13px;">'+_php(r.spawn_share)+'</span>':'—';
     return `<tr data-id="${r.id||''}" data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="cursor:pointer" onclick="htShowVendoFromRow(this)">
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;">${r.sheet_name||r.tg_name||'—'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;">${r.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:10px;">unmatched</span>`}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'<span style="color:#d1d5db">never</span>'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col||'—'}</span></td>
@@ -1429,7 +1429,7 @@ function lfRender(){
     return `<div onclick="lfShowDetail(${i})" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
       <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:2px;min-width:60px;">${dateStr}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;font-size:12px;">${item.sheet_name||item.tg_name||'Unknown'}</div>
+        <div style="font-weight:600;font-size:12px;">${item.sheet_name||`<span style="color:#9ca3af;font-style:italic;">unmatched</span>`}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:1px;">
           <span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${item.collector||'—'}</span>
           &nbsp;${item.area||''}
@@ -1857,7 +1857,7 @@ function rcFilter(){
             const tgStr=h.tg_income!=null?fmtP(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>';
             const noTgBadge=!h.tg_name?'<span style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 4px;border-radius:3px;margin-left:4px;">no TG</span>':'';
             return `<tr style="${rowBg}">
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.sheet_name||h.tg_name||'—'}${noTgBadge}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${h.harvest_window_start||'—'} → ${h.harvest_date||'—'}</td>
@@ -3667,7 +3667,7 @@ function lfShowDetail(idx) {
   const item = lfItems[idx];
   if (!item) return;
   const modal = document.getElementById('hd-modal');
-  document.getElementById('hd-name').textContent = item.sheet_name||item.tg_name||'Unknown';
+  document.getElementById('hd-name').textContent = item.sheet_name||'(unmatched)';
   document.getElementById('hd-sub').textContent = (item.area||'') + (item.harvest_date?' · '+item.harvest_date:'') + (item.collector?' · '+item.collector:'');
   const rows = [
     ['Collector', item.collector||'—'],
