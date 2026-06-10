@@ -953,8 +953,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 
 
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Status</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Harvested at</th>
+            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Days Since</th>
+            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Spawn Share</th>
           </tr>
         </thead>
         <tbody id="ht-tbody">
@@ -1266,7 +1266,7 @@ async function htLoad(){
     let offset = 0;
     while(true){
       const r = await fetch(
-        `${_SB}/rest/v1/harvests?select=id,vendo_id,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_date,status,photo_url,collector_note&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        `${_SB}/rest/v1/harvests?select=id,vendo_id,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,status,photo_url,collector_note&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
         {headers:{..._HDR,'Prefer':'count=none'}}
       );
       const batch = await r.json();
@@ -1336,15 +1336,17 @@ function htFilter(){
   if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
   tb.innerHTML = rows.slice(0,2000).map(r=>{
     const col = r.collector||r.actual_collector||'—';
-    const st  = '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">harvested</span>';
+    const days = r.harvest_date ? Math.floor((Date.now()-new Date(r.harvest_date))/86400000) : null;
+    const daysColor = days===null?'#9ca3af':days>30?'#dc2626':days>14?'#d97706':'#15803d';
+    const daysStr = days===null?'—':`<span style="font-weight:700;color:${daysColor}">${days}d ago</span>`;
+    const spawn = r.spawn_share!=null?'<span style="font-weight:700;color:#15803d;font-size:13px;">'+_php(r.spawn_share)+'</span>':'—';
     return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;">${r.sheet_name||r.tg_name||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col}</span></td>
-
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${st}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;color:var(--mu);">${_fmt(r.harvested_at)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${daysStr}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${spawn}</td>
     </tr>`;
   }).join('');
   if(rows.length>2000) tb.innerHTML+=`<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
@@ -1375,25 +1377,29 @@ function lfRender(){
     <div style="font-size:20px;font-weight:700;color:${c};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
   </div>`).join('');
-  el.innerHTML = lfItems.slice(0,200).map(item=>`
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;">
-      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:1px;min-width:44px;">${_fmtT(item.harvested_at)}</div>
+  el.innerHTML = lfItems.slice(0,500).map(item=>{
+    const dateStr = item.harvest_date||item.harvested_at?.slice(0,10)||'';
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;">
+      <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:1px;min-width:55px;">${dateStr}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:600;font-size:12px;">${item.sheet_name||'Unknown'}</div>
         <div style="font-size:11px;color:var(--mu);margin-top:1px;">
           <span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${item.collector||'—'}</span>
-          &nbsp;${item.area||''} ${item.group_label?'· '+item.group_label:''}
+          &nbsp;${item.area||''}
         </div>
       </div>
-      ${item.coins_total!=null?`<div style="font-size:12px;font-weight:700;color:#15803d;white-space:nowrap;">${_php(item.coins_total)}</div>`:''}
-    </div>`).join('');
+      <div style="text-align:right;white-space:nowrap;">
+        ${item.spawn_share!=null?`<div style="font-size:13px;font-weight:700;color:#15803d;">${_php(item.spawn_share)}</div>`:''}
+        ${item.net_collectible!=null?`<div style="font-size:10px;color:var(--mu);">net ${_php(item.net_collectible)}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function lfLoadToday(){
-  const today = new Date(); today.setHours(0,0,0,0);
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvests?harvest_date=eq.${today.toISOString().slice(0,10)}&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,collector&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvests?select=id,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,harvest_date,collector&order=harvested_at.desc&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -1470,14 +1476,14 @@ async function rcRun(){
   let harvestRows=[], offset=0;
   while(true){
     const r=await fetch(
-      `${_SB}/rest/v1/harvest_group_items?status=eq.harvested&harvested_at=gte.${fromISO}&harvested_at=lte.${toISO}`+
-      `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)`+
-      `&order=harvested_at.desc&limit=1000&offset=${offset}`,
+      `${_SB}/rest/v1/harvests?harvest_date=gte.${from}&harvest_date=lte.${to}`+
+      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,spawn_share,harvested_at,harvest_date,collector`+
+      `&order=harvest_date.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
     const batch=await r.json();
     if(!Array.isArray(batch)||!batch.length) break;
-    harvestRows.push(...batch);
+    harvestRows.push(...batch.map(r=>({...r, actual_collector:r.collector})));
     if(batch.length<1000) break;
     offset+=1000;
   }
@@ -1486,18 +1492,19 @@ async function rcRun(){
     return;
   }
   document.getElementById('rc-tbody').innerHTML=`<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income for ${harvestRows.length} harvests…</td></tr>`;
-  // Get tg_names
-  const vendoIds=[...new Set(harvestRows.map(r=>r.vendo_id).filter(Boolean))];
+  // Build tg map from harvests.tg_name directly (already there), fall back to vendos lookup
   const tgMap={};
-  for(let i=0;i<vendoIds.length;i+=200){
+  harvestRows.forEach(r=>{ if(r.tg_name) tgMap[r.vendo_id||r.id+'_h']=r.tg_name; });
+  const vendoIdsNoTg=[...new Set(harvestRows.filter(r=>!r.tg_name&&r.vendo_id).map(r=>r.vendo_id))];
+  for(let i=0;i<vendoIdsNoTg.length;i+=200){
     try{
-      const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,tg_name&limit=200`,{headers:_HDR});
+      const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${vendoIdsNoTg.slice(i,i+200).join(',')})&select=id,tg_name&limit=200`,{headers:_HDR});
       const vd=await rv.json();
       vd.forEach(v=>{ if(v.tg_name) tgMap[v.id]=v.tg_name; });
     }catch(e){}
   }
   // Fetch TG income per unique tg_name
-  const uniqueTg=[...new Set(Object.values(tgMap))];
+  const uniqueTg=[...new Set(harvestRows.map(r=>r.tg_name||tgMap[r.vendo_id]).filter(Boolean))];
   const tgIncomeMap={};
   for(const tg of uniqueTg){
     let total=0,off2=0;
@@ -1517,7 +1524,7 @@ async function rcRun(){
     tgIncomeMap[tg]=total;
   }
   rcAllRows=harvestRows.map(row=>{
-    const tg=tgMap[row.vendo_id]||null;
+    const tg=row.tg_name||tgMap[row.vendo_id]||null;
     const tgInc=tg!=null?(tgIncomeMap[tg]||0):null;
     const coins=Number(row.coins_total||0);
     const gap=tgInc!=null?coins-tgInc:null;
@@ -1525,7 +1532,7 @@ async function rcRun(){
     const overAmt=gap!=null&&Math.abs(gap)>500;
     const overPct=gapPct!=null&&gapPct>20;
     const flag=gap==null?'nodata':overAmt&&overPct?'alert':overAmt||overPct?'warn':'ok';
-    return {...row,collector:row.harvest_groups?.collector||'—',group_label:row.harvest_groups?.group_label||'—',tg_name:tg,tg_income:tgInc,gap,gap_pct:gapPct,flag};
+    return {...row,collector:row.actual_collector||row.collector||'—',tg_name:tg||row.tg_name||null,tg_income:tgInc,gap,gap_pct:gapPct,flag};
   });
   rcFilter();
 }
@@ -1536,7 +1543,7 @@ function rcFilter(){
   const flag=document.getElementById('rc-flag').value;
   const rows=rcAllRows.filter(r=>{
     if(area&&r.area!==area) return false;
-    if(col&&r.collector!==col) return false;
+    if(col&&(r.actual_collector||r.collector)!==col) return false;
     if(flag&&r.flag!==flag) return false;
     return true;
   });
