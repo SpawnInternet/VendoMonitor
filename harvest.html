@@ -719,14 +719,35 @@ window.addEventListener('DOMContentLoaded',()=>{
     localStorage.setItem('harvest_app_version', APP_VERSION);
   }
 
-  // Show resume banner only — never auto-start
+  // Show resume banner — check localStorage first, then DB for cross-device resume
   const saved = JSON.parse(localStorage.getItem('harvest_session')||'null');
-  if(saved && saved.collector && saved.groupRunId && saved.groupLabel){
+  if(saved && saved.collector && saved.groupId && saved.groupLabel){
     document.getElementById('resume-banner').style.display='';
     document.getElementById('resume-collector-name').textContent=saved.collector;
     document.getElementById('resume-group-name').textContent=saved.groupLabel||'—';
   } else {
     localStorage.removeItem('harvest_session');
+    // Check DB for any active group run today (cross-device resume)
+    (async()=>{try {
+      const today = new Date().toISOString().slice(0,10);
+      const r = await fetch(`${SB}/rest/v1/harvest_groups?status=eq.active&started_at=gte.${today}T00:00:00+08:00&select=id,group_id,collector,area,started_at,harvested_count&order=started_at.desc&limit=5`,{headers:HDR});
+      const runs = await r.json();
+      if(Array.isArray(runs) && runs.length){
+        const run = runs[0];
+        const grps = await loadPermGroups();
+        const grp = (grps||[]).find(g=>g.id===run.group_id||g.group_id===run.group_id);
+        const label = grp?(grp.group_id||grp.area||'Group'):'Group';
+        localStorage.setItem('harvest_session', JSON.stringify({
+          collector: run.collector||'',
+          groupId: run.group_id||run.id,
+          groupRunId: run.id,
+          groupLabel: `${label} (${run.harvested_count||0} done)`
+        }));
+        document.getElementById('resume-banner').style.display='';
+        document.getElementById('resume-collector-name').textContent=run.collector||'Collector';
+        document.getElementById('resume-group-name').textContent=`${label} · ${run.harvested_count||0} harvested`;
+      }
+    } catch(e){}})();
   }
 });
 
