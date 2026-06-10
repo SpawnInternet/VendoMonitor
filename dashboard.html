@@ -1363,6 +1363,7 @@ async function vpQuickLink(tgName){
   }catch(e){toast('Error: '+e.message);}
 }
 
+let _tgSearchResults = [];
 async function vpTgSearch2(q){
   const el=document.getElementById('vn-tg-results');
   if(!el)return;
@@ -1373,15 +1374,23 @@ async function vpTgSearch2(q){
   try{
     const r=await fetch(`${SB_URL}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
       {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
-    const rows=await r.json();
-    if(!rows.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
-    el.innerHTML=rows.map(v=>`<div onclick="document.getElementById('vn-tg').value=${JSON.stringify(v.tg_name)};document.getElementById('vn-tg-results').style.display='none';"
+    _tgSearchResults=await r.json();
+    if(!_tgSearchResults.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
+    el.innerHTML=_tgSearchResults.map((v,i)=>`<div onclick="vpTgPick(${i})"
       style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;"
       onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
       <div style="font-weight:600">${v.tg_name}</div>
       <div style="font-size:10px;color:var(--mu)">${v.sheet_name||''} · ${v.area||''}</div>
     </div>`).join('');
   }catch(e){el.innerHTML='<div style="padding:8px 10px;color:#dc2626;font-size:12px;">Error</div>';}
+}
+function vpTgPick(i){
+  const v=_tgSearchResults[i];
+  if(!v)return;
+  const inp=document.getElementById('vn-tg');
+  if(inp) inp.value=v.tg_name;
+  const el=document.getElementById('vn-tg-results');
+  if(el) el.style.display='none';
 }
 
 async function vpSaveNames(){
