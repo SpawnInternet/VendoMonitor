@@ -1796,7 +1796,7 @@ async function rcRun(){
   while(true){
     const r=await fetch(
       `${_SB}/rest/v1/harvests?harvest_date=gte.${from}&harvest_date=lte.${to}`+
-      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code,admin_notes,reconcile_status`+
+      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code,admin_notes,reconcile_status,tg_income,recon_gap,recon_flag,recon_at`+
       `&order=harvest_date.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
@@ -1811,6 +1811,22 @@ async function rcRun(){
     return;
   }
 
+  // Check if all rows already have saved recon data
+  const allSaved = harvestRows.length > 0 && harvestRows.every(r=>r.recon_at && r.tg_income!=null);
+  if(allSaved && !rcBypassCache){
+    rcAllRows=harvestRows.map(row=>({
+      ...row,
+      collector:row.actual_collector||row.collector||'Unknown',
+      tg_income:Number(row.tg_income),
+      gap:Number(row.recon_gap),
+      gap_pct:row.coins_total>0?Math.abs(row.recon_gap)/row.coins_total*100:null,
+      flag:row.recon_flag||'nodata',
+      is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
+    }));
+    document.getElementById('rc-count').textContent=rcAllRows.length+' harvests · saved '+Math.round((Date.now()-new Date(harvestRows[0].recon_at).getTime())/60000)+'min ago';
+    rcFilter();
+    return;
+  }
   el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income for ${harvestRows.length} harvests…</div>`;
 
   // Build tg_name map: harvest id → tg_name
@@ -1896,15 +1912,22 @@ async function rcRun(){
     };
   });
 
-  // Write to bucket cache
-  try {
-    const cachePayload = JSON.stringify({ rows: rcAllRows, from, to, generated_at: new Date().toISOString() });
-    await fetch(`${_SB}/functions/v1/write-recon-cache`, {
-      method: 'POST',
-      headers: { 'x-cache-secret': 'spawn-cache-2026', apikey: _KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rows: rcAllRows, from, to })
-    });
-  } catch(e) {}
+  // Save tg_income, gap, flag to DB for each row — instant reload next time
+  const toSave = rcAllRows.filter(r=>r.tg_income!=null);
+  if(toSave.length){
+    for(let i=0;i<toSave.length;i+=50){
+      const batch=toSave.slice(i,i+50);
+      try{
+        await Promise.all(batch.map(r=>
+          fetch(`${_SB}/rest/v1/harvests?id=eq.${r.id}`,{
+            method:'PATCH',
+            headers:{..._HDR,'Prefer':'return=minimal'},
+            body:JSON.stringify({tg_income:r.tg_income,recon_gap:r.gap,recon_flag:r.flag,recon_at:new Date().toISOString()})
+          })
+        ));
+      }catch(e){}
+    }
+  }
   rcFilter();
   } catch(e) { console.error('rcRun error',e); document.getElementById('rc-content').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>'; }
 }
