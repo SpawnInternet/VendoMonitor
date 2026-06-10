@@ -1447,9 +1447,21 @@ function openItem(idx){
     gpsLbl.textContent='No GPS yet — tap Capture';
   }
   document.getElementById('gps-verify-link').style.display='none';
-  // Always hidden until collector opens Edit
-  document.getElementById('gps-status-lbl').style.display='none';
+  // Show GPS label if coords already exist, hide otherwise until Edit
+  const _hasGps = !!(currentItem.lat && currentItem.lng);
+  document.getElementById('gps-status-lbl').style.display = _hasGps ? '' : 'none';
   document.getElementById('gps-actions').style.display='none';
+  // Update camera button to reflect GPS state
+  const _camBtn = document.getElementById('camera-open-btn');
+  if(_camBtn){
+    if(_hasGps){
+      _camBtn.textContent = '📷 Recapture Photo + GPS';
+      _camBtn.style.background = '#0369a1';
+    } else {
+      _camBtn.textContent = '📷 Open Camera & Capture GPS';
+      _camBtn.style.background = '';
+    }
+  }
 
   // Reset camera/photo state
   capturedPhotoBlob=null;
