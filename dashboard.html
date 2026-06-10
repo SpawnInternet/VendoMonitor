@@ -3546,90 +3546,13 @@ async function openVendoFromSearch(vendo, area) {
 // ══════════════════════════════════════════════════════════
 
 
-// ── VENDO POPUP — monthly harvest breakdown ───────────────────────
-async function htShowVendoFromRow(tr) {
-  const vendoId = tr.dataset.id;
+// ── VENDO POPUP — delegate to existing vendo profile ───────────────
+function htShowVendoFromRow(tr) {
   const name = tr.dataset.tg;
   const area = tr.dataset.area;
-  if (!vendoId && !name) return;
-
-  const modal = document.getElementById('hd-modal');
-  document.getElementById('hd-name').textContent = name||'Unknown';
-  document.getElementById('hd-sub').textContent = area||'';
-  document.getElementById('hd-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
-  modal.style.display = 'flex';
-
-  try {
-    // Fetch all harvests — try by vendo_id first, then sheet_name, merge results
-    const sel = 'select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100';
-    let harvests = [];
-    if(vendoId){
-      const r1 = await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${vendoId}&${sel}`, {headers:_HDR});
-      harvests = await r1.json();
-    }
-    if((!harvests.length||!vendoId) && name){
-      const r2 = await fetch(`${_SB}/rest/v1/harvests?sheet_name=eq.${encodeURIComponent(name)}&${sel}`, {headers:_HDR});
-      const byName = await r2.json();
-      // Merge avoiding duplicates
-      const ids = new Set(harvests.map(h=>h.id));
-      byName.forEach(h=>{ if(!ids.has(h.id)) harvests.push(h); });
-    }
-
-    if (!harvests.length) {
-      document.getElementById('hd-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">No harvest records yet.</div>';
-      return;
-    }
-
-    // Group by month
-    const byMonth = {};
-    harvests.forEach(h => {
-      const m = (h.harvest_date||'').slice(0,7);
-      if (!byMonth[m]) byMonth[m] = [];
-      byMonth[m].push(h);
-    });
-
-    let html = '';
-    Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([month, rows]) => {
-      const mNet   = rows.reduce((s,r)=>s+parseFloat(r.net_collectible||0),0);
-      const mSpawn = rows.reduce((s,r)=>s+parseFloat(r.spawn_share||0),0);
-      const mOwner = rows.reduce((s,r)=>s+parseFloat(r.customer_share||0),0);
-      html += `<div style="margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;color:#1565c0;background:#f0f7ff;padding:6px 10px;border-radius:6px;margin-bottom:6px;display:flex;justify-content:space-between;">
-          <span>${month}</span>
-          <span style="color:#15803d;font-weight:700">${_php(mSpawn)} spawn</span>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <thead><tr style="background:#f9fafb;">
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);">Date</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);">Net</th>
-            <th style="padding:5px 8px;text-align:right;color:#15803d;font-weight:700;">Spawn 75%</th>
-            <th style="padding:5px 8px;text-align:right;color:#7c3aed;">Owner 25%</th>
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);">Collector</th>
-          </tr></thead>
-          <tbody>
-            ${rows.map(h=>`<tr>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.harvest_date||'—'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${_php(h.net_collectible)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700;color:#15803d;">${_php(h.spawn_share)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;color:#7c3aed;">${_php(h.customer_share)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 5px;border-radius:4px;font-size:10px;">${h.collector||'—'}</span></td>
-            </tr>`).join('')}
-            <tr style="background:#f0fdf4;font-weight:700;">
-              <td style="padding:5px 8px;">TOTAL (${rows.length})</td>
-              <td style="padding:5px 8px;text-align:right;">${_php(mNet)}</td>
-              <td style="padding:5px 8px;text-align:right;color:#15803d;">${_php(mSpawn)}</td>
-              <td style="padding:5px 8px;text-align:right;color:#7c3aed;">${_php(mOwner)}</td>
-              <td></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>`;
-    });
-    document.getElementById('hd-body').innerHTML = html;
-  } catch(e) {
-    document.getElementById('hd-body').innerHTML = '<div style="padding:20px;color:#dc2626;">Error: '+e.message+'</div>';
-  }
+  htShowVendoProfile(name, area);
 }
+
 
 // ── HARVEST DETAIL POPUP ──────────────────────────────────────────
 function lfShowDetail(idx) {
