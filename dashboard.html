@@ -947,7 +947,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
           <tr style="background:#f0f4ff;">
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Vendo name</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Area</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Group</th>
+            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Date</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Collector</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Coins total</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Free</th>
@@ -1219,66 +1219,27 @@ let htAllRows = [];
 async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="10" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
-  const _HT_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/harvest_table.json';
-  // 1. localStorage — instant on repeat visits (5 min TTL)
-  try {
-    const ls = localStorage.getItem('spawn_ht');
-    if(ls){
-      const {ts, rows} = JSON.parse(ls);
-      if(rows && rows.length && (Date.now()-ts) < 5*60*1000){
-        htAllRows = rows;
-        htFilter();
-        document.getElementById('ht-tbody').innerHTML='';
-        // silently refresh from bucket in background
-        fetch(_HT_URL+'?t='+Date.now()).then(r=>r.json()).then(d=>{ if(d.rows&&d.rows.length){ htAllRows=d.rows; try{localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:d.rows}));}catch(e){} htFilter(); }}).catch(()=>{});
-        return;
-      }
-    }
-  } catch(e){}
-  // 2. Storage bucket — pre-built JSON, fast public CDN fetch
-  try {
-    const r = await fetch(_HT_URL+'?t='+Math.floor(Date.now()/60000));
-    if(r.ok){
-      const d = await r.json();
-      if(d.rows && d.rows.length){
-        htAllRows = d.rows;
-        try{ localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:htAllRows})); }catch(e){}
-        htFilter();
-        return; // done — no DB needed
-      }
-    }
-  } catch(e){ console.warn('bucket fetch failed',e); }
+  localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
   // 3. Fallback: direct DB — query harvests table for actual collector
   if(!htAllRows.length){
     let offset = 0;
     while(true){
       const r = await fetch(
-        `${_SB}/rest/v1/harvest_group_items?select=id,vendo_id,sheet_name,tg_name,owner_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        `${_SB}/rest/v1/harvests?select=id,vendo_id,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_date,status,photo_url,collector_note&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
         {headers:{..._HDR,'Prefer':'count=none'}}
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
-      htAllRows.push(...batch);
+      // Normalize: map harvests fields so htFilter/htRender work
+      htAllRows.push(...batch.map(r=>({
+        ...r,
+        actual_collector: r.collector||null,
+        sheet_name: r.sheet_name||r.tg_name||r.vendo_name||'—',
+      })));
       if(batch.length<1000) break;
       offset+=1000;
     }
-    // Enrich with actual collector from harvests table
-    const harvestedIds = htAllRows.filter(r=>r.vendo_id&&r.status==='harvested').map(r=>r.vendo_id);
-    if(harvestedIds.length){
-      try{
-        const rh = await fetch(
-          `${_SB}/rest/v1/harvests?select=vendo_id,collector,harvest_date&vendo_id=in.(${[...new Set(harvestedIds)].slice(0,200).join(',')})&order=harvested_at.desc&limit=500`,
-          {headers:_HDR}
-        );
-        const hrows = await rh.json();
-        const collectorMap = {};
-        (hrows||[]).forEach(h=>{ if(!collectorMap[h.vendo_id]) collectorMap[h.vendo_id]=h.collector; });
-        htAllRows = htAllRows.map(r=>({...r, actual_collector: collectorMap[r.vendo_id]||null}));
-      }catch(e){}
-    }
-    try{ localStorage.setItem('spawn_ht',JSON.stringify({ts:Date.now(),rows:htAllRows})); }catch(e){}
-  }
-  const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.harvest_groups?.collector).filter(Boolean))].sort();
+  const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
   const htSel = document.getElementById('ht-collector');
   const rcSel = document.getElementById('rc-collector');
   const prev = htSel.value;
@@ -1325,17 +1286,12 @@ function htFilter(){
   const tb = document.getElementById('ht-tbody');
   if(!rows.length){ tb.innerHTML='<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
   tb.innerHTML = rows.slice(0,2000).map(r=>{
-    const col = r.actual_collector||r.harvest_groups?.collector||'—';
-    const grp = r.harvest_groups?.group_label||'—';
-    const st  = r.status==='harvested'
-      ? '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">done</span>'
-      : r.status==='skipped'
-      ? '<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">skipped</span>'
-      : '<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">pending</span>';
-    return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="${r.status==='harvested'?'':'background:#fffdf5'};cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.sheet_name||'—'}</td>
+    const col = r.collector||r.actual_collector||'—';
+    const st  = '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">harvested</span>';
+    return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;">${r.sheet_name||r.tg_name||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;max-width:150px;overflow:hidden;text-overflow:ellipsis;">${grp}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col}</span></td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.coins_total!=null?_php(r.coins_total):'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.coins_free!=null?_php(r.coins_free):'—'}</td>
