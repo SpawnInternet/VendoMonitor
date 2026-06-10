@@ -1866,7 +1866,7 @@ async function rcRun(){
     const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
     const overAmt=gap!=null&&Math.abs(gap)>500;
     const overPct=gapPct!=null&&gapPct>20;
-    const flag=gap==null?'nodata':overAmt&&overPct?'alert':overAmt||overPct?'warn':'ok';
+    const flag=gap==null?'nodata':gap<0&&(overAmt||overPct)?'alert':gap>0&&(overAmt||overPct)?'warn':'ok';
     const rc=row.route_code||'ADMIN';
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
     return {...row,
@@ -1934,17 +1934,21 @@ function rcFilter(){
 
   const fmtP=v=>_php(v);
   const flagBadge=f=>f==='alert'
-    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 ALERT</span>'
+    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Short</span>'
     :f==='warn'
-    ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">⚠ WARN</span>'
+    ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🟡 Surplus</span>'
     :f==='nodata'
     ?'<span style="background:#f3f4f6;color:#6b7280;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">no TG</span>'
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
-    const c=gap<-500?'#dc2626':gap<0?'#d97706':gap>500?'#1565c0':'#15803d';
+    // gap = TG income - coins_total
+    // positive = surplus (TG > coins) = yellow
+    // negative = short (coins > TG) = red
+    const c=gap>100?'#b45309':gap<-100?'#dc2626':'#15803d';
+    const bg=gap>100?'#fef9c3':gap<-100?'#fee2e2':'#dcfce7';
     const sign=gap>=0?'+':'';
-    return `<span style="color:${c};font-weight:700;">${sign}${fmtP(gap)}</span>`;
+    return `<span style="color:${c};font-weight:700;background:${bg};padding:1px 6px;border-radius:4px;">${sign}${fmtP(gap)}</span>`;
   };
 
   let html='';
@@ -2035,7 +2039,7 @@ function rcFilter(){
           </tr></thead>
           <tbody>
           ${rd.rows.map(h=>{
-            const rowBg=h.flag==='alert'?'background:#fef2f2;':h.flag==='warn'?'background:#fffbeb;':'';
+            const rowBg=h.flag==='alert'?'background:#fef2f2;':h.flag==='warn'?'background:#fefce8;':'';
             const tgStr=h.tg_income!=null?fmtP(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>';
             const noTgBadge=!h.tg_name?'<span style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 4px;border-radius:3px;margin-left:4px;">no TG</span>':'';
             return `<tr style="${rowBg}">
