@@ -1284,7 +1284,7 @@ async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // Query ALL vendos + their last harvest data
+  // Query ALL vendos — last_harvest_date already stored in vendos table
   try {
     let offset = 0;
     while(true){
@@ -1294,25 +1294,31 @@ async function htLoad(){
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
-      htAllRows.push(...batch);
+      htAllRows.push(...batch.map(v=>({
+        ...v,
+        harvest_date: v.last_harvest_date||null,
+        actual_collector: null,
+        spawn_share: null,
+      })));
       if(batch.length<1000) break;
       offset+=1000;
     }
-    // Enrich with last harvest details
-    const vendoIds = htAllRows.map(v=>v.id).filter(Boolean);
-    for(let i=0;i<vendoIds.length;i+=200){
+    // Enrich only harvested vendos with last collector+spawn_share (single query)
+    const harvestedIds = htAllRows.filter(v=>v.last_harvest_date).map(v=>v.id);
+    if(harvestedIds.length){
       try{
         const rh = await fetch(
-          `${_SB}/rest/v1/harvests?vendo_id=in.(${vendoIds.slice(i,i+200).join(',')})&select=vendo_id,collector,harvest_date,spawn_share,net_collectible,harvested_at&order=harvest_date.desc&limit=200`,
+          `${_SB}/rest/v1/harvests?select=vendo_id,collector,spawn_share,harvest_date&vendo_id=in.(${harvestedIds.slice(0,500).join(',')})&order=harvest_date.desc&limit=500`,
           {headers:_HDR}
         );
         const hrows = await rh.json();
         const hmap = {};
         (hrows||[]).forEach(h=>{ if(!hmap[h.vendo_id]) hmap[h.vendo_id]=h; });
-        htAllRows = htAllRows.map(v=>{
-          const h = hmap[v.id]||{};
-          return {...v, actual_collector:h.collector||null, harvest_date:h.harvest_date||null, spawn_share:h.spawn_share||null, net_collectible:h.net_collectible||null, harvested_at:h.harvested_at||null};
-        });
+        htAllRows = htAllRows.map(v=>({
+          ...v,
+          actual_collector: hmap[v.id]?.collector||null,
+          spawn_share: hmap[v.id]?.spawn_share||null,
+        }));
       }catch(e){}
     }
   } catch(e){
