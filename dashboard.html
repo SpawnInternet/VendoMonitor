@@ -3560,12 +3560,20 @@ async function htShowVendoFromRow(tr) {
   modal.style.display = 'flex';
 
   try {
-    // Fetch all harvests for this vendo
-    let url = vendoId
-      ? `${_SB}/rest/v1/harvests?vendo_id=eq.${vendoId}&select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100`
-      : `${_SB}/rest/v1/harvests?sheet_name=eq.${encodeURIComponent(name)}&select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100`;
-    const r = await fetch(url, {headers:_HDR});
-    const harvests = await r.json();
+    // Fetch all harvests — try by vendo_id first, then sheet_name, merge results
+    const sel = 'select=id,harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,collector_note,photo_url&order=harvest_date.desc&limit=100';
+    let harvests = [];
+    if(vendoId){
+      const r1 = await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${vendoId}&${sel}`, {headers:_HDR});
+      harvests = await r1.json();
+    }
+    if((!harvests.length||!vendoId) && name){
+      const r2 = await fetch(`${_SB}/rest/v1/harvests?sheet_name=eq.${encodeURIComponent(name)}&${sel}`, {headers:_HDR});
+      const byName = await r2.json();
+      // Merge avoiding duplicates
+      const ids = new Set(harvests.map(h=>h.id));
+      byName.forEach(h=>{ if(!ids.has(h.id)) harvests.push(h); });
+    }
 
     if (!harvests.length) {
       document.getElementById('hd-body').innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">No harvest records yet.</div>';
