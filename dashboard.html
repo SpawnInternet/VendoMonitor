@@ -1005,36 +1005,53 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- ══ TAB: RECONCILIATION ══ -->
-<div id="hvt-recon" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-    <span style="font-size:11px;color:var(--mu);font-weight:500;">From</span>
-    <input type="date" id="rc-from" onchange="rcRun()" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
-    <span style="font-size:11px;color:var(--mu);font-weight:500;">To</span>
-    <input type="date" id="rc-to" onchange="rcRun()" style="padding:5px 8px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;height:30px;">
-    <select id="rc-area" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
-      <option value="">All areas</option>
-      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-      <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
-    </select>
-    <select id="rc-collector" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
-      <option value="">All collectors</option>
-    </select>
+<div id="hvt-recon" style="display:none;overflow-y:auto;height:calc(100vh - 88px);">
 
-    <span style="flex:1"></span>
-    <span id="rc-count" style="font-size:11px;color:var(--mu)"></span>
-    <button onclick="rcRunFresh(document.getElementById('rc-from').value,document.getElementById('rc-to').value)" style="padding:3px 10px;border:1px solid var(--bd);border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:var(--blue);font-family:inherit;">🔄 Refresh</button>
+  <!-- Mode switcher -->
+  <div style="display:flex;border-bottom:2px solid #e5e7eb;background:#f8faff;flex-shrink:0;">
+    <button id="rc-mode-recent" onclick="rcSetMode('recent')"
+      style="padding:10px 20px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid #1565c0;color:#1565c0;margin-bottom:-2px;">
+      🌱 Recent Harvests
+    </button>
+    <button id="rc-mode-history" onclick="rcSetMode('history')"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#6b7280;margin-bottom:-2px;">
+      📅 History
+    </button>
   </div>
-  <div style="font-size:10px;color:var(--mu);margin-bottom:10px;">
-    Formula: <b>True Deficit = TG Income − Coins Total</b> (coins_total includes saloy) · window = harvest_window_start → harvest_date &nbsp;|&nbsp;
-    <span style="color:#dc2626;font-weight:700;">🔴 ALERT</span> &gt;₱500 &amp; &gt;20% &nbsp;
-    <span style="color:#d97706;font-weight:700;">⚠ WARN</span> one threshold &nbsp;
-    <span style="color:#15803d;font-weight:700;">✅ OK</span> clean
+
+  <!-- RECENT MODE -->
+  <div id="rc-panel-recent" style="padding:12px;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <select id="rc-area" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
+        <option value="">All areas</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option>
+      </select>
+      <select id="rc-collector" onchange="rcFilter()" style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
+        <option value="">All collectors</option>
+      </select>
+      <span style="flex:1"></span>
+      <span id="rc-count" style="font-size:11px;color:var(--mu)"></span>
+      <button onclick="rcRunFresh(document.getElementById('rc-from').value,document.getElementById('rc-to').value)" style="padding:3px 10px;border:1px solid var(--bd);border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:var(--blue);font-family:inherit;">🔄 Refresh</button>
+    </div>
+    <div style="font-size:10px;color:var(--mu);margin-bottom:10px;">
+      Formula: <b>TG Income − Coins Total</b> · 🔴 Short = collector brought less &nbsp; 🟡 Surplus = collector brought more &nbsp; ✅ OK
+    </div>
+    <select id="rc-flag" style="display:none"><option value="">All flags</option></select>
+    <!-- hidden date inputs kept for rcRun compatibility -->
+    <input type="date" id="rc-from" style="display:none;">
+    <input type="date" id="rc-to" style="display:none;">
+    <div id="rc-content" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="padding:40px;text-align:center;color:var(--mu);font-size:13px;">Set date range and click 🔄 Refresh to load reconciliation data.</div>
+    </div>
   </div>
-  <!-- hidden selects kept for compatibility -->
-  <select id="rc-flag" style="display:none"><option value="">All flags</option></select>
-  <div id="rc-content" style="display:flex;flex-direction:column;gap:12px;">
-    <div style="padding:30px;text-align:center;color:var(--mu);font-size:13px;"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</div>
+
+  <!-- HISTORY MODE -->
+  <div id="rc-panel-history" style="display:none;padding:12px;">
+    <div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Select a past harvest date to view its reconciliation.</div>
+    <div id="rc-history-list"><div style="padding:20px;text-align:center;color:#6b7280;">Loading past harvests…</div></div>
   </div>
+
 </div>
 
 <script>
@@ -1063,8 +1080,13 @@ function hvNewTab(id, btn){
   if(id==='livefeed') lfConnect();
   if(id==='recon'){
     rcInitDates();
-    const el=document.getElementById('rc-content');
-    if(el&&!el.dataset.loaded) el.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">Set date range and click 🔄 Refresh to load reconciliation data.</div>';
+    rcSetMode('recent');
+    // Auto-load recent harvests (last 7 days) if not already loaded
+    if(!rcAllRows.length){
+      const from=document.getElementById('rc-from').value;
+      const to=document.getElementById('rc-to').value;
+      if(from&&to) rcRun();
+    }
   }
   if(id==='settings') csLoad();
 }
@@ -1758,7 +1780,7 @@ let rcDatesInited = false;
 
 function rcInitDates(){
   const to = new Date(), from = new Date();
-  from.setDate(from.getDate()-30);
+  from.setDate(from.getDate()-7); // default to last 7 days for recent view
   document.getElementById('rc-to').value   = to.toISOString().slice(0,10);
   document.getElementById('rc-from').value = from.toISOString().slice(0,10);
   rcDatesInited = true;
@@ -8746,7 +8768,155 @@ function actViewPhoto(url){
   <script src="js/shared.js"></script>
   <script src="js/api.js"></script>
   <script src="tabs/overview.js"></script>
-  <script src="tabs/harvest.js"></script>
+  <script src="tabs/harvest.js">
+// ── RECONCILIATION MODE SWITCHER ──────────────────────────────────
+let rcMode = 'recent';
+
+function rcSetMode(mode){
+  rcMode = mode;
+  const isRecent = mode==='recent';
+  document.getElementById('rc-panel-recent').style.display = isRecent?'':'none';
+  document.getElementById('rc-panel-history').style.display = isRecent?'none':'';
+  document.getElementById('rc-mode-recent').style.borderBottomColor = isRecent?'#1565c0':'transparent';
+  document.getElementById('rc-mode-recent').style.color = isRecent?'#1565c0':'#6b7280';
+  document.getElementById('rc-mode-history').style.borderBottomColor = isRecent?'transparent':'#1565c0';
+  document.getElementById('rc-mode-history').style.color = isRecent?'#6b7280':'#1565c0';
+  if(mode==='history') rcLoadHistory();
+}
+
+async function rcLoadHistory(){
+  const el = document.getElementById('rc-history-list');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  try {
+    // Get distinct harvest dates with summary
+    const r = await fetch(`${_SB}/rest/v1/harvests?select=harvest_date,sheet_name,collector,coins_total,tg_income,recon_gap,recon_flag&order=harvest_date.desc&limit=1000`,{headers:_HDR});
+    const rows = await r.json();
+
+    // Group by date
+    const byDate = {};
+    rows.forEach(h=>{
+      const d = h.harvest_date;
+      if(!byDate[d]) byDate[d]={date:d,count:0,coins:0,tg:0,gap:0,collectors:new Set(),alerts:0,warns:0,nodata:0};
+      byDate[d].count++;
+      byDate[d].coins += Number(h.coins_total||0);
+      byDate[d].tg += Number(h.tg_income||0);
+      byDate[d].gap += Number(h.recon_gap||0);
+      if(h.collector) byDate[d].collectors.add(h.collector);
+      if(h.recon_flag==='alert') byDate[d].alerts++;
+      else if(h.recon_flag==='warn') byDate[d].warns++;
+      else if(!h.recon_flag||h.recon_flag==='nodata') byDate[d].nodata++;
+    });
+
+    const dates = Object.values(byDate).sort((a,b)=>b.date.localeCompare(a.date));
+    if(!dates.length){el.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No harvest history found.</div>';return;}
+
+    let html='';
+    dates.forEach(d=>{
+      const isToday = d.date===new Date().toISOString().slice(0,10);
+      const gapColor = d.gap>500?'#dc2626':d.gap<-500?'#b45309':'#15803d';
+      const gapBg = d.gap>500?'#fef2f2':d.gap<-500?'#fefce8':'#f0fdf4';
+      const hasRecon = d.tg>0;
+      html+=`<div style="border:1.5px solid ${isToday?'#86efac':'#e5e7eb'};border-radius:10px;margin-bottom:8px;overflow:hidden;background:#fff;">
+        <div onclick="rcLoadHistoryDate('${d.date}')"
+          style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:${isToday?'#f0fdf4':'#f8faff'};"
+          onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='${isToday?'#f0fdf4':'#f8faff'}'">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1e293b;">${d.date} ${isToday?'<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:6px;font-size:10px;">TODAY</span>':''}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:1px;">${[...d.collectors].join(', ')} · ${d.count} harvests</div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:#6b7280;">Coins</div>
+              <div style="font-size:13px;font-weight:700;">₱${Math.round(d.coins).toLocaleString()}</div>
+            </div>
+            ${hasRecon?`<div style="text-align:right;">
+              <div style="font-size:11px;color:#6b7280;">TG</div>
+              <div style="font-size:13px;font-weight:700;">₱${Math.round(d.tg).toLocaleString()}</div>
+            </div>
+            <div style="text-align:right;background:${gapBg};padding:4px 8px;border-radius:6px;">
+              <div style="font-size:11px;color:#6b7280;">Gap</div>
+              <div style="font-size:13px;font-weight:700;color:${gapColor};">${d.gap>=0?'+':''}₱${Math.round(d.gap).toLocaleString()}</div>
+            </div>`:'<span style="font-size:10px;color:#d97706;background:#fffbeb;padding:3px 8px;border-radius:6px;border:1px solid #fde68a;">needs recon</span>'}
+            ${d.alerts?`<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;">${d.alerts} Short</span>`:''}
+            ${d.warns?`<span style="background:#fefce8;color:#b45309;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;">${d.warns} Surplus</span>`:''}
+            <span style="color:#6b7280;font-size:18px;">›</span>
+          </div>
+        </div>
+        <div id="rc-hist-${d.date}" style="display:none;border-top:1px solid #e5e7eb;"></div>
+      </div>`;
+    });
+    el.innerHTML = html;
+  } catch(e){
+    el.innerHTML=`<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;
+  }
+}
+
+async function rcLoadHistoryDate(date){
+  const el = document.getElementById('rc-hist-'+date);
+  if(!el) return;
+  // Toggle
+  if(el.style.display!=='none'){el.style.display='none';return;}
+  el.style.display='';
+  el.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;font-size:12px;">Loading reconciliation for '+date+'…</div>';
+
+  try {
+    const r = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,sheet_name,tg_name,area,coins_total,tg_income,recon_gap,recon_flag,harvest_window_start,collector,reconcile_status,admin_notes&order=collector.asc`,{headers:_HDR});
+    const rows = await r.json();
+    if(!rows.length){el.innerHTML='<div style="padding:14px;text-align:center;color:#6b7280;">No records.</div>';return;}
+
+    const needsRecon = rows.some(r=>r.tg_income==null&&r.tg_name);
+    let html='';
+    if(needsRecon){
+      html+=`<div style="padding:10px 14px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:#b45309;">⚠ Some rows need TG fetch</span>
+        <button onclick="rcFetchDate('${date}')" style="padding:3px 10px;background:#d97706;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🔄 Fetch TG Now</button>
+      </div>`;
+    }
+
+    html+=`<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="background:#f8faff;">
+        <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Vendo</th>
+        <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Collector</th>
+        <th style="padding:6px 10px;text-align:left;border-bottom:1px solid #e5e7eb;">Window</th>
+        <th style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;">Coins</th>
+        <th style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;">TG</th>
+        <th style="padding:6px 10px;text-align:right;border-bottom:1px solid #e5e7eb;">Gap</th>
+        <th style="padding:6px 10px;text-align:center;border-bottom:1px solid #e5e7eb;">Status</th>
+      </tr></thead><tbody>`;
+
+    rows.forEach(h=>{
+      const gc=h.recon_gap>100?'#dc2626':h.recon_gap<-100?'#b45309':'#15803d';
+      const bg=h.recon_flag==='alert'?'#fef2f2':h.recon_flag==='warn'?'#fefce8':'';
+      const flagEl=h.recon_flag==='alert'?'🔴 Short':h.recon_flag==='warn'?'🟡 Surplus':h.recon_flag==='ok'?'✅ OK':'<span style="color:#9ca3af">no TG</span>';
+      html+=`<tr style="background:${bg}">
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;">${h.sheet_name||'—'}${!h.tg_name?'<span style="font-size:9px;color:#d97706;margin-left:4px;">no TG</span>':''}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;">${h.collector||'—'}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;">${h.harvest_window_start||'—'} → ${date}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;text-align:right;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;text-align:right;">${h.tg_income!=null?'₱'+Math.round(h.tg_income).toLocaleString():'<span style="color:#9ca3af">—</span>'}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:${gc};font-weight:700;">${h.recon_gap!=null?(h.recon_gap>=0?'+':'')+'₱'+Math.round(Math.abs(h.recon_gap)).toLocaleString():'—'}</td>
+        <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:10px;">${flagEl}</td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    el.innerHTML=html;
+  } catch(e){
+    el.innerHTML=`<div style="padding:14px;color:#dc2626;">Error: ${e.message}</div>`;
+  }
+}
+
+async function rcFetchDate(date){
+  // Set date range and run reconciliation for that specific date
+  document.getElementById('rc-from').value = date;
+  document.getElementById('rc-to').value = date;
+  rcBypassCache = true;
+  await rcRun();
+  rcBypassCache = false;
+  // Reload history to show updated results
+  rcLoadHistory();
+}
+
+</script>
 </body>
 </html>
 
