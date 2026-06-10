@@ -1115,6 +1115,7 @@ async function htShowVendoProfile(name, area) {
       +'<button class="vp-tab" onclick="vpTab(\'info\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid #1565c0;color:#1565c0;font-weight:600;">Info</button>'
       +'<button class="vp-tab" onclick="vpTab(\'ledger\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">Ledger</button>'
       +'<button class="vp-tab" onclick="vpTab(\'recon\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">Reconciliation</button>'
+      +'<button class="vp-tab" onclick="vpTab(\'names\',this)" id="vp-tab-names" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">🔗 Names</button>'
       +'</div>'
       +'<div id="vp-body" style="overflow-y:auto;flex:1;padding:16px;"></div>'
       +'</div>';
@@ -1142,7 +1143,7 @@ function vpCancelPullout(){const ov=document.getElementById('vp-po-ov');if(ov)ov
 function vpTab(tab,btn){
   document.querySelectorAll('.vp-tab').forEach(t=>{t.style.borderBottomColor='transparent';t.style.color='#6b7280';t.style.fontWeight='';});
   btn.style.borderBottomColor='#1565c0';btn.style.color='#1565c0';btn.style.fontWeight='600';
-  if(tab==='info')vpRenderInfo();else if(tab==='ledger')vpRenderLedger();else vpRenderRecon();
+  if(tab==='info')vpRenderInfo();else if(tab==='ledger')vpRenderLedger();else if(tab==='names')vpRenderNames();else vpRenderRecon();
 }
 function vpToggleEdit(){window._vpEditMode=!window._vpEditMode;document.getElementById('vp-edit-btn').textContent=window._vpEditMode?'Cancel':'Edit';vpRenderInfo();}
 function _vf(label,value,key,edit){
@@ -1214,6 +1215,129 @@ async function vpRenderRecon(){
     document.getElementById('vp-body').innerHTML=html;
   }catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
 }
+async function vpRenderNames(){
+  const v=window._vpVendo;
+  const body=document.getElementById('vp-body');
+  body.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;font-size:13px;">Loading...</div>';
+
+  // Load ALL vendos with same sheet_name OR tg_name to find duplicates/splits
+  const sheetName = v&&v.sheet_name;
+  const tgName = v&&v.tg_name;
+  const matchStatus = tgName
+    ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">✅ Matched</span>'
+    : '<span style="background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">⚠ Unmatched</span>';
+
+  // Search for other vendos with similar names to help matching
+  let suggestions = [];
+  if(!tgName && sheetName){
+    // Find TG-only vendos whose tg_name contains the sheet_name words
+    const words = sheetName.split(/\s+/).filter(w=>w.length>3);
+    const q = words.slice(0,2).join(' ');
+    try{
+      const r=await fetch(`${SB_URL}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=10`,
+        {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+      suggestions=await r.json();
+    }catch(e){}
+  }
+
+  let html = `
+  <div style="margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div style="font-size:14px;font-weight:700;color:#1e293b;">Name Matching Status</div>
+      ${matchStatus}
+    </div>
+
+    <!-- Current names -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;">
+        <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📋 Excel / Sheet Name</div>
+        <div style="font-size:14px;font-weight:700;color:#0c4a6e;word-break:break-word;">${sheetName||'<span style="color:#9ca3af;font-style:italic;font-weight:400;">Not set</span>'}</div>
+        ${sheetName?'<div style="font-size:10px;color:#0369a1;margin-top:4px;">Used in dashboard display</div>':'<div style="font-size:10px;color:#d97706;margin-top:4px;">⚠ Vendo will show as unmatched</div>'}
+      </div>
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;">
+        <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">📡 TG Name</div>
+        <div style="font-size:13px;font-weight:600;color:#14532d;word-break:break-word;">${tgName||'<span style="color:#9ca3af;font-style:italic;font-weight:400;">Not linked</span>'}</div>
+        ${tgName?'<div style="font-size:10px;color:#15803d;margin-top:4px;">Used for TG income matching</div>':'<div style="font-size:10px;color:#d97706;margin-top:4px;">⚠ No TG income can be fetched</div>'}
+      </div>
+    </div>
+
+    <!-- Edit section -->
+    <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:10px;padding:14px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:10px;">Edit Names</div>
+      <div style="margin-bottom:8px;">
+        <label style="font-size:11px;color:#6b7280;font-weight:500;">Excel / Sheet Name</label>
+        <input id="vn-sheet" value="${(sheetName||'').replace(/"/g,'&quot;')}" placeholder="Name from Excel file..."
+          style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px;color:#6b7280;font-weight:500;">TG Name (for income matching)</label>
+        <div style="position:relative;margin-top:3px;">
+          <input id="vn-tg" value="${(tgName||'').replace(/"/g,'&quot;')}" placeholder="Search TG name..." oninput="vpTgSearch2(this.value)"
+            style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+          <div id="vn-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:160px;overflow-y:auto;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>
+        </div>
+      </div>
+      <button onclick="vpSaveNames()" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
+    </div>`;
+
+  // Suggestions for unmatched vendos
+  if(suggestions.length){
+    html += `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;">
+      <div style="font-size:12px;font-weight:600;color:#b45309;margin-bottom:8px;">💡 Possible TG matches for "${sheetName}"</div>`;
+    suggestions.forEach(s=>{
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:6px;border:1px solid #fde68a;font-size:12px;">
+        <div><div style="font-weight:500;color:#1e293b;">${s.tg_name}</div><div style="font-size:10px;color:#6b7280;">${s.area||''} · VLAN ${s.vlan||'—'}</div></div>
+        <button onclick="document.getElementById('vn-tg').value=${JSON.stringify(s.tg_name)}" style="height:26px;padding:0 10px;background:#1565c0;color:#fff;border:none;border-radius:5px;font-size:11px;cursor:pointer;">Use</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  body.innerHTML = html;
+}
+
+async function vpTgSearch2(q){
+  const el=document.getElementById('vn-tg-results');
+  if(!el)return;
+  q=(q||'').trim();
+  if(!q){el.style.display='none';return;}
+  el.style.display='';
+  el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">Searching…</div>';
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
+      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    const rows=await r.json();
+    if(!rows.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
+    el.innerHTML=rows.map(v=>`<div onclick="document.getElementById('vn-tg').value=${JSON.stringify(v.tg_name)};document.getElementById('vn-tg-results').style.display='none';"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;"
+      onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+      <div style="font-weight:600">${v.tg_name}</div>
+      <div style="font-size:10px;color:var(--mu)">${v.sheet_name||''} · ${v.area||''}</div>
+    </div>`).join('');
+  }catch(e){el.innerHTML='<div style="padding:8px 10px;color:#dc2626;font-size:12px;">Error</div>';}
+}
+
+async function vpSaveNames(){
+  const v=window._vpVendo; if(!v)return;
+  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const sheet=(document.getElementById('vn-sheet')||{}).value||'';
+  const tg=(document.getElementById('vn-tg')||{}).value||'';
+  const u={sheet_name:sheet||null, tg_name:tg||null};
+  if(tg) u.tg_match_confirmed=true;
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(u)});
+    if(r.ok){
+      Object.assign(window._vpVendo,u);
+      document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name||u.tg_name||'—';
+      toast('✅ Names saved!');
+      vpRenderNames();
+    } else toast('Save failed');
+  }catch(e){toast('Error: '+e.message);}
+}
+
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
   const pw=prompt('Admin password:');if(pw!=='101510'){toast('Wrong password');return;}
