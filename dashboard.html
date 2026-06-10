@@ -1580,7 +1580,7 @@ async function rcRun(){
     while(true){
       try{
         const rt=await fetch(
-          `${_SB}/rest/v1/transactions?tg_name=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&created_at=gte.${fromISO}&created_at=lte.${toISO}&select=amount&limit=1000&offset=${off2}`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&created_at=gte.${fromISO}&created_at=lte.${toISO}&select=amount&limit=1000&offset=${off2}`,
           {headers:_HDR}
         );
         const td=await rt.json();
@@ -1641,15 +1641,18 @@ function rcFilter(){
   const el=document.getElementById('rc-content');
   if(!rows.length){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--mu);">No results</div>';return;}
 
-  // ── Group: Collector → Route → Vendos ──────────────────────────
+  // ── Group: Collector → Date → Route → Vendos ──────────────────
   const byCollector={};
   rows.forEach(r=>{
     const c=r.collector;
-    if(!byCollector[c]) byCollector[c]={rows:[],routes:{}};
+    if(!byCollector[c]) byCollector[c]={rows:[],dates:{}};
     byCollector[c].rows.push(r);
+    const dt=r.harvest_date||'unknown';
+    if(!byCollector[c].dates[dt]) byCollector[c].dates[dt]={rows:[],routes:{}};
+    byCollector[c].dates[dt].rows.push(r);
     const rc=r.route_code||'ADMIN';
-    if(!byCollector[c].routes[rc]) byCollector[c].routes[rc]={rows:[],is_admin:r.is_admin};
-    byCollector[c].routes[rc].rows.push(r);
+    if(!byCollector[c].dates[dt].routes[rc]) byCollector[c].dates[dt].routes[rc]={rows:[],is_admin:r.is_admin};
+    byCollector[c].dates[dt].routes[rc].rows.push(r);
   });
 
   const fmtP=v=>_php(v);
@@ -1689,10 +1692,32 @@ function rcFilter(){
           <div><div style="font-size:11px;opacity:.7;">True Gap</div><div style="font-size:14px;font-weight:700;color:${colGapColor==='#15803d'?'#86efac':colGapColor==='#d97706'?'#fde68a':'#fca5a5'};">${colGap>=0?'+':''}${fmtP(colGap)}</div></div>
         </div>
       </div>
-      <!-- Route blocks -->
+      <!-- Date blocks -->
       <div style="padding:10px 12px;display:flex;flex-direction:column;gap:10px;">`;
 
-    Object.entries(cd.routes).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([rc,rd])=>{
+    Object.entries(cd.dates).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([dt,dd])=>{
+      const dtCoins=dd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
+      const dtTG=dd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
+      const dtGap=dd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
+      const dtAlerts=dd.rows.filter(r=>r.flag==='alert').length;
+      const dtWarns=dd.rows.filter(r=>r.flag==='warn').length;
+      const dtGapColor=dtGap<-500?'#dc2626':dtGap<-100?'#d97706':'#15803d';
+
+      html+=`<div style="border:1px solid #e0e7ff;border-radius:8px;overflow:hidden;">
+        <div style="background:#eef2ff;padding:7px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #e0e7ff;">
+          <span style="font-size:12px;font-weight:700;color:#3730a3;">📅 ${dt}</span>
+          <span style="font-size:11px;color:#6b7280;">${dd.rows.length} vendos</span>
+          ${dtAlerts?`<span style="background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${dtAlerts} ALERT</span>`:''}
+          ${dtWarns?`<span style="background:#fef9c3;color:#b45309;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${dtWarns} WARN</span>`:''}
+          <div style="margin-left:auto;font-size:11px;display:flex;gap:10px;">
+            <span>Coins: <b>${fmtP(dtCoins)}</b></span>
+            <span>TG: <b>${fmtP(dtTG)}</b></span>
+            <span>Gap: <b style="color:${dtGapColor};">${dtGap>=0?'+':''}${fmtP(dtGap)}</b></span>
+          </div>
+        </div>
+        <div style="padding:6px 8px;display:flex;flex-direction:column;gap:6px;">`;
+
+    Object.entries(dd.routes).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([rc,rd])=>{
       const rcCoins=rd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
       const rcTG=rd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
       const rcGap=rd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
@@ -1752,7 +1777,9 @@ function rcFilter(){
       </div>`;
     });
 
-    html+='</div></div>';
+        html+='</div></div>'; // end date block
+      }); // end dates loop
+    html+='</div></div></div></div>'; // close date inner, date container, routes wrapper, collector
   });
 
   el.innerHTML=html;
