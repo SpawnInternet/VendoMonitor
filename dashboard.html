@@ -947,6 +947,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       style="padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;width:220px;height:30px;">
     <span style="flex:1"></span>
     <span id="ht-count" style="font-size:11px;color:var(--mu)"></span>
+    <span id="ht-cache-age" style="font-size:10px;color:var(--mu);"></span>
     <button onclick="htLoad()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;">↺ Refresh</button>
   </div>
 
@@ -1280,12 +1281,40 @@ async function vpExecutePullout(){
 /* ── HARVEST TABLE ── */
 let htAllRows = [];
 
+
+async function htRebuildCache() {
+  try {
+    await fetch(`${_SB}/functions/v1/write-vendos-cache`, {
+      method: 'POST',
+      headers: { 'x-cache-secret': 'spawn-cache-2026', apikey: _KEY }
+    });
+    console.log('[htLoad] Cache rebuilt');
+  } catch(e) { console.warn('[htLoad] Cache rebuild failed', e); }
+}
+
 async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // Query ALL vendos — last_harvest_date already stored in vendos table
+  // 1. Try bucket cache first (instant, no DB load)
+  const _HT_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/vendos_table.json';
   try {
+    const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/300000));
+    if (rc.ok) {
+      const d = await rc.json();
+      if (d.rows && d.rows.length) {
+        htAllRows = d.rows;
+        // Background refresh from DB if cache older than 10 min
+        const age = Date.now() - new Date(d.generated_at||0).getTime();
+        if (age > 10*60*1000) htRebuildCache();
+        document.getElementById('ht-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
+        return; // fast path
+      }
+    }
+  } catch(e) {}
+  // 2. Fallback: direct DB
+  try {
+    document.getElementById('ht-cache-age').textContent = 'loading from DB…';
     let offset = 0;
     while(true){
       const r = await fetch(
@@ -1294,36 +1323,24 @@ async function htLoad(){
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
-      htAllRows.push(...batch.map(v=>({
-        ...v,
-        harvest_date: v.last_harvest_date||null,
-        actual_collector: null,
-        spawn_share: null,
-      })));
+      htAllRows.push(...batch.map(v=>({...v, harvest_date:v.last_harvest_date||null, actual_collector:null, spawn_share:null})));
       if(batch.length<1000) break;
       offset+=1000;
     }
-    // Enrich only harvested vendos with last collector+spawn_share (single query)
-    const harvestedIds = htAllRows.filter(v=>v.last_harvest_date).map(v=>v.id);
-    if(harvestedIds.length){
-      try{
-        const rh = await fetch(
-          `${_SB}/rest/v1/harvests?select=vendo_id,collector,spawn_share,harvest_date&vendo_id=in.(${harvestedIds.slice(0,500).join(',')})&order=harvest_date.desc&limit=500`,
-          {headers:_HDR}
-        );
-        const hrows = await rh.json();
-        const hmap = {};
-        (hrows||[]).forEach(h=>{ if(!hmap[h.vendo_id]) hmap[h.vendo_id]=h; });
-        htAllRows = htAllRows.map(v=>({
-          ...v,
-          actual_collector: hmap[v.id]?.collector||null,
-          spawn_share: hmap[v.id]?.spawn_share||null,
-        }));
-      }catch(e){}
+    // Enrich with last harvest
+    const ids = htAllRows.filter(v=>v.last_harvest_date).map(v=>v.id).slice(0,500);
+    if(ids.length){
+      const rh = await fetch(`${_SB}/rest/v1/harvests?select=vendo_id,collector,spawn_share&vendo_id=in.(${ids.join(',')})&order=harvest_date.desc&limit=500`,{headers:_HDR});
+      const hrows = await rh.json();
+      const hmap={};
+      (hrows||[]).forEach(h=>{if(!hmap[h.vendo_id])hmap[h.vendo_id]=h;});
+      htAllRows=htAllRows.map(v=>({...v,actual_collector:hmap[v.id]?.collector||null,spawn_share:hmap[v.id]?.spawn_share||null}));
     }
+    document.getElementById('ht-cache-age').textContent = 'live';
+    htRebuildCache(); // write to bucket for next time
   } catch(e){
     console.warn('htLoad error',e);
-    document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#dc2626;">Error loading: '+e.message+'</td></tr>';
+    document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</td></tr>';
     return;
   }
   if(!htAllRows.length){
