@@ -1561,19 +1561,39 @@ async function rcRun(){
     return;
   }
   document.getElementById('rc-tbody').innerHTML=`<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income for ${harvestRows.length} harvests…</td></tr>`;
-  // Build tg map from harvests.tg_name directly (already there), fall back to vendos lookup
-  const tgMap={};
-  harvestRows.forEach(r=>{ if(r.tg_name) tgMap[r.vendo_id||r.id+'_h']=r.tg_name; });
-  const vendoIdsNoTg=[...new Set(harvestRows.filter(r=>!r.tg_name&&r.vendo_id).map(r=>r.vendo_id))];
-  for(let i=0;i<vendoIdsNoTg.length;i+=200){
+  // Build tg_name map: harvest row → tg_name
+  // Priority: (1) harvest.tg_name, (2) lookup vendos by vendo_id, (3) lookup vendos by sheet_name
+  const tgMap={}; // keyed by harvest id
+  harvestRows.forEach(r=>{ if(r.tg_name) tgMap[r.id]=r.tg_name; });
+
+  // Lookup by vendo_id for those missing tg_name
+  const noTgIds=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.vendo_id).map(r=>r.vendo_id))];
+  const vendoTgMap={}; // vendo_id → tg_name
+  for(let i=0;i<noTgIds.length;i+=200){
     try{
-      const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${vendoIdsNoTg.slice(i,i+200).join(',')})&select=id,tg_name&limit=200`,{headers:_HDR});
+      const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${noTgIds.slice(i,i+200).join(',')})&select=id,sheet_name,tg_name&limit=200`,{headers:_HDR});
       const vd=await rv.json();
-      vd.forEach(v=>{ if(v.tg_name) tgMap[v.id]=v.tg_name; });
+      vd.forEach(v=>{ if(v.tg_name) vendoTgMap[v.id]=v.tg_name; });
     }catch(e){}
   }
+  harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.vendo_id&&vendoTgMap[r.vendo_id]) tgMap[r.id]=vendoTgMap[r.vendo_id]; });
+
+  // Lookup by sheet_name for remaining (old Excel imports without vendo_id)
+  const noTgNames=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.sheet_name).map(r=>r.sheet_name))];
+  const sheetTgMap={}; // sheet_name → tg_name
+  for(let i=0;i<noTgNames.length;i+=50){
+    try{
+      const names=noTgNames.slice(i,i+50).map(n=>`"${n}"`).join(',');
+      const params=noTgNames.slice(i,i+50).map(n=>`sheet_name=eq.${encodeURIComponent(n)}`).join('&');
+      const rv=await fetch(`${_SB}/rest/v1/vendos?or=(${noTgNames.slice(i,i+50).map(n=>`sheet_name.eq.${encodeURIComponent(n)}`).join(',')})&select=sheet_name,tg_name&limit=50`,{headers:_HDR});
+      const vd=await rv.json();
+      vd.forEach(v=>{ if(v.tg_name) sheetTgMap[v.sheet_name]=v.tg_name; });
+    }catch(e){}
+  }
+  harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.sheet_name&&sheetTgMap[r.sheet_name]) tgMap[r.id]=sheetTgMap[r.sheet_name]; });
+
   // Fetch TG income per unique tg_name
-  const uniqueTg=[...new Set(harvestRows.map(r=>r.tg_name||tgMap[r.vendo_id]).filter(Boolean))];
+  const uniqueTg=[...new Set(Object.values(tgMap))];
   const tgIncomeMap={};
   for(const tg of uniqueTg){
     let total=0,off2=0;
@@ -1593,7 +1613,7 @@ async function rcRun(){
     tgIncomeMap[tg]=total;
   }
   rcAllRows=harvestRows.map(row=>{
-    const tg=row.tg_name||tgMap[row.vendo_id]||null;
+    const tg=tgMap[row.id]||row.tg_name||null;
     const tgInc=tg!=null?(tgIncomeMap[tg]||0):null;
     const coins=Number(row.coins_total||0);
     const gap=tgInc!=null?coins-tgInc:null;
