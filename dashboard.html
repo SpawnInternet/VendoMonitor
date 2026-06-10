@@ -2655,6 +2655,9 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
     </div>
   </div>
 
+  <!-- Security Banner -->
+  <div id="sec-banner" style="margin-bottom:14px;"></div>
+
   <!-- Data gap results -->
   <div id="gap-results" style="display:none;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
     <div style="font-size:12px;font-weight:700;color:#7c3aed;margin-bottom:8px;">🔍 Data Gap Check Results</div>
@@ -9373,6 +9376,93 @@ async function daDelete(id){
   await fetch(`${_SB}/rest/v1/device_approvals?id=eq.${id}`,{method:'DELETE',headers:_HDR});
   daLoad();
 }
+
+
+/* ══ SECURITY REMINDER ══ */
+(function(){
+  const KEY = 'spawn_key_rotated_at';
+  const INTERVAL_DAYS = 30;
+
+  function secCheck(){
+    const el = document.getElementById('sec-banner');
+    if(!el) return;
+    const last = parseInt(localStorage.getItem(KEY)||'0');
+    const now = Date.now();
+    const daysSince = last ? Math.floor((now-last)/86400000) : null;
+    const due = !last || daysSince >= INTERVAL_DAYS;
+
+    if(!due){
+      el.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;font-size:12px;">
+        <span style="font-size:16px;">🔐</span>
+        <span style="color:#15803d;font-weight:600;">Service key rotated ${daysSince}d ago</span>
+        <span style="color:#6b7280;">Next rotation due in ${INTERVAL_DAYS-daysSince} days</span>
+        <span style="flex:1"></span>
+        <button onclick="secMarkRotated()" style="padding:3px 10px;border:1px solid #bbf7d0;border-radius:6px;background:#fff;font-size:11px;cursor:pointer;color:#15803d;">✓ Rotated now</button>
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = `<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-size:20px;">🔴</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:#dc2626;">Service Key Rotation Due${!last?' (never rotated)':' ('+daysSince+'d ago)'}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px;">Rotating monthly limits exposure if the key is ever seen in source code.</div>
+      </div>
+      <button onclick="secShowRotateGuide()" style="padding:6px 14px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🔄 Rotate Now</button>
+      <button onclick="secMarkRotated()" style="padding:6px 14px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:8px;font-size:12px;cursor:pointer;">Already rotated</button>
+    </div>`;
+  }
+
+  window.secMarkRotated = function(){
+    localStorage.setItem('spawn_key_rotated_at', Date.now().toString());
+    toast('✅ Marked as rotated. Reminder set for 30 days.');
+    secCheck();
+  };
+
+  window.secShowRotateGuide = function(){
+    const pop = document.createElement('div');
+    pop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    pop.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:560px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+      <div style="background:#dc2626;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:15px;font-weight:700;color:#fff;">🔄 Service Key Rotation Guide</div>
+        <button onclick="this.closest('div[style]').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:rgba(255,255,255,.8);">✕</button>
+      </div>
+      <div style="padding:20px;font-size:13px;line-height:1.7;">
+        <div style="background:#fef2f2;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#991b1b;">
+          ⚠️ After rotating, update the key in <b>dashboard.html</b> and <b>harvest.html</b> immediately or the app will stop working.
+        </div>
+        <ol style="margin:0;padding-left:20px;color:#374151;">
+          <li style="margin-bottom:8px;">Go to <a href="https://supabase.com/dashboard/project/cviraqfhphhsonjmrtvu/settings/api" target="_blank" style="color:#1565c0;font-weight:600;">Supabase → Settings → API ↗</a></li>
+          <li style="margin-bottom:8px;">Under <b>Service Role Key</b> → click <b>Reveal</b> → then <b>Rotate</b></li>
+          <li style="margin-bottom:8px;">Copy the new key</li>
+          <li style="margin-bottom:8px;">In dashboard.html: replace both <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">SB_KEY</code> and <code style="background:#f3f4f6;padding:1px 5px;border-radius:3px;">_KEY</code> values</li>
+          <li style="margin-bottom:8px;">In harvest.html: replace the Supabase key</li>
+          <li style="margin-bottom:8px;">Push to GitHub</li>
+          <li>Come back here and click <b>"Already rotated"</b></li>
+        </ol>
+      </div>
+      <div style="padding:0 20px 16px;display:flex;gap:8px;">
+        <a href="https://supabase.com/dashboard/project/cviraqfhphhsonjmrtvu/settings/api" target="_blank"
+          style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block;">
+          Open Supabase API Settings ↗
+        </a>
+        <button onclick="this.closest('div[style]').remove()" style="padding:8px 16px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;cursor:pointer;background:#fff;">Close</button>
+      </div>
+    </div>`;
+    pop.addEventListener('click', e=>{ if(e.target===pop) pop.remove(); });
+    document.body.appendChild(pop);
+  };
+
+  // Check on System panel open
+  const origShowP = window.showP;
+  window.showP = function(panel, btn){
+    if(origShowP) origShowP(panel, btn);
+    if(panel==='status') setTimeout(secCheck, 100);
+  };
+
+  // Also check on page load if system panel is active
+  window.addEventListener('load', ()=>setTimeout(secCheck, 1000));
+})();
 
 </script>
 </body>
