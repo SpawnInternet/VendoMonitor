@@ -1289,7 +1289,7 @@ function htFilter(){
     if(q    && !(r.sheet_name||'').toLowerCase().includes(q)) return false;
     return true;
   });
-  const done = rows.filter(r=>r.status==='done').length;
+  const done = rows.filter(r=>r.status==='harvested').length;
   const pend = rows.filter(r=>r.status==='pending').length;
   const tCoins = rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
   const tNet   = rows.reduce((s,r)=>s+Number(r.net_collectible||0),0);
@@ -1309,12 +1309,12 @@ function htFilter(){
   tb.innerHTML = rows.slice(0,2000).map(r=>{
     const col = r.harvest_groups?.collector||'—';
     const grp = r.harvest_groups?.group_label||'—';
-    const st  = r.status==='done'
+    const st  = r.status==='harvested'
       ? '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">done</span>'
       : r.status==='skipped'
       ? '<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">skipped</span>'
       : '<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">pending</span>';
-    return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="${r.status==='done'?'':'background:#fffdf5'};cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
+    return `<tr data-tg="${(r.sheet_name||r.tg_name||'').replace(/"/g,'&quot;')}" data-area="${r.area||''}" style="${r.status==='harvested'?'':'background:#fffdf5'};cursor:pointer" onclick="htShowVendoProfile(this.dataset.tg,this.dataset.area)">
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.sheet_name||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;max-width:150px;overflow:hidden;text-overflow:ellipsis;">${grp}</td>
@@ -1373,7 +1373,7 @@ async function lfLoadToday(){
   const today = new Date(); today.setHours(0,0,0,0);
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=eq.done&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=eq.harvested&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -1399,7 +1399,7 @@ function lfConnect(){
     lfWs.onmessage = async (e)=>{
       try{
         const msg = JSON.parse(e.data);
-        if((msg.event==='INSERT'||msg.event==='UPDATE') && msg.payload?.record?.status==='done'){
+        if((msg.event==='INSERT'||msg.event==='UPDATE') && msg.payload?.record?.status==='harvested'){
           const rec = msg.payload.record;
           let collector='', group_label='';
           try{
@@ -1448,7 +1448,7 @@ async function rcRun(){
   let harvestRows=[], offset=0;
   while(true){
     const r=await fetch(
-      `${_SB}/rest/v1/harvest_group_items?status=eq.done&harvested_at=gte.${fromISO}&harvested_at=lte.${toISO}`+
+      `${_SB}/rest/v1/harvest_group_items?status=eq.harvested&harvested_at=gte.${fromISO}&harvested_at=lte.${toISO}`+
       `&select=id,vendo_id,sheet_name,area,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)`+
       `&order=harvested_at.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
