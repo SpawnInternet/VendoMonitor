@@ -948,7 +948,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <span style="flex:1"></span>
     <span id="ht-count" style="font-size:11px;color:var(--mu)"></span>
     <span id="ht-cache-age" style="font-size:10px;color:var(--mu);"></span>
-    <button onclick="htLoad()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;">↺ Refresh</button>
+    <button onclick="htForceLoad()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;">↺ Refresh</button>
   </div>
 
   <div id="ht-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px;"></div>
@@ -1414,6 +1414,46 @@ async function htRebuildCache() {
     });
     console.log('[htLoad] Cache rebuilt');
   } catch(e) { console.warn('[htLoad] Cache rebuild failed', e); }
+}
+
+async function htForceLoad(){
+  // Skip bucket cache entirely, go straight to DB
+  htAllRows=[];
+  document.getElementById('ht-cache-age').textContent = 'refreshing…';
+  document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading from DB…</td></tr>';
+  try {
+    let offset = 0;
+    while(true){
+      const r = await fetch(
+        `${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,last_harvest_date,status&status=eq.active&order=last_harvest_date.desc.nullslast&limit=1000&offset=${offset}`,
+        {headers:{..._HDR,'Prefer':'count=none'}}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      htAllRows.push(...batch.map(v=>({...v,harvest_date:v.last_harvest_date||null,actual_collector:null,spawn_share:null})));
+      if(batch.length<1000) break;
+      offset+=1000;
+    }
+    // Enrich with last harvest
+    const ids = htAllRows.filter(v=>v.last_harvest_date).map(v=>v.id).slice(0,500);
+    if(ids.length){
+      const rh = await fetch(`${_SB}/rest/v1/harvests?select=vendo_id,collector,spawn_share&vendo_id=in.(${ids.join(',')})&order=harvest_date.desc&limit=500`,{headers:_HDR});
+      const hrows = await rh.json();
+      const hmap={};
+      (hrows||[]).forEach(h=>{if(!hmap[h.vendo_id])hmap[h.vendo_id]=h;});
+      htAllRows=htAllRows.map(v=>({...v,actual_collector:hmap[v.id]?.collector||null,spawn_share:hmap[v.id]?.spawn_share||null}));
+    }
+    const collectors=[...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
+    const htSel=document.getElementById('ht-collector');
+    const rcSel=document.getElementById('rc-collector');
+    if(htSel){const prev=htSel.value;htSel.innerHTML='<option value="">All collectors</option>';collectors.forEach(c=>{htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`;});}
+    if(rcSel){rcSel.innerHTML='<option value="">All collectors</option>';collectors.forEach(c=>{rcSel.innerHTML+=`<option>${c}</option>`;});}
+    document.getElementById('ht-cache-age').textContent = `${htAllRows.length} rows · live`;
+    htFilter();
+    htRebuildCache(); // update bucket cache with fresh data
+  } catch(e){
+    document.getElementById('ht-tbody').innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</td></tr>';
+  }
 }
 
 async function htLoad(){
