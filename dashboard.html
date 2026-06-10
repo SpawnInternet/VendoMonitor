@@ -439,6 +439,25 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <!-- Stat cards -->
   <div class="stats" id="dash-stats" style="margin-bottom:7px;"></div>
 
+  <!-- Dashboard search bar -->
+  <div style="display:flex;gap:8px;margin-bottom:7px;align-items:center;">
+    <div style="flex:1;position:relative;">
+      <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none;">🔍</span>
+      <input type="text" id="dash-search" placeholder="Search vendo name, area, owner..." oninput="dashSearch(this.value)"
+        style="width:100%;padding:7px 12px 7px 32px;border:1.5px solid var(--bd);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
+        onfocus="this.style.borderColor='#1565c0'" onblur="this.style.borderColor='var(--bd)'">
+    </div>
+    <select id="dash-area-filter" onchange="dashSearch(document.getElementById('dash-search').value)"
+      style="padding:7px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:12px;font-family:inherit;background:#fff;outline:none;">
+      <option value="">All Areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+      <option>MINAOG</option><option>MIX AREAS</option>
+    </select>
+  </div>
+  <!-- Search results dropdown -->
+  <div id="dash-search-results" style="display:none;background:#fff;border:1.5px solid #1565c0;border-radius:10px;margin-bottom:7px;max-height:320px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>
+
   <!-- Suspicious alert banner -->
   <div id="suspicious-alert" style="display:none;background:#fee2e2;border:1px solid #fecaca;border-radius:7px;padding:6px 12px;margin-bottom:7px;align-items:center;gap:10px;">
     <span>🚨</span>
@@ -1253,7 +1272,7 @@ async function htLoad(){
     let offset = 0;
     while(true){
       const r = await fetch(
-        `${_SB}/rest/v1/harvest_group_items?select=id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
+        `${_SB}/rest/v1/harvest_group_items?select=id,vendo_id,sheet_name,area,status,coins_total,coins_free,coins_saloy,net_collectible,harvested_at,group_run_id,harvest_groups!group_run_id(collector,group_label)&order=harvested_at.desc.nullslast&limit=1000&offset=${offset}`,
         {headers:{..._HDR,'Prefer':'count=none'}}
       );
       const batch = await r.json();
@@ -1307,7 +1326,7 @@ function htFilter(){
   const tb = document.getElementById('ht-tbody');
   if(!rows.length){ tb.innerHTML='<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
   tb.innerHTML = rows.slice(0,2000).map(r=>{
-    const col = r.harvest_groups?.collector||'—';
+    const col = r.actual_collector||r.harvest_groups?.collector||'—';
     const grp = r.harvest_groups?.group_label||'—';
     const st  = r.status==='harvested'
       ? '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">done</span>'
@@ -1373,12 +1392,12 @@ async function lfLoadToday(){
   const today = new Date(); today.setHours(0,0,0,0);
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvest_group_items?harvested_at=gte.${today.toISOString()}&status=eq.harvested&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,harvest_groups!inner(collector,group_label)&order=harvested_at.desc&limit=500`,
+      `${_SB}/rest/v1/harvests?harvest_date=eq.${today.toISOString().slice(0,10)}&select=id,sheet_name,area,coins_total,net_collectible,harvested_at,collector&order=harvested_at.desc&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
     if(Array.isArray(rows)){
-      lfItems = rows.map(r=>({...r,collector:r.harvest_groups?.collector,group_label:r.harvest_groups?.group_label}));
+      lfItems = rows.map(r=>({...r,group_label:''}));
       lfRender();
     }
   }catch(e){console.warn('lfLoadToday',e);}
@@ -1391,7 +1410,7 @@ function lfConnect(){
     const wsUrl = `wss://cviraqfhphhsonjmrtvu.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=${_KEY}`;
     lfWs = new WebSocket(wsUrl);
     lfWs.onopen = ()=>{
-      lfWs.send(JSON.stringify({topic:'realtime:public:harvest_group_items',event:'phx_join',payload:{},ref:'1'}));
+      lfWs.send(JSON.stringify({topic:'realtime:public:harvests',event:'phx_join',payload:{},ref:'1'}));
       lfConnected = true;
       document.getElementById('lf-dot').style.background='#16a34a';
       document.getElementById('lf-status').textContent='Live — updates as collectors submit';
@@ -1399,17 +1418,19 @@ function lfConnect(){
     lfWs.onmessage = async (e)=>{
       try{
         const msg = JSON.parse(e.data);
-        if((msg.event==='INSERT'||msg.event==='UPDATE') && msg.payload?.record?.status==='harvested'){
-          const rec = msg.payload.record;
-          let collector='', group_label='';
-          try{
-            const rg=await fetch(`${_SB}/rest/v1/harvest_groups?id=eq.${rec.group_run_id}&select=collector,group_label&limit=1`,{headers:_HDR});
-            const gd=await rg.json();
-            if(gd.length){collector=gd[0].collector;group_label=gd[0].group_label;}
-          }catch(err){}
-          lfItems.unshift({...rec,collector,group_label});
-          lfRender();
-          if(hvNewActiveTab==='htable') htLoad();
+        if(msg.event==='INSERT' || msg.event==='UPDATE'){
+          const rec = msg.payload?.record;
+          if(!rec) return;
+          // harvests table INSERT — has collector directly
+          if(rec.collector && rec.harvest_date){
+            lfItems.unshift({...rec, group_label:''});
+            lfRender();
+            if(hvNewActiveTab==='htable') htLoad();
+          }
+          // harvest_group_items UPDATE to harvested — refresh table
+          else if(rec.status==='harvested'){
+            if(hvNewActiveTab==='htable') htLoad();
+          }
         }
       }catch(err){}
     };
@@ -3323,6 +3344,67 @@ async function openVendoFromSearch(vendo, area) {
 }
 
 // ══════════════════════════════════════════════════════════
+// DASHBOARD SEARCH
+// ══════════════════════════════════════════════════════════
+let _dashSearchTimer = null;
+function dashSearch(q) {
+  clearTimeout(_dashSearchTimer);
+  const area = document.getElementById('dash-area-filter')?.value || '';
+  const el = document.getElementById('dash-search-results');
+  q = (q || '').trim();
+  if (!q && !area) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  _dashSearchTimer = setTimeout(async () => {
+    el.style.display = '';
+    el.innerHTML = '<div style="padding:10px 14px;color:var(--mu);font-size:12px;">Searching…</div>';
+    try {
+      let params = `select=id,sheet_name,tg_name,owner_name,area,vlan,last_harvest_date&limit=30&order=sheet_name.asc`;
+      const filters = [];
+      if (area) filters.push(`area=eq.${encodeURIComponent(area)}`);
+      if (q) filters.push(`or=(sheet_name.ilike.*${encodeURIComponent(q)}*,tg_name.ilike.*${encodeURIComponent(q)}*,owner_name.ilike.*${encodeURIComponent(q)}*)`);
+      if (filters.length) params = filters.join('&') + '&' + params;
+      const r = await fetch(`${_SB}/rest/v1/vendos?${params}`, { headers: _HDR });
+      const rows = await r.json();
+      if (!rows.length) {
+        el.innerHTML = '<div style="padding:12px 14px;color:var(--mu);font-size:12px;">No vendos found.</div>';
+        return;
+      }
+      el.innerHTML = rows.map(v => {
+        const days = v.last_harvest_date ? Math.floor((Date.now() - new Date(v.last_harvest_date)) / 86400000) : null;
+        const daysStr = days === null ? '<span style="color:#9ca3af">Never</span>'
+          : days > 30 ? `<span style="color:#dc2626;font-weight:700">${days}d ago</span>`
+          : `<span style="color:#15803d">${days}d ago</span>`;
+        return `<div onclick="showVendoFromDash(${JSON.stringify(v.sheet_name||v.tg_name||'').replace(/</g,'&lt;')},${JSON.stringify(v.area||'')})"
+          style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer;transition:background .1s"
+          onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.sheet_name||v.tg_name||'—'}</div>
+            <div style="font-size:10px;color:var(--mu);margin-top:1px">${v.owner_name||''} ${v.area?'· '+v.area:''} ${v.vlan?'· VLAN '+v.vlan:''}</div>
+          </div>
+          <div style="font-size:10px;text-align:right">${daysStr}</div>
+        </div>`;
+      }).join('');
+    } catch(e) {
+      el.innerHTML = '<div style="padding:10px 14px;color:#dc2626;font-size:12px;">Search failed.</div>';
+    }
+  }, 300);
+}
+function showVendoFromDash(name, area) {
+  document.getElementById('dash-search-results').style.display = 'none';
+  // Switch to vendos tab and show profile
+  showP('vendos', document.querySelector('.nav-bar button:nth-child(2)'));
+  setTimeout(() => {
+    const s = document.getElementById('v-search');
+    if (s) { s.value = name; filterVendos(); }
+  }, 200);
+}
+// Close search on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#dash-search') && !e.target.closest('#dash-search-results') && !e.target.closest('#dash-area-filter')) {
+    const el = document.getElementById('dash-search-results');
+    if (el) el.style.display = 'none';
+  }
+});
+
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
 async function csLoad() {
