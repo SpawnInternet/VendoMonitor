@@ -1197,19 +1197,19 @@ async function vpRenderRecon(){
   document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;font-size:13px;">Loading...</div>';
   try{
     const tg=await sb('transactions','vendo=eq.'+encodeURIComponent(v.tg_name)+'&is_skipped=eq.false&select=date,amount&order=date.asc',50000);
-    const totTg=tg.reduce((s,r)=>s+Number(r.amount||0),0),totC=h.reduce((s,r)=>s+Number(r.net_collectible||0),0),gap=totC-totTg;
+    const totTg=tg.reduce((s,r)=>s+Number(r.amount||0),0),totC=h.reduce((s,r)=>s+Number(r.coins_total||0),0),gap=totC-totTg;
     const gc=Math.abs(gap)<100?'#374151':gap>0?'#dc2626':'#15803d';
     const tgByDate={};tg.forEach(r=>{tgByDate[r.date]=(tgByDate[r.date]||0)+Number(r.amount||0);});
     let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">'
-      +'<div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:#1565c0;">'+_php(totC)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">Coins net</div></div>'
+      +'<div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:#1565c0;">'+_php(totC)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">Coins total</div></div>'
       +'<div style="background:#f0fdf4;border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:#15803d;">'+_php(totTg)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">TG income</div></div>'
       +'<div style="background:'+(Math.abs(gap)<100?'#f0fdf4':'#fef2f2')+';border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:'+gc+';">'+(gap>=0?'+':'')+_php(gap)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">Gap</div></div>'
-      +'</div><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f8faff;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Harvest date</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Coins net</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">TG income</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Gap</th></tr></thead><tbody>';
+      +'</div><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f8faff;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Harvest date</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Coins total</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">TG income</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Gap</th></tr></thead><tbody>';
     h.forEach((hr,i)=>{
       const pe=hr.harvest_date,ps=i+1<h.length?h[i+1].harvest_date:null;
       const ti=Object.entries(tgByDate).filter(([d])=>d<=pe&&(!ps||d>ps)).reduce((s,[,v2])=>s+v2,0);
-      const g=Number(hr.net_collectible||0)-ti,gc2=Math.abs(g)<100?'#374151':g>0?'#dc2626':'#15803d';
-      html+='<tr><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">'+pe+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#1565c0;">'+_php(hr.net_collectible)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#15803d;">'+_php(ti)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:'+gc2+';font-weight:600;">'+(g>=0?'+':'')+_php(g)+'</td></tr>';
+      const g=Number(hr.coins_total||0)-ti,gc2=Math.abs(g)<100?'#374151':g>0?'#dc2626':'#15803d';
+      html+='<tr><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">'+pe+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#1565c0;">'+_php(hr.coins_total)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#15803d;">'+_php(ti)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:'+gc2+';font-weight:600;">'+(g>=0?'+':'')+_php(g)+'</td></tr>';
     });
     html+='</tbody></table>';
     document.getElementById('vp-body').innerHTML=html;
