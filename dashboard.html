@@ -907,7 +907,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div class="hv-toprow">
     <div class="hv-title">🌾 Harvest</div>
     <div class="hv-tabs" id="hv-main-tabs">
-      <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Harvest Table</button>
+      <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos Table</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">⚡ Live Feed</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this)">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
@@ -949,10 +949,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Area</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Date</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Collector</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Coins total</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Free</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Saloy</th>
-            <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Net</th>
+
+
+
+
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Status</th>
             <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--blue);border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:#f0f4ff;">Harvested at</th>
           </tr>
@@ -1061,6 +1061,39 @@ function hvNewTab(id, btn){
 }
 
 
+
+async function vpTgSearch(q) {
+  const el = document.getElementById('vp-tg-results');
+  if (!el) return;
+  q = (q || '').trim();
+  if (!q) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = '<div style="padding:8px 10px;color:var(--mu);font-size:12px;">Searching…</div>';
+  try {
+    const r = await fetch(
+      `${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
+      {headers: _HDR}
+    );
+    const rows = await r.json();
+    if (!rows.length) { el.innerHTML = '<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>'; return; }
+    el.innerHTML = rows.map(v =>
+      `<div onclick="vpTgSelect('${(v.tg_name||'').replace(/'/g,"\'")}')"
+        style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;"
+        onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+        <div style="font-weight:600">${v.tg_name}</div>
+        <div style="font-size:10px;color:var(--mu)">${v.sheet_name||''} · ${v.area||''}</div>
+      </div>`
+    ).join('');
+  } catch(e) {
+    el.innerHTML = '<div style="padding:8px 10px;color:#dc2626;font-size:12px;">Search failed</div>';
+  }
+}
+function vpTgSelect(tgName) {
+  const inp = document.getElementById('vp-f-tg_name');
+  const el = document.getElementById('vp-tg-results');
+  if (inp) inp.value = tgName;
+  if (el) el.style.display = 'none';
+}
 async function htShowVendoProfile(name, area) {
   let modal = document.getElementById('vp-modal');
   if (!modal) {
@@ -1122,7 +1155,15 @@ function vpRenderInfo(){
   h1+='<div><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Identity</div>';
   h1+=_vf('Store / Vendo name',v&&v.sheet_name,null,false);
   h1+=edit?_vf('Owner name',v&&v.owner_name,'owner_name',true):'<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">Owner name</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(v&&v.owner_name||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
-  h1+=edit?_vf('TG name',v&&v.tg_name,'tg_name',true):'<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.tg_name||'&#8212;')+tgB+'</div></div>';
+  if(edit){
+    h1+='<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">TG name</div>'
+      +'<div style="position:relative;">'
+      +'<input id="vp-f-tg_name" value="'+(v&&v.tg_name||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" placeholder="Search TG name..."' oninput="vpTgSearch(this.value)"' style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">'
+      +'<div id="vp-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:180px;overflow-y:auto;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>'
+      +'</div></div>';
+  } else {
+    h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.tg_name||'&#8212;')+tgB+'</div></div>';
+  }
   h1+=_vf('Area',v&&v.area,null,false)+_vf('VLAN',v&&v.vlan,null,false)+_vf('Status',v&&v.status,null,false);
   h1+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed;">&#128205; Location &amp; Contact</div>';
   h1+=_vf('Address',v&&v.address,'address',edit)+_vf('Contact',v&&v.contact_number,'contact_number',edit);
@@ -1217,7 +1258,7 @@ async function vpExecutePullout(){
 let htAllRows = [];
 
 async function htLoad(){
-  document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="10" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
+  document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
   // 3. Fallback: direct DB — query harvests table for actual collector
@@ -1276,15 +1317,13 @@ function htFilter(){
     ['stat-blue', rows.length.toLocaleString(), 'Vendos shown'],
     ['stat-grn',  done.toLocaleString(), 'Done'],
     ['stat-amb',  pend.toLocaleString(), 'Pending'],
-    ['stat-blue', _php(tCoins), 'Total coins'],
-    ['stat-grn',  _php(tNet),   'Total net'],
   ].map(([cl,v,l])=>`<div style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:10px 12px;">
     <div style="font-size:20px;font-weight:700;color:${cl==='stat-grn'?'#15803d':cl==='stat-amb'?'#b45309':'#1565c0'};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
   </div>`).join('');
   document.getElementById('ht-count').textContent = rows.length.toLocaleString()+' rows';
   const tb = document.getElementById('ht-tbody');
-  if(!rows.length){ tb.innerHTML='<tr><td colspan="10" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
+  if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
   tb.innerHTML = rows.slice(0,2000).map(r=>{
     const col = r.collector||r.actual_collector||'—';
     const st  = '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;">harvested</span>';
@@ -1293,15 +1332,12 @@ function htFilter(){
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.area||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.harvest_date||'—'}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;"><span style="background:#ede9fe;color:#6d28d9;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">${col}</span></td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.coins_total!=null?_php(r.coins_total):'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.coins_free!=null?_php(r.coins_free):'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${r.coins_saloy!=null?_php(r.coins_saloy):'—'}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-weight:600;color:#15803d;">${r.net_collectible!=null?_php(r.net_collectible):'—'}</td>
+
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${st}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;color:var(--mu);">${_fmt(r.harvested_at)}</td>
     </tr>`;
   }).join('');
-  if(rows.length>2000) tb.innerHTML+=`<tr><td colspan="10" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
+  if(rows.length>2000) tb.innerHTML+=`<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
 }
 
 /* ── LIVE FEED ── */
