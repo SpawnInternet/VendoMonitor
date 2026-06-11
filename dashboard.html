@@ -166,6 +166,26 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .rc-filter-row input:focus,.rc-filter-row select:focus{border-color:#1e3cb8;}
 .rc-summary-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .rc-chip{padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;}
+/* Prevent Leaflet map from overflowing */
+#progress-map, #vmap-top-map {
+  height: 300px !important;
+  overflow: hidden !important;
+  position: relative !important;
+  z-index: 0 !important;
+}
+#hvt-progress {
+  position: relative;
+  isolation: isolate;
+  z-index: 0;
+}
+/* CRITICAL: hide leaflet panes when parent is hidden */
+#hvt-progress[style*="display: none"] .leaflet-pane,
+#hvt-progress[style*="display:none"] .leaflet-pane,
+#hvt-progress[style*="display: none"] .leaflet-container,
+#hvt-progress[style*="display:none"] .leaflet-container {
+  display: none !important;
+  visibility: hidden !important;
+}
 </style>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -2296,6 +2316,8 @@ function rcFilter(){
     if(origShowP) origShowP(panel, btn);
     if(panel==='dash') loadDashboard();
     if(panel==='harvest'){ htLoad(); lfConnect(); }
+    // Destroy progress map when leaving harvest
+    if(panel!=='harvest' && typeof _progressMap!=='undefined' && _progressMap){ _progressMap.remove(); _progressMap=null; }
   };
 })();
 
