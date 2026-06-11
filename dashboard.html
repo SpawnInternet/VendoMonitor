@@ -9489,7 +9489,26 @@ let _nmTgResults = [];
 async function nmLoad(){
   document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;">Loading…</td></tr>';
   try {
-    // Fetch all active vendos with sheet_name
+    // 1. Try bucket cache first (instant)
+    const _NM_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/names-cache/names.json';
+    try {
+      const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 5000);
+      const rc = await fetch(_NM_BUCKET + '?t=' + Math.floor(Date.now()/60000), {signal:ctrl.signal});
+      if(rc.ok){
+        const d = await rc.json();
+        const age = Date.now() - new Date(d.generated_at||0).getTime();
+        if(d.rows && d.rows.length > 100){
+          _nmRows = d.rows;
+          if(age > 30*60*1000) fetch('https://cviraqfhphhsonjmrtvu.supabase.co/functions/v1/write-names-cache',{method:'POST',headers:{'x-cache-secret':'spawn-cache-2026','Content-Type':'application/json'}}).catch(()=>{});
+          const matched = _nmRows.filter(v=>v.tg_name).length;
+          const unmatched = _nmRows.length - matched;
+          document.getElementById('nm-stats').innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#15803d;font-size:16px;">${matched}</span> <span style="color:#6b7280;">matched</span></div><div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#b45309;font-size:16px;">${unmatched}</span> <span style="color:#6b7280;">unmatched</span></div><div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#1565c0;font-size:16px;">${_nmRows.length}</span> <span style="color:#6b7280;">total</span></div>`;
+          nmRender();
+          return;
+        }
+      }
+    } catch(e){}
+    // 2. Fallback: direct DB
     let all = [], off = 0;
     while(true){
       const r = await fetch(`${_SB}/rest/v1/vendos?status=eq.active&sheet_name=not.is.null&select=id,sheet_name,tg_name,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
@@ -9500,6 +9519,8 @@ async function nmLoad(){
       off+=1000;
     }
     _nmRows = all;
+    // Rebuild bucket in background
+    fetch('https://cviraqfhphhsonjmrtvu.supabase.co/functions/v1/write-names-cache',{method:'POST',headers:{'x-cache-secret':'spawn-cache-2026','Content-Type':'application/json'}}).catch(()=>{});
     const matched = all.filter(v=>v.tg_name).length;
     const unmatched = all.length - matched;
     document.getElementById('nm-stats').innerHTML = `
