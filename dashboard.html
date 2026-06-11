@@ -2425,9 +2425,10 @@ async function loadProgress(){
         const t = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
         const name = h.sheet_name||h.vendo_name||h.tg_name||'—';
         const bg = i%2===0?'#fff':'#f9fafb';
-        html += `<tr style="background:${bg};" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'">
+        const _sn = (h.sheet_name||h.vendo_name||h.tg_name||'').replace(/'/g,"\\'");
+        html += `<tr style="background:${bg};cursor:pointer;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'" onclick="vmZoomTo('${_sn}')" title="Click to show on Vendo Map">
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;white-space:nowrap;">${t}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;">${name}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;">${name} <span style="font-size:9px;color:#9ca3af;">📍</span></td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:11px;">${h.area||'—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#1e293b;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#15803d;">₱${Math.round(h.spawn_share||0).toLocaleString()}</td>
@@ -2497,10 +2498,30 @@ function _initProgressMap(gpsRows){
   }, 200);
 }
 
+function vmZoomTo(name){
+  const btn = document.getElementById('hbtn-vmap');
+  if(btn) hvNewTab('vmap', btn);
+  const _try = (n)=>{
+    if(!_vmMap || !_vmAllRows.length){
+      if(n>0) setTimeout(()=>_try(n-1), 400);
+      if(!_vmAllRows.length) vmLoad();
+      return;
+    }
+    const v = _vmAllRows.find(r=>(r.sheet_name||r.tg_name||'').toLowerCase()===name.toLowerCase());
+    if(!v||!v.lat||!v.lng) return;
+    _vmMap.setView([parseFloat(v.lat), parseFloat(v.lng)], 17);
+    _vmMarkers.forEach(m=>{
+      const ll = m.getLatLng();
+      if(Math.abs(ll.lat-parseFloat(v.lat))<0.0001 && Math.abs(ll.lng-parseFloat(v.lng))<0.0001){
+        m.openPopup();
+      }
+    });
+  };
+  setTimeout(()=>_try(5), 300);
+}
+
 // Auto-refresh every 30 seconds when tab is active
 setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
-// Auto-refresh Vendo Map every 60 seconds when tab is active
-setInterval(()=>{ if(hvNewActiveTab==='vmap') vmLoad(); }, 60000);
 
 </script>
 
