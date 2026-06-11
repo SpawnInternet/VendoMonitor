@@ -1215,8 +1215,7 @@ function hvNewTab(id, btn){
   btn.classList.add('on');
   hvNewActiveTab = id;
   if(id==='htable' && htAllRows.length===0) htLoad();
-  if(id==='livefeed'){ lfConnect(); lfSetMode('today'); }
-  if(id==='livefeed') lfConnect();
+  if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){
     rcInitDates();
     rcSetMode('recent');
@@ -1854,7 +1853,7 @@ async function lfLoadHistoryDate(){
 async function lfLoadToday(){
   try{
     const r = await fetch(
-      `${_SB}/rest/v1/harvests?harvest_date=eq.${new Date().toISOString().slice(0,10)}&select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,
+      `${_SB}/rest/v1/harvests?harvest_date=eq.${new Date(Date.now()+8*3600000).toISOString().slice(0,10)}&select=id,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,harvested_at,harvest_date,collector,collector_note,photo_url&order=harvested_at.desc.nullslast&limit=500`,
       {headers:_HDR}
     );
     const rows = await r.json();
@@ -9203,7 +9202,7 @@ let _nmTgResults = [];
 function nmRebuildCache(){ fetch(`${_SB}/functions/v1/write-names-cache`,{method:'POST',headers:{'x-cache-secret':'spawn-cache-2026',apikey:_KEY}}).catch(()=>{}); }
 
 async function nmLoad(){
-  document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;"><span style="display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#1565c0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading 1,100+ vendos…</td></tr>';
+  document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;">Loading…</td></tr>';
   try {
     // 1. Try bucket cache first (3s timeout)
     const _NM_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/names-cache/names.json';
@@ -9218,7 +9217,7 @@ async function nmLoad(){
         if(d.rows && d.rows.length > 100){
           all = d.rows;
           const age = Date.now() - new Date(d.generated_at||0).getTime();
-          const _ncaB=document.getElementById('nm-cache-age'); if(_ncaB) _ncaB.textContent='cache '+Math.round(age/60000)+'min ago';
+          document.getElementById('nm-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
           if(age > 10*60*1000) nmRebuildCache();
         }
       }
