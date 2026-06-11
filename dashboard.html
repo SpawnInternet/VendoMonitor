@@ -2476,6 +2476,7 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
       style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;height:30px;width:200px;">
     <span style="flex:1"></span>
     <span id="nm-count" style="font-size:11px;color:#6b7280;"></span>
+    <span id="nm-cache-age" style="font-size:10px;color:#9ca3af;margin-left:6px;"></span>
     <button onclick="nmLoad()" style="padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
   </div>
   <div id="nm-stats" style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"></div>
@@ -9145,18 +9146,40 @@ let _nmRows = [];
 let _nmFilter = 'all';
 let _nmTgResults = [];
 
+function nmRebuildCache(){ fetch(`${_SB}/functions/v1/write-names-cache`,{method:'POST',headers:{'x-cache-secret':'spawn-cache-2026',apikey:_KEY}}).catch(()=>{}); }
+
 async function nmLoad(){
   document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;">Loading…</td></tr>';
   try {
-    // Fetch all active vendos with sheet_name
-    let all = [], off = 0;
-    while(true){
-      const r = await fetch(`${_SB}/rest/v1/vendos?status=eq.active&sheet_name=not.is.null&select=id,sheet_name,tg_name,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
-      const batch = await r.json();
-      if(!Array.isArray(batch)||!batch.length) break;
-      all.push(...batch);
-      if(batch.length<1000) break;
-      off+=1000;
+    // 1. Try bucket cache first
+    const _NM_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/names-cache/names.json';
+    let all = [];
+    try {
+      const rc = await fetch(_NM_BUCKET + '?t=' + Math.floor(Date.now()/300000));
+      if(rc.ok){
+        const d = await rc.json();
+        if(d.rows && d.rows.length > 100){
+          all = d.rows;
+          const age = Date.now() - new Date(d.generated_at||0).getTime();
+          document.getElementById('nm-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
+          if(age > 10*60*1000) nmRebuildCache();
+        }
+      }
+    } catch(e){}
+    // 2. Fallback: direct DB
+    if(!all.length){
+      document.getElementById('nm-cache-age').textContent = 'loading…';
+      let off = 0;
+      while(true){
+        const r = await fetch(`${_SB}/rest/v1/vendos?status=eq.active&sheet_name=not.is.null&select=id,sheet_name,tg_name,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
+        const batch = await r.json();
+        if(!Array.isArray(batch)||!batch.length) break;
+        all.push(...batch);
+        if(batch.length<1000) break;
+        off+=1000;
+      }
+      document.getElementById('nm-cache-age').textContent = 'live';
+      nmRebuildCache();
     }
     _nmRows = all;
     const matched = all.filter(v=>v.tg_name).length;
@@ -9292,6 +9315,7 @@ async function nmSaveRow(id){
       const v = _nmRows.find(r=>r.id===id);
       if(v) v.tg_name = tgName||null;
       toast('✅ Saved!');
+      nmRebuildCache();
       nmRender();
     } else toast('Save failed');
   }catch(e){toast('Error: '+e.message);}
@@ -9311,6 +9335,7 @@ async function nmUnlink(id){
       const v = _nmRows.find(r=>r.id===id);
       if(v) v.tg_name = null;
       toast('Unlinked');
+      nmRebuildCache();
       nmRender();
     } else toast('Unlink failed');
   }catch(e){toast('Error: '+e.message);}
