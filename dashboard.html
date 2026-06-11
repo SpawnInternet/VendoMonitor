@@ -167,6 +167,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .rc-summary-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
 .rc-chip{padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;}
 </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
 
@@ -2338,11 +2340,14 @@ async function loadProgress(){
   try {
     const phNow = new Date(Date.now() + (8*60*60*1000));
     const today = phNow.toISOString().slice(0,10);
-    const r = await fetch(
-      `${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,
-      {headers:_HDR}
-    );
-    const rows = await r.json();
+
+    // Fetch harvests + GPS locations in parallel
+    const [rH, rGPS] = await Promise.all([
+      fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
+      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,collector_note&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00+00:00&order=harvested_at.desc&limit=500`,{headers:_HDR})
+    ]);
+    const rows = await rH.json();
+    const gpsRows = await rGPS.json();
 
     const totalCoins = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
     const totalSpawn = rows.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
@@ -2368,9 +2373,22 @@ async function loadProgress(){
       </div>
     </div>`;
 
+    // Map section
+    html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+      <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">
+        🗺 Live Field Map — Zamboanga del Norte
+        <span style="font-size:10px;font-weight:400;opacity:.6;margin-left:4px;">${gpsRows.length} GPS points today</span>
+        <div style="margin-left:auto;display:flex;gap:12px;font-size:10px;font-weight:400;">
+          <span>🟢 &lt;30min</span><span>🟡 30–60min</span><span>🔴 &gt;1hr</span>
+        </div>
+      </div>
+      <div id="progress-map" style="height:320px;width:100%;"></div>
+    </div>`;
+
     if(!rows.length){
       html += '<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;background:#fff;border-radius:10px;border:1px solid #e5e7eb;">No harvests today yet.</div>';
       el.innerHTML = html;
+      _initProgressMap(gpsRows);
       document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
       return;
     }
@@ -2420,10 +2438,51 @@ async function loadProgress(){
     });
 
     el.innerHTML = html;
+    _initProgressMap(gpsRows);
     document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   } catch(e){
     el.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;
   }
+}
+
+let _progressMap = null;
+function _initProgressMap(gpsRows){
+  if(!window.L) return;
+  setTimeout(()=>{
+    const mapEl = document.getElementById('progress-map');
+    if(!mapEl) return;
+    // Destroy existing map instance
+    if(_progressMap){ _progressMap.remove(); _progressMap=null; }
+    // Center on Zamboanga del Norte
+    _progressMap = L.map('progress-map').setView([8.15, 123.27], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© OpenStreetMap',maxZoom:18
+    }).addTo(_progressMap);
+
+    if(!gpsRows||!gpsRows.length) return;
+
+    // Get latest point per collector (use sheet_name as proxy)
+    // Group all points, latest first
+    const now = Date.now();
+    const bounds = [];
+    gpsRows.forEach(row=>{
+      if(!row.lat_captured||!row.lng_captured) return;
+      const lat = parseFloat(row.lat_captured);
+      const lng = parseFloat(row.lng_captured);
+      if(isNaN(lat)||isNaN(lng)) return;
+      const minsAgo = row.harvested_at ? (now - new Date(row.harvested_at).getTime())/60000 : 999;
+      const color = minsAgo < 30 ? '#16a34a' : minsAgo < 60 ? '#d97706' : '#dc2626';
+      const name = row.sheet_name||row.tg_name||'?';
+      const t = row.harvested_at ? new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
+      const marker = L.circleMarker([lat,lng],{
+        radius:8, fillColor:color, color:'#fff',
+        weight:2, opacity:1, fillOpacity:0.9
+      }).addTo(_progressMap);
+      marker.bindPopup(`<b>${name}</b><br>${t}`);
+      bounds.push([lat,lng]);
+    });
+    if(bounds.length) _progressMap.fitBounds(bounds, {padding:[30,30]});
+  }, 100);
 }
 
 // Auto-refresh every 30 seconds when tab is active
