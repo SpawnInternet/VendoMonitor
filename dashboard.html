@@ -2451,20 +2451,17 @@ function _initProgressMap(gpsRows){
   setTimeout(()=>{
     const mapEl = document.getElementById('progress-map');
     if(!mapEl) return;
-    // Destroy existing map instance
     if(_progressMap){ _progressMap.remove(); _progressMap=null; }
-    // Center on Zamboanga del Norte
-    _progressMap = L.map('progress-map').setView([8.15, 123.27], 10);
+    _progressMap = L.map('progress-map', {zoomControl:true}).setView([8.15, 123.27], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      attribution:'© OpenStreetMap',maxZoom:18
+      attribution:'© OpenStreetMap', maxZoom:19
     }).addTo(_progressMap);
 
     if(!gpsRows||!gpsRows.length) return;
 
-    // Get latest point per collector (use sheet_name as proxy)
-    // Group all points, latest first
     const now = Date.now();
     const bounds = [];
+
     gpsRows.forEach(row=>{
       if(!row.lat_captured||!row.lng_captured) return;
       const lat = parseFloat(row.lat_captured);
@@ -2474,15 +2471,29 @@ function _initProgressMap(gpsRows){
       const color = minsAgo < 30 ? '#16a34a' : minsAgo < 60 ? '#d97706' : '#dc2626';
       const name = row.sheet_name||row.tg_name||'?';
       const t = row.harvested_at ? new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
-      const marker = L.circleMarker([lat,lng],{
-        radius:8, fillColor:color, color:'#fff',
-        weight:2, opacity:1, fillOpacity:0.9
-      }).addTo(_progressMap);
-      marker.bindPopup(`<b>${name}</b><br>${t}`);
-      bounds.push([lat,lng]);
+
+      // Pin with label using divIcon
+      const pinIcon = L.divIcon({
+        className: '',
+        html: `<div style="position:relative;text-align:center;">
+          <div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>
+          <div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);margin-top:3px;display:inline-block;">${name}</div>
+          <div style="color:#555;font-size:9px;white-space:nowrap;">${t}</div>
+        </div>`,
+        iconAnchor: [7, 7]
+      });
+      L.marker([lat, lng], {icon: pinIcon})
+        .addTo(_progressMap)
+        .bindPopup(`<div style="font-size:13px;min-width:120px;"><b>${name}</b><br><span style="color:#6b7280;font-size:11px;">${t} · ${minsAgo<60?Math.round(minsAgo)+'min ago':'over 1hr ago'}</span></div>`);
+      bounds.push([lat, lng]);
     });
-    if(bounds.length) _progressMap.fitBounds(bounds, {padding:[30,30]});
-  }, 100);
+
+    if(bounds.length === 1){
+      _progressMap.setView(bounds[0], 16);
+    } else if(bounds.length > 1){
+      _progressMap.fitBounds(bounds, {padding:[50,50], maxZoom:16});
+    }
+  }, 200);
 }
 
 // Auto-refresh every 30 seconds when tab is active
