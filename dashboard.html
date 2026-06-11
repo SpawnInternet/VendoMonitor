@@ -1022,7 +1022,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
-      <button class="hv-hvtab"    id="hbtn-vmap" onclick="hvNewTab('vmap',this);vmLoad()">🗺 Vendo Map</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -1209,7 +1208,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names','vmap'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf','progress','names'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -2344,7 +2343,7 @@ async function loadProgress(){
     // Fetch harvests + GPS locations in parallel
     const [rH, rGPS] = await Promise.all([
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
-      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
+      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,harvest_groups(collector)&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
     ]);
     const rows = await rH.json();
     const gpsRows = await rGPS.json();
@@ -2473,18 +2472,20 @@ function _initProgressMap(gpsRows){
       const t = row.harvested_at ? new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
 
       // Pin with label using divIcon
+      const collector = row.harvest_groups?.collector||'';
       const pinIcon = L.divIcon({
         className: '',
         html: `<div style="position:relative;text-align:center;">
           <div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>
-          <div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);margin-top:3px;display:inline-block;">${name}</div>
+          ${collector?`<div style="background:#1e293b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;margin-top:2px;display:inline-block;">👤 ${collector}</div>`:''}
+          <div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);margin-top:2px;display:inline-block;">${name}</div>
           <div style="color:#555;font-size:9px;white-space:nowrap;">${t}</div>
         </div>`,
         iconAnchor: [7, 7]
       });
       L.marker([lat, lng], {icon: pinIcon})
         .addTo(_progressMap)
-        .bindPopup(`<div style="font-size:13px;min-width:120px;"><b>${name}</b><br><span style="color:#6b7280;font-size:11px;">${t} · ${minsAgo<60?Math.round(minsAgo)+'min ago':'over 1hr ago'}</span></div>`);
+        .bindPopup(`<div style="font-size:13px;min-width:140px;">${collector?`<div style="font-size:11px;color:#6b7280;margin-bottom:2px;">👤 <b>${collector}</b></div>`:''}<b>${name}</b><br><span style="color:#6b7280;font-size:11px;">${t} · ${minsAgo<60?Math.round(minsAgo)+'min ago':'over 1hr ago'}</span></div>`);
       bounds.push([lat, lng]);
     });
 
@@ -2494,120 +2495,6 @@ function _initProgressMap(gpsRows){
       _progressMap.fitBounds(bounds, {padding:[50,50], maxZoom:16});
     }
   }, 200);
-}
-
-
-/* ══ VENDO MAP ══ */
-let _vmMap = null;
-let _vmAllRows = [];
-let _vmMarkers = [];
-
-const _VM_AREA_COLORS = {
-  'DIPOLOG':'#1565c0','DAPITAN':'#15803d','SINDANGAN':'#7e22ce',
-  'POLANCO':'#b45309','ROXAS':'#dc2626','SINAMAN':'#0891b2',
-  'MINAOG':'#be185d','MIX AREAS':'#6b7280'
-};
-
-async function vmLoad(){
-  const mapEl = document.getElementById('vmap-map');
-  if(!mapEl) return;
-  if(!window.L) return;
-
-  // Init map if needed
-  if(!_vmMap){
-    _vmMap = L.map('vmap-map').setView([8.15, 123.27], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      attribution:'© OpenStreetMap', maxZoom:19
-    }).addTo(_vmMap);
-  }
-
-  document.getElementById('vmap-count').textContent = 'Loading…';
-
-  try {
-    // Fetch all active vendos with GPS
-    let all = [], off = 0;
-    while(true){
-      const r = await fetch(
-        `${_SB}/rest/v1/vendos?status=eq.active&lat=not.is.null&select=id,sheet_name,tg_name,area,address,contact_number,lat,lng,last_harvest_date,vlan&order=sheet_name.asc&limit=1000&offset=${off}`,
-        {headers:_HDR}
-      );
-      const batch = await r.json();
-      if(!Array.isArray(batch)||!batch.length) break;
-      all.push(...batch);
-      if(batch.length<1000) break;
-      off+=1000;
-    }
-    _vmAllRows = all;
-
-    // Populate area filter
-    const areas = [...new Set(all.map(v=>v.area).filter(Boolean))].sort();
-    const areaSel = document.getElementById('vmap-area');
-    const prevArea = areaSel.value;
-    areaSel.innerHTML = '<option value="">All areas</option>' + areas.map(a=>`<option${a===prevArea?' selected':''}>${a}</option>`).join('');
-
-    vmFilter();
-  } catch(e){
-    document.getElementById('vmap-count').textContent = 'Error: '+e.message;
-  }
-}
-
-function vmFilter(){
-  if(!_vmMap||!_vmAllRows.length) return;
-  const q = (document.getElementById('vmap-search')?.value||'').toLowerCase().trim();
-  const area = document.getElementById('vmap-area')?.value||'';
-
-  let rows = _vmAllRows;
-  if(area) rows = rows.filter(v=>v.area===area);
-  if(q) rows = rows.filter(v=>
-    (v.sheet_name||'').toLowerCase().includes(q)||
-    (v.tg_name||'').toLowerCase().includes(q)||
-    (v.address||'').toLowerCase().includes(q)
-  );
-
-  // Clear old markers
-  _vmMarkers.forEach(m=>_vmMap.removeLayer(m));
-  _vmMarkers = [];
-
-  const bounds = [];
-  rows.forEach(v=>{
-    const lat = parseFloat(v.lat), lng = parseFloat(v.lng);
-    if(isNaN(lat)||isNaN(lng)) return;
-    const color = _VM_AREA_COLORS[v.area]||'#475569';
-    const name = v.sheet_name||v.tg_name||'?';
-    const lastH = v.last_harvest_date||'—';
-    const daysAgo = v.last_harvest_date ? Math.floor((Date.now()-new Date(v.last_harvest_date))/86400000) : null;
-    const daysColor = daysAgo===null?'#9ca3af':daysAgo>60?'#dc2626':daysAgo>30?'#d97706':'#15803d';
-    const gpsLink = `https://maps.google.com/?q=${lat},${lng}`;
-    const addr = v.address||'—';
-
-    const icon = L.divIcon({
-      className:'',
-      html:`<div style="text-align:center;">
-        <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);margin:0 auto;"></div>
-        <div style="background:${color};color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap;margin-top:2px;box-shadow:0 1px 3px rgba(0,0,0,.3);">${name}</div>
-      </div>`,
-      iconAnchor:[6,6]
-    });
-
-    const popup = `<div style="font-size:12px;min-width:180px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${name}</div>
-      <div style="color:#6b7280;margin-bottom:2px;">📍 <a href="${gpsLink}" target="_blank" style="color:#1565c0;">Open in Google Maps</a></div>
-      ${addr!=='—'?`<div style="color:#6b7280;font-size:11px;margin-bottom:2px;">🏠 ${addr}</div>`:''}
-      ${v.contact_number?`<div style="color:#6b7280;font-size:11px;margin-bottom:2px;">📞 ${v.contact_number}</div>`:''}
-      <div style="font-size:11px;margin-top:4px;"><span style="background:${color};color:#fff;padding:1px 6px;border-radius:6px;">${v.area||'—'}</span>${v.vlan?` <span style="color:#6b7280;">VLAN ${v.vlan}</span>`:''}</div>
-      <div style="font-size:11px;margin-top:3px;color:${daysColor};">Last harvest: ${lastH}${daysAgo!==null?' ('+daysAgo+'d ago)':''}</div>
-    </div>`;
-
-    const marker = L.marker([lat,lng],{icon}).addTo(_vmMap);
-    marker.bindPopup(popup);
-    _vmMarkers.push(marker);
-    bounds.push([lat,lng]);
-  });
-
-  document.getElementById('vmap-count').textContent = `${rows.filter(v=>v.lat&&v.lng).length} of ${_vmAllRows.length} vendos with GPS`;
-
-  if(bounds.length===1) _vmMap.setView(bounds[0],16);
-  else if(bounds.length>1) _vmMap.fitBounds(bounds,{padding:[30,30],maxZoom:15});
 }
 
 // Auto-refresh every 30 seconds when tab is active
@@ -2658,20 +2545,6 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
       </tbody>
     </table>
   </div>
-</div>
-
-<div id="hvt-vmap" style="display:none;height:calc(100vh - 88px);overflow:hidden;">
-  <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap;">
-    <div style="font-size:14px;font-weight:700;color:#1e293b;">🗺 Vendo Map</div>
-    <input id="vmap-search" type="text" placeholder="Search vendo name, area…" oninput="vmFilter()"
-      style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;width:220px;font-family:inherit;">
-    <select id="vmap-area" onchange="vmFilter()" style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;">
-      <option value="">All areas</option>
-    </select>
-    <span id="vmap-count" style="font-size:11px;color:#6b7280;"></span>
-    <button onclick="vmLoad()" style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
-  </div>
-  <div id="vmap-map" style="height:calc(100vh - 138px);width:100%;"></div>
 </div>
 
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
