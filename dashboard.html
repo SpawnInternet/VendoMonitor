@@ -8,8 +8,6 @@
 <meta http-equiv="Expires" content="0">
 <title>Spawn Internetan — Vendo Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="https://raw.githack.com/SpawnInternet/VendoMonitor/main/js/shared.js"></script>
-  <script src="https://raw.githack.com/SpawnInternet/VendoMonitor/main/js/api.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -437,6 +435,13 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3 C8 3 4 7 4 12 C4 16 8 20 12 20 C16 20 20 16 20 12" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 3 C14 6 18 6 20 3" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 8 L12 16 M9 13 L12 16 L15 13" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </div>
       <span class="nl">Harvest</span>
+    </button>
+    <!-- Vendo Map -->
+    <button onclick="showP('vmap-top',this);vmTopLoad()" data-panel="vmap-top">
+      <div class="ni" style="background:#e0f2fe">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#0369a1" opacity=".3"/><circle cx="12" cy="9" r="2.5" fill="#0369a1"/></svg>
+      </div>
+      <span class="nl" style="color:#0369a1">Vendo Map</span>
     </button>
     <!-- Suspicious -->
     <button data-panel="suspicious" onclick="showP('suspicious',this);loadSuspicious()">
@@ -1017,7 +1022,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
-      <button class="hv-hvtab"    id="hbtn-vmap" onclick="hvNewTab('vmap',this);setTimeout(()=>{if(_vmMap)_vmMap.invalidateSize();vmLoad();},50)">🗺 Vendo Map</button>
+
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -1204,7 +1209,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names','vmap'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf','progress','names'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -2775,20 +2780,6 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
       </tbody>
     </table>
   </div>
-</div>
-
-<div id="hvt-vmap" style="display:none;height:calc(100vh - 88px);overflow:hidden;">
-  <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap;">
-    <div style="font-size:14px;font-weight:700;color:#1e293b;">🗺 Vendo Map</div>
-    <input id="vmap-search" type="text" placeholder="Search vendo name, area…" oninput="vmFilter()"
-      style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;width:220px;font-family:inherit;">
-    <select id="vmap-area" onchange="vmFilter()" style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;">
-      <option value="">All areas</option>
-    </select>
-    <span id="vmap-count" style="font-size:11px;color:#6b7280;"></span>
-    <button onclick="vmLoad()" style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
-  </div>
-  <div id="vmap-map" style="height:calc(100vh - 138px);width:100%;"></div>
 </div>
 
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
@@ -7855,13 +7846,7 @@ async function fullBackup() {
         style="width:100%;padding:8px;background:#f3f4f6;color:#6b7280;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;">
         Cancel
       </button>
-    <!-- Vendo Map -->
-    <button onclick="showP('vmap-top',this);vmTopLoad()" data-panel="vmap-top">
-      <div class="ni" style="background:#e0f2fe">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#0369a1" opacity=".3"/><circle cx="12" cy="9" r="2.5" fill="#0369a1"/></svg>
-      </div>
-      <span class="nl" style="color:#0369a1">Vendo Map</span>
-    </button>
+
     </div>
   </div>
 </div>
