@@ -272,10 +272,45 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     const p=(document.getElementById('sl-pass').value||'').trim();
     const err=document.getElementById('sl-error');
     if(u===SL_USER && p===SL_PASS){
-      // Grant access directly
-      localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
-      document.getElementById('spawn-login-screen').classList.add('hidden');
-      err.classList.remove('show');
+      // Check device approval
+      const devId=getDeviceId();
+      const devName=getDeviceName()+' · '+new Date().toLocaleDateString('en-PH');
+      try{
+        const r=await fetch(`${SB}/rest/v1/device_approvals?device_id=eq.${devId}&select=status`,
+          {headers:{apikey:ANON,Authorization:'Bearer '+ANON}});
+        const rows=await r.json();
+        if(rows.length && rows[0].status==='approved'){
+          // Device approved — grant access
+          localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
+          document.getElementById('spawn-login-screen').classList.add('hidden');
+          err.classList.remove('show');
+          return;
+        } else if(rows.length && rows[0].status==='denied'){
+          err.textContent='This device has been denied access.';
+          err.classList.add('show');
+          return;
+        } else if(!rows.length){
+          // New device — register and request approval
+          await fetch(`${SB}/rest/v1/device_approvals`,{
+            method:'POST',
+            headers:{apikey:ANON,Authorization:'Bearer '+ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+            body:JSON.stringify({device_id:devId,device_name:devName,browser:navigator.userAgent.slice(0,100),status:'pending'})
+          });
+        }
+        // Show pending screen
+        document.getElementById('sl-login-view').style.display='none';
+        document.getElementById('sl-pending-view').style.display='';
+        document.getElementById('sl-device-info').textContent='Device: '+getDeviceName();
+        document.getElementById('sl-device-id-display').textContent='ID: '+devId.slice(0,16)+'…';
+        window._slDevId=devId;
+        slCheckApproval();
+        // Poll every 5 seconds
+        window._slPollInterval=setInterval(slCheckApproval,5000);
+      }catch(e){
+        // If DB unreachable, fall back to password-only
+        localStorage.setItem(SL_KEY,JSON.stringify({ok:true,ts:Date.now()}));
+        document.getElementById('spawn-login-screen').classList.add('hidden');
+      }
     } else {
       err.textContent='Incorrect username or password';
       err.classList.add('show');
@@ -2303,7 +2338,7 @@ async function loadProgress(){
   try {
     const today = new Date().toISOString().slice(0,10);
     // Get all active + recently completed group runs today
-    const rG = await fetch(`${_SB}/rest/v1/harvest_groups?started_at=gte.${today}T00:00:00+08:00&select=id,group_id,collector,area,status,started_at,harvested_count,skipped_count,total_net&order=started_at.desc&limit=20`,{headers:_HDR});
+    const rG = await fetch(`${_SB}/rest/v1/harvest_groups?started_at=gte.${today}T00:00:00%2B08:00&select=id,group_id,collector,area,status,started_at,harvested_count,skipped_count,total_net&order=started_at.desc&limit=20`,{headers:_HDR});
     const runs = await rG.json();
     if(!runs.length){
       el.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">No harvest sessions today yet.</div>';
