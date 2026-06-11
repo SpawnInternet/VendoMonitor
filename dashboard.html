@@ -1650,32 +1650,8 @@ async function htForceLoad(){
 async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
-  localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // 1. Try bucket cache first (instant, no DB load)
-  const _HT_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/vendos_table.json';
-  try {
-    const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/300000));
-    if (rc.ok) {
-      const d = await rc.json();
-      if (d.rows && d.rows.length && d.rows.length > 500) {
-        htAllRows = d.rows;
-        // Background refresh from DB if cache older than 10 min
-        const age = Date.now() - new Date(d.generated_at||0).getTime();
-        if (age > 10*60*1000) htRebuildCache();
-        document.getElementById('ht-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
-        // fast path — still need to populate collectors and render
-        const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
-        const htSel = document.getElementById('ht-collector');
-        const rcSel = document.getElementById('rc-collector');
-        if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
-        if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
-        htFilter();
-        if (age > 10*60*1000) htRebuildCache();
-        return;
-      }
-    }
-  } catch(e) {}
-  // 2. Fallback: direct DB
+  // Always load from DB directly — bucket cache was causing stale data issues
+  // Rebuild bucket in background after load
   try {
     document.getElementById('ht-cache-age').textContent = 'loading from DB…';
     let offset = 0;
@@ -2731,6 +2707,159 @@ function vmTopFilter(){
 
 // Auto-refresh Vendo Map top every 60s
 setInterval(()=>{ if(document.getElementById('panel-vmap-top')?.classList.contains('active')) vmTopLoad(); },60000);
+
+
+/* ══ NAME MATCHING ══ */
+let _nmRows = [], _nmFilter = 'all';
+function nmRebuildCache(){ fetch(`${_SB}/functions/v1/write-names-cache`,{method:'POST',headers:{'x-cache-secret':'spawn-cache-2026',apikey:_KEY}}).catch(()=>{}); }
+
+async function nmLoad(){
+  document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:#6b7280;"><span style="display:inline-block;width:18px;height:18px;border:2px solid #e5e7eb;border-top-color:#1565c0;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading vendos…</td></tr>';
+  try {
+    let all = [], off = 0;
+    while(true){
+      const r = await fetch(`${_SB}/rest/v1/vendos?status=eq.active&sheet_name=not.is.null&select=id,sheet_name,tg_name,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      all.push(...batch);
+      if(batch.length<1000) break;
+      off+=1000;
+    }
+    _nmRows = all;
+    nmRebuildCache();
+    const matched = all.filter(v=>v.tg_name).length;
+    const unmatched = all.length - matched;
+    document.getElementById('nm-stats').innerHTML = `
+      <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#15803d;font-size:16px;">${matched}</span> <span style="color:#6b7280;">matched</span></div>
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#b45309;font-size:16px;">${unmatched}</span> <span style="color:#6b7280;">unmatched</span></div>
+      <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:8px 14px;font-size:12px;"><span style="font-weight:700;color:#1565c0;font-size:16px;">${all.length}</span> <span style="color:#6b7280;">total</span></div>`;
+    nmRender();
+  } catch(e){
+    document.getElementById('nm-tbody').innerHTML = `<tr><td colspan="5" style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function nmSetFilter(f){
+  _nmFilter = f;
+  ['all','matched','unmatched'].forEach(x=>{
+    const btn = document.getElementById('nm-filter-'+x);
+    if(!btn) return;
+    btn.style.background = x===f?'#1565c0':'#fff';
+    btn.style.color = x===f?'#fff':'#6b7280';
+    btn.style.borderColor = x===f?'#1565c0':'#e5e7eb';
+  });
+  nmRender();
+}
+
+function nmRender(){
+  const q = (document.getElementById('nm-search')?.value||'').toLowerCase().trim();
+  let rows = _nmRows;
+  if(_nmFilter==='matched') rows = rows.filter(v=>v.tg_name);
+  if(_nmFilter==='unmatched') rows = rows.filter(v=>!v.tg_name);
+  if(q) rows = rows.filter(v=>(v.sheet_name||'').toLowerCase().includes(q)||(v.tg_name||'').toLowerCase().includes(q)||(v.area||'').toLowerCase().includes(q));
+  const countEl = document.getElementById('nm-count');
+  if(countEl) countEl.textContent = rows.length + ' vendos';
+  if(!rows.length){ document.getElementById('nm-tbody').innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
+  document.getElementById('nm-tbody').innerHTML = rows.map(v=>{
+    const matched = !!v.tg_name;
+    const statusBadge = matched
+      ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;">✅ Matched</span>'
+      : '<span style="background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;">⚠ Unmatched</span>';
+    const tgDisplay = v.tg_name
+      ? `<span style="color:#15803d;font-size:11px;">${v.tg_name}</span>`
+      : `<span style="color:#d1d5db;font-style:italic;font-size:11px;">Not linked</span>`;
+    return `<tr style="border-bottom:1px solid #f3f4f6;" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+      <td style="padding:8px 12px;font-weight:600;color:#1e293b;">${v.sheet_name}</td>
+      <td style="padding:8px 12px;" id="nm-tgcell-${v.id}">
+        <div style="display:flex;align-items:center;gap:6px;">${tgDisplay}
+          <button onclick="nmEditRow(${v.id})" style="padding:2px 8px;border-radius:5px;border:1px solid #e5e7eb;background:#fff;font-size:10px;cursor:pointer;color:#6b7280;flex-shrink:0;">✏️</button>
+        </div></td>
+      <td style="padding:8px 12px;color:#6b7280;font-size:11px;">${v.area||'—'}</td>
+      <td style="padding:8px 12px;text-align:center;">${statusBadge}</td>
+      <td style="padding:8px 12px;text-align:center;">${matched?`<button onclick="nmUnlink(${v.id})" style="padding:2px 8px;border-radius:5px;border:1px solid #fee2e2;background:#fff;font-size:10px;cursor:pointer;color:#dc2626;">Unlink</button>`:''}</td>
+    </tr>`;
+  }).join('');
+}
+
+function nmEditRow(id){
+  const cell = document.getElementById('nm-tgcell-'+id);
+  if(!cell) return;
+  const v = _nmRows.find(r=>r.id===id);
+  if(!v) return;
+  cell.innerHTML = `<div style="position:relative;display:flex;gap:4px;align-items:center;">
+    <div style="position:relative;flex:1;">
+      <input id="nm-inp-${id}" value="${(v.tg_name||'').replace(/"/g,'&quot;')}" placeholder="Search TG name…" oninput="nmTgSearch(${id},this.value)"
+        style="width:100%;padding:4px 8px;border:1px solid #1565c0;border-radius:6px;font-size:11px;font-family:inherit;">
+      <div id="nm-dd-${id}" style="display:none;position:absolute;top:30px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:150px;overflow-y:auto;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>
+    </div>
+    <button onclick="nmSaveRow(${id})" style="padding:3px 8px;border-radius:5px;border:none;background:#15803d;color:#fff;font-size:10px;cursor:pointer;font-weight:700;flex-shrink:0;">Save</button>
+    <button onclick="nmRender()" style="padding:3px 8px;border-radius:5px;border:1px solid #e5e7eb;background:#fff;font-size:10px;cursor:pointer;flex-shrink:0;">✕</button>
+  </div>`;
+  document.getElementById('nm-inp-'+id)?.focus();
+}
+
+async function nmTgSearch(id, q){
+  const dd = document.getElementById('nm-dd-'+id);
+  if(!dd) return;
+  q = (q||'').trim();
+  if(!q){dd.style.display='none';return;}
+  dd.style.display='';
+  dd.innerHTML='<div style="padding:6px 8px;color:#6b7280;font-size:11px;">Searching…</div>';
+  try{
+    const r = await fetch(`${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=id,tg_name,sheet_name,area&limit=15&order=tg_name.asc`,{headers:_HDR});
+    const rows = await r.json();
+    window._nmDdResults = window._nmDdResults||{};
+    window._nmDdResults[id] = rows;
+    if(!rows.length){dd.innerHTML='<div style="padding:6px 8px;color:#6b7280;font-size:11px;">No matches</div>';return;}
+    dd.innerHTML = rows.map((row,i)=>`<div onclick="nmTgPick(${id},${i})" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:11px;" onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;">${row.tg_name}</div>
+      <div style="font-size:10px;color:#6b7280;">${row.sheet_name||''} · ${row.area||''}</div>
+    </div>`).join('');
+  }catch(e){dd.innerHTML='<div style="padding:6px 8px;color:#dc2626;font-size:11px;">Error</div>';}
+}
+
+function nmTgPick(id, i){
+  const row = (window._nmDdResults||{})[id]?.[i];
+  if(!row) return;
+  const inp = document.getElementById('nm-inp-'+id);
+  if(inp) inp.value = row.tg_name;
+  const dd = document.getElementById('nm-dd-'+id);
+  if(dd) dd.style.display='none';
+}
+
+async function nmSaveRow(id){
+  const inp = document.getElementById('nm-inp-'+id);
+  if(!inp) return;
+  const tgName = inp.value.trim();
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
+  try{
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Prefer':'return=minimal'},body:JSON.stringify({tg_name:tgName||null,tg_match_confirmed:!!tgName})});
+    if(r.ok){
+      const v = _nmRows.find(r=>r.id===id);
+      if(v) v.tg_name = tgName||null;
+      toast('✅ Saved!');
+      nmRebuildCache();
+      nmRender();
+    } else toast('Save failed');
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function nmUnlink(id){
+  if(!confirm('Remove TG link for this vendo?')) return;
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
+  try{
+    const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Prefer':'return=minimal'},body:JSON.stringify({tg_name:null,tg_match_confirmed:false})});
+    if(r.ok){
+      const v = _nmRows.find(r=>r.id===id);
+      if(v) v.tg_name = null;
+      toast('Unlinked');
+      nmRebuildCache();
+      nmRender();
+    } else toast('Unlink failed');
+  }catch(e){toast('Error: '+e.message);}
+}
 
 // Auto-refresh every 30 seconds when tab is active
 setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
