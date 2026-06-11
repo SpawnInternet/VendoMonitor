@@ -125,7 +125,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .lineman-job{font-size:11px;color:var(--muted);margin-top:1px}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px}
 
-/* MISC */
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:20px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);animation:modalIn .18s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.modal-head{padding:18px 18px 0;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.modal-title{font-size:17px;font-weight:800;color:#1e2d5a;flex:1}
+.modal-close{background:none;border:none;font-size:20px;color:#9ca3af;cursor:pointer;line-height:1;padding:0;flex-shrink:0}
+.modal-close:hover{color:#374151}
+.modal-body{padding:14px 18px 20px}
 .section-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px}
 .empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
 .loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px;color:var(--muted)}
@@ -408,6 +417,60 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div id="pullout-list"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     MODAL: IDENTITY CONFIRMATION
+═══════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="identity-modal" onclick="identityModalBgClick(event)">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="modal-role-title">Confirm Identity</div>
+        <div style="font-size:12px;color:#8b99b8;margin-top:2px" id="modal-role-sub">Select your name and enter PIN</div>
+      </div>
+      <button class="modal-close" onclick="closeIdentityModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Step 1: Name selection -->
+      <div id="modal-step-name">
+        <div style="font-size:11px;font-weight:700;color:#8b99b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px" id="modal-name-label">Select your name</div>
+        <div id="modal-name-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px"></div>
+        <div class="loading" id="modal-name-loading" style="display:none"><div class="spinner"></div><span>Loading…</span></div>
+      </div>
+
+      <!-- Step 2: PIN entry (shown after name selected) -->
+      <div id="modal-step-pin" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+        <!-- Selected name pill -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;background:#f0f4ff;border-radius:10px;padding:10px 12px">
+          <div id="modal-selected-avatar" style="width:36px;height:36px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0"></div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:14px;color:#1e2d5a" id="modal-selected-name-display">—</div>
+            <div style="font-size:11px;color:#8b99b8" id="modal-selected-role-display">—</div>
+          </div>
+          <button onclick="resetModalName()" style="background:none;border:none;color:#9ca3af;font-size:13px;cursor:pointer">Change</button>
+        </div>
+
+        <div style="font-size:11px;font-weight:700;color:#8b99b8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">4-digit PIN</div>
+        <div style="display:flex;justify-content:center;gap:18px;margin-bottom:14px">
+          <div class="pin-dot" id="lpd1"></div>
+          <div class="pin-dot" id="lpd2"></div>
+          <div class="pin-dot" id="lpd3"></div>
+          <div class="pin-dot" id="lpd4"></div>
+        </div>
+        <input type="password" inputmode="numeric" maxlength="4" id="login-pin"
+          placeholder="••••"
+          style="width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:28px;font-weight:700;letter-spacing:12px;text-align:center;font-family:monospace;outline:none;color:#1e2d5a;background:#f7f9ff"
+          oninput="loginPinInput(this)" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off">
+        <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:12px;font-size:16px">
+          Login →
+        </button>
+        <div id="login-error" style="color:var(--red);font-size:13px;text-align:center;margin-top:10px;display:none;font-weight:600"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -534,6 +597,9 @@ updateOnline();
 const ROLE_LABELS = {
   wendell:'Sir Wendell 👑', michael:'Sir Michael', lineman:'Lineman', office:'Office Staff'
 };
+const ROLE_ICONS = {
+  wendell:'👑', michael:'🌐', lineman:'🔧', office:'📋'
+};
 const STAFF_NAMES = {
   wendell:['Sir Wendell'],
   michael:['Sir Michael'],
@@ -545,35 +611,68 @@ let _selectedRole = null;
 let _selectedName = null;
 let _staffData = [];
 
+// ── MODAL HELPERS ──────────────────────────────────────────────
+function openIdentityModal(role){
+  document.getElementById('identity-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  resetModalName();
+}
+
+function closeIdentityModal(){
+  document.getElementById('identity-modal').classList.remove('open');
+  document.body.style.overflow = '';
+  // Reset role highlight
+  document.querySelectorAll('.role-btn[data-role]').forEach(b=>b.classList.remove('selected'));
+  _selectedRole = null; _selectedName = null;
+  document.getElementById('login-pin').value='';
+  [1,2,3,4].forEach(i=>{const d=document.getElementById('lpd'+i);if(d)d.classList.remove('filled');});
+  document.getElementById('login-error').style.display='none';
+}
+
+function identityModalBgClick(e){
+  if(e.target===document.getElementById('identity-modal')) closeIdentityModal();
+}
+
+function resetModalName(){
+  _selectedName = null;
+  document.getElementById('modal-step-pin').style.display='none';
+  document.getElementById('modal-step-name').style.display='';
+  document.getElementById('login-pin').value='';
+  [1,2,3,4].forEach(i=>{const d=document.getElementById('lpd'+i);if(d)d.classList.remove('filled');});
+  document.getElementById('login-error').style.display='none';
+  document.getElementById('login-btn').disabled=true;
+}
+
 function selectRole(el, role){
   document.querySelectorAll('.role-btn[data-role]').forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
   _selectedRole = role;
   _selectedName = null;
 
-  // Show name list
-  const nameCard = document.getElementById('login-name-card');
-  const pinCard  = document.getElementById('login-pin-card');
-  nameCard.style.display = '';
-  document.getElementById('login-name-label').textContent =
-    role === 'wendell' || role === 'michael' ? 'Confirm your identity' : 'Select your name';
+  // Set modal header
+  const icon = ROLE_ICONS[role]||'👤';
+  const label = ROLE_LABELS[role]||role;
+  document.getElementById('modal-role-title').textContent = icon+' '+label;
+  document.getElementById('modal-role-sub').textContent = 'Select your name and enter your PIN';
 
-  // Load staff names from DB
+  // Open modal
+  openIdentityModal(role);
   loadStaffForRole(role);
-  pinCard.style.display = 'none';
-  document.getElementById('login-btn').disabled = true;
 }
 
 async function loadStaffForRole(role){
-  const el = document.getElementById('login-name-list');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  const el = document.getElementById('modal-name-list');
+  const loading = document.getElementById('modal-name-loading');
+  el.innerHTML = '';
+  loading.style.display = 'flex';
 
-  // Fallback names
   const fallback = (STAFF_NAMES[role]||[]).map(n=>({name:n,role,pin:'0000'}));
+
   const render = (list) => {
+    loading.style.display = 'none';
     el.innerHTML = list.map(s=>`
-      <div class="role-btn" onclick="selectStaff(this,'${s.name}','${s.pin}')" data-name="${s.name}">
-        <div style="width:38px;height:38px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e2d5a;margin:0 auto 6px">${s.name[0].toUpperCase()}</div>
+      <div class="role-btn" onclick="selectStaff(this,'${s.name.replace(/'/g,"\\'")}','${(s.pin||'0000')}')" data-name="${s.name}">
+        <div style="width:40px;height:40px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#1e2d5a;margin:0 auto 8px;transition:.15s" class="col-av">${s.name[0].toUpperCase()}</div>
         <div class="role-btn-name" style="font-size:13px">${s.name}</div>
       </div>`).join('');
   };
@@ -593,13 +692,19 @@ async function loadStaffForRole(role){
 
 let _cachedPin = null;
 function selectStaff(el, name, pin){
-  document.querySelectorAll('#login-name-list .role-btn').forEach(b=>b.classList.remove('selected'));
+  document.querySelectorAll('#modal-name-list .role-btn').forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
   _selectedName = name;
   _cachedPin = pin;
 
-  document.getElementById('login-pin-card').style.display = '';
-  document.getElementById('login-pin').focus();
+  // Show the selected name pill + PIN step
+  document.getElementById('modal-selected-avatar').textContent = name[0].toUpperCase();
+  document.getElementById('modal-selected-name-display').textContent = name;
+  document.getElementById('modal-selected-role-display').textContent = ROLE_LABELS[_selectedRole]||_selectedRole;
+  document.getElementById('modal-step-name').style.display = 'none';
+  document.getElementById('modal-step-pin').style.display = '';
+
+  setTimeout(()=>document.getElementById('login-pin').focus(), 100);
   loginCheckReady();
 }
 
@@ -662,6 +767,9 @@ async function doLogin(){
   document.getElementById('login-pin').value='';
   [1,2,3,4].forEach(i=>{const d=document.getElementById('lpd'+i);if(d)d.classList.remove('filled');});
   btn.textContent='Login →';
+  // Close modal
+  document.getElementById('identity-modal').classList.remove('open');
+  document.body.style.overflow = '';
   enterApp();
 }
 
@@ -670,9 +778,9 @@ function doLogout(){
   STATE = {role:null,name:null,staffId:null,gpsActive:false,gpsWatcher:null,gpsCoords:null,currentJO:null,currentInstallJO:null,installPhotoTaken:false,officeType:null,_prevScreen:null,_navHistory:[]};
   _selectedRole = null; _selectedName = null;
   document.querySelectorAll('.role-btn[data-role]').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('login-name-card').style.display='none';
-  document.getElementById('login-pin-card').style.display='none';
   document.getElementById('login-error').style.display='none';
+  document.getElementById('identity-modal').classList.remove('open');
+  document.body.style.overflow = '';
   document.getElementById('topbar-sub').textContent='Field Operations';
   showScreen('screen-login',false);
 }
