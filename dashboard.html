@@ -1619,27 +1619,26 @@ async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // 1. Try bucket cache first (instant, no DB load)
+  // Bucket cache with 5-min expiry
   const _HT_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/vendos_table.json';
   try {
-    const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/300000));
+    const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/60000));
     if (rc.ok) {
       const d = await rc.json();
       if (d.rows && d.rows.length && d.rows.length > 500) {
         htAllRows = d.rows;
-        // Background refresh from DB if cache older than 10 min
         const age = Date.now() - new Date(d.generated_at||0).getTime();
-        if (age > 10*60*1000) htRebuildCache();
+        if(age > 5*60*1000){ htAllRows=[]; htRebuildCache(); }
+        else {
         document.getElementById('ht-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
-        // fast path — still need to populate collectors and render
         const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
         const htSel = document.getElementById('ht-collector');
         const rcSel = document.getElementById('rc-collector');
         if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
         if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
         htFilter();
-        if (age > 10*60*1000) htRebuildCache();
         return;
+        } // end fresh cache
       }
     }
   } catch(e) {}
@@ -2417,8 +2416,7 @@ function _initProgressMap(gpsRows){
     if(!mapEl) return;
     if(_progressMap){ _progressMap.remove(); _progressMap=null; }
     _progressMap = L.map('progress-map').setView([8.15,123.27],10);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:19}).addTo(_progressMap);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{attribution:'',maxZoom:19,opacity:0.8}).addTo(_progressMap);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_progressMap);
     if(!gpsRows||!gpsRows.length) return;
     const now=Date.now(), bounds=[];
     gpsRows.forEach(row=>{
@@ -3946,8 +3944,7 @@ async function vmTopLoad(){
   if(!mapEl||!window.L) return;
   if(!_vmtMap){
     _vmtMap = L.map('vmap-top-map').setView([8.15,123.27],10);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'© Esri',maxZoom:19}).addTo(_vmtMap);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{attribution:'',maxZoom:19,opacity:0.8}).addTo(_vmtMap);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_vmtMap);
   }
   setTimeout(()=>_vmtMap.invalidateSize(),150);
   const cnt=document.getElementById('vmap-top-count');
