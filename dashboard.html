@@ -599,7 +599,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 <!-- ── HARVEST DETAIL MODAL ── -->
 <div id="hd-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:14px;width:90%;max-width:480px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3);">
+  <div style="background:#fff;border-radius:14px;width:95%;max-width:860px;max-height:92vh;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.3);">
     <div style="background:#1565c0;color:#fff;padding:14px 16px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div id="hd-name" style="font-weight:700;font-size:15px;"></div>
@@ -607,7 +607,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
       <button onclick="document.getElementById('hd-modal').style.display='none'" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer;">✕</button>
     </div>
-    <div id="hd-body" style="padding:16px;"></div>
+    <div id="hd-body" style="padding:16px;overflow-y:auto;max-height:calc(92vh - 70px);"></div>
   </div>
 </div>
 
@@ -2344,7 +2344,7 @@ async function loadProgress(){
     // Fetch harvests + GPS locations in parallel
     const [rH, rGPS] = await Promise.all([
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
-      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
+      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,collector_note&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00+00:00&order=harvested_at.desc&limit=500`,{headers:_HDR})
     ]);
     const rows = await rH.json();
     const gpsRows = await rGPS.json();
@@ -2451,14 +2451,18 @@ function _initProgressMap(gpsRows){
   setTimeout(()=>{
     const mapEl = document.getElementById('progress-map');
     if(!mapEl) return;
+    // Destroy existing map instance
     if(_progressMap){ _progressMap.remove(); _progressMap=null; }
+    // Center on Zamboanga del Norte
     _progressMap = L.map('progress-map').setView([8.15, 123.27], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-      attribution:'© OpenStreetMap', maxZoom:19
+      attribution:'© OpenStreetMap',maxZoom:18
     }).addTo(_progressMap);
 
-    if(!gpsRows||!gpsRows.length){ return; }
+    if(!gpsRows||!gpsRows.length) return;
 
+    // Get latest point per collector (use sheet_name as proxy)
+    // Group all points, latest first
     const now = Date.now();
     const bounds = [];
     gpsRows.forEach(row=>{
@@ -2470,29 +2474,15 @@ function _initProgressMap(gpsRows){
       const color = minsAgo < 30 ? '#16a34a' : minsAgo < 60 ? '#d97706' : '#dc2626';
       const name = row.sheet_name||row.tg_name||'?';
       const t = row.harvested_at ? new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
-      // Circle marker
       const marker = L.circleMarker([lat,lng],{
-        radius:10, fillColor:color, color:'#fff',
-        weight:2.5, opacity:1, fillOpacity:0.95
+        radius:8, fillColor:color, color:'#fff',
+        weight:2, opacity:1, fillOpacity:0.9
       }).addTo(_progressMap);
-      marker.bindPopup(`<div style="font-size:13px;"><b>${name}</b><br><span style="color:#6b7280;font-size:11px;">${t}</span></div>`);
-      // Label
-      const icon = L.divIcon({
-        className:'',
-        html:`<div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3);margin-top:14px;margin-left:-10px;">${name}</div>`,
-        iconAnchor:[0,0]
-      });
-      L.marker([lat,lng],{icon}).addTo(_progressMap);
+      marker.bindPopup(`<b>${name}</b><br>${t}`);
       bounds.push([lat,lng]);
     });
-    if(bounds.length > 0){
-      if(bounds.length === 1){
-        _progressMap.setView(bounds[0], 15);
-      } else {
-        _progressMap.fitBounds(bounds, {padding:[40,40], maxZoom:15});
-      }
-    }
-  }, 200);
+    if(bounds.length) _progressMap.fitBounds(bounds, {padding:[30,30]});
+  }, 100);
 }
 
 // Auto-refresh every 30 seconds when tab is active
@@ -4365,13 +4355,19 @@ function lfShowDetail(idx) {
     ['Owner Share (25%)', item.customer_share!=null?_php(item.customer_share):'—'],
     ['Note', item.collector_note||'—'],
   ];
-  let body = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  let table = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
   rows.forEach(([l,v])=>{
-    body+=`<tr><td style="padding:7px 8px;color:#6b7280;font-size:11px;font-weight:500;width:140px;border-bottom:1px solid #f3f4f6;">${l}</td><td style="padding:7px 8px;border-bottom:1px solid #f3f4f6;">${v}</td></tr>`;
+    table+=`<tr><td style="padding:7px 10px;color:#6b7280;font-size:11px;font-weight:500;width:150px;border-bottom:1px solid #f3f4f6;white-space:nowrap;">${l}</td><td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;">${v}</td></tr>`;
   });
-  body+='</table>';
+  table+='</table>';
+  let body;
   if(item.photo_url){
-    body+=`<div style="margin-top:12px;text-align:center;"><img src="${item.photo_url}" style="max-width:100%;border-radius:10px;border:1px solid #e5e7eb;" onerror="this.style.display='none'"></div>`;
+    body=`<div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">${table}</div>
+      <div style="flex-shrink:0;width:260px;"><img src="${item.photo_url}" style="width:100%;border-radius:10px;border:1px solid #e5e7eb;display:block;" onerror="this.parentElement.style.display='none'"></div>
+    </div>`;
+  } else {
+    body = table;
   }
   document.getElementById('hd-body').innerHTML = body;
   modal.style.display = 'flex';
