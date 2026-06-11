@@ -1647,9 +1647,9 @@ async function htForceLoad(){
 async function htLoad(){
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
-  localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
-  // 1. Try bucket cache first (instant, no DB load)
-  const _HT_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/vendos_table.json';
+  localStorage.removeItem('spawn_ht');
+  // Skip bucket — load directly from DB
+  const _HT_BUCKET = 'DISABLED';
   try {
     const rc = await fetch(_HT_BUCKET + '?t=' + Math.floor(Date.now()/60000));
     if (rc.ok) {
@@ -2868,7 +2868,7 @@ function vmTopFilter(){
   const cnt=document.getElementById('vmap-top-count');
   if(cnt) cnt.textContent=`${_vmtMarkers.length} of ${_vmtRows.length} vendos with GPS`;
   if(bounds.length===1) _vmtMap.setView(bounds[0],16);
-  else if(bounds.length>1) _vmtMap.fitBounds(bounds,{padding:[30,30],maxZoom:15});
+  else if(bounds.length>1) _vmtMap.fitBounds(bounds,{padding:[20,20],maxZoom:13});
 }
 
 // Auto-refresh Vendo Map top every 60s
