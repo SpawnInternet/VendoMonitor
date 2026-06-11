@@ -1005,6 +1005,8 @@ async function startGroup(groupId){
     const cached = _cachedParsed;
     currentGroupDef = cached.g;
     currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    // Save collector to harvest_groups
+    if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
     currentItems = cached.items;
     document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
@@ -1081,6 +1083,8 @@ async function startGroup(groupId){
     }
 
     currentGroupRun = {...g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    // Save collector to harvest_groups
+    if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
     activeTab='pending';
     renderVendoList();
 
