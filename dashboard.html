@@ -2307,119 +2307,143 @@ async function loadProgress(){
   el.innerHTML = '<div style="padding:30px;text-align:center;color:#6b7280;">Loading…</div>';
   document.getElementById('progress-updated').textContent = '';
   try {
-    const today = new Date().toISOString().slice(0,10);
-    // Get all active + recently completed group runs today
-    const rG = await fetch(`${_SB}/rest/v1/harvest_groups?started_at=gte.${today}T00:00:00+08:00&select=id,group_id,collector,area,status,started_at,harvested_count,skipped_count,total_net&order=started_at.desc&limit=20`,{headers:_HDR});
-    const runs = await rG.json();
-    if(!runs.length){
-      el.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;">No harvest sessions today yet.</div>';
-      return;
-    }
-    // Get items for all runs
-    const runIds = runs.map(r=>r.id);
-    const rI = await fetch(`${_SB}/rest/v1/harvest_group_items?group_run_id=in.(${runIds.join(',')})&select=group_run_id,vendo_id,sheet_name,tg_name,area,status,coins_total,spawn_share,harvested_at,collector_note&order=id.asc&limit=2000`,{headers:_HDR});
-    const items = await rI.json();
-    // Group items by run
-    const itemsByRun = {};
-    items.forEach(i=>{ if(!itemsByRun[i.group_run_id]) itemsByRun[i.group_run_id]=[]; itemsByRun[i.group_run_id].push(i); });
+    const phNow = new Date(Date.now() + (8*60*60*1000));
+    const today = phNow.toISOString().slice(0,10);
 
-    let html = '';
-    runs.forEach(run => {
-      const ritems = itemsByRun[run.id]||[];
-      const done = ritems.filter(i=>i.status==='harvested');
-      const pending = ritems.filter(i=>i.status!=='harvested'&&i.status!=='skipped');
-      const skipped = ritems.filter(i=>i.status==='skipped');
-      const total = ritems.length;
-      const pct = total>0?Math.round(done.length/total*100):0;
-      const isActive = run.status==='active';
-      const statusColor = isActive?'#15803d':'#6b7280';
-      const statusBg = isActive?'#dcfce7':'#f3f4f6';
-      const statusLabel = isActive?'🟢 Active':'✅ Completed';
+    const [rH, rGPS] = await Promise.all([
+      fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
+      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,harvest_groups(collector)&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
+    ]);
+    const rows = await rH.json();
+    const gpsRows = await rGPS.json();
 
-      html += `<div style="background:#fff;border:1.5px solid ${isActive?'#86efac':'#e5e7eb'};border-radius:12px;margin-bottom:14px;overflow:hidden;">
-        <!-- Header -->
-        <div style="background:${isActive?'linear-gradient(135deg,#15803d,#16a34a)':'linear-gradient(135deg,#475569,#64748b)'};color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <div style="font-size:15px;font-weight:700;">👤 ${run.collector||'Unknown'}</div>
-          <span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:8px;font-size:11px;">${statusLabel}</span>
-          <span style="font-size:11px;opacity:.8;">${run.group_id||run.area||''}</span>
-          <div style="margin-left:auto;display:flex;gap:14px;text-align:right;">
-            <div><div style="font-size:10px;opacity:.7;">Done</div><div style="font-size:14px;font-weight:700;">${done.length}/${total}</div></div>
-            <div><div style="font-size:10px;opacity:.7;">Spawn</div><div style="font-size:14px;font-weight:700;">₱${Math.round(done.reduce((s,i)=>s+(parseFloat(i.spawn_share)||0),0)).toLocaleString()}</div></div>
+    const totalCoins = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
+    const totalSpawn = rows.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
+    const collectors = [...new Set(rows.map(h=>h.collector).filter(Boolean))];
+
+    let html = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="background:#fff;border:1.5px solid #e0e7ff;border-radius:10px;padding:10px 18px;flex:1;min-width:100px;text-align:center;">
+        <div style="font-size:10px;color:#6b7280;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px;">Harvests</div>
+        <div style="font-size:26px;font-weight:700;color:#1565c0;">${rows.length}</div>
+      </div>
+      <div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 18px;flex:1;min-width:100px;text-align:center;">
+        <div style="font-size:10px;color:#6b7280;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px;">Coins</div>
+        <div style="font-size:26px;font-weight:700;color:#15803d;">₱${Math.round(totalCoins).toLocaleString()}</div>
+      </div>
+      <div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:10px;padding:10px 18px;flex:1;min-width:100px;text-align:center;">
+        <div style="font-size:10px;color:#6b7280;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px;">Spawn Share</div>
+        <div style="font-size:26px;font-weight:700;color:#15803d;">₱${Math.round(totalSpawn).toLocaleString()}</div>
+      </div>
+      <div style="background:#fff;border:1.5px solid #e0e7ff;border-radius:10px;padding:10px 18px;flex:1;min-width:100px;text-align:center;">
+        <div style="font-size:10px;color:#6b7280;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px;">Collectors</div>
+        <div style="font-size:26px;font-weight:700;color:#1565c0;">${collectors.length}</div>
+      </div>
+    </div>`;
+
+    // Map
+    if(window.L){
+      html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+        <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">
+          🗺 Live Field Map — Zamboanga del Norte
+          <span style="font-size:10px;font-weight:400;opacity:.6;">${gpsRows.length} GPS points today</span>
+          <div style="margin-left:auto;display:flex;gap:12px;font-size:10px;font-weight:400;">
+            <span>🟢 &lt;30min</span><span>🟡 30–60min</span><span>🔴 &gt;1hr</span>
           </div>
         </div>
-        <!-- Progress bar -->
-        <div style="height:6px;background:#e5e7eb;">
-          <div style="height:6px;background:${isActive?'#16a34a':'#64748b'};width:${pct}%;transition:width .3s;"></div>
-        </div>
-        <!-- Stats row -->
-        <div style="padding:8px 14px;display:flex;gap:16px;font-size:11px;color:#6b7280;background:#f8faff;border-bottom:1px solid #e5e7eb;">
-          <span>✅ Done: <b style="color:#15803d">${done.length}</b></span>
-          <span>⏳ Pending: <b style="color:#d97706">${pending.length}</b></span>
-          <span>⏭ Skipped: <b style="color:#6b7280">${skipped.length}</b></span>
-          <span style="margin-left:auto;">${new Date(run.started_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</span>
-        </div>`;
-
-      // Pending vendos
-      if(pending.length){
-        html += `<div style="padding:8px 12px;">
-          <div style="font-size:10px;font-weight:700;color:#d97706;margin-bottom:6px;text-transform:uppercase;">⏳ Pending (${pending.length})</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
-        pending.forEach(i=>{
-          html += `<span style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:3px 8px;font-size:11px;color:#92400e;">${i.sheet_name||i.tg_name||'?'}</span>`;
-        });
-        html += `</div></div>`;
-      }
-
-      // Done vendos
-      if(done.length){
-        html += `<div style="padding:8px 12px;border-top:1px solid #f3f4f6;">
-          <div style="font-size:10px;font-weight:700;color:#15803d;margin-bottom:6px;text-transform:uppercase;">✅ Done (${done.length})</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">`;
-        done.forEach(i=>{
-          html += `<span style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;font-size:11px;color:#15803d;" title="₱${Math.round(i.spawn_share||0)}">${i.sheet_name||i.tg_name||'?'} <span style="opacity:.6;">₱${Math.round(i.spawn_share||0)}</span></span>`;
-        });
-        html += `</div></div>`;
-      }
-
-      html += `</div>`;
-    });
-
-    // Fetch recent PWA logs
-    const rL = await fetch(`${_SB}/rest/v1/pwa_logs?order=created_at.desc&limit=20`,{headers:_HDR});
-    const logs = await rL.json();
-    if(logs.length){
-      html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-        <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;">🔧 PWA Logs <span style="font-size:10px;font-weight:400;opacity:.7;">(last 20)</span></div>
-        <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <thead><tr style="background:#f8faff;">
-            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Time</th>
-            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Collector</th>
-            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Type</th>
-            <th style="padding:5px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #e5e7eb;">Message</th>
-          </tr></thead><tbody>`;
-      logs.forEach(log=>{
-        const tc=log.log_type==='error'?'#dc2626':log.log_type==='sync'?'#15803d':'#6b7280';
-        const bg=log.log_type==='error'?'#fef2f2':'';
-        const t=new Date(log.created_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        html+=`<tr style="background:${bg}">
-          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#6b7280;">${t}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;font-weight:600;">${log.collector||'—'}</td>
-          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;"><span style="color:${tc};font-weight:700;">${log.log_type}</span></td>
-          <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;">${log.message||'—'}</td>
-        </tr>`;
-      });
-      html += `</tbody></table></div></div>`;
+        <div id="progress-map" style="height:300px;width:100%;"></div>
+      </div>`;
     }
 
+    if(!rows.length){
+      html += '<div style="padding:40px;text-align:center;color:#6b7280;font-size:13px;background:#fff;border-radius:10px;border:1px solid #e5e7eb;">No harvests today yet.</div>';
+      el.innerHTML = html;
+      if(window.L) _initProgressMap(gpsRows);
+      document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+      return;
+    }
+
+    const byCollector = {};
+    rows.forEach(h => { const c=h.collector||'Unknown'; if(!byCollector[c]) byCollector[c]=[]; byCollector[c].push(h); });
+
+    Object.entries(byCollector).forEach(([collector, harvests]) => {
+      const cCoins = harvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
+      const cSpawn = harvests.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
+      html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;padding:11px 16px;display:flex;align-items:center;gap:10px;">
+          <div style="font-size:16px;font-weight:700;">👤 ${collector}</div>
+          <span style="background:rgba(255,255,255,.2);padding:2px 10px;border-radius:10px;font-size:11px;">${harvests.length} harvested</span>
+          <div style="margin-left:auto;display:flex;gap:18px;text-align:right;">
+            <div><div style="font-size:10px;opacity:.7;">Coins</div><div style="font-weight:700;">₱${Math.round(cCoins).toLocaleString()}</div></div>
+            <div><div style="font-size:10px;opacity:.7;">Spawn</div><div style="font-weight:700;">₱${Math.round(cSpawn).toLocaleString()}</div></div>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="background:#f8faff;border-bottom:1px solid #e5e7eb;">
+            <th style="padding:7px 12px;text-align:left;color:#6b7280;font-weight:600;font-size:11px;">Time</th>
+            <th style="padding:7px 12px;text-align:left;color:#6b7280;font-weight:600;font-size:11px;">Vendo</th>
+            <th style="padding:7px 12px;text-align:left;color:#6b7280;font-weight:600;font-size:11px;">Area</th>
+            <th style="padding:7px 12px;text-align:right;color:#6b7280;font-weight:600;font-size:11px;">Coins</th>
+            <th style="padding:7px 12px;text-align:right;color:#6b7280;font-weight:600;font-size:11px;">Spawn</th>
+          </tr></thead><tbody>`;
+      harvests.forEach((h,i) => {
+        const t = h.harvested_at?new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—';
+        const name = h.sheet_name||h.vendo_name||h.tg_name||'—';
+        const bg = i%2===0?'#fff':'#f9fafb';
+        const sn = (name).replace(/'/g,"\'");
+        html += `<tr style="background:${bg};cursor:pointer;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'" onclick="vmZoomToProgress('${sn}')">
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;white-space:nowrap;">${t}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;">${name} <span style="font-size:9px;color:#9ca3af;">📍</span></td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:11px;">${h.area||'—'}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#1e293b;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#15803d;">₱${Math.round(h.spawn_share||0).toLocaleString()}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div>`;
+    });
+
     el.innerHTML = html;
+    if(window.L) _initProgressMap(gpsRows);
     document.getElementById('progress-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   } catch(e){
     el.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;">Error: ${e.message}</div>`;
   }
 }
 
-// Auto-refresh progress every 30 seconds when tab is active
+let _progressMap = null;
+function _initProgressMap(gpsRows){
+  if(!window.L) return;
+  setTimeout(()=>{
+    const mapEl = document.getElementById('progress-map');
+    if(!mapEl) return;
+    if(_progressMap){ _progressMap.remove(); _progressMap=null; }
+    _progressMap = L.map('progress-map').setView([8.15,123.27],10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_progressMap);
+    if(!gpsRows||!gpsRows.length) return;
+    const now=Date.now(), bounds=[];
+    gpsRows.forEach(row=>{
+      if(!row.lat_captured||!row.lng_captured) return;
+      const lat=parseFloat(row.lat_captured),lng=parseFloat(row.lng_captured);
+      if(isNaN(lat)||isNaN(lng)) return;
+      const minsAgo=row.harvested_at?(now-new Date(row.harvested_at).getTime())/60000:999;
+      const color=minsAgo<30?'#16a34a':minsAgo<60?'#d97706':'#dc2626';
+      const name=row.sheet_name||row.tg_name||'?';
+      const t=row.harvested_at?new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—';
+      const collector=row.harvest_groups?.collector||'';
+      const icon=L.divIcon({className:'',html:`<div style="text-align:center;"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>${collector?`<div style="background:#1e293b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;margin-top:2px;display:inline-block;">👤 ${collector}</div>`:''}<div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;margin-top:2px;display:inline-block;">${name}</div><div style="color:#555;font-size:9px;">${t}</div></div>`,iconAnchor:[7,7]});
+      L.marker([lat,lng],{icon}).addTo(_progressMap).bindPopup(`<b>${name}</b><br>${collector?'👤 '+collector+'<br>':''}${t}`);
+      bounds.push([lat,lng]);
+    });
+    if(bounds.length===1)_progressMap.setView(bounds[0],15);
+    else if(bounds.length>1)_progressMap.fitBounds(bounds,{padding:[40,40],maxZoom:15});
+  },200);
+}
+
+function vmZoomToProgress(name){
+  const btn=document.getElementById('hbtn-vmap');
+  if(btn) hvNewTab('vmap',btn);
+}
+
+// Auto-refresh every 30 seconds when tab is active
 setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
 
 </script>
