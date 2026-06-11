@@ -1022,7 +1022,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
-      <button class="hv-hvtab"    id="hbtn-vmap" onclick="hvNewTab('vmap',this);vmLoad()">🗺 Vendo Map</button>
+      <button class="hv-hvtab"    id="hbtn-vmap" onclick="hvNewTab('vmap',this);setTimeout(()=>{if(_vmMap)_vmMap.invalidateSize();vmLoad();},50)">🗺 Vendo Map</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -2520,6 +2520,146 @@ function vmZoomTo(name){
   };
   setTimeout(()=>_try(5), 300);
 }
+
+
+/* ══ VENDO MAP ══ */
+let _vmMap = null;
+let _vmAllRows = [];
+let _vmMarkers = [];
+
+const _VM_AREA_COLORS = {
+  'DIPOLOG':'#1565c0','DAPITAN':'#15803d','SINDANGAN':'#7e22ce',
+  'POLANCO':'#b45309','ROXAS':'#dc2626','SINAMAN':'#0891b2',
+  'MINAOG':'#be185d','MIX AREAS':'#6b7280'
+};
+
+async function vmLoad(){
+  const mapEl = document.getElementById('vmap-map');
+  if(!mapEl) return;
+  if(!window.L){ console.warn('Leaflet not loaded'); return; }
+
+  // Init map if not yet created
+  if(!_vmMap){
+    _vmMap = L.map('vmap-map').setView([8.15, 123.27], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+      attribution:'© OpenStreetMap', maxZoom:19
+    }).addTo(_vmMap);
+  }
+  // Always invalidate size in case tab was hidden
+  setTimeout(()=>_vmMap.invalidateSize(), 150);
+
+  const countEl = document.getElementById('vmap-count');
+  if(countEl) countEl.textContent = 'Loading…';
+
+  try {
+    let all = [], off = 0;
+    while(true){
+      const r = await fetch(
+        `${_SB}/rest/v1/vendos?status=eq.active&lat=not.is.null&select=id,sheet_name,tg_name,area,address,contact_number,lat,lng,last_harvest_date,vlan&order=sheet_name.asc&limit=1000&offset=${off}`,
+        {headers:_HDR}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      all.push(...batch);
+      if(batch.length<1000) break;
+      off+=1000;
+    }
+    _vmAllRows = all;
+
+    // Populate area filter
+    const areas = [...new Set(all.map(v=>v.area).filter(Boolean))].sort();
+    const areaSel = document.getElementById('vmap-area');
+    if(areaSel){
+      const prev = areaSel.value;
+      areaSel.innerHTML = '<option value="">All areas</option>' + areas.map(a=>`<option${a===prev?' selected':''}>${a}</option>`).join('');
+    }
+    vmFilter();
+  } catch(e){
+    if(countEl) countEl.textContent = 'Error: '+e.message;
+  }
+}
+
+function vmFilter(){
+  if(!_vmMap||!_vmAllRows.length) return;
+  const q = (document.getElementById('vmap-search')?.value||'').toLowerCase().trim();
+  const area = document.getElementById('vmap-area')?.value||'';
+
+  let rows = _vmAllRows;
+  if(area) rows = rows.filter(v=>v.area===area);
+  if(q) rows = rows.filter(v=>
+    (v.sheet_name||'').toLowerCase().includes(q)||
+    (v.tg_name||'').toLowerCase().includes(q)||
+    (v.address||'').toLowerCase().includes(q)
+  );
+
+  _vmMarkers.forEach(m=>_vmMap.removeLayer(m));
+  _vmMarkers = [];
+
+  const bounds = [];
+  rows.forEach(v=>{
+    const lat = parseFloat(v.lat), lng = parseFloat(v.lng);
+    if(isNaN(lat)||isNaN(lng)) return;
+    const color = _VM_AREA_COLORS[v.area]||'#475569';
+    const name = v.sheet_name||v.tg_name||'?';
+    const lastH = v.last_harvest_date||'—';
+    const daysAgo = v.last_harvest_date ? Math.floor((Date.now()-new Date(v.last_harvest_date))/86400000) : null;
+    const daysColor = daysAgo===null?'#9ca3af':daysAgo>60?'#dc2626':daysAgo>30?'#d97706':'#15803d';
+    const gpsLink = `https://maps.google.com/?q=${lat},${lng}`;
+
+    const icon = L.divIcon({
+      className:'',
+      html:`<div style="text-align:center;">
+        <div style="width:12px;height:12px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);margin:0 auto;"></div>
+        <div style="background:${color};color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:6px;white-space:nowrap;margin-top:2px;box-shadow:0 1px 3px rgba(0,0,0,.3);display:inline-block;">${name}</div>
+      </div>`,
+      iconAnchor:[6,6]
+    });
+
+    const popup = `<div style="font-size:12px;min-width:180px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${name}</div>
+      <div style="margin-bottom:2px;">📍 <a href="${gpsLink}" target="_blank" style="color:#1565c0;">Open in Google Maps</a></div>
+      ${v.address?`<div style="color:#6b7280;font-size:11px;margin-bottom:2px;">🏠 ${v.address}</div>`:''}
+      ${v.contact_number?`<div style="color:#6b7280;font-size:11px;margin-bottom:2px;">📞 ${v.contact_number}</div>`:''}
+      <div style="margin-top:4px;"><span style="background:${color};color:#fff;padding:1px 6px;border-radius:6px;font-size:11px;">${v.area||'—'}</span>${v.vlan?` <span style="color:#6b7280;font-size:11px;">VLAN ${v.vlan}</span>`:''}</div>
+      <div style="font-size:11px;margin-top:3px;color:${daysColor};">Last harvest: ${lastH}${daysAgo!==null?' ('+daysAgo+'d ago)':''}</div>
+    </div>`;
+
+    const marker = L.marker([lat,lng],{icon}).addTo(_vmMap);
+    marker.bindPopup(popup);
+    _vmMarkers.push(marker);
+    bounds.push([lat,lng]);
+  });
+
+  const countEl = document.getElementById('vmap-count');
+  if(countEl) countEl.textContent = `${_vmMarkers.length} of ${_vmAllRows.length} vendos with GPS`;
+
+  if(bounds.length===1) _vmMap.setView(bounds[0],16);
+  else if(bounds.length>1) _vmMap.fitBounds(bounds,{padding:[30,30],maxZoom:15});
+}
+
+function vmZoomTo(name){
+  const btn = document.getElementById('hbtn-vmap');
+  if(btn) hvNewTab('vmap', btn);
+  setTimeout(()=>{ if(_vmMap) _vmMap.invalidateSize(); },100);
+  const _try = (n)=>{
+    if(!_vmMap || !_vmAllRows.length){
+      if(n>0) setTimeout(()=>_try(n-1), 400);
+      if(!_vmAllRows.length) vmLoad();
+      return;
+    }
+    const v = _vmAllRows.find(r=>(r.sheet_name||r.tg_name||'').toLowerCase()===name.toLowerCase());
+    if(!v||!v.lat||!v.lng) return;
+    _vmMap.setView([parseFloat(v.lat), parseFloat(v.lng)], 17);
+    _vmMarkers.forEach(m=>{
+      const ll = m.getLatLng();
+      if(Math.abs(ll.lat-parseFloat(v.lat))<0.0001 && Math.abs(ll.lng-parseFloat(v.lng))<0.0001) m.openPopup();
+    });
+  };
+  setTimeout(()=>_try(5), 300);
+}
+
+// Auto-refresh Vendo Map every 60 seconds when tab is active
+setInterval(()=>{ if(hvNewActiveTab==='vmap') vmLoad(); }, 60000);
 
 // Auto-refresh every 30 seconds when tab is active
 setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
