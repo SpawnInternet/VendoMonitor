@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Spawn Ops</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1565c0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --blue:#1565c0;--blue2:#0d47a1;--blue-light:#eef2ff;--blue-mid:#c7d2fe;
+  --green:#16a34a;--green-light:#f0fdf4;--green-mid:#bbf7d0;
+  --red:#dc2626;--red-light:#fef2f2;
+  --amber:#d97706;--amber-light:#fffbeb;
+  --purple:#7c3aed;--purple-light:#ede9fe;
+  --teal:#0d9488;--teal-light:#f0fdfa;
+  --gray:#6b7280;--border:#e5e7eb;--bg:#f8fafc;
+  --text:#111827;--muted:#6b7280;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);min-height:100vh;color:var(--text);font-size:15px;-webkit-text-size-adjust:100%}
+.screen{display:none;min-height:calc(100vh - 52px);padding:16px;max-width:600px;margin:0 auto}
+.screen.active{display:block}
+
+/* TOPBAR */
+.topbar{background:var(--blue);color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100}
+.topbar-back{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:7px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:none}
+.topbar-logout{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:none;margin-left:auto}
+.topbar-logo{font-size:16px;font-weight:800;letter-spacing:-.3px}
+.topbar-sub{font-size:10px;opacity:.75;margin-top:1px}
+.sync-badge{font-size:9px;padding:3px 8px;border-radius:10px;background:rgba(255,255,255,.2);display:flex;align-items:center;gap:4px;margin-left:auto}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:#4ade80}
+.sync-dot.off{background:#f87171}
+.offline-banner{background:#dc2626;color:#fff;text-align:center;padding:8px;font-size:12px;font-weight:700;display:none}
+.offline-banner.show{display:block}
+
+/* CARDS */
+.card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px}
+.card-title{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+
+/* BUTTONS */
+.btn{width:100%;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:active{opacity:.85}
+.btn-green{background:var(--green);color:#fff}
+.btn-green:active{opacity:.85}
+.btn-red{background:var(--red);color:#fff}
+.btn-red:active{opacity:.85}
+.btn-amber{background:var(--amber);color:#fff}
+.btn-outline{background:#fff;color:var(--blue);border:1.5px solid var(--blue-mid)}
+.btn-gray{background:#f3f4f6;color:var(--muted);border:none}
+.btn-sm{padding:8px 14px;font-size:13px;width:auto;border-radius:8px}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.btn-row .btn{flex:1}
+
+/* FORMS */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:8px;font-size:15px;font-family:inherit;outline:none;color:var(--text);background:#fff}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--blue)}
+.field textarea{resize:vertical;min-height:72px}
+
+/* ROLE BUTTONS (login) */
+.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.role-btn{background:#f7f9ff;border:1.5px solid #e0e4f0;border-radius:14px;padding:16px 8px;text-align:center;cursor:pointer;font-family:inherit;transition:.15s}
+.role-btn:active{transform:scale(.97)}
+.role-btn.selected{border-color:var(--blue);background:#eff6ff}
+.role-btn-icon{font-size:26px;margin-bottom:6px}
+.role-btn-name{font-size:14px;font-weight:700;color:#1e2d5a}
+.role-btn-desc{font-size:10px;color:#8b99b8;margin-top:2px}
+.role-btn.selected .role-btn-name{color:var(--blue)}
+.role-btn.owner{background:linear-gradient(135deg,#1a2340,#2a3870);border-color:transparent}
+.role-btn.owner .role-btn-name{color:#fff}
+.role-btn.owner .role-btn-desc{color:rgba(255,255,255,.6)}
+
+/* JOB ORDER CARDS */
+.jo{background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px}
+.jo-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px}
+.jo-name{font-weight:700;font-size:15px;color:var(--text)}
+.jo-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px}
+.jo-tag{background:#f0f4ff;color:#4b5ea8;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500}
+.jo-addr{color:var(--muted);font-size:12px}
+.jo-note{font-size:12px;color:var(--muted);background:#f8fafc;border-radius:6px;padding:8px 10px;margin-top:8px;line-height:1.5}
+
+/* STATUS PILLS */
+.pill{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.pill-pending{background:#fef3c7;color:#92400e}
+.pill-approved{background:#dbeafe;color:#1e40af}
+.pill-done{background:#dcfce7;color:#166534}
+.pill-failed{background:#fee2e2;color:#991b1b}
+.pill-mikrotik{background:#ede9fe;color:#5b21b6}
+.pill-office{background:#e0f2fe;color:#075985}
+.pill-fb{background:#dbeafe;color:#1e40af}
+
+/* GPS */
+.gps-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;border:1.5px solid var(--green-mid);background:var(--green-light);color:var(--green);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.gps-btn.off{border-color:#fca5a5;background:#fef2f2;color:var(--red)}
+
+/* STAT CARDS */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.stat-n{font-size:24px;font-weight:800}
+.stat-l{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+
+/* CHECKLIST */
+.check-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.check-item:last-child{border-bottom:none}
+.check-circle{width:24px;height:24px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:.15s;font-size:13px}
+.check-circle.done{background:var(--green);border-color:var(--green);color:#fff}
+.check-info{flex:1}
+.check-label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.check-val{font-size:14px;color:var(--text);margin-top:2px}
+
+/* PIN */
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);background:transparent;transition:.2s}
+.pin-dot.filled{background:var(--blue);border-color:var(--blue)}
+
+/* LINEMAN STATUS */
+.lineman-row{display:flex;align-items:center;gap:10px;padding:10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;border:1px solid var(--border)}
+.lineman-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+.lineman-info{flex:1}
+.lineman-name{font-weight:700;font-size:13px}
+.lineman-job{font-size:11px;color:var(--muted);margin-top:1px}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px}
+
+/* MISC */
+.section-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:14px}
+.loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:24px;color:var(--muted)}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.divider{height:1px;background:var(--border);margin:14px 0}
+.alert-box{border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.5}
+.alert-amber{background:var(--amber-light);border:1px solid #fcd34d;color:#92400e}
+.alert-blue{background:var(--blue-light);border:1px solid var(--blue-mid);color:#1e3a8a}
+.alert-green{background:var(--green-light);border:1px solid var(--green-mid);color:#166534}
+.alert-red{background:var(--red-light);border:1px solid #fca5a5;color:#991b1b}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e2d5a;color:#fff;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;z-index:300;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <button class="topbar-back" id="topbar-back" onclick="goBack()">← Back</button>
+  <div>
+    <div class="topbar-logo">⚡ Spawn Ops</div>
+    <div class="topbar-sub" id="topbar-sub">Field Operations</div>
+  </div>
+  <div class="sync-badge" id="sync-badge">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-label">Online</span>
+  </div>
+  <button class="topbar-logout" id="topbar-logout" onclick="doLogout()">🚪 Logout</button>
+</div>
+<div class="offline-banner" id="offline-banner">📵 You are offline — changes will sync when back online</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: LOGIN
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen active" id="screen-login">
+  <div style="text-align:center;padding:20px 0 20px">
+    <img src="/VendoMonitor/spawn-logo.png" alt="Spawn"
+      style="width:72px;height:72px;object-fit:contain;border-radius:50%;display:block;margin:0 auto 10px"
+      onerror="this.style.display='none'">
+    <div style="font-size:24px;font-weight:800;color:#1e2d5a;letter-spacing:-.3px">Spawn Ops</div>
+    <div style="font-size:12px;color:#8b99b8;margin-top:4px">Field Operations System</div>
+  </div>
+
+  <!-- Role selection -->
+  <div class="card">
+    <div class="card-title">Select your role</div>
+    <div class="role-grid">
+      <div class="role-btn owner" onclick="selectRole(this,'wendell')" data-role="wendell" style="grid-column:span 2">
+        <div class="role-btn-icon">👑</div>
+        <div class="role-btn-name">Sir Wendell</div>
+        <div class="role-btn-desc">Owner — full oversight + approval</div>
+      </div>
+      <div class="role-btn" onclick="selectRole(this,'michael')" data-role="michael">
+        <div class="role-btn-icon">🌐</div>
+        <div class="role-btn-name">Sir Michael</div>
+        <div class="role-btn-desc">VLAN / PPPoE</div>
+      </div>
+      <div class="role-btn" onclick="selectRole(this,'lineman')" data-role="lineman">
+        <div class="role-btn-icon">🔧</div>
+        <div class="role-btn-name">Lineman</div>
+        <div class="role-btn-desc">Field operations</div>
+      </div>
+      <div class="role-btn" onclick="selectRole(this,'office')" data-role="office" style="grid-column:span 2">
+        <div class="role-btn-icon">📋</div>
+        <div class="role-btn-name">Office Staff</div>
+        <div class="role-btn-desc">Submit complaints & requests</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Name + PIN (shown after role selected) -->
+  <div class="card" id="login-name-card" style="display:none">
+    <div class="card-title" id="login-name-label">Select name</div>
+    <div id="login-name-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:0"></div>
+  </div>
+
+  <div class="card" id="login-pin-card" style="display:none">
+    <div class="card-title">4-digit PIN</div>
+    <div style="display:flex;justify-content:center;gap:16px;margin:4px 0 14px" id="pin-dots-login">
+      <div class="pin-dot" id="lpd1"></div>
+      <div class="pin-dot" id="lpd2"></div>
+      <div class="pin-dot" id="lpd3"></div>
+      <div class="pin-dot" id="lpd4"></div>
+    </div>
+    <input type="password" inputmode="numeric" maxlength="4" id="login-pin"
+      placeholder="••••"
+      style="width:100%;padding:13px;border:1.5px solid var(--border);border-radius:10px;font-size:26px;font-weight:700;letter-spacing:10px;text-align:center;font-family:monospace;outline:none;color:#1e2d5a;background:#f7f9ff"
+      oninput="loginPinInput(this)" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:12px">Login →</button>
+    <div id="login-error" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: WENDELL — OVERVIEW
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-wendell-home">
+  <div style="font-size:20px;font-weight:700;margin-bottom:2px">Good morning, Sir Wendell 👑</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:16px" id="wendell-date">—</div>
+
+  <div class="stats" id="wendell-stats">
+    <div class="stat"><div class="stat-n blue" id="ws-pending" style="color:var(--amber)">—</div><div class="stat-l">Need Approval</div></div>
+    <div class="stat"><div class="stat-n" id="ws-dispatched" style="color:var(--blue)">—</div><div class="stat-l">Dispatched</div></div>
+    <div class="stat"><div class="stat-n" id="ws-done" style="color:var(--green)">—</div><div class="stat-l">Done Today</div></div>
+    <div class="stat"><div class="stat-n" id="ws-offline" style="color:var(--red)">—</div><div class="stat-l">Subscribers Offline 12h+</div></div>
+  </div>
+
+  <!-- Pending approvals -->
+  <div id="wendell-pending-section">
+    <div class="section-label">⏳ Waiting for your approval</div>
+    <div id="wendell-pending-list"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
+    <button class="btn btn-green" id="wendell-approve-all-btn" style="display:none;margin-bottom:12px" onclick="approveAll()">✓ Approve all pending jobs</button>
+  </div>
+
+  <!-- Lineman status -->
+  <div class="section-label">👷 Lineman status</div>
+  <div id="wendell-linemen"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: WENDELL — ALL JOB ORDERS
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-wendell-jobs">
+  <div style="font-size:18px;font-weight:700;margin-bottom:12px">All Job Orders</div>
+  <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px" id="jo-filter-tabs">
+    <button class="btn-sm btn-blue" onclick="filterJO('all',this)">All</button>
+    <button class="btn-sm btn-outline" onclick="filterJO('pending_approval',this)">Pending</button>
+    <button class="btn-sm btn-outline" onclick="filterJO('approved',this)">Approved</button>
+    <button class="btn-sm btn-outline" onclick="filterJO('done',this)">Done</button>
+    <button class="btn-sm btn-outline" onclick="filterJO('pending',this)">Rolled Over</button>
+  </div>
+  <div id="wendell-all-jobs"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: JOB ORDER DETAIL (shared)
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-jo-detail">
+  <div id="jo-detail-body"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: MICHAEL — VLAN QUEUE
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-michael-home">
+  <div style="font-size:20px;font-weight:700;margin-bottom:2px">VLAN Queue</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Install forms ready for VLAN assignment</div>
+  <div id="michael-queue"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: MICHAEL — ASSIGN VLAN
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-michael-assign">
+  <div style="font-size:18px;font-weight:700;margin-bottom:16px" id="michael-assign-title">Assign VLAN</div>
+  <div id="michael-assign-checklist" class="card" style="margin-bottom:12px"></div>
+  <div class="card">
+    <div class="card-title">VLAN + PPPoE assignment</div>
+    <div class="field"><label>VLAN Number</label><input id="michael-vlan" type="number" placeholder="e.g. 44" inputmode="numeric"></div>
+    <div class="field"><label>PPPoE Username</label><input id="michael-pppoe" placeholder="e.g. client.name"></div>
+    <div class="field"><label>PPPoE Password</label><input id="michael-pppoe-pass" placeholder="password"></div>
+    <div class="alert-amber" id="michael-incomplete-warn" style="display:none">⚠️ Lineman has not completed all install details yet. You can still assign but coordinates, photo or contact may be missing.</div>
+    <button class="btn btn-green" onclick="saveMichaelVLAN()">✓ Save VLAN + PPPoE — mark complete</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: LINEMAN — MY JOBS
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-lineman-home">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div>
+      <div style="font-size:20px;font-weight:700" id="lineman-greeting">Hi! 👋</div>
+      <div style="font-size:13px;color:var(--muted)" id="lineman-job-count">—</div>
+    </div>
+    <button class="gps-btn off" id="gps-btn" onclick="toggleGPS()">📍 GPS OFF</button>
+  </div>
+  <div id="lineman-jobs"><div class="loading"><div class="spinner"></div><span>Loading your jobs…</span></div></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: LINEMAN — INSTALL FORM
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-install-form">
+  <div style="font-size:18px;font-weight:700;margin-bottom:4px" id="install-form-title">New Installation</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:14px" id="install-form-sub">Complete all fields before VLAN can be assigned</div>
+  <div class="alert-blue" style="margin-bottom:14px">⚠️ VLAN + PPPoE will only be assigned by Sir Michael after all fields are complete.</div>
+  <div class="card">
+    <div class="card-title">Client details</div>
+    <div class="field"><label>Full Name *</label><input id="if-name" placeholder="Client full name"></div>
+    <div class="field"><label>Address *</label><input id="if-addr" placeholder="Purok, Barangay, City"></div>
+    <div class="field"><label>Contact Number *</label><input id="if-num" type="tel" placeholder="09XXXXXXXXX"></div>
+    <div class="field"><label>Facebook Name *</label><input id="if-fb" placeholder="Facebook profile name"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Installation details</div>
+    <div class="field"><label>Installer *</label><input id="if-installer" placeholder="Your name"></div>
+    <div class="field"><label>Date Installed *</label><input id="if-date" type="date"></div>
+    <div class="field">
+      <label>GPS Coordinates *</label>
+      <div style="display:flex;gap:8px">
+        <input id="if-gps" placeholder="lat, lng" style="flex:1">
+        <button class="btn-sm btn-outline" onclick="captureGPS()">📍 Auto</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Photo *</label>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="if-photo-status" style="font-size:13px;color:var(--muted)">No photo yet</span>
+        <button class="btn-sm btn-outline" onclick="fakePhoto()">📷 Take Photo</button>
+      </div>
+    </div>
+  </div>
+  <button class="btn btn-blue" onclick="saveInstallForm()" style="margin-bottom:16px">Save Install Details</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: OFFICE — SUBMIT
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-office-home">
+  <div style="font-size:20px;font-weight:700;margin-bottom:2px">Submit Request</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Report a complaint or new installation</div>
+
+  <div class="card">
+    <div class="card-title">Type of request</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:0">
+      <div class="role-btn" onclick="selectType(this,'subscriber_repair')" data-type="subscriber_repair">
+        <div class="role-btn-icon">📡</div>
+        <div class="role-btn-name" style="font-size:13px">No Internet</div>
+        <div class="role-btn-desc">Subscriber problem</div>
+      </div>
+      <div class="role-btn" onclick="selectType(this,'vendo_repair')" data-type="vendo_repair">
+        <div class="role-btn-icon">🪙</div>
+        <div class="role-btn-name" style="font-size:13px">Vendo Issue</div>
+        <div class="role-btn-desc">Machine problem</div>
+      </div>
+      <div class="role-btn" onclick="selectType(this,'subscriber_installation')" data-type="subscriber_installation">
+        <div class="role-btn-icon">🆕</div>
+        <div class="role-btn-name" style="font-size:13px">New Subscriber</div>
+        <div class="role-btn-desc">Installation request</div>
+      </div>
+      <div class="role-btn" onclick="selectType(this,'vendo_installation')" data-type="vendo_installation">
+        <div class="role-btn-icon">📦</div>
+        <div class="role-btn-name" style="font-size:13px">New Vendo</div>
+        <div class="role-btn-desc">Install machine</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="office-form-card" style="display:none">
+    <div class="card-title" id="office-form-title">Details</div>
+    <div class="field"><label>Client / Subscriber Name *</label><input id="of-name" placeholder="Full name"></div>
+    <div class="field"><label>Contact Number</label><input id="of-num" type="tel" placeholder="09XXXXXXXXX"></div>
+    <div class="field"><label>Address / Location *</label><input id="of-addr" placeholder="Barangay, City"></div>
+    <div class="field">
+      <label>Area *</label>
+      <select id="of-area">
+        <option value="">Select area…</option>
+        <option>DAPITAN</option><option>DIPOLOG</option><option>SINDANGAN</option>
+        <option>POLANCO</option><option>ROXAS</option><option>SINAMAN</option><option>MINAOG</option>
+      </select>
+    </div>
+    <div class="field"><label>Details / Notes</label><textarea id="of-notes" placeholder="Describe the problem or request…"></textarea></div>
+    <button class="btn btn-blue" onclick="submitOfficeRequest()">Submit Request →</button>
+  </div>
+
+  <!-- My submitted tickets -->
+  <div class="section-label" id="office-tickets-label" style="display:none">My submitted tickets</div>
+  <div id="office-tickets"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: PULLOUT REVIEW (Wendell only, from home)
+═══════════════════════════════════════════════════════════════ -->
+<div class="screen" id="screen-pullouts">
+  <div style="font-size:18px;font-weight:700;margin-bottom:4px">Pullout Review</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Flagged from office finance sheet — confirm before marking</div>
+  <div class="alert-amber" style="margin-bottom:14px">⚠️ These were marked PULL-OUT in your Excel (BASHANG). Confirm each one — the machine will only be marked pulled out after your approval.</div>
+  <div id="pullout-list"><div class="loading"><div class="spinner"></div><span>Loading…</span></div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── SUPABASE ───────────────────────────────────────────────────
+const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+
+async function sb(method, path, body){
+  const opts = {method, headers:HDR};
+  if(body) opts.body = JSON.stringify(body);
+  if(method==='GET' && !path.includes('select=')) path += (path.includes('?')?'&':'?') + 'select=*';
+  const r = await fetch(`${SB}/rest/v1/${path}`, opts);
+  if(!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  if(r.status===204) return null;
+  return r.json();
+}
+
+// ── STATE ──────────────────────────────────────────────────────
+let STATE = {
+  role: null,
+  name: null,
+  staffId: null,
+  gpsActive: false,
+  gpsWatcher: null,
+  gpsCoords: null,
+  currentJO: null,   // job order being viewed
+  currentInstallJO: null, // install form job order id
+  installPhotoTaken: false,
+  officeType: null,
+  _prevScreen: null,
+};
+
+// ── SCREEN NAV ─────────────────────────────────────────────────
+function showScreen(id, recordHistory=true){
+  if(recordHistory && STATE._prevScreen && STATE._prevScreen !== id)
+    STATE._navHistory = [...(STATE._navHistory||[]), STATE._prevScreen];
+  STATE._prevScreen = id;
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+  const noBack = ['screen-login','screen-wendell-home','screen-lineman-home',
+                  'screen-michael-home','screen-office-home'];
+  const backBtn = document.getElementById('topbar-back');
+  const logoutBtn = document.getElementById('topbar-logout');
+  if(backBtn) backBtn.style.display = noBack.includes(id) ? 'none' : 'inline-block';
+  if(logoutBtn) logoutBtn.style.display = noBack.includes(id) ? 'none' : 'inline-block';
+}
+
+function goBack(){
+  const hist = STATE._navHistory || [];
+  if(hist.length){
+    const prev = hist.pop();
+    STATE._navHistory = hist;
+    showScreen(prev, false);
+  } else {
+    homeScreen();
+  }
+}
+
+function homeScreen(){
+  const map = {
+    wendell: 'screen-wendell-home',
+    michael: 'screen-michael-home',
+    lineman: 'screen-lineman-home',
+    office:  'screen-office-home',
+  };
+  const s = map[STATE.role];
+  if(s) showScreen(s, false);
+}
+
+// ── UTILS ──────────────────────────────────────────────────────
+function toast(msg,dur=2500){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+function todayPHT(){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());
+}
+function timeAgo(ts){
+  if(!ts) return '—';
+  const d=(Date.now()-new Date(ts).getTime())/1000;
+  if(d<60) return 'just now';
+  if(d<3600) return Math.floor(d/60)+'m ago';
+  if(d<86400) return Math.floor(d/3600)+'h ago';
+  return Math.floor(d/86400)+'d ago';
+}
+function sourceLabel(s){
+  return {mikrotik:'🟣 MikroTik',office:'🔵 Office',fb:'🔷 FB AI',manual:'🟡 Manual'}[s]||s||'—';
+}
+function typeLabel(t){
+  return {
+    vendo_repair:'Vendo Repair',subscriber_repair:'Subscriber Repair',
+    vendo_installation:'Vendo Install',subscriber_installation:'Subscriber Install',
+    complaint:'Complaint',repair:'Repair',unrecognized:'Unrecognized'
+  }[t]||t||'—';
+}
+function pillClass(status){
+  return {
+    pending_approval:'pill-pending',approved:'pill-approved',
+    done:'pill-done',pending:'pill-failed'
+  }[status]||'pill-pending';
+}
+function pillLabel(status){
+  return {
+    pending_approval:'Needs Approval',approved:'Dispatched',
+    done:'Done',pending:'Rolled Over'
+  }[status]||status||'—';
+}
+
+// ── ONLINE STATUS ──────────────────────────────────────────────
+function updateOnline(){
+  const ok=navigator.onLine;
+  document.getElementById('sync-dot').className='sync-dot'+(ok?'':' off');
+  document.getElementById('sync-label').textContent=ok?'Online':'Offline';
+  document.getElementById('offline-banner').className='offline-banner'+(ok?'':' show');
+}
+window.addEventListener('online',updateOnline);
+window.addEventListener('offline',updateOnline);
+updateOnline();
+
+// ── LOGIN ──────────────────────────────────────────────────────
+const ROLE_LABELS = {
+  wendell:'Sir Wendell 👑', michael:'Sir Michael', lineman:'Lineman', office:'Office Staff'
+};
+const STAFF_NAMES = {
+  wendell:['Sir Wendell'],
+  michael:['Sir Michael'],
+  lineman:['Jericho','Bim2x','Warren','Jhoe','Dodoy','Dongie'],
+  office:['Weng','Office 1','Office 2']
+};
+
+let _selectedRole = null;
+let _selectedName = null;
+let _staffData = [];
+
+function selectRole(el, role){
+  document.querySelectorAll('.role-btn[data-role]').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+  _selectedRole = role;
+  _selectedName = null;
+
+  // Show name list
+  const nameCard = document.getElementById('login-name-card');
+  const pinCard  = document.getElementById('login-pin-card');
+  nameCard.style.display = '';
+  document.getElementById('login-name-label').textContent =
+    role === 'wendell' || role === 'michael' ? 'Confirm your identity' : 'Select your name';
+
+  // Load staff names from DB
+  loadStaffForRole(role);
+  pinCard.style.display = 'none';
+  document.getElementById('login-btn').disabled = true;
+}
+
+async function loadStaffForRole(role){
+  const el = document.getElementById('login-name-list');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+
+  // Fallback names
+  const fallback = (STAFF_NAMES[role]||[]).map(n=>({name:n,role,pin:'0000'}));
+  const render = (list) => {
+    el.innerHTML = list.map(s=>`
+      <div class="role-btn" onclick="selectStaff(this,'${s.name}','${s.pin}')" data-name="${s.name}">
+        <div style="width:38px;height:38px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e2d5a;margin:0 auto 6px">${s.name[0].toUpperCase()}</div>
+        <div class="role-btn-name" style="font-size:13px">${s.name}</div>
+      </div>`).join('');
+  };
+  render(fallback);
+
+  try{
+    const data = await sb('GET', `staff?role=eq.${role}&active=eq.true&order=display_name.asc`);
+    if(Array.isArray(data) && data.length){
+      _staffData = data;
+      const mapped = data.map(s=>({name:s.display_name||s.name||'Staff', pin:s.pin||'0000', id:s.id}));
+      render(mapped);
+    }
+  }catch(e){
+    _staffData = fallback;
+  }
+}
+
+let _cachedPin = null;
+function selectStaff(el, name, pin){
+  document.querySelectorAll('#login-name-list .role-btn').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+  _selectedName = name;
+  _cachedPin = pin;
+
+  document.getElementById('login-pin-card').style.display = '';
+  document.getElementById('login-pin').focus();
+  loginCheckReady();
+}
+
+function loginPinInput(inp){
+  inp.value = inp.value.replace(/[^0-9]/g,'');
+  const len = inp.value.length;
+  [1,2,3,4].forEach(i=>{
+    const d = document.getElementById('lpd'+i);
+    if(d){ d.classList.toggle('filled', i<=len); }
+  });
+  loginCheckReady();
+}
+
+function loginCheckReady(){
+  const ready = _selectedName && document.getElementById('login-pin').value.length===4;
+  document.getElementById('login-btn').disabled = !ready;
+}
+
+async function doLogin(){
+  const pin = document.getElementById('login-pin').value;
+  const errEl = document.getElementById('login-error');
+  const btn   = document.getElementById('login-btn');
+  btn.disabled=true; btn.textContent='Checking…';
+  errEl.style.display='none';
+
+  // Try DB verification first
+  let ok = false;
+  try{
+    const rows = await sb('GET',
+      `staff?role=eq.${_selectedRole}&active=eq.true`+
+      `&or=(display_name.eq.${encodeURIComponent(_selectedName)},name.eq.${encodeURIComponent(_selectedName)})`
+    );
+    if(Array.isArray(rows) && rows.length){
+      const staff = rows[0];
+      ok = (staff.pin === pin) || pin === '0000'; // 0000 is default — allow until set
+      if(ok) STATE.staffId = staff.id;
+    } else {
+      // Not in staff table yet — allow default PIN 0000
+      ok = (pin === '0000');
+    }
+  }catch(e){
+    // Offline — allow cached PIN
+    ok = (_cachedPin === pin) || (pin === '0000');
+  }
+
+  if(!ok){
+    errEl.textContent='❌ Wrong PIN — try again';
+    errEl.style.display='';
+    btn.disabled=false; btn.textContent='Login →';
+    document.getElementById('login-pin').value='';
+    [1,2,3,4].forEach(i=>{const d=document.getElementById('lpd'+i);if(d)d.classList.remove('filled');});
+    loginCheckReady();
+    return;
+  }
+
+  // Success
+  STATE.role = _selectedRole;
+  STATE.name = _selectedName;
+  document.getElementById('topbar-sub').textContent = ROLE_LABELS[_selectedRole]||_selectedRole;
+  document.getElementById('login-pin').value='';
+  [1,2,3,4].forEach(i=>{const d=document.getElementById('lpd'+i);if(d)d.classList.remove('filled');});
+  btn.textContent='Login →';
+  enterApp();
+}
+
+function doLogout(){
+  stopGPS();
+  STATE = {role:null,name:null,staffId:null,gpsActive:false,gpsWatcher:null,gpsCoords:null,currentJO:null,currentInstallJO:null,installPhotoTaken:false,officeType:null,_prevScreen:null,_navHistory:[]};
+  _selectedRole = null; _selectedName = null;
+  document.querySelectorAll('.role-btn[data-role]').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('login-name-card').style.display='none';
+  document.getElementById('login-pin-card').style.display='none';
+  document.getElementById('login-error').style.display='none';
+  document.getElementById('topbar-sub').textContent='Field Operations';
+  showScreen('screen-login',false);
+}
+
+function enterApp(){
+  const home = {
+    wendell:'screen-wendell-home',
+    michael:'screen-michael-home',
+    lineman:'screen-lineman-home',
+    office:'screen-office-home',
+  }[STATE.role];
+  showScreen(home,false);
+
+  // Load data for role
+  if(STATE.role==='wendell') loadWendellHome();
+  if(STATE.role==='michael') loadMichaelQueue();
+  if(STATE.role==='lineman') { loadLinemanJobs(); initGPSAutoStart(); }
+  if(STATE.role==='office')  { loadOfficeTickets(); }
+}
+
+// ── JOB ORDER HELPERS ──────────────────────────────────────────
+function joCard(jo, actions=''){
+  const sc = pillClass(jo.status);
+  const sl = pillLabel(jo.status);
+  return `
+  <div class="jo" onclick="openJO('${jo.id}')">
+    <div class="jo-top">
+      <div class="jo-name">${jo.customer||jo.address||'(no name)'}</div>
+      <span class="pill ${sc}">${sl}</span>
+    </div>
+    <div class="jo-meta">
+      <span class="jo-tag">${typeLabel(jo.type)}</span>
+      <span class="jo-tag">${jo.area||'—'}</span>
+      ${jo.mikrotik_wait_hrs ? `<span class="jo-tag" style="color:var(--amber)">⏱ ${jo.mikrotik_wait_hrs}h wait</span>` : ''}
+    </div>
+    <div class="jo-addr">📍 ${jo.address||'—'} ${jo.technician ? `· → ${jo.technician}` : ''}</div>
+    ${jo.notes ? `<div class="jo-note">${jo.notes.slice(0,120)}${jo.notes.length>120?'…':''}</div>` : ''}
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--muted)">
+      <span>${sourceLabel(jo.source)}</span>
+      <span>${timeAgo(jo.created_at)}</span>
+    </div>
+    ${actions}
+  </div>`;
+}
+
+async function openJO(id){
+  STATE.currentJO = id;
+  const detail = document.getElementById('jo-detail-body');
+  detail.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  showScreen('screen-jo-detail');
+
+  try{
+    const rows = await sb('GET', `job_orders?id=eq.${id}`);
+    const jo = rows[0];
+    if(!jo){ detail.innerHTML='<div class="empty">Job order not found.</div>'; return; }
+
+    const canApprove = (STATE.role==='wendell' && jo.status==='pending_approval');
+    const canMarkDone = (STATE.role==='lineman' && jo.assigned_to===STATE.name && jo.status==='approved');
+    const isInstall = jo.type && jo.type.includes('installation');
+
+    detail.innerHTML = `
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px">${jo.customer||'Job Order'}</div>
+    <div style="margin-bottom:14px"><span class="pill ${pillClass(jo.status)}">${pillLabel(jo.status)}</span> <span style="font-size:12px;color:var(--muted);margin-left:6px">${sourceLabel(jo.source)}</span></div>
+    <div class="card">
+      ${field('Type', typeLabel(jo.type))}
+      ${field('Area', jo.area)}
+      ${field('Address', jo.address)}
+      ${field('Contact', jo.contact)}
+      ${field('Assigned to', jo.technician||jo.assigned_to||'—')}
+      ${jo.mikrotik_ip ? field('MikroTik IP', jo.mikrotik_ip) : ''}
+      ${jo.mikrotik_wait_hrs ? field('Wait time', jo.mikrotik_wait_hrs+'h on waiting list') : ''}
+      ${field('Created', timeAgo(jo.created_at))}
+      ${jo.notes ? field('Notes', jo.notes) : ''}
+    </div>
+    ${canApprove ? `
+    <div class="card">
+      <div class="card-title">Approval</div>
+      <div class="field"><label>Assign to lineman</label>
+        <select id="jo-reassign">
+          ${['Jericho','Bim2x','Warren','Jhoe','Dodoy','Dongie'].map(n=>`<option ${n===(jo.technician||jo.assigned_to)?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-green" onclick="approveJO('${jo.id}')">✓ Approve</button>
+        <button class="btn btn-red btn-sm" onclick="rejectJO('${jo.id}')">✕ Reject</button>
+      </div>
+    </div>` : ''}
+    ${canMarkDone ? `
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="linemanDone('${jo.id}')">✓ Mark Done</button>
+      <button class="btn btn-gray" onclick="linemanFail('${jo.id}')">✗ Cannot Do</button>
+    </div>
+    ${isInstall ? `<button class="btn btn-outline" style="margin-top:8px" onclick="openInstallForm('${jo.id}','${jo.customer||''}')">📋 Open Install Form</button>` : ''}` : ''}
+    `;
+  }catch(e){
+    detail.innerHTML=`<div class="empty">Error loading job order.<br><small>${e.message}</small></div>`;
+  }
+}
+
+function field(label, value){
+  if(!value || value==='—') return '';
+  return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+    <span style="color:var(--muted);font-weight:500">${label}</span>
+    <span style="font-weight:600;text-align:right;max-width:60%">${value}</span>
+  </div>`;
+}
+
+// ── WENDELL ────────────────────────────────────────────────────
+async function loadWendellHome(){
+  document.getElementById('wendell-date').textContent =
+    new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric',timeZone:'Asia/Manila'});
+
+  try{
+    // Stats
+    const today = todayPHT();
+    const [pending, approved, done, offline] = await Promise.all([
+      sb('GET','job_orders?status=eq.pending_approval&select=id'),
+      sb('GET','job_orders?status=eq.approved&select=id'),
+      sb('GET',`job_orders?status=eq.done&completed_at=gte.${today}T00:00:00&select=id`),
+      sb('GET','subscribers?is_online=eq.false&status=eq.active&select=id'),
+    ]);
+    document.getElementById('ws-pending').textContent   = pending.length;
+    document.getElementById('ws-dispatched').textContent= approved.length;
+    document.getElementById('ws-done').textContent      = done.length;
+    document.getElementById('ws-offline').textContent   = offline.length;
+
+    // Pending approvals
+    const pendingJOs = await sb('GET','job_orders?status=eq.pending_approval&order=created_at.asc');
+    const pList = document.getElementById('wendell-pending-list');
+    if(!pendingJOs.length){
+      pList.innerHTML='<div class="empty" style="padding:16px">✅ No pending approvals</div>';
+      document.getElementById('wendell-approve-all-btn').style.display='none';
+    } else {
+      pList.innerHTML = pendingJOs.map(jo=>joCard(jo,`
+        <div class="btn-row" onclick="event.stopPropagation()">
+          <button class="btn btn-green btn-sm" onclick="approveJOQuick('${jo.id}',this)">✓ Approve</button>
+          <button class="btn btn-gray btn-sm" onclick="openJO('${jo.id}')">Details</button>
+        </div>`)).join('');
+      if(pendingJOs.length>1)
+        document.getElementById('wendell-approve-all-btn').style.display='';
+    }
+
+    // Lineman GPS
+    const gps = await sb('GET','lineman_gps_latest?select=technician,lat,lng,pinged_at,job_order_id');
+    const lEl = document.getElementById('wendell-linemen');
+    const COLORS = {Jericho:'#3b82f6',Bim2x:'#22c55e',Warren:'#f59e0b',Jhoe:'#a855f7',Dodoy:'#ef4444',Dongie:'#06b6d4'};
+    const allLinemen = ['Jericho','Bim2x','Warren','Jhoe','Dodoy','Dongie'];
+    const gpsMap = {};
+    (gps||[]).forEach(g=>gpsMap[g.technician]=g);
+
+    lEl.innerHTML = allLinemen.map(name=>{
+      const g = gpsMap[name];
+      const color = COLORS[name]||'#6b7280';
+      const minsAgo = g ? Math.floor((Date.now()-new Date(g.pinged_at).getTime())/60000) : null;
+      const isOnline = g && minsAgo < 30;
+      const statusColor = !g ? '#9ca3af' : isOnline ? '#16a34a' : '#ef4444';
+      const statusText = !g ? 'No GPS data' : isOnline ? `Last seen ${minsAgo}m ago` : `Offline — ${minsAgo}m ago`;
+      return `<div class="lineman-row">
+        <div class="lineman-av" style="background:${color}22;color:${color}">${name[0]}</div>
+        <div class="lineman-info">
+          <div class="lineman-name">${name}</div>
+          <div class="lineman-job" style="color:${statusColor}">
+            <span class="status-dot" style="background:${statusColor}"></span>${statusText}
+          </div>
+        </div>
+        ${g && isOnline ? `<a href="https://maps.google.com/?q=${g.lat},${g.lng}" target="_blank"
+          style="font-size:11px;color:var(--blue);text-decoration:none;flex-shrink:0">📍 Map</a>` : ''}
+      </div>`;
+    }).join('');
+
+  }catch(e){
+    toast('Error loading data');
+  }
+}
+
+async function approveJOQuick(id, btn){
+  btn.disabled=true; btn.textContent='…';
+  try{
+    await sb('PATCH', `job_orders?id=eq.${id}`,
+      {status:'approved', approved_by:STATE.name, approved_at:new Date().toISOString(), updated_at:new Date().toISOString()});
+    toast('✓ Approved');
+    btn.closest('.jo').style.opacity='0.4';
+    loadWendellHome();
+  }catch(e){ toast('Error: '+e.message); btn.disabled=false; btn.textContent='✓ Approve'; }
+}
+
+async function approveJO(id){
+  const lineman = document.getElementById('jo-reassign')?.value;
+  try{
+    await sb('PATCH', `job_orders?id=eq.${id}`,
+      {status:'approved', approved_by:STATE.name, approved_at:new Date().toISOString(),
+       technician:lineman, updated_at:new Date().toISOString()});
+    toast('✓ Approved — dispatched to '+lineman);
+    goBack();
+    loadWendellHome();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function rejectJO(id){
+  if(!confirm('Remove this job order?')) return;
+  try{
+    await sb('DELETE', `job_orders?id=eq.${id}`);
+    toast('Job order removed');
+    goBack();
+    loadWendellHome();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function approveAll(){
+  const btn = document.getElementById('wendell-approve-all-btn');
+  btn.disabled=true; btn.textContent='Approving…';
+  try{
+    await sb('PATCH', 'job_orders?status=eq.pending_approval',
+      {status:'approved', approved_by:STATE.name, approved_at:new Date().toISOString(), updated_at:new Date().toISOString()});
+    toast('✅ All jobs approved and dispatched');
+    loadWendellHome();
+  }catch(e){ toast('Error: '+e.message); btn.disabled=false; btn.textContent='✓ Approve all pending jobs'; }
+}
+
+async function loadWendellAllJobs(){
+  showScreen('screen-wendell-jobs');
+  filterJO('all', document.querySelector('#jo-filter-tabs button'));
+}
+
+let _allJOs = [];
+async function filterJO(status, btn){
+  document.querySelectorAll('#jo-filter-tabs button').forEach(b=>{
+    b.className='btn-sm btn-outline';
+  });
+  if(btn) btn.className='btn-sm btn-blue';
+
+  const el = document.getElementById('wendell-all-jobs');
+  el.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  try{
+    const filter = status==='all' ? '' : `&status=eq.${status}`;
+    const jos = await sb('GET', `job_orders?order=created_at.desc&limit=50${filter}`);
+    _allJOs = jos;
+    el.innerHTML = jos.length ? jos.map(jo=>joCard(jo)).join('') : '<div class="empty">No job orders found</div>';
+  }catch(e){ el.innerHTML='<div class="empty">Error loading</div>'; }
+}
+
+// ── MICHAEL ────────────────────────────────────────────────────
+async function loadMichaelQueue(){
+  const el = document.getElementById('michael-queue');
+  el.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading queue…</span></div>';
+  try{
+    // Find job orders that are installations where install form needs VLAN
+    const jos = await sb('GET',
+      'job_orders?type=in.(vendo_installation,subscriber_installation)&status=in.(approved,pending_approval)&order=created_at.asc');
+    if(!jos.length){
+      el.innerHTML='<div class="empty">✅ No installs waiting for VLAN assignment</div>';
+      return;
+    }
+    el.innerHTML = jos.map(jo=>`
+      <div class="jo" onclick="openMichaelAssign('${jo.id}')">
+        <div class="jo-top">
+          <div class="jo-name">${jo.customer||'Install'}</div>
+          <span class="pill ${jo.vlan ? 'pill-done' : 'pill-pending'}">${jo.vlan ? 'VLAN assigned' : 'Needs VLAN'}</span>
+        </div>
+        <div class="jo-meta">
+          <span class="jo-tag">${typeLabel(jo.type)}</span>
+          <span class="jo-tag">${jo.area||'—'}</span>
+          ${jo.technician ? `<span class="jo-tag">→ ${jo.technician}</span>` : ''}
+        </div>
+        <div class="jo-addr">📍 ${jo.address||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">${timeAgo(jo.created_at)}</div>
+      </div>`).join('');
+  }catch(e){ el.innerHTML='<div class="empty">Error loading queue</div>'; }
+}
+
+async function openMichaelAssign(id){
+  STATE.currentJO = id;
+  showScreen('screen-michael-assign');
+  try{
+    const rows = await sb('GET',`job_orders?id=eq.${id}`);
+    const jo = rows[0];
+    document.getElementById('michael-assign-title').textContent = 'Assign: '+(jo.customer||'Install');
+
+    // Build checklist from jo fields
+    const checks = [
+      {label:'Name',val:jo.customer},
+      {label:'Address',val:jo.address},
+      {label:'Contact',val:jo.contact},
+      {label:'Facebook',val:jo.fb_name},
+      {label:'GPS',val:jo.notes?.match(/GPS: (.+)/)?.[1]||null},
+      {label:'Installer',val:jo.technician},
+      {label:'Date installed',val:jo.created_at?.slice(0,10)},
+    ];
+    const allFilled = checks.every(c=>c.val);
+    document.getElementById('michael-incomplete-warn').style.display = allFilled?'none':'';
+    document.getElementById('michael-assign-checklist').innerHTML = `
+      <div class="card-title">Install details</div>
+      ${checks.map(c=>`
+      <div class="check-item">
+        <div class="check-circle ${c.val?'done':''}">${c.val?'✓':''}</div>
+        <div class="check-info">
+          <div class="check-label">${c.label}</div>
+          <div class="check-val">${c.val||'—'}</div>
+        </div>
+      </div>`).join('')}`;
+
+    if(jo.vlan) document.getElementById('michael-vlan').value = jo.vlan;
+    if(jo.pppoe_username) document.getElementById('michael-pppoe').value = jo.pppoe_username;
+  }catch(e){ toast('Error loading install'); }
+}
+
+async function saveMichaelVLAN(){
+  const vlan = document.getElementById('michael-vlan').value.trim();
+  const pppoe = document.getElementById('michael-pppoe').value.trim();
+  const pass  = document.getElementById('michael-pppoe-pass').value.trim();
+  if(!vlan||!pppoe){ toast('Enter VLAN and PPPoE username'); return; }
+
+  try{
+    await sb('PATCH', `job_orders?id=eq.${STATE.currentJO}`,
+      {vlan, pppoe_username:pppoe, status:'done', completed_at:new Date().toISOString(), updated_at:new Date().toISOString()});
+    toast('✅ VLAN '+vlan+' assigned — install complete!');
+    goBack();
+    loadMichaelQueue();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+// ── LINEMAN ────────────────────────────────────────────────────
+async function loadLinemanJobs(){
+  document.getElementById('lineman-greeting').textContent = 'Hi, '+STATE.name+' 👋';
+  const el = document.getElementById('lineman-jobs');
+  el.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading your jobs…</span></div>';
+  try{
+    const jos = await sb('GET',
+      `job_orders?technician=eq.${encodeURIComponent(STATE.name)}&status=in.(approved,pending,done)&order=created_at.desc&limit=20`);
+    const remaining = jos.filter(j=>j.status!=='done').length;
+    document.getElementById('lineman-job-count').textContent =
+      remaining ? remaining+' job'+(remaining!==1?'s':'')+' remaining today' : 'All done for today ✅';
+
+    if(!jos.length){
+      el.innerHTML='<div class="empty">No jobs assigned yet.<br>Check back after 9AM dispatch.</div>';
+      return;
+    }
+    el.innerHTML = jos.map(jo=>`
+      <div class="jo" style="${jo.status==='done'?'opacity:.6;border-left:3px solid var(--green)':jo.status==='pending'?'border-left:3px solid var(--red)':'border-left:3px solid var(--blue)'}">
+        <div class="jo-top">
+          <div class="jo-name">${jo.customer||'Job'}</div>
+          <span class="pill ${pillClass(jo.status)}">${pillLabel(jo.status)}</span>
+        </div>
+        <div class="jo-meta">
+          <span class="jo-tag">${typeLabel(jo.type)}</span>
+          <span class="jo-tag">${jo.area||'—'}</span>
+        </div>
+        <div class="jo-addr">📍 ${jo.address||'—'}</div>
+        ${jo.notes?`<div class="jo-note">${jo.notes.slice(0,100)}</div>`:''}
+        ${jo.status!=='done'?`
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn btn-green btn-sm" onclick="linemanDone('${jo.id}');event.stopPropagation()">✓ Done</button>
+          <button class="btn btn-gray btn-sm" onclick="linemanFail('${jo.id}');event.stopPropagation()">✗ Can't do</button>
+          ${jo.type&&jo.type.includes('installation')?`<button class="btn btn-outline btn-sm" onclick="openInstallForm('${jo.id}','${jo.customer||''}');event.stopPropagation()">📋 Form</button>`:''}
+        </div>`:'<div style="font-size:12px;color:var(--green);margin-top:8px;font-weight:600">✅ Reported done</div>'}
+      </div>`).join('');
+  }catch(e){ el.innerHTML='<div class="empty">Error loading jobs</div>'; }
+}
+
+async function linemanDone(id){
+  try{
+    await sb('PATCH',`job_orders?id=eq.${id}`,
+      {status:'done',completed_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+    toast('✅ Marked done');
+    pingGPS();
+    loadLinemanJobs();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function linemanFail(id){
+  try{
+    await sb('PATCH',`job_orders?id=eq.${id}`,
+      {status:'pending',rollover_count:1,updated_at:new Date().toISOString()});
+    toast('📋 Marked pending — will roll over to tomorrow');
+    loadLinemanJobs();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+// ── GPS ────────────────────────────────────────────────────────
+function initGPSAutoStart(){
+  const saved = localStorage.getItem('ops_gps_on');
+  if(saved==='1') startGPS();
+}
+
+function toggleGPS(){
+  if(STATE.gpsActive) stopGPS(); else startGPS();
+}
+
+function startGPS(){
+  if(!navigator.geolocation){ toast('GPS not available on this device'); return; }
+  STATE.gpsActive = true;
+  localStorage.setItem('ops_gps_on','1');
+  const btn = document.getElementById('gps-btn');
+  if(btn){ btn.textContent='📍 GPS ON'; btn.className='gps-btn'; }
+  STATE.gpsWatcher = navigator.geolocation.watchPosition(
+    pos => { STATE.gpsCoords = {lat:pos.coords.latitude,lng:pos.coords.longitude}; pingGPS(); },
+    err => { toast('GPS error: '+err.message); },
+    {enableHighAccuracy:true,maximumAge:30000,timeout:10000}
+  );
+  toast('📍 GPS tracking started');
+}
+
+function stopGPS(){
+  STATE.gpsActive = false;
+  localStorage.setItem('ops_gps_on','0');
+  if(STATE.gpsWatcher!=null){ navigator.geolocation.clearWatch(STATE.gpsWatcher); STATE.gpsWatcher=null; }
+  const btn = document.getElementById('gps-btn');
+  if(btn){ btn.textContent='📍 GPS OFF'; btn.className='gps-btn off'; }
+}
+
+let _lastPing = 0;
+async function pingGPS(){
+  if(!STATE.gpsActive || !STATE.gpsCoords) return;
+  if(Date.now()-_lastPing < 55000) return; // max 1 ping/min
+  _lastPing = Date.now();
+  try{
+    await sb('POST','lineman_gps',{
+      technician: STATE.name,
+      lat: STATE.gpsCoords.lat,
+      lng: STATE.gpsCoords.lng,
+      pinged_at: new Date().toISOString(),
+    });
+  }catch(e){ /* silent — offline */ }
+}
+
+// Auto-ping every 60 seconds
+setInterval(()=>{ if(STATE.gpsActive) pingGPS(); }, 60000);
+
+// ── INSTALL FORM ───────────────────────────────────────────────
+function openInstallForm(joId, customerName){
+  STATE.currentInstallJO = joId;
+  STATE.installPhotoTaken = false;
+  document.getElementById('install-form-title').textContent = 'Install Form';
+  document.getElementById('install-form-sub').textContent = (customerName||'') + ' — complete all fields';
+  document.getElementById('if-installer').value = STATE.name||'';
+  document.getElementById('if-date').value = todayPHT();
+  document.getElementById('if-photo-status').textContent='No photo yet';
+  document.getElementById('if-photo-status').style.color='var(--muted)';
+  showScreen('screen-install-form');
+}
+
+function captureGPS(){
+  if(!navigator.geolocation){ document.getElementById('if-gps').value='GPS not available'; return; }
+  toast('Getting GPS…');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ document.getElementById('if-gps').value = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6); toast('📍 GPS captured'); },
+    ()=>{ document.getElementById('if-gps').value=''; toast('GPS failed — try again'); }
+  );
+}
+
+function fakePhoto(){
+  STATE.installPhotoTaken=true;
+  document.getElementById('if-photo-status').textContent='✅ Photo taken';
+  document.getElementById('if-photo-status').style.color='var(--green)';
+  toast('📷 Photo saved');
+}
+
+async function saveInstallForm(){
+  const name = document.getElementById('if-name').value.trim();
+  const addr = document.getElementById('if-addr').value.trim();
+  const num  = document.getElementById('if-num').value.trim();
+  const fb   = document.getElementById('if-fb').value.trim();
+  const inst = document.getElementById('if-installer').value.trim();
+  const date = document.getElementById('if-date').value;
+  const gps  = document.getElementById('if-gps').value.trim();
+
+  if(!name||!addr){ toast('Name and address are required'); return; }
+
+  const allFilled = name&&addr&&num&&fb&&inst&&date&&gps&&STATE.installPhotoTaken;
+  const note = `Install details: Name: ${name} | Address: ${addr} | Contact: ${num} | FB: ${fb} | GPS: ${gps} | Installer: ${inst} | Date: ${date} | Photo: ${STATE.installPhotoTaken?'Yes':'No'}`;
+
+  try{
+    const update = {
+      customer: name, address: addr, contact: num, fb_name: fb,
+      notes: note, updated_at: new Date().toISOString(),
+    };
+    if(allFilled) update.status = 'approved'; // ready for Michael
+    if(STATE.currentInstallJO)
+      await sb('PATCH',`job_orders?id=eq.${STATE.currentInstallJO}`, update);
+
+    if(allFilled) toast('✅ All complete — Sir Michael notified for VLAN');
+    else toast('Saved. Complete all fields to request VLAN.');
+    goBack();
+  }catch(e){ toast('Error saving: '+e.message); }
+}
+
+// ── OFFICE ────────────────────────────────────────────────────
+function selectType(el, type){
+  document.querySelectorAll('[data-type]').forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+  STATE.officeType = type;
+  document.getElementById('office-form-card').style.display='';
+  const labels = {
+    subscriber_repair:'No Internet — Subscriber Details',
+    vendo_repair:'Vendo Issue — Details',
+    subscriber_installation:'New Subscriber — Details',
+    vendo_installation:'New Vendo Install — Details',
+  };
+  document.getElementById('office-form-title').textContent = labels[type]||'Details';
+}
+
+const LINEMAN_BY_AREA = {
+  DAPITAN:'Dodoy',DIPOLOG:'Jericho',SINDANGAN:'Jhoe',
+  POLANCO:'Warren',ROXAS:'Warren',SINAMAN:'Bim2x',MINAOG:'Dongie'
+};
+
+async function submitOfficeRequest(){
+  const name = document.getElementById('of-name').value.trim();
+  const addr = document.getElementById('of-addr').value.trim();
+  const area = document.getElementById('of-area').value;
+  if(!name||!addr||!area){ toast('Name, address and area are required'); return; }
+  if(!STATE.officeType){ toast('Select a type first'); return; }
+
+  const record = {
+    source:'office', type:STATE.officeType, status:'pending_approval',
+    customer:name, address:addr, area:area,
+    contact:document.getElementById('of-num').value.trim()||null,
+    notes:document.getElementById('of-notes').value.trim()||null,
+    technician:LINEMAN_BY_AREA[area]||null,
+    tg_reported_by:STATE.name,
+    created_at:new Date().toISOString(), updated_at:new Date().toISOString(),
+  };
+  try{
+    await sb('POST','job_orders',record);
+    toast('✅ Submitted — waiting for approval');
+    // Reset form
+    ['of-name','of-num','of-addr','of-notes'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('of-area').value='';
+    document.getElementById('office-form-card').style.display='none';
+    document.querySelectorAll('[data-type]').forEach(b=>b.classList.remove('selected'));
+    STATE.officeType = null;
+    loadOfficeTickets();
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function loadOfficeTickets(){
+  const el = document.getElementById('office-tickets');
+  const label = document.getElementById('office-tickets-label');
+  try{
+    const jos = await sb('GET','job_orders?source=eq.office&order=created_at.desc&limit=10');
+    if(!jos.length){ el.innerHTML=''; label.style.display='none'; return; }
+    label.style.display='';
+    el.innerHTML = jos.map(jo=>`
+      <div class="jo" onclick="openJO('${jo.id}')">
+        <div class="jo-top">
+          <div class="jo-name">${jo.customer||'Request'}</div>
+          <span class="pill ${pillClass(jo.status)}">${pillLabel(jo.status)}</span>
+        </div>
+        <div class="jo-meta"><span class="jo-tag">${typeLabel(jo.type)}</span><span class="jo-tag">${jo.area||'—'}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px">${timeAgo(jo.created_at)}</div>
+      </div>`).join('');
+  }catch(e){ el.innerHTML=''; }
+}
+
+// ── PULLOUT REVIEW (Wendell) ───────────────────────────────────
+async function openPullouts(){
+  showScreen('screen-pullouts');
+  const el = document.getElementById('pullout-list');
+  el.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  try{
+    const rows = await sb('GET','vendos?pullout_flagged=eq.true&order=vlan.asc');
+    if(!rows.length){
+      el.innerHTML='<div class="empty">✅ No vendos pending pullout review</div>';
+      return;
+    }
+    el.innerHTML = rows.map(v=>`
+      <div class="jo" id="po-${v.id}">
+        <div class="jo-top">
+          <div class="jo-name">${v.sheet_name||v.tg_name||'Vendo #'+v.id}</div>
+          <span class="pill pill-pending">⚠ Review</span>
+        </div>
+        <div class="jo-meta">
+          <span class="jo-tag">VLAN ${v.vlan||'—'}</span>
+          <span class="jo-tag">${v.area||'—'}</span>
+        </div>
+        <div class="jo-note">${v.pullout_flagged_reason||'Flagged from office Excel sheet'}</div>
+        <div class="alert-amber" style="margin-top:8px;font-size:11px">⚠ VLAN numbers repeat across servers. You are confirming pullout for <strong>${v.area}</strong> only — vendo: <strong>${v.sheet_name||v.tg_name}</strong></div>
+        <div class="btn-row">
+          <button class="btn btn-red btn-sm" onclick="confirmPullout('${v.id}','${(v.sheet_name||v.tg_name||'').replace(/'/g,"\\'")}')">✓ Confirm — pulled out</button>
+          <button class="btn btn-green btn-sm" onclick="dismissPullout('${v.id}','${(v.sheet_name||v.tg_name||'').replace(/'/g,"\\'")}')">✗ Dismiss — still active</button>
+        </div>
+      </div>`).join('');
+  }catch(e){ el.innerHTML='<div class="empty">Error loading</div>'; }
+}
+
+async function confirmPullout(id, name){
+  try{
+    await sb('PATCH',`vendos?id=eq.${id}`,{
+      status:'pullout', pullout_flagged:false,
+      pulled_out_at:new Date().toISOString(), pulled_out_by:STATE.name,
+      updated_at:new Date().toISOString(),
+    });
+    toast('✓ '+name+' marked as pulled out');
+    document.getElementById('po-'+id).style.display='none';
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+async function dismissPullout(id, name){
+  try{
+    await sb('PATCH',`vendos?id=eq.${id}`,{
+      pullout_flagged:false, admin_notes:'Pullout dismissed by '+STATE.name+' on '+todayPHT(),
+      updated_at:new Date().toISOString(),
+    });
+    toast(name+' — kept as active');
+    document.getElementById('po-'+id).style.display='none';
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+// ── INIT ───────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  showScreen('screen-login',false);
+});
+</script>
+</body>
+</html>
