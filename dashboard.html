@@ -1022,6 +1022,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Reconciliation</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Live Progress</button>
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
+      <button class="hv-hvtab"    id="hbtn-vmap" onclick="hvNewTab('vmap',this);vmLoad()">🗺 Vendo Map</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
     </div>
@@ -1208,7 +1209,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf','progress','names','vmap'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -2568,6 +2569,20 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
       </tbody>
     </table>
   </div>
+</div>
+
+<div id="hvt-vmap" style="display:none;height:calc(100vh - 88px);overflow:hidden;">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;">🗺 Vendo Map</div>
+    <input id="vmap-search" type="text" placeholder="Search vendo name, area…" oninput="vmFilter()"
+      style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;width:220px;font-family:inherit;">
+    <select id="vmap-area" onchange="vmFilter()" style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;font-family:inherit;background:#fff;">
+      <option value="">All areas</option>
+    </select>
+    <span id="vmap-count" style="font-size:11px;color:#6b7280;"></span>
+    <button onclick="vmLoad()" style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;font-size:12px;cursor:pointer;">↺ Refresh</button>
+  </div>
+  <div id="vmap-map" style="height:calc(100vh - 138px);width:100%;"></div>
 </div>
 
 <div id="hvt-settings" style="display:none;padding:16px;overflow-y:auto;height:calc(100vh - 88px);">
