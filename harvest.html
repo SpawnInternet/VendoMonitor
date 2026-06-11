@@ -1994,6 +1994,13 @@ async function submitHarvest(){
     // Invalidate group cache so next open fetches fresh last_harvest_date
     if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
 
+    // Rebuild dashboard caches so Vendos tab + overview reflect this harvest immediately
+    if(navigator.onLine){
+      const _cHdr = { 'x-cache-secret': 'spawn-cache-2026', apikey: SB.includes('cviraq') ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwNDI0MzYsImV4cCI6MjA1ODYxODQzNn0.jLOKxStPP8S1wRlXBiHY4RO9JFBFMsLPqGKEgGdxjqs' : '' };
+      fetch(`${SB}/functions/v1/write-vendos-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
+      fetch(`${SB}/functions/v1/write-dashboard-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
+    }
+
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
     toast(navigator.onLine?'✅ Saved!':'⚡ Saved offline');
     setTimeout(()=>backToRoute(),900);
