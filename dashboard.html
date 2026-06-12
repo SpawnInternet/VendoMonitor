@@ -1637,8 +1637,6 @@ async function htLoad(){
       if (d.rows && d.rows.length && d.rows.length > 500) {
         htAllRows = d.rows;
         const age = Date.now() - new Date(d.generated_at||0).getTime();
-        if(age > 5*60*1000){ htRebuildCache(); } // rebuild in background but still render stale
-        {
         document.getElementById('ht-cache-age').textContent = 'cache ' + Math.round(age/60000) + 'min ago';
         const collectors = [...new Set(htAllRows.map(r=>r.actual_collector||r.collector).filter(Boolean))].sort();
         const htSel = document.getElementById('ht-collector');
@@ -1646,8 +1644,8 @@ async function htLoad(){
         if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
         if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
         htFilter();
+        if(age > 60*60*1000) htRebuildCache();
         return;
-        } // end fresh cache
       }
     }
   } catch(e) {}
