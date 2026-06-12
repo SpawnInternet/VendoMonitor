@@ -808,6 +808,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
+var cameraStream = null;
+var capturedPhotoBlob = null;
+
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
 const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
@@ -1772,7 +1775,7 @@ function openItem(idx){
   const addrInp=document.getElementById('address-inp');
   if(addrInp) addrInp.value=currentItem.address||'';
   const snEl=document.getElementById('owner-name-inp');if(snEl){if(snEl.tagName==='INPUT')snEl.value=currentItem.sheet_name||'';else snEl.textContent=currentItem.sheet_name||'—';}
-  document.getElementById('contact-inp').value=currentItem.contact_number||'';
+  { const _e=document.getElementById('contact-inp'); if(_e) _e.value=currentItem.contact_number||''; }
   const ownReal=document.getElementById('owner-real-name-inp');if(ownReal)ownReal.value=currentItem.owner_name||'';
   const ownRealDisp=document.getElementById('owner-name-real-display');if(ownRealDisp)ownRealDisp.textContent=currentItem.owner_name||'—';
   const tgInp=document.getElementById('tg-name-inp');if(tgInp)tgInp.value=currentItem.tg_name||'';
@@ -1828,18 +1831,18 @@ function openItem(idx){
   document.getElementById('camera-open-btn').textContent='📷 Open Camera & Capture GPS';
   document.getElementById('gps-actions').style.display='none';
   ['coin-total','coin-free','coin-saloy','coin-freecoins'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('note-inp').value='';
-  document.getElementById('skip-note').value='';
+  { const _e=document.getElementById('note-inp'); if(_e) _e.value=''; }
+  { const _e=document.getElementById('skip-note'); if(_e) _e.value=''; }
   document.getElementById('skip-form').style.display='none';
   calcNet();
 
   if(currentItem.status==='harvested'){
-    if(currentItem.coins_total) document.getElementById('coin-total').value=currentItem.coins_total;
-    if(currentItem.coins_free_time !== undefined) document.getElementById('coin-free').value = currentItem.coins_free_time;
-    if(currentItem.coins_free_coins !== undefined) document.getElementById('coin-freecoins').value = currentItem.coins_free_coins;
-    if(currentItem.coins_old) document.getElementById('coin-old').value=currentItem.coins_old;
-    if(currentItem.coins_saloy) document.getElementById('coin-saloy').value=currentItem.coins_saloy;
-    if(currentItem.collector_note) document.getElementById('note-inp').value=currentItem.collector_note;
+    if(currentItem.coins_total) { const _e=document.getElementById('coin-total'); if(_e) _e.value=currentItem.coins_total; }
+    if(currentItem.coins_free_time !== undefined) { const _e=document.getElementById('coin-free'); if(_e) _e.value=currentItem.coins_free_time; }
+    if(currentItem.coins_free_coins !== undefined) { const _e=document.getElementById('coin-freecoins'); if(_e) _e.value=currentItem.coins_free_coins; }
+    if(currentItem.coins_old) { const _e=document.getElementById('coin-old'); if(_e) _e.value=currentItem.coins_old; }
+    if(currentItem.coins_saloy) { const _e=document.getElementById('coin-saloy'); if(_e) _e.value=currentItem.coins_saloy; }
+    if(currentItem.collector_note) { const _e=document.getElementById('note-inp'); if(_e) _e.value=currentItem.collector_note; }
     calcNet(); toast('Already harvested — re-submit to update');
   } else {
     resetPackForm();
@@ -1936,8 +1939,6 @@ async function saveVendoDetails(){
   }
 }
 // ── CAMERA + GPS ──────────────────────────────────────────────────
-var cameraStream = null;
-var capturedPhotoBlob = null;
 
 function openCamera(){
   const wrap = document.getElementById('camera-wrap');
