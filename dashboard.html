@@ -2605,13 +2605,15 @@ async function elLoad(){
   if(loadEl){loadEl.style.display='block';loadEl.textContent='Loading ledger data…';}
   if(wrapEl) wrapEl.style.display='none';
   try{
-    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json?t='+Math.floor(Date.now()/300000));
+    const url='https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json';
+    const r=await fetch(url,{cache:'no-store'});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
-    _elData=d.records||[];
+    _elData=Array.isArray(d)?d:(d.records||[]);
+    if(loadEl) loadEl.style.display='none';
     elFilter();
   }catch(e){
-    if(loadEl) loadEl.textContent='Error loading data: '+e.message;
+    if(loadEl){loadEl.style.display='block';loadEl.textContent='Error: '+e.message;}
   }
 }
 function elFilter(){
@@ -4842,16 +4844,11 @@ async function perfLoad() {
                 <div style="color:var(--mu);font-size:9px;">Avg per harvest</div>
               </div>
             </div>
-            <button onclick="var d=document.getElementById('${breakdownId}');d.style.display=d.style.display?'':'block';this.textContent=d.style.display?'▲ Hide harvests':'▼ Show ${harvestRows.length} harvests';"
-              style="width:100%;padding:5px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;cursor:pointer;color:#475569;">
-              ▼ Show ${harvestRows.length} harvests
+            <button onclick="perfShowPopup('${breakdownId}')"
+              style="width:100%;padding:5px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;cursor:pointer;color:#1565c0;">
+              📋 View ${harvestRows.length} harvests
             </button>
-            <div id="${breakdownId}" style="display:none;margin-top:6px;max-height:250px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
-              <div style="display:flex;justify-content:space-between;padding:4px 8px;background:#f8faff;font-size:10px;font-weight:600;color:#475569;border-bottom:1px solid #e5e7eb;">
-                <span>Date</span><span>Vendo</span><span>Area</span><span>Spawn Share</span>
-              </div>
-              ${harvestHtml}
-            </div>
+            <div id="${breakdownId}" style="display:none;">${harvestHtml}</div>
           </div>`;
         }).join('')}
       </div>`;
@@ -9629,7 +9626,7 @@ async function nmLoad(){
     // 2. Fallback: direct DB
     let all = [], off = 0;
     while(true){
-      const r = await fetch(`${_SB}/rest/v1/vendos?status=eq.active&sheet_name=not.is.null&select=id,sheet_name,tg_name,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
+      const r = await fetch(`${_SB}/rest/v1/vendos?sheet_name=not.is.null&select=id,sheet_name,tg_name,status,pulled_out_at,area,vlan,tg_match_confirmed&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:_HDR});
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
       all.push(...batch);
@@ -9686,6 +9683,11 @@ function nmRender(){
     const statusBadge = matched
       ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;">✅ Matched</span>'
       : '<span style="background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;">⚠ Unmatched</span>';
+    const vendoStatus = v.status==='active'
+      ? '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;">Active</span>'
+      : v.status==='pulled_out'||v.pulled_out_at
+      ? '<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;">Pulled Out</span>'
+      : '<span style="background:#f3f4f6;color:#6b7280;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:600;">Inactive</span>';
     const tgDisplay = v.tg_name
       ? `<span style="color:#15803d;font-size:11px;">${v.tg_name}</span>`
       : `<span style="color:#d1d5db;font-style:italic;font-size:11px;">Not linked</span>`;
@@ -9699,6 +9701,7 @@ function nmRender(){
       </td>
       <td style="padding:8px 12px;color:#6b7280;font-size:11px;">${v.area||'—'}</td>
       <td style="padding:8px 12px;text-align:center;">${statusBadge}</td>
+      <td style="padding:8px 12px;text-align:center;">${vendoStatus}</td>
       <td style="padding:8px 12px;text-align:center;">
         ${matched?`<button onclick="nmUnlink(${v.id})" style="padding:2px 8px;border-radius:5px;border:1px solid #fee2e2;background:#fff;font-size:10px;cursor:pointer;color:#dc2626;">Unlink</button>`:''}
       </td>
@@ -9934,6 +9937,41 @@ async function daDelete(id){
   window.addEventListener('load', ()=>setTimeout(secCheck, 1000));
 })();
 
+</script>
+
+<!-- ══ PERFORMANCE POPUP MODAL ══ -->
+<div id="perf-popup" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;" onclick="if(event.target===this)this.style.display='none';">
+  <div style="background:#fff;border-radius:14px;width:min(600px,95vw);max-height:80vh;overflow:hidden;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+      <div id="perf-popup-title" style="font-size:14px;font-weight:700;color:#1e293b;"></div>
+      <button onclick="document.getElementById('perf-popup').style.display='none'" style="border:none;background:none;font-size:20px;cursor:pointer;color:#6b7280;">✕</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#f8faff;position:sticky;top:0;">
+          <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569;border-bottom:1px solid #e5e7eb;">Date</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569;border-bottom:1px solid #e5e7eb;">Vendo</th>
+          <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569;border-bottom:1px solid #e5e7eb;">Area</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:#15803d;border-bottom:1px solid #e5e7eb;">Spawn Share</th>
+        </tr></thead>
+        <tbody id="perf-popup-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+function perfShowPopup(id){
+  const data=document.getElementById(id);
+  if(!data)return;
+  const rows=data.querySelectorAll('div[style]');
+  // Get collector name from card
+  const card=data.closest('[style*="border-radius:12px"]');
+  const name=card?card.querySelector('[style*="font-weight:700;font-size:14px"]')?.textContent?.replace(/[🥇🥈🥉🏅]/g,'').trim()||'Collector':'Collector';
+  document.getElementById('perf-popup-title').textContent='📋 '+name+' — Harvest Details';
+  document.getElementById('perf-popup-tbody').innerHTML=data.innerHTML;
+  const popup=document.getElementById('perf-popup');
+  popup.style.display='flex';
+}
 </script>
 </body>
 </html>
