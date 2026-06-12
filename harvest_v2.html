@@ -977,19 +977,21 @@ let _pinCollectors = [];
 async function pinLoadCollectors(){
   const FALLBACK=[{name:'Ailyn',team:'TeamA'},{name:'Axcel',team:'TeamA'},{name:'Gilbert',team:'TeamA'},{name:'Tandoy',team:'TeamB'}];
   const el=document.getElementById('pin-name-list');
-  if(!el) return;
+  console.log('[pinLoadCollectors] el=', el);
+  if(!el){ console.error('[pinLoadCollectors] pin-name-list NOT FOUND'); return; }
   const render=(list)=>{
-    el.innerHTML=list.map(c=>`
+    const html = list.map(c=>`
       <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
         <div style="width:40px;height:40px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e2d5a;margin:0 auto 8px;transition:.15s" class="col-av">${c.name[0].toUpperCase()}</div>
         <div class="collector-btn-name">${c.name}</div>
         <div class="collector-btn-team">${c.team||''}</div>
       </div>`).join('');
+    console.log('[pinLoadCollectors] rendering', list.length, 'collectors, html length=', html.length);
+    el.innerHTML = html;
+    console.log('[pinLoadCollectors] el.children=', el.children.length);
   };
-  // Render fallback SYNCHRONOUSLY first — always visible immediately
   render(FALLBACK);
   _pinCollectors=FALLBACK;
-  // Then try to fetch real list
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),5000);
@@ -1001,7 +1003,7 @@ async function pinLoadCollectors(){
       render(data);
     }
   }catch(e){
-    // fallback already showing
+    console.warn('[pinLoadCollectors] fetch failed:', e.message);
   }
 }
 
