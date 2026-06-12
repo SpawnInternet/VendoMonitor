@@ -943,7 +943,11 @@ function showScreen(id){
   const backBtn=document.getElementById('topbar-back');
   const logoutBtn=document.getElementById('topbar-logout');
   const noBack=['screen-collector'];
-  if(backBtn) backBtn.style.display=noBack.includes(id)?'none':'inline-block';
+  if(backBtn){
+    backBtn.style.display=noBack.includes(id)?'none':'inline-block';
+    // Label: ← Back on form, ⌂ Home everywhere else
+    backBtn.textContent = (id==='screen-form') ? '← Back' : '⌂ Home';
+  }
   if(logoutBtn) logoutBtn.style.display=noBack.includes(id)?'none':'inline-block';
   // Show bottom nav on harvest screens
   const navScreens=['screen-route','screen-form','screen-gate','screen-receipt'];
@@ -2577,16 +2581,15 @@ function forceClearSession(){
 
 function topbarBack(){
   const active=document.querySelector('.screen.active');
-  if(!active)return;
+  if(!active) return;
   const id=active.id;
-  if(id==='screen-areas'){pinLogout();}
-  else if(id==='screen-groups'){showAreasScreen();}
-  else if(id==='screen-route'){showAreasScreen();}
-  else if(id==='screen-areas'){pinLogout();}
-  else if(id==='screen-form'){backToRoute();}
-  else if(id==='screen-gate'){showScreen('screen-route');}
-  else if(id==='screen-receipt'){showAreasScreen();}
-  else{showAreasScreen();}
+  if(id==='screen-form'){
+    backToRoute(); // back to vendo list
+  } else if(id==='screen-route'||id==='screen-gate'||id==='screen-receipt'){
+    showHomeScreen(); // back to home
+  } else {
+    showHomeScreen();
+  }
 }
 
 function goHome(){
