@@ -1942,9 +1942,11 @@ function rcInitDates(){
 async function rcRun(){
   console.log('[rcRun] called');
   try {
+  // Auto-set dates if not set (last 30 days)
+  if(!document.getElementById('rc-from').value || !document.getElementById('rc-to').value){ rcInitDates(); }
   const from = document.getElementById('rc-from').value;
   const to   = document.getElementById('rc-to').value;
-  if(!from||!to){ alert('Please select a date range'); return; }
+  if(!from||!to) return;
   const fromISO = from+'T00:00:00+08:00';
   const toISO   = to  +'T23:59:59+08:00';
   const el = document.getElementById('rc-content');
@@ -2603,7 +2605,7 @@ async function elLoad(){
   if(loadEl){loadEl.style.display='block';loadEl.textContent='Loading ledger data…';}
   if(wrapEl) wrapEl.style.display='none';
   try{
-    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json?t='+Date.now());
+    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json?t='+Math.floor(Date.now()/300000));
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     _elData=d.records||[];
@@ -4769,7 +4771,7 @@ async function perfLoad() {
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
   try {
     const monthSel = document.getElementById('perf-month')?.value||'';
-    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area&order=harvest_date.desc&limit=1000`;
+    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area,sheet_name,tg_name&order=harvest_date.desc&limit=1000`;
     if(monthSel){
       // Get first and last day of selected month properly
       const [yr,mo] = monthSel.split('-').map(Number);
@@ -4804,6 +4806,16 @@ async function perfLoad() {
           const days = s.dates.size;
           const avg = days ? (s.spawn/s.count).toFixed(0) : 0;
           const medal = medals[i]||'';
+          // Build harvest rows for breakdown
+          const harvestRows = rows.filter(r=>r.collector===name).sort((a,b)=>b.harvest_date.localeCompare(a.harvest_date));
+          const breakdownId = 'perf-bd-'+name.replace(/[^a-z0-9]/gi,'_');
+          const harvestHtml = harvestRows.map(h=>`
+            <div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid #f3f4f6;font-size:11px;">
+              <span style="color:#475569;">${h.harvest_date}</span>
+              <span style="color:#6b7280;">${h.sheet_name||h.tg_name||'—'}</span>
+              <span style="color:#475569;">${h.area||'—'}</span>
+              <span style="font-weight:600;color:#15803d;">${_php(h.spawn_share)}</span>
+            </div>`).join('');
           return `<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
               <div style="font-size:22px;">${medal||'🏅'}</div>
@@ -4816,7 +4828,7 @@ async function perfLoad() {
                 <div style="font-size:9px;color:var(--mu);">total spawn</div>
               </div>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11px;margin-bottom:10px;">
               <div style="background:#f0fdf4;border-radius:6px;padding:6px 8px;">
                 <div style="font-weight:700;color:#15803d;">${_php(s.net)}</div>
                 <div style="color:var(--mu);font-size:9px;">Total net</div>
@@ -4829,6 +4841,16 @@ async function perfLoad() {
                 <div style="font-weight:700;color:#7c3aed;">${_php(avg)}</div>
                 <div style="color:var(--mu);font-size:9px;">Avg per harvest</div>
               </div>
+            </div>
+            <button onclick="var d=document.getElementById('${breakdownId}');d.style.display=d.style.display?'':'block';this.textContent=d.style.display?'▲ Hide harvests':'▼ Show ${harvestRows.length} harvests';"
+              style="width:100%;padding:5px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;cursor:pointer;color:#475569;">
+              ▼ Show ${harvestRows.length} harvests
+            </button>
+            <div id="${breakdownId}" style="display:none;margin-top:6px;max-height:250px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:6px;">
+              <div style="display:flex;justify-content:space-between;padding:4px 8px;background:#f8faff;font-size:10px;font-weight:600;color:#475569;border-bottom:1px solid #e5e7eb;">
+                <span>Date</span><span>Vendo</span><span>Area</span><span>Spawn Share</span>
+              </div>
+              ${harvestHtml}
             </div>
           </div>`;
         }).join('')}
@@ -4923,7 +4945,11 @@ function csRenderList(collectors) {
       <div style="width:36px;height:36px;background:${c.active?'#dbeafe':'#f3f4f6'};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${c.active?'#1565c0':'#9ca3af'};">${(c.name||'?')[0].toUpperCase()}</div>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:600;color:#1e293b;">${c.name}</div>
-        <div style="font-size:11px;color:#6b7280;">${c.area||'—'} · PIN: ${'●'.repeat(4)}</div>
+        <div style="font-size:11px;color:#6b7280;">
+          ${c.area||'—'} · PIN: <span id="pin-val-${c.id}">●●●●</span>
+          <button onclick="var s=document.getElementById('pin-val-${c.id}');s.textContent=s.textContent==='${c.pin||'????'}'?'●●●●':'${c.pin||'????'}';" 
+            style="border:none;background:none;cursor:pointer;padding:0 3px;font-size:12px;" title="Show/hide PIN">👁</button>
+        </div>
       </div>
       <span style="background:${c.active?'#dcfce7':'#f3f4f6'};color:${c.active?'#15803d':'#6b7280'};padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;">${c.active?'Active':'Inactive'}</span>
       <button onclick="csChangePin(${c.id},'${(c.name||'').replace(/'/g,"\'")}')" style="height:28px;padding:0 10px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Change PIN</button>
