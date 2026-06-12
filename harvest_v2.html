@@ -220,7 +220,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .gate-blocked-item:last-child{border-bottom:none}
 .gate-blocked-item:active{background:#fef3c7}
 
-/* BOTTOM NAV - GCash style */
+/* HOME SCREEN - GCash style */
+.home-action-btn{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;font-family:inherit;transition:.15s;width:100%}
+.home-action-btn:active{transform:scale(.97);background:#f7f8fc}
+.ha-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px}
+.ha-label{font-size:13px;font-weight:700;color:var(--text)}
+.home-recent-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.home-recent-row:last-child{border-bottom:none}
+.home-recent-name{font-size:13px;font-weight:600;color:var(--text);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-recent-meta{font-size:10px;color:var(--muted);margin-top:1px}
+.home-recent-amt{font-size:14px;font-weight:700;color:var(--spawn-blue,#2B7BE8)}
+
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:none;z-index:200;box-shadow:0 -2px 12px rgba(0,0,0,.08)}
 .bottom-nav.show{display:flex}
 .bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px 10px;cursor:pointer;border:none;background:transparent;font-family:inherit;transition:.15s;position:relative}
@@ -378,13 +388,75 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div><!-- /screen-collector -->
 
 <!-- ── SCREEN 1b: AREA SELECT ─────────────────────────── -->
+<div class="screen" id="screen-home">
+  <!-- Hero balance card -->
+  <div class="hero-balance" style="margin-top:4px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="hero-label">This Month's Harvest</div>
+        <div class="hero-amount" id="home-month-total">₱0</div>
+        <div class="hero-sub" id="home-month-label">Loading…</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.06em">Collector</div>
+        <div style="font-size:15px;font-weight:700;margin-top:2px" id="home-collector-name">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick stats row -->
+  <div class="quick-stats" style="margin-bottom:16px">
+    <div class="qs-box">
+      <div class="qs-val" id="home-vendos-month">0</div>
+      <div class="qs-lbl">Vendos</div>
+    </div>
+    <div class="qs-box">
+      <div class="qs-val" id="home-sessions-month">0</div>
+      <div class="qs-lbl">Sessions</div>
+    </div>
+    <div class="qs-box">
+      <div class="qs-val" id="home-spawn-month">₱0</div>
+      <div class="qs-lbl">Spawn Share</div>
+    </div>
+  </div>
+
+  <!-- Action grid -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+    <button class="home-action-btn" onclick="showAreasScreen()">
+      <div class="ha-icon" style="background:#EEF4FD">🏠</div>
+      <div class="ha-label">Start Harvest</div>
+    </button>
+    <button class="home-action-btn" onclick="bnavSwitchFromHome('expense')">
+      <div class="ha-icon" style="background:#FFF3E0">🧾</div>
+      <div class="ha-label">Expenses</div>
+    </button>
+    <button class="home-action-btn" onclick="bnavSwitchFromHome('eod')">
+      <div class="ha-icon" style="background:#F3E5F5">📋</div>
+      <div class="ha-label">End of Day</div>
+    </button>
+    <button class="home-action-btn" onclick="showHomeHistory()">
+      <div class="ha-icon" style="background:#E8F5E9">📊</div>
+      <div class="ha-label">My History</div>
+    </button>
+  </div>
+
+  <!-- Recent harvests -->
+  <div class="card">
+    <div class="card-title">Recent Harvests</div>
+    <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Loading…</div></div>
+  </div>
+
+  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+</div>
+
+<!-- ── SCREEN: AREAS (kept for navigation) ── -->
 <div class="screen" id="screen-areas">
   <div style="margin-top:8px;margin-bottom:16px">
     <div style="font-size:20px;font-weight:700;margin-bottom:2px">Hi, <span id="areas-collector-name">—</span> 👋</div>
     <div style="font-size:13px;color:var(--muted)">Select an area to start harvesting</div>
   </div>
   <div id="areas-list"></div>
-  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+  <button class="btn btn-gray" onclick="showScreen('screen-home')" style="margin-top:4px">← Back to Home</button>
 </div>
 
 <!-- ── SCREEN 2: GROUP LIST ───────────────────────────── -->
@@ -1001,7 +1073,7 @@ async function pinSubmit(){
     sessionStorage.setItem('col_id', collector.id||'');
     sessionStorage.setItem('col_name', collector.name||'');
     sessionStorage.setItem('col_pin', pin);
-    showAreasScreen();
+    showHomeScreen();
   }catch(e){
     // Offline or timeout fallback — check cached collectors
     const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&c.pin===pin);
@@ -1010,7 +1082,10 @@ async function pinSubmit(){
       selectedTeam=cached.team||(cached.name==='Tandoy'?'TeamB':'TeamA');
       document.getElementById('topbar-sub').textContent=cached.name;
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
-      showAreasScreen();
+      sessionStorage.setItem('col_id', cached.id||'');
+      sessionStorage.setItem('col_name', cached.name||'');
+      sessionStorage.setItem('col_pin', pin);
+      showHomeScreen();
     }else{
       const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN — try again';
       errEl.textContent=msg;
@@ -2521,7 +2596,117 @@ async function renderHistory(){
   listEl.innerHTML=html;
 }
 
-// ── V2: PACK/BUGI/CASH STATE ─────────────────────────────────────────
+// ── HOME SCREEN ───────────────────────────────────────────────────────
+async function showHomeScreen(){
+  showScreen('screen-home');
+  document.getElementById('home-collector-name').textContent = selectedCollector||'—';
+  // Show bottom nav on home too
+  document.getElementById('bottom-nav').classList.add('show');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const hb = document.getElementById('bnav-home');
+  if(hb) hb.classList.add('active');
+  loadHomeStats();
+}
+
+async function loadHomeStats(){
+  const collectorName = selectedCollector||sessionStorage.getItem('col_name')||'';
+  if(!collectorName) return;
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const monthEnd = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
+  const monthLabel = now.toLocaleDateString('en-PH',{month:'long',year:'numeric'});
+
+  document.getElementById('home-month-label').textContent = monthLabel;
+
+  try {
+    // Fetch this collector's sessions this month
+    const r = await fetch(
+      `${_SB}/rest/v1/collector_sessions?collector_name=eq.${encodeURIComponent(collectorName)}&session_date=gte.${monthStart}&session_date=lte.${monthEnd}&order=session_date.desc`,
+      {headers:HDR}
+    );
+    const sessions = await r.json();
+
+    const totalGross = sessions.reduce((s,x)=>s+(parseFloat(x.total_gross)||0),0);
+    const totalVendos = sessions.reduce((s,x)=>s+(parseInt(x.vendos_harvested)||0),0);
+    const totalSpawn = totalGross * 0.75;
+
+    document.getElementById('home-month-total').textContent = '₱'+fmt(totalGross);
+    document.getElementById('home-vendos-month').textContent = totalVendos;
+    document.getElementById('home-sessions-month').textContent = sessions.length;
+    document.getElementById('home-spawn-month').textContent = '₱'+fmt(totalSpawn);
+
+    // Recent harvests - from harvests table
+    const rh = await fetch(
+      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&order=harvested_at.desc&limit=5`,
+      {headers:HDR}
+    );
+    const recent = await rh.json();
+    const listEl = document.getElementById('home-recent-list');
+    if(!Array.isArray(recent)||!recent.length){
+      listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet this month</div>';
+      return;
+    }
+    listEl.innerHTML = recent.map(h=>{
+      const name = h.sheet_name||h.tg_name||'Unknown';
+      const date = h.harvested_at ? new Date(h.harvested_at).toLocaleDateString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : h.harvest_date||'—';
+      const amt = parseFloat(h.coins_total)||0;
+      return `<div class="home-recent-row">
+        <div>
+          <div class="home-recent-name">${name}</div>
+          <div class="home-recent-meta">${date}</div>
+        </div>
+        <div class="home-recent-amt">₱${fmt(amt)}</div>
+      </div>`;
+    }).join('');
+  } catch(e){
+    document.getElementById('home-month-total').textContent = '₱—';
+    document.getElementById('home-month-label').textContent = monthLabel+' · offline';
+    document.getElementById('home-recent-list').innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Could not load — check connection</div>';
+  }
+}
+
+function bnavSwitchFromHome(tab){
+  // Show bottom nav and switch tab
+  document.getElementById('bottom-nav').classList.add('show');
+  bnavSwitch(tab);
+}
+
+function showHomeHistory(){
+  // For now go to areas — history tab can be built later
+  toast('History coming soon');
+}
+
+// Override bnavSwitch 'home' to go to home screen
+const _origBnavSwitch = window.bnavSwitch;
+window.bnavSwitch = function(tab){
+  if(tab==='home'){
+    document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+    const hb=document.getElementById('bnav-home');
+    if(hb) hb.classList.add('active');
+    // If already logged in, go to home screen
+    if(selectedCollector){
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+      document.getElementById('screen-home').classList.add('active');
+      window.scrollTo(0,0);
+    }
+    return;
+  }
+  if(_origBnavSwitch) _origBnavSwitch(tab);
+};
+
+// Also update showScreen to show bnav on home screen
+const _origShowScreen2 = window.showScreen;
+window.showScreen = function(id){
+  if(_origShowScreen2) _origShowScreen2(id);
+  if(id==='screen-home'){
+    document.getElementById('bottom-nav').classList.add('show');
+    document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+    const hb=document.getElementById('bnav-home');
+    if(hb) hb.classList.add('active');
+  }
+};
+
 let _p1k = 0, _p300 = 0;
 let _sessionId = null;
 let _expenses = [];
@@ -3086,7 +3271,7 @@ async function submitEodSession(){
 <div class="bottom-nav" id="bottom-nav">
   <button class="bnav-item active" id="bnav-home" onclick="bnavSwitch('home')">
     <div class="bnav-icon">🏠</div>
-    <div class="bnav-label">Harvest</div>
+    <div class="bnav-label">Home</div>
   </button>
   <button class="bnav-item" id="bnav-expense" onclick="bnavSwitch('expense')">
     <div class="bnav-icon">🧾</div>
