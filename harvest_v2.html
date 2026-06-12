@@ -84,11 +84,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .collector-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .collector-btn{background:#f7f9ff;border:1.5px solid #e0e4f0;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;font-family:inherit;transition:.15s}
 .collector-btn:active{transform:scale(.97)}
-.collector-btn.selected{border-color:#00A651;background:#E8F5EE}
-.collector-btn.selected .col-av{background:#00A651!important;color:#fff!important}
+.collector-btn.selected{border-color:#2B7BE8;background:#EEF4FD}
+.collector-btn.selected .col-av{background:#2B7BE8!important;color:#fff!important}
 .collector-btn-name{font-size:14px;font-weight:700;color:#1e2d5a}
 .collector-btn-team{font-size:10px;color:#8b99b8;margin-top:2px}
-.collector-btn.selected .collector-btn-name{color:#00A651}
+.collector-btn.selected .collector-btn-name{color:#2B7BE8}
 
 /* GROUP LIST */
 .group-item{background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s}
@@ -973,10 +973,9 @@ window.addEventListener('DOMContentLoaded',()=>{
 let _pinCollectors = [];
 
 async function pinLoadCollectors(){
-  // Always show fallback immediately so collector isn't stuck on empty screen
-  const FALLBACK=[{name:'Ailyn'},{name:'Axcel'},{name:'Gilbert'},{name:'Tandoy'}];
+  const FALLBACK=[{name:'Ailyn',team:'TeamA'},{name:'Axcel',team:'TeamA'},{name:'Gilbert',team:'TeamA'},{name:'Tandoy',team:'TeamB'}];
   const el=document.getElementById('pin-name-list');
-  if(!el)return;
+  if(!el) return;
   const render=(list)=>{
     el.innerHTML=list.map(c=>`
       <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
@@ -985,9 +984,10 @@ async function pinLoadCollectors(){
         <div class="collector-btn-team">${c.team||''}</div>
       </div>`).join('');
   };
-  // Show fallback immediately
+  // Render fallback SYNCHRONOUSLY first — always visible immediately
   render(FALLBACK);
-  // Then try to fetch real list with timeout
+  _pinCollectors=FALLBACK;
+  // Then try to fetch real list
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),5000);
@@ -997,12 +997,9 @@ async function pinLoadCollectors(){
     if(Array.isArray(data)&&data.length){
       _pinCollectors=data;
       render(data);
-    } else {
-      _pinCollectors=FALLBACK;
     }
   }catch(e){
-    _pinCollectors=FALLBACK;
-    // fallback already rendered
+    // fallback already showing
   }
 }
 
