@@ -2,16 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Spawn Harvest v2.1</title>
+<title>Spawn Harvest</title>
 <link rel="manifest" href="/VendoMonitor/manifest.json">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1e3cb8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Spawn Harvest v2.1</title>
+<title>Spawn Harvest</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -86,11 +84,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .collector-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .collector-btn{background:#f7f9ff;border:1.5px solid #e0e4f0;border-radius:14px;padding:14px 8px;text-align:center;cursor:pointer;font-family:inherit;transition:.15s}
 .collector-btn:active{transform:scale(.97)}
-.collector-btn.selected{border-color:#2B7BE8;background:#EEF4FD}
-.collector-btn.selected .col-av{background:#2B7BE8!important;color:#fff!important}
+.collector-btn.selected{border-color:#00A651;background:#E8F5EE}
+.collector-btn.selected .col-av{background:#00A651!important;color:#fff!important}
 .collector-btn-name{font-size:14px;font-weight:700;color:#1e2d5a}
 .collector-btn-team{font-size:10px;color:#8b99b8;margin-top:2px}
-.collector-btn.selected .collector-btn-name{color:#2B7BE8}
+.collector-btn.selected .collector-btn-name{color:#00A651}
 
 /* GROUP LIST */
 .group-item{background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s}
@@ -309,7 +307,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pin-key:active{background:#EEF4FD;border-color:#2B7BE8}
 .pin-key.del{font-size:16px;color:var(--muted)}
 .pin-key.empty{border:none;background:transparent;cursor:default}
-/* PICKER SHEETS */
+.home-action-btn{background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;font-family:inherit;transition:.15s;width:100%}
+.home-action-btn:active{transform:scale(.97);background:#f7f8fc}
+.ha-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+.ha-label{font-size:13px;font-weight:700;color:var(--text)}
+
 .picker-sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:none;align-items:flex-end;justify-content:center;pointer-events:none}
 .picker-sheet.show{display:flex;pointer-events:all}
 .picker-body{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;animation:slideUp .25s ease}
@@ -317,7 +319,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .picker-handle{width:36px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 12px}
 .picker-title{font-size:17px;font-weight:700;color:var(--text)}
 .picker-scroll{overflow-y:auto;padding:8px 16px 24px;flex:1}
-.picker-item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer}
+.picker-item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)}
 .picker-item:last-child{border-bottom:none}
 .picker-item:active{background:#f7f8fc;border-radius:8px}
 </style>
@@ -498,6 +500,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <!-- ── SCREEN: AREAS (kept for navigation) ── -->
+<div class="screen" id="screen-home">
+  <div style="background:linear-gradient(135deg,#1557C0,#2B7BE8);border-radius:16px;padding:20px;margin:4px 0 12px;color:#fff">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+      <div>
+        <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em">This Month's Harvest</div>
+        <div style="font-size:36px;font-weight:700;line-height:1;margin-top:4px" id="home-month-total">₱0</div>
+        <div style="font-size:12px;opacity:.75;margin-top:4px" id="home-month-label">Loading…</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.06em">Collector</div>
+        <div style="font-size:15px;font-weight:700;margin-top:2px" id="home-collector-name">—</div>
+      </div>
+    </div>
+    <div style="height:6px;background:rgba(255,255,255,.25);border-radius:3px;overflow:hidden">
+      <div id="home-quota-bar" style="height:100%;width:0%;background:#fff;border-radius:3px;transition:.5s ease"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.7;margin-top:4px">
+      <span id="home-quota-label">Daily Quota ₱25,000</span>
+      <span id="home-quota-pct">0%</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;position:relative;z-index:1">
+    <button class="home-action-btn" onclick="showAreasScreen()">
+      <div class="ha-icon" style="background:#EEF4FD"><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#2B7BE8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11L13 3l10 8v11a1 1 0 01-1 1H16v-6h-6v6H4a1 1 0 01-1-1z"/></svg></div>
+      <div class="ha-label">Start Harvest</div>
+    </button>
+    <button class="home-action-btn" onclick="bnavSwitchFromHome('expense')">
+      <div class="ha-icon" style="background:#EEF4FD"><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#2B7BE8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="18" height="20" rx="2"/><path d="M9 8h8M9 12h8M9 16h5"/></svg></div>
+      <div class="ha-label">Expenses</div>
+    </button>
+    <button class="home-action-btn" onclick="bnavSwitchFromHome('eod')">
+      <div class="ha-icon" style="background:#EEF4FD"><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#2B7BE8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="18" height="18" rx="2"/><path d="M9 9h8M9 13h8M9 17h4"/></svg></div>
+      <div class="ha-label">End of Day</div>
+    </button>
+    <button class="home-action-btn" onclick="toast('History coming soon')">
+      <div class="ha-icon" style="background:#EEF4FD"><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#2B7BE8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="14" width="4" height="8" rx="1"/><rect x="11" y="9" width="4" height="13" rx="1"/><rect x="19" y="4" width="4" height="18" rx="1"/></svg></div>
+      <div class="ha-label">My History</div>
+    </button>
+  </div>
+  <div class="card">
+    <div class="card-title">Recent Harvests Today</div>
+    <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div></div>
+  </div>
+  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+</div>
+
 <div class="screen" id="screen-areas">
   <div style="margin-top:8px;margin-bottom:16px">
     <div style="font-size:20px;font-weight:700;margin-bottom:2px">Hi, <span id="areas-collector-name">—</span> 👋</div>
@@ -977,18 +1025,14 @@ let _pinCollectors = [];
 async function pinLoadCollectors(){
   const FALLBACK=[{name:'Ailyn',team:'TeamA'},{name:'Axcel',team:'TeamA'},{name:'Gilbert',team:'TeamA'},{name:'Tandoy',team:'TeamB'}];
   const el=document.getElementById('pin-name-list');
-  console.log('[pinLoadCollectors] el=', el);
-  if(!el){ console.error('[pinLoadCollectors] pin-name-list NOT FOUND'); return; }
+  if(!el) return;
   const render=(list)=>{
-    const html = list.map(c=>`
+    el.innerHTML=list.map(c=>`
       <div class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">
         <div style="width:40px;height:40px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e2d5a;margin:0 auto 8px;transition:.15s" class="col-av">${c.name[0].toUpperCase()}</div>
         <div class="collector-btn-name">${c.name}</div>
         <div class="collector-btn-team">${c.team||''}</div>
       </div>`).join('');
-    console.log('[pinLoadCollectors] rendering', list.length, 'collectors, html length=', html.length);
-    el.innerHTML = html;
-    console.log('[pinLoadCollectors] el.children=', el.children.length);
   };
   render(FALLBACK);
   _pinCollectors=FALLBACK;
@@ -998,13 +1042,8 @@ async function pinLoadCollectors(){
     const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR,signal:ctrl.signal});
     clearTimeout(tid);
     const data=await r.json();
-    if(Array.isArray(data)&&data.length){
-      _pinCollectors=data;
-      render(data);
-    }
-  }catch(e){
-    console.warn('[pinLoadCollectors] fetch failed:', e.message);
-  }
+    if(Array.isArray(data)&&data.length){ _pinCollectors=data; render(data); }
+  }catch(e){}
 }
 
 let _pinSelectedName=null;
@@ -1106,73 +1145,2443 @@ function pinLogout(){
 }
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
-async function showAreasScreen(){
+async 
+// ── HOME SCREEN ────────────────────────────────────────────
+async function showHomeScreen(){
+  showScreen('screen-home');
+  const name = selectedCollector||sessionStorage.getItem('col_name')||'';
+  const el = document.getElementById('home-collector-name');
+  if(el) el.textContent = name;
+  const bnav = document.getElementById('bottom-nav');
+  if(bnav) bnav.classList.add('show');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const hb = document.getElementById('bnav-home');
+  if(hb) hb.classList.add('active');
+  // Load today's spawn share
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const r = await fetch(`${SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(name)}&harvest_date=eq.${today}&select=coins_total,sheet_name,harvested_at`,{headers:HDR});
+    const rows = await r.json();
+    if(Array.isArray(rows)){
+      const gross = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
+      const spawn = gross*0.75;
+      const QUOTA=25000;
+      const pct=Math.min(100,(spawn/QUOTA)*100);
+      const el2=document.getElementById('home-month-total');
+      if(el2) el2.textContent='₱'+fmt(spawn);
+      const lb=document.getElementById('home-quota-label');
+      if(lb) lb.textContent=pct>=100?'🎉 Quota reached!':'Daily Quota ₱25,000';
+      const bar=document.getElementById('home-quota-bar');
+      if(bar){ bar.style.width=pct+'%'; bar.style.background=pct>=100?'#4ade80':pct>=70?'#fde68a':'#fff'; }
+      const pp=document.getElementById('home-quota-pct');
+      if(pp) pp.textContent=Math.round(pct)+'%';
+      const ml=document.getElementById('home-month-label');
+      if(ml) ml.textContent=new Date().toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
+      const list=document.getElementById('home-recent-list');
+      if(list&&rows.length){
+        list.innerHTML=rows.slice(0,6).map(h=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.sheet_name||'—'}</div><div style="font-size:14px;font-weight:700;color:#2B7BE8">₱${fmt((parseFloat(h.coins_total)||0)*0.75)}</div></div>`).join('');
+      }
+    }
+  }catch(e){}
+}
+
+function bnavSwitchFromHome(tab){
+  const bnav=document.getElementById('bottom-nav');
+  if(bnav) bnav.classList.add('show');
+  bnavSwitch(tab);
+}
+
+function showAreasScreen(){
   document.getElementById('topbar-sub').textContent=selectedCollector||'Collector PWA';
-  // Show area picker as bottom sheet popup
-  const sheet = document.getElementById('area-picker-sheet');
-  const listEl = document.getElementById('area-picker-list');
+  const sheet=document.getElementById('area-picker-sheet');
+  const listEl=document.getElementById('area-picker-list');
+  if(!sheet||!listEl) return;
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading areas…</span></div>';
   sheet.classList.add('show');
-
   loadPermGroups().then(groups=>{
-    const areas = getAreasFromGroups(groups);
-    const items = areas.map(area=>{
-      const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
-      const groupCount = areaGroups.length;
-      const meta = area.noGroups ? 'Tap to browse vendos' :
-        groupCount===1 ? '1 group' : groupCount+' groups';
-      return {area, meta};
-    });
-    listEl.innerHTML = items.map(({area, meta})=>`
-      <div class="picker-item" data-area="${encodeURIComponent(JSON.stringify(area))}">
-        <div class="gi-icon active" style="font-size:20px;width:44px;height:44px;background:linear-gradient(135deg,#1557C0,#2B7BE8)">${area.icon}</div>
-        <div class="gi-left">
-          <div style="font-size:15px;font-weight:700">${area.label}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div>
-        </div>
+    const areas=getAreasFromGroups(groups);
+    listEl.innerHTML=areas.map(area=>{
+      const cnt=groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase()).length;
+      const meta=area.noGroups?'Tap to browse vendos':cnt===1?'1 group':cnt+' groups';
+      return `<div class="picker-item" style="cursor:pointer" onclick="closeAreaPicker();openGroupPicker(${JSON.stringify(JSON.stringify(area))})">
+        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1557C0,#2B7BE8);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${area.icon}</div>
+        <div class="gi-left"><div style="font-size:15px;font-weight:700">${area.label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div></div>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>`).join('');
-    listEl.querySelectorAll('.picker-item').forEach(el=>{
-      el.addEventListener('click',()=>{
-        closeAreaPicker();
-        const area = JSON.parse(decodeURIComponent(el.dataset.area));
-        loadGroupsPopup(selectedCollector, area);
-      });
-    });
+      </div>`;
+    }).join('');
   });
 }
 
-function closeAreaPicker(){
-  document.getElementById('area-picker-sheet').classList.remove('show');
-}
+function closeAreaPicker(){ document.getElementById('area-picker-sheet')?.classList.remove('show'); }
 
-async function loadGroupsPopup(collectorName, area){
-  const sheet = document.getElementById('group-picker-sheet');
-  const title = document.getElementById('group-picker-title');
-  const listEl = document.getElementById('group-picker-list');
-  title.textContent = area.label;
+async function openGroupPicker(areaJson){
+  const area=JSON.parse(areaJson);
+  const sheet=document.getElementById('group-picker-sheet');
+  const title=document.getElementById('group-picker-title');
+  const listEl=document.getElementById('group-picker-list');
+  if(!sheet) return;
+  title.textContent=area.label;
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
   sheet.classList.add('show');
+  const groups=await loadPermGroups();
+  const areaGroups=groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
+  let html=`<div class="picker-item" style="cursor:pointer" onclick="closeGroupPicker();startAllVendos(${JSON.stringify(JSON.stringify(area))})">
+    <div style="width:44px;height:44px;border-radius:50%;background:#EEF4FD;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📋</div>
+    <div class="gi-left"><div style="font-size:15px;font-weight:700;color:#2B7BE8">All Vendos — ${area.label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">Browse all vendos in this area</div></div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>`;
+  if(areaGroups.length){
+    html+=areaGroups.map(g=>`<div class="picker-item" style="cursor:pointer" onclick="closeGroupPicker();startGroup(${g.id})">
+      <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1557C0,#2B7BE8);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0">▶</div>
+      <div class="gi-left"><div style="font-size:15px;font-weight:700">${g.group_label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${g.barangays||''} · ${g.total_vendos||0} vendos</div></div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`).join('');
+  } else {
+    html+='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet for this area</div>';
+  }
+  listEl.innerHTML=html;
+}
+
+function closeGroupPicker(){ document.getElementById('group-picker-sheet')?.classList.remove('show'); }
+
+
+function areaSelect(areaJson){
+  const area = JSON.parse(areaJson);
+  loadGroupsScreen(selectedCollector, area);
+}
+
+
+async function loadGroupsScreen(collector, area){
+  showScreen('screen-groups');
+  document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
+  const listEl = document.getElementById('group-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
 
   const groups = await loadPermGroups();
   const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
 
-  const allGroups2 = await loadPermGroups();
-  const areaGroups = allGroups2.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
-
-  // Fetch counts
+  // Fetch vendo counts per permanent group from harvest_group_items
   let countMap = {};
   try {
     const ids = areaGroups.map(g=>g.id).join(',');
     if(ids){
-      const r2 = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids})&select=group_run_id,status`,{headers:HDR});
-      const rows2 = await r2.json();
-      rows2.forEach(row=>{
+      const r = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids})&select=group_run_id,status`,{headers:HDR});
+      const rows = await r.json();
+      rows.forEach(row=>{
         if(!countMap[row.group_run_id]) countMap[row.group_run_id]={total:0,harvested:0};
         countMap[row.group_run_id].total++;
         if(row.status==='harvested') countMap[row.group_run_id].harvested++;
       });
     }
-  } catch(e){}
+  } catch(e){ /* non-critical */ }
 
-  let html = `<div class="picker-item" data-allarea=
+  // All-vendos option for this area
+  let html = `<div class="group-item active-group" style="cursor:pointer;border-color:var(--teal);background:var(--teal-light)" onclick="startAllVendos(${JSON.stringify(JSON.stringify(area))})">
+    <div class="gi-icon active" style="background:var(--teal);font-size:18px;width:44px;height:44px">📋</div>
+    <div class="gi-left">
+      <div class="gi-name" style="color:var(--teal)">All Vendos — ${area.label}</div>
+      <div class="gi-meta">Browse all vendos in this area</div>
+    </div>
+    <div class="gi-badge"><span class="pill" style="background:var(--teal-light);color:var(--teal)">All</span></div>
+  </div>`;
+
+  if(!areaGroups.length){
+    html += '<div style="color:var(--muted);text-align:center;padding:24px">No groups yet for this area</div>';
+  } else {
+    areaGroups.forEach(g=>{
+      const counts = countMap[g.id]||{total:0,harvested:0};
+      const pct = counts.total ? Math.round(counts.harvested/counts.total*100) : 0;
+      const pill = counts.total ?
+        `<span class="pill ${pct===100?'pill-green':'pill-blue'}">${counts.harvested}/${counts.total}</span>` :
+        `<span class="pill pill-gray">No data</span>`;
+      const meta = counts.total ?
+        `${counts.total} vendos · ${pct}% harvested last run` :
+        `${g.group_label||g.group_id}`;
+      const brgy = g.barangays ? `<div style="font-size:10px;color:#0369a1;margin-top:2px;font-weight:600">${g.barangays}</div>` : '';
+      html += `<div class="group-item active-group" style="cursor:pointer" onclick="startGroup(${g.id})">
+        <div class="gi-icon active">▶</div>
+        <div class="gi-left">
+          <div class="gi-name">${g.group_label||g.group_id}</div>
+          <div class="gi-meta">${meta}</div>
+          ${brgy}
+        </div>
+        <div class="gi-badge">${pill}</div>
+      </div>`;
+    });
+  }
+
+  listEl.innerHTML = html;
+}
+
+// ── START GROUP (reuses permanent group items) ────────────────────
+async function startGroup(groupId){
+  showScreen('screen-route');
+  const listEl = document.getElementById('vendo-list');
+
+  // ── Try cache first (24h TTL) ──────────────────────────────────
+  const CACHE_KEY = 'grp_cache_'+groupId;
+  const CACHE_TS_KEY = 'grp_cache_ts_'+groupId;
+  const cachedRaw = localStorage.getItem(CACHE_KEY);
+  const cachedTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
+  const CACHE_TTL = 1*3600*1000; // 1 hour — ensures GPS updates reflect quickly
+  const _cachedParsed = cachedRaw ? JSON.parse(cachedRaw) : null;
+  const cacheHit = _cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0 && (Date.now()-cachedTs < CACHE_TTL);
+  // Bust cache if pending items are missing GPS (GPS may have been captured since cache was built)
+  const _noGpsPending = cacheHit && _cachedParsed.items.filter(i=>i.status!=='harvested'&&(!i.lat||!i.lng)).length > 0;
+  const _effectiveCacheHit = cacheHit && !_noGpsPending;
+
+  if(_effectiveCacheHit){
+    // Serve from cache instantly — no network needed
+    const cached = _cachedParsed;
+    currentGroupDef = cached.g;
+    currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    // Save collector to harvest_groups
+    if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
+    currentItems = cached.items;
+    document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
+    /* sched-day-num updated in renderVendoList */
+    localStorage.setItem('harvest_session',JSON.stringify({
+      collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
+    }));
+    activeTab='pending';
+    renderVendoList();
+    // Background: refresh last_harvest_date silently
+    _refreshLHD(groupId);
+    return;
+  }
+
+  // ── Cold load ─────────────────────────────────────────────────
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
+  try {
+    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR});
+    const gRows = await rG.json();
+    if(!gRows.length){toast('Group not found');return;}
+    const g = gRows[0];
+    currentGroupDef = g;
+
+    localStorage.setItem('harvest_session',JSON.stringify({
+      collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:g.group_label||g.group_id
+    }));
+    document.getElementById('topbar-sub').textContent=g.group_label||g.group_id;
+    document.getElementById('sched-group-name').textContent=g.group_label||g.group_id;
+    document.getElementById('sched-group-meta').textContent=(g.barangays?g.barangays+' · ':'')+selectedCollector;
+    /* sched-day-num updated in renderVendoList */
+
+    listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading vendos…</span></div>';
+    let allItems = [], offset = 0;
+    while(true){
+      const r = await fetch(
+        `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
+        `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+        `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      allItems.push(...batch);
+      if(batch.length<500) break;
+      offset+=500;
+    }
+
+    // Fetch fresh last_harvest_date
+    const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
+    let lhdMap = {};
+    for(let i=0;i<vendoIds.length;i+=200){
+      try{
+        const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
+        (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; });
+      }catch(e){}
+    }
+
+    currentItems = allItems.map(item=>({
+      ...item, status:'pending',
+      last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+      coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
+    }));
+
+    // Save to cache (only if we actually got items)
+    if(currentItems.length > 0){
+      localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
+      localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
+    }
+
+    // Reset DB stats (background, don't await)
+    if(navigator.onLine){
+      fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:0,skipped_count:0,total_net:0,started_at:new Date().toISOString()})});
+      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
+    }
+
+    currentGroupRun = {...g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    // Save collector to harvest_groups
+    if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
+    activeTab='pending';
+    renderVendoList();
+
+  } catch(e){
+    console.error('startGroup error:', e);
+    pwLog('error','startGroup failed',{group:groupId,error:e.message});
+    listEl.innerHTML='';
+    const div=document.createElement('div');
+    div.className='loading';
+    div.innerHTML='<span style="color:var(--red);text-align:center;line-height:2">❌ '+e.message+'</span>';
+    const btn=document.createElement('button');
+    btn.textContent='← Back';
+    btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+    btn.onclick=function(){ showAreasScreen(); };
+    div.appendChild(btn);
+    listEl.appendChild(div);
+  }
+}
+
+// Background-refresh last_harvest_date without blocking UI
+async function _refreshLHD(groupId){
+  try{
+    const CACHE_KEY='grp_cache_'+groupId;
+    const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
+    if(!cached) return;
+    const vendoIds=cached.items.filter(i=>i.vendo_id).map(i=>i.vendo_id);
+    let lhdMap={};
+    for(let i=0;i<vendoIds.length;i+=200){
+      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
+      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date;});
+    }
+    // Update cache and currentItems
+    let changed=false;
+    cached.items=cached.items.map(item=>{
+      const fresh=item.vendo_id&&lhdMap[item.vendo_id];
+      if(fresh&&fresh!==item.last_harvest_date){changed=true;return{...item,last_harvest_date:fresh};}
+      return item;
+    });
+    if(changed){
+      localStorage.setItem(CACHE_KEY,JSON.stringify(cached));
+      localStorage.setItem('grp_cache_ts_'+groupId,Date.now().toString());
+      // Update live display if this group is still active
+      if(currentGroupRun&&currentGroupRun.id===groupId){
+        currentItems=currentItems.map(item=>{
+          const fresh=item.vendo_id&&lhdMap[item.vendo_id];
+          return fresh&&fresh!==item.last_harvest_date?{...item,last_harvest_date:fresh}:item;
+        });
+        renderVendoList();
+      }
+    }
+  }catch(e){console.warn('_refreshLHD:',e.message);}
+}
+
+// ── ALL VENDOS MODE (no group filter) ─────────────────────────────
+async function startAllVendos(areaJson){
+  const area = JSON.parse(areaJson);
+  showScreen('screen-route');
+  document.getElementById('vendo-list').innerHTML='<div class="loading"><div class="spinner"></div><span>Loading all vendos…</span></div>';
+
+  currentGroupDef = {group_label:'All — '+area.label, area:area.id, group_id:'ALL', id:null};
+  currentGroupRun = null;
+
+  document.getElementById('topbar-sub').textContent='All — '+area.label;
+  document.getElementById('sched-group-name').textContent='All Vendos';
+  document.getElementById('sched-group-meta').textContent=selectedCollector+' · '+area.label;
+  /* sched-day-num updated in renderVendoList */
+
+  try {
+    let allVendos = [];
+    let offset = 0;
+    while(true){
+      const r = await fetch(
+        `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area.id)}`+
+        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address`+
+        `&order=sheet_name.asc&limit=500&offset=${offset}`,{headers:HDR}
+      );
+      const batch = await r.json();
+      if(!Array.isArray(batch)||!batch.length) break;
+      allVendos.push(...batch);
+      if(batch.length<500) break;
+      offset+=500;
+    }
+
+    currentItems = allVendos.map(v=>({
+      id: null, // no group_item id — submit goes direct to harvests + vendos
+      vendo_id: v.id,
+      sheet_name: v.sheet_name,
+      tg_name: v.tg_name,
+      vlan: v.vlan,
+      area: area.id,
+      barangay: null,
+      lat: v.lat,
+      lng: v.lng,
+      last_harvest_date: v.last_harvest_date,
+      contact_number: v.contact_number,
+      address: v.address,
+      status: 'pending'
+    }));
+
+    // Cache vendos locally for 24hrs
+    localStorage.setItem('cached_vendos_'+area.id, JSON.stringify({ts:Date.now(), data:currentItems}));
+
+    activeTab='pending';
+    renderVendoList();
+  } catch(e){
+    toast('❌ '+e.message, 4000);
+  }
+}
+async function resumeSession(){
+  const saved=JSON.parse(localStorage.getItem('harvest_session')||'null');
+  if(!saved) return;
+  selectedCollector=saved.collector;
+  // Set topbar immediately so it shows the right name before async fetch
+  document.getElementById('topbar-sub').textContent=saved.groupLabel||saved.collector||'Loading…';
+  if(saved.groupId){
+    await startGroup(saved.groupId);
+  } else {
+    localStorage.removeItem('harvest_session');
+    showAreasScreen();
+  }
+}
+
+// ── RENDER VENDO LIST ─────────────────────────────────────────────
+function switchTab(tab){
+  activeTab=tab;
+  ['pending','done','issues','sync','history'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el) el.classList.toggle('active',t===tab);
+  });
+  const isHist=tab==='history';
+  const sb=document.getElementById('search-bar');
+  const hb=document.getElementById('history-search-bar');
+  if(sb) sb.style.display=isHist?'none':'';
+  if(hb) hb.style.display=isHist?'':'none';
+  if(isHist){renderHistory();return;}
+  renderVendoList();
+}
+function onSearch(v){if(!currentGroupRun||!currentItems.length) return;searchQuery=v.trim().toLowerCase();document.getElementById('search-clear').style.display=v?'inline':'none';renderVendoList();}
+function clearSearch(){searchQuery='';document.getElementById('search-inp').value='';document.getElementById('search-clear').style.display='none';renderVendoList();}
+
+function renderVendoList(){
+  const all=currentItems;
+  const _area=currentGroupDef&&currentGroupDef.area;const _initCentroid=(currentGroupDef&&AREA_CENTROIDS[_area])||{lat:START_LAT,lng:START_LNG};
+  all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
+
+  const pending=all.filter(i=>i.status==='pending').sort((a,b)=>{
+    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):99999;
+    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):99999;
+    return db-da;
+  });
+  const done=all.filter(i=>i.status==='harvested');
+  const issues=all.filter(i=>i.status==='skipped');
+  const total=all.length,doneCnt=done.length,pct=total?Math.round(doneCnt/total*100):0;
+
+  document.getElementById('rt-progress').style.width=pct+'%';
+  document.getElementById('rt-done-cnt').textContent=doneCnt+' harvested';
+  document.getElementById('rt-total-cnt').textContent=total+' total';
+  document.getElementById('rt-meta').textContent=`${selectedCollector} · ${currentGroupDef?.group_label||currentGroupDef?.group_id||'—'} · ${total} vendos`;
+  document.getElementById('cnt-pending').textContent=pending.length;
+  document.getElementById('cnt-done').textContent=done.length;
+  document.getElementById('sched-day-num').textContent=done.length;
+  document.getElementById('cnt-issues').textContent=issues.length;
+  document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
+
+  const allTouched=(pending.length===0);
+  document.getElementById('finish-btn').style.display=allTouched&&total>0?'':'none';
+
+  if(activeTab==='sync'){
+    if(!syncLog.length){document.getElementById('vendo-list').innerHTML='<div class="loading"><span>No sync activity yet.</span></div>';return;}
+    const pendingQ=offlineQueue.filter(q=>q.type==='harvest').length;
+    const hdr=pendingQ?`<div style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;font-weight:700;color:var(--amber)">⚡ ${pendingQ} waiting to sync</div>`:'<div style="background:var(--green-light);border:1px solid #86efac;border-radius:10px;padding:8px 14px;margin-bottom:10px;font-size:12px;font-weight:700;color:#15803d">✅ All synced</div>';
+    document.getElementById('vendo-list').innerHTML=hdr+syncLog.map(s=>{
+      const dt=new Date(s.ts),ok=s.status==='synced';
+      return `<div class="vendo-item ${ok?'done':'issue'}" style="cursor:default">
+        <div class="vi-seq" style="${ok?'background:#86efac;color:#15803d':'background:#fca5a5;color:var(--red)'}">${ok?'✓':'⏳'}</div>
+        <div class="vi-left"><div class="vi-name">${s.name||'—'}</div>
+        <div class="vi-sub">${ok?'Saved':'Pending'} · Net: ₱${fmt(s.net)}</div>
+        <div class="vi-sub">${dt.toLocaleDateString('en-PH',{month:'short',day:'numeric'})} ${dt.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'})}</div></div></div>`;
+    }).join('');
+    return;
+  }
+
+  let view=activeTab==='done'?done:activeTab==='issues'?issues:pending;
+  if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
+
+  // GPS sort — filter outliers > 15km from start point
+  let sorted=false;
+  if(activeTab!=='done'){
+    const centroid=(currentGroupDef&&AREA_CENTROIDS[currentGroupDef.area])||{lat:START_LAT,lng:START_LNG};
+    const MAX_DIST_KM=20;
+    view.forEach(item=>{item._dist=(item.lat&&item.lng)?haversine(centroid.lat,centroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
+    const withG=view.filter(i=>i._dist!==null&&i._dist<=MAX_DIST_KM),noG=view.filter(i=>i._dist===null||i._dist>MAX_DIST_KM);
+    if(withG.length){
+      const out=[],pool=[...withG];let cLat=centroid.lat,cLng=centroid.lng;
+      while(pool.length){let bi=0,bd=Infinity;pool.forEach((x,i)=>{const d=haversine(cLat,cLng,parseFloat(x.lat),parseFloat(x.lng));if(d<bd){bd=d;bi=i;}});const ch=pool.splice(bi,1)[0];ch._legDist=bd;cLat=parseFloat(ch.lat);cLng=parseFloat(ch.lng);out.push(ch);}
+      view=[...out,...noG];sorted=true;
+    }
+  }
+  document.getElementById('sort-info').style.display=sorted?'flex':'none';
+
+  if(!view.length){
+    const m=searchQuery?`No match for "${searchQuery}"`:{'pending':'🎉 All vendos recorded!','done':'No harvests yet.','issues':'No skipped vendos.'}[activeTab];
+    document.getElementById('vendo-list').innerHTML=`<div class="loading"><span>${m}</span></div>`;return;
+  }
+
+  const gpsItems=activeTab!=='done'?view.filter(i=>i.lat&&i.lng):view;
+  const noGpsItems=activeTab!=='done'?view.filter(i=>!i.lat||!i.lng):[];
+
+  const renderItem=(item,seqIdx)=>{
+    const cls=item.status==='harvested'?'done':item.status==='skipped'?'issue':'';
+    const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
+      item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
+    const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
+    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):null;
+    const lhdColor=item.status==='harvested'?'#9ca3af':daysSince===null?'#6b7280':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#1e3cb8':'#15803d';
+    const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince===null?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
+    const _dLabel=daysSince===null?'Never':daysSince>=30?Math.floor(daysSince/30)+'mo '+Math.floor(daysSince%30)+'d':daysSince+'d';
+    const lhdBadge=item.status!=='harvested'?'<span class="pill '+daysBadgeCls+'" style="font-size:10px;font-weight:900;padding:2px 7px">'+_dLabel+'</span>':'';
+    const legD=item._legDist!=null?item._legDist:item._dist;
+    const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
+    const mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:'';
+    const gpsBtn=mapsUrl
+      ?`<a href="${mapsUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#0284c7;color:#fff;border-radius:6px;font-size:10px;font-weight:700;text-decoration:none;margin-top:4px">📍 GPS</a>`
+      :`<button onclick="event.stopPropagation();toast('No GPS recorded — capture GPS when harvesting.',3000)" style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;background:#e5e7eb;color:#9ca3af;border:none;border-radius:6px;font-size:10px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:4px">📍 No GPS</button>`;
+    const gpsBadge=item.lat&&item.lng?'':'<span class="pill pill-orange" style="font-size:8px">No GPS</span>';
+    const contactBadge=item.contact_number?'':'<span class="pill pill-amber" style="font-size:8px">No contact</span>';
+    const netLine=item.status==='harvested'?`<div style="font-size:10px;color:#16a34a;margin-top:2px">Net: ₱${fmt(item.net_collectible)}</div>`:'';
+    const noteLine=item.collector_note&&item.status!=='harvested'?`<div style="font-size:10px;color:#92400e;margin-top:2px;background:#fef3c7;padding:2px 6px;border-radius:4px">📝 ${item.collector_note}</div>`:'';
+    return `<div class="vendo-item ${cls}" onclick="openItem(${item._origIdx})">
+      <div class="vi-seq">${seqIdx+1}</div>
+      <div class="vi-left">
+        <div class="vi-name">${item.sheet_name||item.tg_name||'Unknown'}</div>
+        <div class="vi-sub">${item.address||item.barangay||item.area||'—'}${item.vlan?' · VLAN '+item.vlan:''}</div>
+        ${distBadge}
+        <div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:${lhdColor}">${lastH}</b> ${lhdBadge}</div>
+
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${contactBadge}</div>
+        ${netLine}${noteLine}${gpsBtn}
+      </div>
+      <div style="flex-shrink:0;margin-left:8px">${pill}</div>
+      <div style="color:var(--muted);font-size:16px;margin-left:4px">›</div>
+    </div>`;
+  };
+
+  // Group by barangay and render with section headers
+  // Attach barangay to each item using stored barangay field or lookup from excel data
+  view.forEach(item => {
+    if(!item.barangay) {
+      item.barangay = NAME_TO_BARANGAY[item.sheet_name] || null;
+    }
+  });
+  const byBarangay = {};
+  view.forEach((item, i) => {
+    const b = item.barangay || item.area || 'General';
+    if(!byBarangay[b]) byBarangay[b] = [];
+    byBarangay[b].push(item);
+  });
+
+  const renderBarangaySection = (barangay, items, startSeq) => {
+    const doneCount = items.filter(i=>i.status==='harvested').length;
+    const totalCount = items.length;
+    const allDone = doneCount===totalCount;
+    const headerHtml = `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px 4px;margin-top:4px">
+      <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em">📍 ${barangay}</div>
+      <span class="pill ${allDone?'pill-green':'pill-gray'}" style="font-size:9px">${doneCount}/${totalCount}</span>
+    </div>`;
+    // GPS items first for this barangay, then no-GPS
+    const bGps = activeTab!=='done' ? items.filter(i=>i.lat&&i.lng) : items;
+    const bNoGps = activeTab!=='done' ? items.filter(i=>!i.lat||!i.lng) : [];
+    const itemsHtml = bGps.map((it,i)=>renderItem(it,startSeq+i)).join('');
+    let noGpsHtml2='';
+    if(bNoGps.length&&activeTab!=='done'){
+      noGpsHtml2=`<div class="nogps-section"><div class="nogps-header">No GPS <span style="background:#ea580c;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px">${bNoGps.length}</span></div>`+bNoGps.map((it,i)=>renderItem(it,startSeq+bGps.length+i)).join('')+'</div>';
+    }
+    return headerHtml + itemsHtml + noGpsHtml2;
+  };
+
+  const listEl = document.getElementById('vendo-list');
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+
+  // Split finalHtml into chunks of ~10 items for progressive rendering
+  // Build as array of strings first for chunking
+  const chunks=[];
+  if(activeTab==='done'){
+    const items=view;
+    for(let i=0;i<items.length;i+=10) chunks.push(items.slice(i,i+10).map((it,j)=>renderItem(it,i+j)).join(''));
+  } else {
+    // Already grouped by barangay — chunk by section
+    let seqC2=0;
+    Object.entries(byBarangay).forEach(([barangay,items])=>{
+      chunks.push(renderBarangaySection(barangay,items,seqC2));
+      seqC2+=items.length;
+    });
+  }
+
+  // Progressive append: first chunk immediate, rest via setTimeout(0)
+  requestAnimationFrame(()=>{
+    listEl.innerHTML='';
+    const appendChunk=(i)=>{
+      if(i>=chunks.length){
+        if(currentGroupRun) localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems));
+        return;
+      }
+      listEl.insertAdjacentHTML('beforeend',chunks[i]);
+      setTimeout(()=>appendChunk(i+1),0);
+    };
+    appendChunk(0);
+  });
+}
+
+// ── OPEN ITEM FORM ────────────────────────────────────────────────
+function openItem(idx){
+  currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
+  const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
+  document.getElementById('form-vname').textContent=name;
+  const fmtLastDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+  document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(currentItem.last_harvest_date)}`;
+  const _ds=currentItem.last_harvest_date?Math.floor((Date.now()-new Date(currentItem.last_harvest_date+'T12:00:00'))/86400000):null;
+  const _hdrColor=_ds===null?'#6b7280':_ds>45?'#dc2626':_ds>30?'#d97706':_ds>14?'#1e3cb8':'#15803d';
+  document.getElementById('form-header-el').style.background=_hdrColor;
+
+  // Directions
+  const dirEl=document.getElementById('form-directions');
+  if(currentItem.lat&&currentItem.lng){
+    const url=`https://www.google.com/maps/dir/?api=1&destination=${currentItem.lat},${currentItem.lng}`;
+    dirEl.innerHTML=`<div style="font-size:11px;color:#0369a1;margin-bottom:5px">📍 ${currentItem.address||currentItem.lat+', '+currentItem.lng}</div><a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#0284c7;color:#fff;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none">📍 Open in Google Maps</a>`;
+  } else {
+    dirEl.innerHTML=`<button onclick="toast('No GPS recorded for this vendo — capture GPS when harvesting to enable directions.',3500)" style="width:100%;padding:8px 16px;background:#e5e7eb;color:#9ca3af;border:none;border-radius:8px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer">📍 No GPS recorded</button>`;
+  }
+  dirEl.style.display='';
+
+  // Pre-fill owner info
+  document.getElementById('owner-name-display').textContent=currentItem.sheet_name||'—';
+  document.getElementById('contact-display').textContent=currentItem.contact_number||'—';
+  const addrDisp=document.getElementById('address-display');
+  if(addrDisp) addrDisp.textContent=currentItem.address||'—';
+  const addrInp=document.getElementById('address-inp');
+  if(addrInp) addrInp.value=currentItem.address||'';
+  const snEl=document.getElementById('owner-name-inp');if(snEl){if(snEl.tagName==='INPUT')snEl.value=currentItem.sheet_name||'';else snEl.textContent=currentItem.sheet_name||'—';}
+  document.getElementById('contact-inp').value=currentItem.contact_number||'';
+  const ownReal=document.getElementById('owner-real-name-inp');if(ownReal)ownReal.value=currentItem.owner_name||'';
+  const ownRealDisp=document.getElementById('owner-name-real-display');if(ownRealDisp)ownRealDisp.textContent=currentItem.owner_name||'—';
+  const tgInp=document.getElementById('tg-name-inp');if(tgInp)tgInp.value=currentItem.tg_name||'';
+  const vlanInp=document.getElementById('vlan-inp');if(vlanInp)vlanInp.value=currentItem.vlan||'';
+  const tgSug=document.getElementById('tg-suggested');const tgSugVal=document.getElementById('tg-suggest-val');
+  if(tgSug&&tgSugVal){const showSug=currentItem.tg_name_suggested&&!currentItem.tg_name;tgSug.style.display=showSug?'':'none';if(showSug)tgSugVal.textContent=currentItem.tg_name_suggested;}
+  document.getElementById('owner-edit').style.display='none';
+  document.getElementById('owner-display').style.display='';
+  const edb=document.getElementById('edit-details-btn');if(edb){edb.textContent='✏️ Edit';edb.style.color='';}
+
+  // GPS status — distinguish stored coords from freshly captured
+  const gpsLbl=document.getElementById('gps-status-lbl');
+  if(currentItem.lat_captured&&currentItem.lng_captured){
+    // Fresh capture from this session
+    gpsLbl.className='gps-status got';
+    gpsLbl.textContent='✅ '+parseFloat(currentItem.lat_captured).toFixed(5)+', '+parseFloat(currentItem.lng_captured).toFixed(5)+' (captured today)';
+  } else if(currentItem.lat&&currentItem.lng){
+    // Historical coords from DB — show differently
+    gpsLbl.className='gps-status';
+    gpsLbl.style.background='#f0f9ff';
+    gpsLbl.style.borderColor='#bae6fd';
+    gpsLbl.style.color='#0369a1';
+    gpsLbl.textContent='📍 '+parseFloat(currentItem.lat).toFixed(5)+', '+parseFloat(currentItem.lng).toFixed(5)+' (stored — tap to recapture)';
+  } else {
+    gpsLbl.className='gps-status';
+    gpsLbl.style.background='';gpsLbl.style.borderColor='';gpsLbl.style.color='';
+    gpsLbl.textContent='No GPS yet — tap Capture';
+  }
+  document.getElementById('gps-verify-link').style.display='none';
+  // Show GPS label if coords already exist, hide otherwise until Edit
+  const _hasGps = !!(currentItem.lat && currentItem.lng);
+  document.getElementById('gps-status-lbl').style.display = _hasGps ? '' : 'none';
+  document.getElementById('gps-actions').style.display='none';
+  // Update camera button to reflect GPS state
+  const _camBtn = document.getElementById('camera-open-btn');
+  if(_camBtn){
+    if(_hasGps){
+      _camBtn.textContent = '📷 Recapture Photo + GPS';
+      _camBtn.style.background = '#0369a1';
+    } else {
+      _camBtn.textContent = '📷 Open Camera & Capture GPS';
+      _camBtn.style.background = '';
+    }
+  }
+
+  // Reset camera/photo state
+  capturedPhotoBlob=null;
+  if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+  document.getElementById('camera-wrap').style.display='none';
+  document.getElementById('photo-thumb-wrap').style.display='none';
+  document.getElementById('camera-open-btn').style.display='';
+  document.getElementById('camera-open-btn').disabled=false;
+  document.getElementById('camera-open-btn').textContent='📷 Open Camera & Capture GPS';
+  document.getElementById('gps-actions').style.display='none';
+  ['coin-total','coin-free','coin-saloy','coin-freecoins'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('note-inp').value='';
+  document.getElementById('skip-note').value='';
+  document.getElementById('skip-form').style.display='none';
+  calcNet();
+
+  if(currentItem.status==='harvested'){
+    if(currentItem.coins_total) document.getElementById('coin-total').value=currentItem.coins_total;
+    if(currentItem.coins_free_time !== undefined) document.getElementById('coin-free').value = currentItem.coins_free_time;
+    if(currentItem.coins_free_coins !== undefined) document.getElementById('coin-freecoins').value = currentItem.coins_free_coins;
+    if(currentItem.coins_old) document.getElementById('coin-old').value=currentItem.coins_old;
+    if(currentItem.coins_saloy) document.getElementById('coin-saloy').value=currentItem.coins_saloy;
+    if(currentItem.collector_note) document.getElementById('note-inp').value=currentItem.collector_note;
+    calcNet(); toast('Already harvested — re-submit to update');
+  } else {
+    resetPackForm();
+  }
+  showScreen('screen-form');
+}
+
+// ── GPS CAPTURE ───────────────────────────────────────────────────
+function toggleOwnerEdit(){
+  const ed=document.getElementById('owner-edit'),dp=document.getElementById('owner-display'),btn=document.getElementById('edit-details-btn');
+  const isEditing=ed.style.display!=='none';
+  if(isEditing){
+    // If photo was taken — require GPS before closing
+    if(capturedPhotoBlob && !capturedGPS){
+      toast('⚠️ GPS not yet locked — wait for GPS or retake photo outdoors',4000);
+      return;
+    }
+    // If photo was taken — save photo+GPS to vendo immediately
+    if(capturedPhotoBlob){
+      saveVendoDetails();
+      return; // saveVendoDetails closes edit mode after saving
+    }
+    // No photo taken — just close edit mode normally
+    _closeOwnerEdit();
+  } else {
+    ed.style.display='';dp.style.display='none';btn.textContent='✓ Done';btn.style.color='var(--green)';
+    document.getElementById('owner-name-inp').focus();
+    document.getElementById('gps-status-lbl').style.display='';
+  }
+}
+
+function _closeOwnerEdit(){
+  const ed=document.getElementById('owner-edit'),dp=document.getElementById('owner-display'),btn=document.getElementById('edit-details-btn');
+  document.getElementById('owner-name-display').textContent=currentItem&&currentItem.sheet_name||'—';
+  document.getElementById('contact-display').textContent=document.getElementById('contact-inp').value.trim()||'—';
+  const orn=document.getElementById('owner-real-name-inp');const ornd=document.getElementById('owner-name-real-display');if(orn&&ornd)ornd.textContent=orn.value.trim()||'—';
+  ed.style.display='none';dp.style.display='';btn.textContent='✏️ Edit';btn.style.color='';
+  document.getElementById('gps-status-lbl').style.display='none';
+  document.getElementById('gps-actions').style.display='none';
+}
+
+async function saveVendoDetails(){
+  const btn=document.getElementById('edit-details-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const contact=document.getElementById('contact-inp')?.value.trim()||'';
+    const ownerName=document.getElementById('owner-real-name-inp')?.value.trim()||'';
+    const tgName=document.getElementById('tg-name-inp')?.value.trim()||'';
+    const addressEdit=document.getElementById('address-inp')?.value.trim()||'';
+    let photoUrl=null;
+
+    // Upload photo
+    if(capturedPhotoBlob && navigator.onLine){
+      photoUrl = await uploadPhoto(capturedPhotoBlob, currentItem.sheet_name||currentItem.tg_name||'vendo');
+    }
+
+    // Build update
+    const vendoUpdate={};
+    if(capturedGPS){vendoUpdate.lat=capturedGPS.lat; vendoUpdate.lng=capturedGPS.lng;}
+    if(photoUrl) vendoUpdate.photo_url=photoUrl;
+    if(contact) vendoUpdate.contact_number=contact;
+    if(ownerName) vendoUpdate.owner_name=ownerName;
+    if(tgName) vendoUpdate.tg_name=tgName;
+    if(addressEdit) vendoUpdate.address=addressEdit;
+
+    // Save to vendos table — queue if offline
+    if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
+      if(navigator.onLine){
+        await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+          method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
+          body:JSON.stringify(vendoUpdate)
+        });
+      } else {
+        // Queue for later sync
+        offlineQueue.push({type:'vendoUpdate',vendoId:currentItem.vendo_id,vendoUpdate,ts:Date.now()});
+        localStorage.setItem('hq',JSON.stringify(offlineQueue));
+        toast('⚡ Saved offline — will sync when connected',3000);
+      }
+    }
+
+    // Also save to current item in memory
+    if(capturedGPS){currentItem.lat_captured=capturedGPS.lat; currentItem.lng_captured=capturedGPS.lng; currentItem.lat=capturedGPS.lat; currentItem.lng=capturedGPS.lng;}
+    if(photoUrl) currentItem.photo_url=photoUrl;
+    if(contact) currentItem.contact_number=contact;
+    if(ownerName) currentItem.owner_name=ownerName;
+    if(addressEdit){currentItem.address=addressEdit;const ad=document.getElementById('address-display');if(ad)ad.textContent=addressEdit;}
+
+    toast(photoUrl?'✅ Photo, GPS & details saved to vendo':'✅ Details saved',3000);
+    _closeOwnerEdit();
+  } catch(e){
+    toast('❌ Save failed: '+e.message, 4000);
+  } finally{
+    btn.disabled=false; btn.textContent='✓ Done'; btn.style.color='var(--green)';
+  }
+}
+// ── CAMERA + GPS ──────────────────────────────────────────────────
+let cameraStream = null;
+let capturedPhotoBlob = null;
+
+function openCamera(){
+  const wrap = document.getElementById('camera-wrap');
+  const btn = document.getElementById('camera-open-btn');
+  const video = document.getElementById('camera-video');
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast('❌ Camera not supported on this device',3000); return;
+  }
+  btn.disabled=true; btn.textContent='Opening camera…';
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false})
+    .then(stream=>{
+      cameraStream=stream;
+      video.srcObject=stream;
+      wrap.style.display='';
+      btn.style.display='none';
+      document.getElementById('photo-thumb-wrap').style.display='none';
+    })
+    .catch(err=>{
+      btn.disabled=false; btn.textContent='📷 Open Camera & Capture GPS';
+      toast('❌ Camera access denied — check browser permissions',4000);
+    });
+}
+
+function closeCamera(){
+  if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream=null; }
+  document.getElementById('camera-wrap').style.display='none';
+  const btn=document.getElementById('camera-open-btn');
+  btn.style.display=''; btn.disabled=false; btn.textContent='📷 Open Camera & Capture GPS';
+}
+
+function stampOverlay(canvas, gps){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+
+  // Info lines
+  const vendoName=currentItem?(currentItem.sheet_name||currentItem.tg_name||'Unknown Vendo'):'Unknown Vendo';
+  const address=currentItem?(currentItem.address||currentItem.barangay||'—'):'—';
+  const vlan=currentItem?('VLAN '+(currentItem.vlan||'?')):'';
+  const collector=selectedCollector||'—';
+  const now=new Date();
+  const dateStr=now.toLocaleDateString('en-PH',{year:'numeric',month:'2-digit',day:'2-digit'});
+  const timeStr=now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const coordStr=gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS pending…';
+
+  const lines=[
+    vendoName,
+    address,
+    vlan+' · '+collector,
+    dateStr+' '+timeStr,
+    coordStr,
+  ];
+
+  // Bottom bar
+  const fontSize=Math.max(16, Math.round(w/45));
+  const lineH=fontSize*1.55;
+  const padX=fontSize*0.8;
+  const barH=lineH*lines.length + fontSize*0.8;
+  const barY=h-barH;
+
+  // Semi-transparent black bar
+  ctx.fillStyle='rgba(0,0,0,0.62)';
+  ctx.fillRect(0,barY,w,barH);
+
+  // Text
+  ctx.font=`bold ${fontSize}px -apple-system,Arial,sans-serif`;
+  ctx.textBaseline='top';
+  lines.forEach((line,i)=>{
+    const y=barY + fontSize*0.4 + i*lineH;
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillText(line, padX+1, y+1);
+    // Main text — first line white+bold, rest light gray
+    ctx.fillStyle = i===0 ? '#ffffff' : i===4 ? '#4ade80' : '#e5e7eb';
+    ctx.fillText(line, padX, y);
+  });
+
+  // Spawn Internet watermark top-right
+  const wmSize=Math.max(11, Math.round(w/80));
+  ctx.font=`${wmSize}px Arial,sans-serif`;
+  ctx.fillStyle='rgba(255,255,255,0.5)';
+  ctx.textAlign='right';
+  ctx.textBaseline='top';
+  ctx.fillText('Spawn Internet', w-8, 8);
+  ctx.textAlign='left';
+}
+
+function snapPhoto(){
+  const video=document.getElementById('camera-video');
+  const canvas=document.getElementById('camera-canvas');
+  const MAX_W=960;
+  const rawW=video.videoWidth||1280, rawH=video.videoHeight||720;
+  const scale=rawW>MAX_W?MAX_W/rawW:1;
+  canvas.width=Math.round(rawW*scale); canvas.height=Math.round(rawH*scale);
+  const ctx=canvas.getContext('2d');
+  ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+  // Store clean frame for re-stamping after GPS
+  const cleanCanvas=document.createElement('canvas');
+  cleanCanvas.width=canvas.width; cleanCanvas.height=canvas.height;
+  cleanCanvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  window._cleanPhotoCanvas=cleanCanvas;
+
+  // Stamp overlay immediately with GPS pending
+  stampOverlay(canvas, null);
+
+  // Start GPS sampling at same moment as photo
+  const lbl=document.getElementById('gps-status-lbl');
+  lbl.className='gps-status'; lbl.textContent='📍 Getting best GPS reading…';
+
+  // Show thumbnail immediately
+  canvas.toBlob(blob=>{
+    capturedPhotoBlob=blob;
+    const url=URL.createObjectURL(blob);
+    document.getElementById('photo-thumb').src=url;
+    document.getElementById('photo-thumb-wrap').style.display='';
+    document.getElementById('photo-gps-badge').textContent='Getting GPS…';
+    const dl=document.getElementById('photo-download-btn');
+    if(dl){dl.href=url;dl.download=_photoFilename();}
+    closeCamera();
+  },'image/jpeg',0.85);
+
+  // Best-of-3 GPS — re-stamp once GPS is known
+  bestOfThreeGPS(lbl, (gps)=>{
+    // Re-draw from clean frame + new overlay
+    const ctx2=canvas.getContext('2d');
+    const src=window._cleanPhotoCanvas||canvas;
+    ctx2.drawImage(src,0,0,canvas.width,canvas.height);
+    stampOverlay(canvas, gps);
+    canvas.toBlob(blob=>{
+      capturedPhotoBlob=blob;
+      const url=URL.createObjectURL(blob);
+      document.getElementById('photo-thumb').src=url;
+      // Update download link
+      const dl=document.getElementById('photo-download-btn');
+      if(dl){dl.href=url; dl.download=_photoFilename();}
+    },'image/jpeg',0.85);
+  });
+}
+
+function _photoFilename(){
+  const name=(currentItem?(currentItem.sheet_name||currentItem.tg_name||'vendo'):'vendo').replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
+  const d=new Date();
+  const ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2);
+  return `spawn_${name}_${ds}.jpg`;
+}
+
+function bestOfThreeGPS(lbl, onFinalized){
+  if(!navigator.geolocation){
+    lbl.className='gps-status err'; lbl.textContent='❌ GPS not supported'; return;
+  }
+  const readings=[];
+  let watchId=null, done=false;
+  const GOOD_ACC=20;
+  const MAX_WAIT=4000;
+
+  function finalize(){
+    if(done) return;
+    done=true;
+    if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    if(!readings.length){
+      lbl.className='gps-status err';
+      lbl.textContent='❌ Could not get GPS — try outdoors or retry';
+      document.getElementById('photo-gps-badge').textContent='No GPS';
+      if(onFinalized) onFinalized(null);
+      return;
+    }
+    const best=readings.reduce((a,b)=>a.acc<b.acc?a:b);
+    capturedGPS={lat:best.lat,lng:best.lng};
+    const accStr='±'+Math.round(best.acc)+'m';
+    const coordStr=`${best.lat.toFixed(6)}, ${best.lng.toFixed(6)}`;
+    lbl.className='gps-status got';
+    lbl.textContent=`✅ ${coordStr} (${accStr})`;
+    document.getElementById('photo-gps-badge').textContent=`📍 ${coordStr} ${accStr}`;
+    const actionsEl=document.getElementById('gps-actions');
+    actionsEl.style.display='flex';
+    document.getElementById('gps-verify-a').href=`https://www.google.com/maps?q=${best.lat},${best.lng}`;
+    toast(`📍 GPS locked — ${accStr}`,3000);
+    if(onFinalized) onFinalized(capturedGPS);
+  }
+
+  const deadline=setTimeout(finalize, MAX_WAIT);
+
+  watchId=navigator.geolocation.watchPosition(
+    pos=>{
+      readings.push({lat:pos.coords.latitude,lng:pos.coords.longitude,acc:pos.coords.accuracy});
+      lbl.textContent='📍 Getting GPS… ±'+Math.round(pos.coords.accuracy)+'m';
+      if(pos.coords.accuracy<=GOOD_ACC){
+        clearTimeout(deadline);
+        finalize();
+      }
+    },
+    err=>{ },
+    {enableHighAccuracy:true, timeout:4000, maximumAge:3000}
+  );
+}
+
+function retakePhoto(){
+  capturedPhotoBlob=null; capturedGPS=null;
+  document.getElementById('photo-thumb-wrap').style.display='none';
+  document.getElementById('gps-status-lbl').className='gps-status';
+  document.getElementById('gps-status-lbl').textContent='No GPS yet — tap Open Camera';
+  document.getElementById('gps-actions').style.display='none';
+  openCamera();
+}
+
+function copyGPS(){
+  if(!capturedGPS){toast('No GPS to copy');return;}
+  const txt=`${capturedGPS.lat.toFixed(6)}, ${capturedGPS.lng.toFixed(6)}`;
+  navigator.clipboard.writeText(txt).then(()=>toast('📋 Copied: '+txt,3000)).catch(()=>{
+    // Fallback
+    const el=document.createElement('textarea');
+    el.value=txt; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    toast('📋 Copied: '+txt,3000);
+  });
+}
+
+// Legacy stub — keeps any remaining calls from crashing
+function captureGPS(){ openCamera(); }
+
+// Upload photo to Supabase Storage, return public URL
+async function uploadPhoto(blob, vendoName){
+  try {
+    const ext='jpg';
+    const vendoId=currentItem&&currentItem.vendo_id?currentItem.vendo_id:null;
+    const safe=(vendoName||'vendo').replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
+    const path=vendoId?`vendo-profiles/vendo_${vendoId}.jpg`:`${todayPHT()}/${safe}_${Date.now()}.${ext}`;
+    const res=await fetch(`${SB}/storage/v1/object/harvest-photos/${path}`,{
+      method:'POST',
+      headers:{...HDR,'Content-Type':'image/jpeg','x-upsert':'true'},
+      body:blob
+    });
+    if(!res.ok){ console.warn('Photo upload failed:',await res.text()); return null; }
+    return `${SB}/storage/v1/object/public/harvest-photos/${path}`;
+  } catch(e){ console.warn('Photo upload error:',e.message); return null; }
+}
+
+// ── CALC NET ──────────────────────────────────────────────────────
+function openCollectionSheet(){
+  document.getElementById('collection-sheet-overlay').classList.add('show');
+}
+function closeCollectionSheet(){
+  document.getElementById('collection-sheet-overlay').classList.remove('show');
+  calcNet();
+}
+
+function adjustPack(type, delta){
+  if(type==='p1k'){
+    _p1k = Math.max(0, (_p1k||0) + delta);
+    document.getElementById('p1k-count').textContent = _p1k;
+    document.getElementById('p1k-total').textContent = '₱'+fmt(_p1k*1000);
+  } else {
+    _p300 = Math.max(0, (_p300||0) + delta);
+    document.getElementById('p300-count').textContent = _p300;
+    document.getElementById('p300-total').textContent = '₱'+fmt(_p300*300);
+  }
+  calcNet();
+}
+
+function calcNet(){
+  const p1k = _p1k||0;
+  const p300 = _p300||0;
+  const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
+  const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+  const breakdownTotal = (p1k*1000) + (p300*300) + bugi + cash;
+  const free = parseFloat(document.getElementById('coin-free').value)||0;
+  const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+  const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
+  const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
+  const spawn = net * 0.75;
+  const customer = net * 0.25;
+
+  // Write to hidden coin-total so submitHarvest() works
+  document.getElementById('coin-total').value = breakdownTotal;
+
+  // Update hero
+  document.getElementById('sum-net').textContent = '₱'+fmt(net);
+  document.getElementById('sum-spawn').textContent = '₱'+fmt(spawn);
+  document.getElementById('sum-customer').textContent = '₱'+fmt(customer);
+
+  // Update sheet live totals
+  const sbt = document.getElementById('sheet-breakdown-total');
+  const sn = document.getElementById('sheet-net');
+  const ss = document.getElementById('sheet-spawn');
+  if(sbt) sbt.textContent = '₱'+fmt(breakdownTotal);
+  if(sn) sn.textContent = '₱'+fmt(net);
+  if(ss) ss.textContent = '₱'+fmt(spawn);
+
+  // Update Enter Collection button label
+  const btn = document.querySelector('button[onclick="openCollectionSheet()"]');
+  if(btn && breakdownTotal > 0){
+    btn.textContent = '📦 Breakdown: ₱'+fmt(breakdownTotal)+' · Edit';
+    btn.style.background = '#EEF4FD';
+  } else if(btn){
+    btn.textContent = '📦 Enter Collection Details';
+    btn.style.background = '';
+  }
+
+  // Breakdown match badge
+  const badge = document.getElementById('breakdown-match-badge');
+  if(badge && spawn > 0){
+    badge.style.display = 'block';
+    badge.textContent = '📦 Breakdown: ₱'+fmt(breakdownTotal);
+  } else if(badge){
+    badge.style.display = 'none';
+  }
+}
+
+// ── SUBMIT HARVEST ────────────────────────────────────────────────
+// TG NAME SEARCH
+var _tgNamesCache=null;
+function _loadTgNames(cb){
+  if(_tgNamesCache){cb(_tgNamesCache);return;}
+  fetch(SB+'/rest/v1/transactions?select=vendo&is_skipped=eq.false&limit=50000',{headers:HDR})
+    .then(r=>r.json()).then(rows=>{
+      var s=new Set(rows.map(function(x){return x.vendo;}).filter(Boolean));
+      _tgNamesCache=[...s].sort();
+      cb(_tgNamesCache);
+    }).catch(function(){_tgNamesCache=[];cb([]);});
+}
+function tgFuzzy(sheet,list){
+  var a=(sheet||'').toLowerCase().replace(/[^a-z0-9 ]/g,'');
+  return list.map(function(t){
+    var b=t.toLowerCase().replace(/[^a-z0-9 ]/g,''),score=0;
+    if(a===b)score=100;
+    else if(b.indexOf(a)>=0||a.indexOf(b)>=0)score=80;
+    else{var aw=a.split(' '),bw=b.split(' ');var c=aw.filter(function(w){return w.length>2&&bw.some(function(bww){return bww.indexOf(w)>=0||w.indexOf(bww)>=0;});});if(c.length)score=Math.min(70,30+c.length*20);}
+    return{t:t,score:score};
+  }).filter(function(x){return x.score>0;}).sort(function(a,b){return b.score-a.score;}).slice(0,8);
+}
+function tgSearch(q){
+  _loadTgNames(function(names){
+    var dd=document.getElementById('tg-dropdown');
+    var items=q&&q.length>1?names.filter(function(t){return t.toLowerCase().indexOf(q.toLowerCase())>=0;}).slice(0,10).map(function(t){return{t:t,score:0};}):(currentItem?tgFuzzy(currentItem.sheet_name||'',names):[]);
+    if(!items.length){dd.style.display='none';return;}
+    dd.innerHTML=items.map(function(x){return '<div onclick="tgSelect(\''+x.t.replace(/'/g,"\\'")+'\')" style="padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid #f3f4f6;color:#1e293b;">'+x.t+(x.score?'<span style="float:right;font-size:10px;color:#9ca3af">'+x.score+'%</span>':'')+'</div>';}).join('');
+    dd.style.display='block';
+  });
+}
+function tgSelect(val){
+  var inp=document.getElementById('tg-name-inp');if(inp)inp.value=val;
+  var dd=document.getElementById('tg-dropdown');if(dd)dd.style.display='none';
+}
+function tgConfirmSuggested(){
+  var sug=document.getElementById('tg-suggest-val');
+  var inp=document.getElementById('tg-name-inp');
+  if(sug&&inp)inp.value=sug.textContent;
+  var s=document.getElementById('tg-suggested');if(s)s.style.display='none';
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest||(!e.target.closest('#tg-name-inp')&&!e.target.closest('#tg-dropdown'))){
+    var dd=document.getElementById('tg-dropdown');if(dd)dd.style.display='none';
+  }
+});
+
+async function submitHarvest(){
+  const btns=document.querySelectorAll('.action-row .btn-green');
+  btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
+
+  const total=parseFloat(document.getElementById('coin-total').value)||0;
+  const free=parseFloat(document.getElementById('coin-free').value)||0;
+  const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
+  const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
+  if(!total){toast('Enter total coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
+
+  const net=Math.max(0,total-free-saloy-freeCoins);
+  const spawn=net*0.75,customer=net*0.25;
+  const now=new Date().toISOString(),today=now.split('T')[0];
+  const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
+  const ownerRealName=(document.getElementById('owner-real-name-inp')||{}).value||'';
+  const contact=(document.getElementById('contact-inp').value||'').trim();
+  const tgNameEdit=(document.getElementById('tg-name-inp')||{}).value||'';
+  const vlanEdit=parseInt((document.getElementById('vlan-inp')||{}).value||'0')||null;
+  const note=(document.getElementById('note-inp').value||'').trim()||null;
+  const prevHadGPS=!!(currentItem.lat&&currentItem.lng);
+  const prevHadContact=!!currentItem.contact_number;
+
+  // Update harvest_group_items
+  const itemUpdate={
+    status:'harvested',
+    coins_total:total,coins_free:free+freeCoins,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
+    net_collectible:net,spawn_share:spawn,customer_share:customer,
+    harvested_at:now,collector_note:note,
+  };
+  if(ownerName) itemUpdate.sheet_name=ownerName;
+  if(contact) itemUpdate.contact_number=contact;
+  if(ownerRealName) itemUpdate.owner_name=ownerRealName;
+  if(capturedGPS){itemUpdate.lat_captured=capturedGPS.lat;itemUpdate.lng_captured=capturedGPS.lng;}
+
+  // Update vendos table
+  const vendoUpdate={last_harvest_date:today};
+  if(capturedGPS){vendoUpdate.lat=capturedGPS.lat;vendoUpdate.lng=capturedGPS.lng;}
+  if(ownerName&&ownerName!==currentItem.sheet_name) vendoUpdate.sheet_name=ownerName;
+  if(contact) vendoUpdate.contact_number=contact;
+  if(ownerRealName) vendoUpdate.owner_name=ownerRealName;
+  const addressSubmit=(document.getElementById('address-inp')?.value||'').trim();
+  if(addressSubmit) vendoUpdate.address=addressSubmit;
+
+  // Also save to harvests table
+  const harvestRecord={
+    harvest_date:today,harvest_window_start:currentItem.last_harvest_date||'2026-04-09',
+    harvest_window_end:now,harvested_at:now,
+    vendo_id:currentItem.vendo_id||null,
+    vendo_name:ownerName||currentItem.sheet_name||currentItem.tg_name||'',
+    tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
+    area:currentItem.area||null,collector:selectedCollector,
+    route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
+    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
+    net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
+  };
+
+  // Upload photo if captured
+  let photoUrl = null;
+  if(capturedPhotoBlob && navigator.onLine){
+    const vendoLabel = ownerName||currentItem.sheet_name||currentItem.tg_name||'vendo';
+    photoUrl = await uploadPhoto(capturedPhotoBlob, vendoLabel);
+    if(photoUrl){ itemUpdate.photo_url=photoUrl; harvestRecord.photo_url=photoUrl; vendoUpdate.photo_url=photoUrl; }
+  }
+
+  try {
+    if(navigator.onLine){
+      // Update group item
+      await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(itemUpdate)});
+      // Save harvest record
+      await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(harvestRecord)});
+      // Update vendo
+      if(currentItem.vendo_id) await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(vendoUpdate)});
+      // Update group run counts
+      if(currentGroupRun){
+        const gpsAdded=capturedGPS&&!prevHadGPS?1:0;
+        const contactAdded=contact&&!prevHadContact?1:0;
+        await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${currentGroupRun.id}`,{
+          method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
+          body:JSON.stringify({
+            harvested_count:currentGroupRun.harvested_count+1,
+            gps_added:(currentGroupRun.gps_added||0)+gpsAdded,
+            contacts_added:(currentGroupRun.contacts_added||0)+contactAdded,
+            total_net:(parseFloat(currentGroupRun.total_net)||0)+net
+          })
+        });
+        currentGroupRun.harvested_count++;
+        if(gpsAdded) currentGroupRun.gps_added=(currentGroupRun.gps_added||0)+1;
+        if(contactAdded) currentGroupRun.contacts_added=(currentGroupRun.contacts_added||0)+1;
+        currentGroupRun.total_net=(parseFloat(currentGroupRun.total_net)||0)+net;
+      }
+    } else {
+      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,ts:Date.now()});
+      localStorage.setItem('hq',JSON.stringify(offlineQueue));
+      toast('⚡ Saved offline',3000);
+    }
+
+    // Update in-memory
+    Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today});
+    if(capturedGPS){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
+    if(ownerName) currentItems[currentItemIdx].sheet_name=ownerName;
+    if(contact) currentItems[currentItemIdx].contact_number=contact;
+    if(ownerRealName) currentItems[currentItemIdx].owner_name=ownerRealName;
+
+    syncLog.unshift({name:ownerName||currentItem.sheet_name||'?',net,ts:Date.now(),status:navigator.onLine?'synced':'queued'});
+    if(syncLog.length>100) syncLog=syncLog.slice(0,100);
+    localStorage.setItem('hs',JSON.stringify(syncLog));
+    localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
+    _histCache=null; // Invalidate history cache
+    // Invalidate group cache so next open fetches fresh last_harvest_date
+    if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
+
+    // Rebuild dashboard caches so Vendos tab + overview reflect this harvest immediately
+    if(navigator.onLine){
+      const _cHdr = { 'x-cache-secret': 'spawn-cache-2026', apikey: SB.includes('cviraq') ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwNDI0MzYsImV4cCI6MjA1ODYxODQzNn0.jLOKxStPP8S1wRlXBiHY4RO9JFBFMsLPqGKEgGdxjqs' : '' };
+      fetch(`${SB}/functions/v1/write-vendos-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
+      fetch(`${SB}/functions/v1/write-dashboard-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
+    }
+
+    btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
+    toast(navigator.onLine?'✅ Saved!':'⚡ Saved offline');
+    setTimeout(()=>backToRoute(),900);
+  } catch(e){
+    toast('❌ '+e.message,4000);
+    btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
+  }
+}
+
+// ── SKIP ─────────────────────────────────────────────────────────
+function toggleSkip(){
+  const sf=document.getElementById('skip-form');
+  sf.style.display=sf.style.display==='none'?'':'none';
+  if(sf.style.display!=='none') document.getElementById('skip-note').focus();
+}
+async function submitSkip(){
+  const note=document.getElementById('skip-note').value.trim();
+  if(!note){toast('Enter a reason');document.getElementById('skip-note').focus();return;}
+  const data={status:'skipped',collector_note:note};
+  try {
+    if(navigator.onLine&&currentItem.id){
+      await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(data)});
+      if(currentGroupRun) await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${currentGroupRun.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({skipped_count:(currentGroupRun.skipped_count||0)+1})});
+      if(currentGroupRun) currentGroupRun.skipped_count=(currentGroupRun.skipped_count||0)+1;
+    } else {
+      offlineQueue.push({type:'skip',itemId:currentItem.id,data,groupRunId:currentGroupRun?.id,ts:Date.now()});
+      localStorage.setItem('hq',JSON.stringify(offlineQueue));
+    }
+    Object.assign(currentItems[currentItemIdx],data);
+    localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
+    toast('⏸ Marked as skipped');
+    setTimeout(()=>backToRoute(),900);
+  } catch(e){toast('❌ '+e.message,4000);}
+}
+function backToRoute(){renderVendoList();showScreen('screen-route');}
+
+// ── FINISH / GATE ─────────────────────────────────────────────────
+function checkFinish(){
+  const untouched=currentItems.filter(i=>i.status==='pending');
+  showScreen('screen-gate');
+  if(untouched.length){
+    document.getElementById('gate-blocked-view').style.display='';
+    document.getElementById('gate-done-view').style.display='none';
+    document.getElementById('gate-remaining-count').textContent=untouched.length;
+    document.getElementById('gate-blocked-list').innerHTML=untouched.slice(0,20).map(item=>
+      `<div class="gate-blocked-item" onclick="openItemFromGate(${item._origIdx})">
+        <span style="font-size:16px">🔴</span>
+        <div><div style="font-size:13px;font-weight:700">${item.sheet_name||item.tg_name||'Unknown'}</div>
+        <div style="font-size:11px;color:var(--muted)">${item.area||'—'}${item.address?' · '+item.address:''}</div></div>
+        <span style="margin-left:auto;color:var(--muted)">›</span>
+      </div>`
+    ).join('')+(untouched.length>20?`<div style="font-size:11px;color:var(--muted);padding:8px 0;text-align:center">+${untouched.length-20} more</div>`:'');
+  } else {
+    showGateDone();
+  }
+}
+function openItemFromGate(idx){showScreen('screen-route');setTimeout(()=>openItem(idx),100);}
+
+function showGateDone(){
+  document.getElementById('gate-blocked-view').style.display='none';
+  document.getElementById('gate-done-view').style.display='';
+  const g=currentGroupDef;
+  document.getElementById('gate-group-name').textContent=(g?(g.group_label||g.group_id||'Group'):'Group')+' complete!';
+  document.getElementById('gate-sub').textContent='Every vendo has been recorded. Group run complete!';
+  const run=currentGroupRun||{};
+  document.getElementById('gate-stats').innerHTML=`
+    <div class="gate-stat"><div class="gate-stat-val" style="color:var(--green)">${run.harvested_count||0}</div><div class="gate-stat-lbl">Harvested</div></div>
+    <div class="gate-stat"><div class="gate-stat-val" style="color:var(--amber)">${run.skipped_count||0}</div><div class="gate-stat-lbl">Skipped</div></div>
+    <div class="gate-stat"><div class="gate-stat-val" style="color:var(--blue)">${run.gps_added||0}</div><div class="gate-stat-lbl">GPS added</div></div>
+    <div class="gate-stat"><div class="gate-stat-val" style="color:var(--green)">₱${Math.round((parseFloat(run.total_net)||0)/1000)}k</div><div class="gate-stat-lbl">Net total</div></div>`;
+
+  // Determine next group
+  nextGroupDef=null; // no auto-unlock in permanent group mode
+  document.getElementById('unlock-btn').textContent=nextGroupDef?`🔓 Complete & unlock ${nextGroupDef.label}`:'🏁 Complete group (final)';
+}
+
+async function completeGroupAndUnlock(){
+  const btn=document.getElementById('unlock-btn');
+  btn.disabled=true; btn.textContent='Saving…';
+  try {
+    if(navigator.onLine&&currentGroupRun){
+      await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${currentGroupRun.id}`,{
+        method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify({status:'completed',completed_at:new Date().toISOString()})
+      });
+    }
+    // Clear cached items
+    localStorage.removeItem('cached_items_'+(currentGroupRun?.id||''));
+    localStorage.removeItem('harvest_session');
+
+    // Show receipt
+    showReceipt();
+  } catch(e){
+    toast('❌ '+e.message,4000); btn.disabled=false; btn.textContent='🔓 Complete & unlock';
+  }
+}
+
+// ── RECEIPT ───────────────────────────────────────────────────────
+function showReceipt(){
+  const run=currentGroupRun||{},g=currentGroupDef;
+  document.getElementById('receipt-sub').textContent=`${g?(g.group_label||g.group_id||''):''}  · ${selectedCollector}`;
+  document.getElementById('receipt-stats').innerHTML=`
+    <div class="stat-box"><div class="stat-val" style="color:var(--green)">${run.harvested_count||0}</div><div class="stat-lbl">Harvested</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:var(--amber)">${run.skipped_count||0}</div><div class="stat-lbl">Skipped</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:var(--blue)">${run.gps_added||0}</div><div class="stat-lbl">GPS added</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:var(--teal)">${run.contacts_added||0}</div><div class="stat-lbl">Contacts added</div></div>
+    <div class="stat-box" style="grid-column:1/-1;background:var(--green-light)"><div class="stat-val" style="color:var(--green);font-size:26px">₱${fmt(run.total_net||0)}</div><div class="stat-lbl">Total net collectible</div></div>`;
+
+  const nextCard=document.getElementById('next-group-card');
+  if(nextGroupDef){
+    nextCard.style.display='';
+    document.getElementById('next-group-name').textContent=nextGroupDef.label+' — '+nextGroupDef.vendos+' vendos';
+  } else {
+    nextCard.style.display='none';
+  }
+  showScreen('screen-receipt');
+}
+function startNextGroup(){
+  if(nextGroupDef) startGroup(nextGroupDef.id);
+  else showAreasScreen();
+}
+function hardReset(){
+  // Clear ALL harvest-related localStorage
+  const keysToRemove = Object.keys(localStorage).filter(k=>
+    k.startsWith('harvest_') || k.startsWith('cached_') || k==='hq' || k==='hs'
+  );
+  keysToRemove.forEach(k=>localStorage.removeItem(k));
+  localStorage.setItem('harvest_app_version', APP_VERSION);
+  // Clear SW cache and re-register on reload
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
+    });
+    caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))));
+  }
+  toast('✅ App reset — reloading…', 2000);
+  setTimeout(()=>location.reload(true), 2000);
+}
+
+function forceClearSession(){
+  ['harvest_session','harvest_last_group','harvest_last_code']
+    .forEach(k=>localStorage.removeItem(k));
+  Object.keys(localStorage).filter(k=>k.startsWith('cached_items_'))
+    .forEach(k=>localStorage.removeItem(k));
+  document.getElementById('resume-banner').style.display='none';
+  document.getElementById('group-section') && (document.getElementById('group-section').style.display='none');
+  selectedCollector=null; selectedTeam=null; _pinSelectedName=null;
+  showScreen('screen-collector');
+  toast('✅ Session cleared');
+}
+
+function topbarBack(){
+  const active=document.querySelector('.screen.active');
+  if(!active)return;
+  const id=active.id;
+  if(id==='screen-areas'){pinLogout();}
+  else if(id==='screen-groups'){showAreasScreen();}
+  else if(id==='screen-route'){showAreasScreen();}
+  else if(id==='screen-areas'){pinLogout();}
+  else if(id==='screen-form'){backToRoute();}
+  else if(id==='screen-gate'){showScreen('screen-route');}
+  else if(id==='screen-receipt'){showAreasScreen();}
+  else{showAreasScreen();}
+}
+
+function goHome(){
+  currentGroupRun=null;currentGroupDef=null;currentItems=[];currentItem=null;
+  capturedGPS=null;nextGroupDef=null;
+  if(selectedCollector){
+    showAreasScreen();
+  } else {
+    selectedTeam=null;
+    document.getElementById('topbar-sub').textContent='Collector PWA';
+    showScreen('screen-collector');
+  }
+}
+
+// ── OFFLINE FLUSH ─────────────────────────────────────────────────
+async function flushQueue(){
+  if(!offlineQueue.length) return;
+  const remaining=[],groupUpdates={};
+  for(const q of offlineQueue){
+    try {
+      if(q.type==='harvest'){
+        await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate)});
+        await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.harvestRecord)});
+        if(q.vendoId) await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
+        if(q.groupRunId){
+          if(!groupUpdates[q.groupRunId]) groupUpdates[q.groupRunId]={harvested_count:0,skipped_count:0,gps_added:0,contacts_added:0,total_net:0};
+          groupUpdates[q.groupRunId].harvested_count++;
+          if(q.vendoUpdate&&(q.vendoUpdate.lat||q.vendoUpdate.lng)) groupUpdates[q.groupRunId].gps_added++;
+          if(q.vendoUpdate&&q.vendoUpdate.contact_number) groupUpdates[q.groupRunId].contacts_added++;
+          groupUpdates[q.groupRunId].total_net+=parseFloat(q.harvestRecord.net_collectible||0);
+        }
+      } else if(q.type==='vendoUpdate'&&q.vendoId){
+        await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
+      } else if(q.type==='skip'&&q.itemId){
+        await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
+        if(q.groupRunId){
+          if(!groupUpdates[q.groupRunId]) groupUpdates[q.groupRunId]={harvested_count:0,skipped_count:0,gps_added:0,contacts_added:0,total_net:0};
+          groupUpdates[q.groupRunId].skipped_count++;
+        }
+      }
+      syncLog=syncLog.map(s=>s.ts===q.ts?{...s,status:'synced'}:s);
+    } catch(e) {
+      remaining.push(q);
+      pwLog('error', 'Sync failed: '+q.type, {item_id:q.itemId, error:e.message});
+    }
+  }
+  for(const [runId,delta] of Object.entries(groupUpdates)){
+    try {
+      const rg=await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${runId}&select=harvested_count,skipped_count,gps_added,contacts_added,total_net`,{headers:HDR});
+      const rows=await rg.json();
+      if(rows.length){const c=rows[0];
+        await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${runId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({
+          harvested_count:(c.harvested_count||0)+(delta.harvested_count||0),
+          skipped_count:(c.skipped_count||0)+(delta.skipped_count||0),
+          gps_added:(c.gps_added||0)+(delta.gps_added||0),
+          contacts_added:(c.contacts_added||0)+(delta.contacts_added||0),
+          total_net:(parseFloat(c.total_net)||0)+delta.total_net
+        })});
+      }
+    } catch(e){ console.warn('Group stats sync:',e.message); }
+  }
+  offlineQueue=remaining;
+  localStorage.setItem('hq',JSON.stringify(offlineQueue));
+  localStorage.setItem('hs',JSON.stringify(syncLog));
+  if(!remaining.length){
+    toast('✅ All synced!',3000);
+    pwLog('sync','All items synced',{count:offlineQueue.length+remaining.length});
+  }
+}
+
+function clearResume(){
+  localStorage.removeItem('harvest_session');
+  document.getElementById('resume-banner').style.display='none';
+}
+
+// ── PWA LOGGER — writes to pwa_logs table ─────────────────────────
+async function pwLog(type, message, details){
+  try {
+    const device = navigator.userAgent.slice(0,80);
+    await fetch(`${SB}/rest/v1/pwa_logs`, {
+      method:'POST',
+      headers:{...HDR,'Prefer':'return=minimal'},
+      body:JSON.stringify({
+        collector: selectedCollector||'unknown',
+        device,
+        log_type: type,
+        message,
+        details: details||null
+      })
+    });
+  } catch(e){} // never block on logging
+}
+
+// ── HARVEST HISTORY ───────────────────────────────────────────────
+let _histCache = null;
+async function renderHistory(){
+  const listEl=document.getElementById('vendo-list');
+  const q=(document.getElementById('hist-search-inp')?.value||'').toLowerCase().trim();
+
+  // Load from DB if not cached
+  if(!_histCache){
+    listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading history…</span></div>';
+    try{
+      const r=await fetch(
+        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&order=harvest_date.desc&limit=500`,
+        {headers:HDR}
+      );
+      _histCache=await r.json();
+    }catch(e){
+      listEl.innerHTML='<div class="loading"><span style="color:var(--red)">❌ Could not load history</span></div>';
+      return;
+    }
+  }
+
+  // Filter
+  let rows=_histCache||[];
+  if(q) rows=rows.filter(r=>{
+    const name=(r.sheet_name||r.vendo_name||'').toLowerCase();
+    const date=r.harvest_date||'';
+    const dateFormatted=date?new Date(date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}).toLowerCase():'';
+    return name.includes(q)||date.includes(q)||dateFormatted.includes(q)||
+           (r.collector_note||'').toLowerCase().includes(q);
+  });
+
+  if(!rows.length){
+    listEl.innerHTML=`<div class="loading"><span>${q?'No results for "'+q+'"':'No harvest history yet.'}</span></div>`;
+    return;
+  }
+
+  // Group by harvest_date
+  const byDate={};
+  rows.forEach(r=>{
+    const d=r.harvest_date||'Unknown';
+    if(!byDate[d]) byDate[d]=[];
+    byDate[d].push(r);
+  });
+
+  let html='';
+  Object.entries(byDate).forEach(([date,items])=>{
+    const dateLabel=date!=='Unknown'
+      ?new Date(date+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'long',day:'numeric',year:'numeric'})
+      :'Unknown date';
+    const dayNet=items.reduce((s,i)=>s+parseFloat(i.net_collectible||0),0);
+    const daySpawn=items.reduce((s,i)=>s+parseFloat(i.spawn_share||0),0);
+
+    html+=`<div style="margin-bottom:4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px 4px">
+        <div style="font-size:12px;font-weight:700;color:var(--blue)">${dateLabel}</div>
+        <div style="text-align:right">
+          <div style="font-size:11px;font-weight:700;color:var(--green)">₱${fmt(dayNet)} net</div>
+          <div style="font-size:9px;color:var(--muted)">${items.length} vendo${items.length>1?'s':''}</div>
+        </div>
+      </div>`;
+
+    items.forEach(item=>{
+      const net=parseFloat(item.net_collectible||0);
+      const note=item.collector_note?`<div style="font-size:10px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-top:3px">📝 ${item.collector_note}</div>`:'';
+      html+=`<div class="vendo-item done" style="cursor:default;margin-bottom:6px">
+        <div class="vi-seq" style="background:#86efac;color:#15803d;font-size:10px">✓</div>
+        <div class="vi-left" style="flex:1">
+          <div class="vi-name">${item.sheet_name||item.vendo_name||'—'}</div>
+          <div class="vi-sub">${item.area||'—'}${item.route_code?' · '+item.route_code:''}</div>
+          ${note}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:13px;font-weight:700;color:#15803d">₱${fmt(net)}</div>
+          <div style="font-size:9px;color:var(--muted)">Spawn ₱${fmt(parseFloat(item.spawn_share||0))}</div>
+        </div>
+      </div>`;
+    });
+
+    html+=`<div style="display:flex;justify-content:flex-end;padding:4px 4px 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+      <div style="font-size:11px;color:var(--muted)">Day total: <b style="color:var(--blue)">₱${fmt(dayNet)}</b> · Spawn: <b style="color:var(--green)">₱${fmt(daySpawn)}</b></div>
+    </div>`;
+    html+='</div>';
+  });
+
+  listEl.innerHTML=html;
+}
+
+// ── HOME SCREEN ───────────────────────────────────────────────────────
+async function showHomeScreen(){
+  showScreen('screen-home');
+  document.getElementById('home-collector-name').textContent = selectedCollector||'—';
+  // Show bottom nav on home too
+  document.getElementById('bottom-nav').classList.add('show');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const hb = document.getElementById('bnav-home');
+  if(hb) hb.classList.add('active');
+  loadHomeStats();
+}
+
+async function loadHomeStats(){
+  const collectorName = selectedCollector||sessionStorage.getItem('col_name')||'';
+  if(!collectorName) return;
+
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const todayLabel = now.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
+  const QUOTA = 25000;
+
+  document.getElementById('home-today-label').textContent = todayLabel;
+
+  try {
+    // TODAY's harvests for this collector
+    const rToday = await fetch(
+      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
+      {headers:HDR}
+    );
+    const todayHarvests = await rToday.json();
+
+    const todayGross = Array.isArray(todayHarvests) ? todayHarvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0) : 0;
+    const todaySpawn = todayGross * 0.75;
+    const todayVendos = Array.isArray(todayHarvests) ? todayHarvests.length : 0;
+
+    // Update hero
+    document.getElementById('home-today-spawn').textContent = '₱'+fmt(todaySpawn);
+
+    // Quota bar
+    const pct = Math.min(100, (todaySpawn / QUOTA) * 100);
+    const bar = document.getElementById('home-quota-bar');
+    const remaining = Math.max(0, QUOTA - todaySpawn);
+    bar.style.width = pct+'%';
+    // Color: green when >=100%, yellow when >=70%, white otherwise
+    bar.style.background = pct >= 100 ? '#4ade80' : pct >= 70 ? '#fde68a' : '#fff';
+    document.getElementById('home-quota-pct').textContent = Math.round(pct)+'%';
+    document.getElementById('home-quota-label').textContent = pct >= 100 ? '🎉 Quota reached!' : 'Daily Quota ₱'+fmt(QUOTA);
+    document.getElementById('home-quota-remaining').textContent = pct >= 100 ? 'Great work today!' : '₱'+fmt(remaining)+' to go';
+
+    // Quick stats
+    document.getElementById('home-vendos-today').textContent = todayVendos;
+    document.getElementById('home-gross-today').textContent = '₱'+fmt(todayGross);
+
+    // Month total spawn share
+    const rMonth = await fetch(
+      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
+      {headers:HDR}
+    );
+    const monthHarvests = await rMonth.json();
+    const monthGross = Array.isArray(monthHarvests) ? monthHarvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0) : 0;
+    document.getElementById('home-spawn-month').textContent = '₱'+fmt(monthGross*0.75);
+
+    // Recent harvests
+    const listEl = document.getElementById('home-recent-list');
+    if(!Array.isArray(todayHarvests)||!todayHarvests.length){
+      listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div>';
+    } else {
+      listEl.innerHTML = todayHarvests.slice(0,8).map(h=>{
+        const name = h.sheet_name||h.tg_name||'Unknown';
+        const time = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
+        const spawn = (parseFloat(h.coins_total)||0)*0.75;
+        return `<div class="home-recent-row">
+          <div>
+            <div class="home-recent-name">${name}</div>
+            <div class="home-recent-meta">${time}</div>
+          </div>
+          <div class="home-recent-amt">₱${fmt(spawn)}</div>
+        </div>`;
+      }).join('');
+    }
+  } catch(e){
+    document.getElementById('home-today-spawn').textContent = '₱—';
+    document.getElementById('home-quota-remaining').textContent = 'offline';
+    document.getElementById('home-recent-list').innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Could not load — check connection</div>';
+  }
+}
+
+function bnavSwitchFromHome(tab){
+  // Show bottom nav and switch tab
+  document.getElementById('bottom-nav').classList.add('show');
+  bnavSwitch(tab);
+}
+
+function showHomeHistory(){
+  // For now go to areas — history tab can be built later
+  toast('History coming soon');
+}
+
+// Override bnavSwitch 'home' to go to home screen
+const _origBnavSwitch = window.bnavSwitch;
+window.bnavSwitch = function(tab){
+  if(tab==='home'){
+    document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+    const hb=document.getElementById('bnav-home');
+    if(hb) hb.classList.add('active');
+    // If already logged in, go to home screen
+    if(selectedCollector){
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+      document.getElementById('screen-home').classList.add('active');
+      window.scrollTo(0,0);
+    }
+    return;
+  }
+  if(_origBnavSwitch) _origBnavSwitch(tab);
+};
+
+// Also update showScreen to show bnav on home screen
+const _origShowScreen2 = window.showScreen;
+window.showScreen = function(id){
+  if(_origShowScreen2) _origShowScreen2(id);
+  if(id==='screen-home'){
+    document.getElementById('bottom-nav').classList.add('show');
+    document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+    const hb=document.getElementById('bnav-home');
+    if(hb) hb.classList.add('active');
+  }
+};
+
+let _p1k = 0, _p300 = 0;
+let _sessionId = null;
+let _expenses = [];
+let _packData = {}; // keyed by vendo_id
+
+// Reset pack form when opening a new vendo
+const _origShowForm = typeof showForm === 'function' ? showForm : null;
+function resetPackForm(){
+  _p1k = 0; _p300 = 0;
+  document.getElementById('p1k-count').textContent = '0';
+  document.getElementById('p300-count').textContent = '0';
+  document.getElementById('p1k-total').textContent = '₱0';
+  document.getElementById('p300-total').textContent = '₱0';
+  const b = document.getElementById('bugi-amount');
+  const c = document.getElementById('cash-amount');
+  if(b) b.value = '';
+  if(c) c.value = '';
+}
+
+// ── CONFIRM POPUP BEFORE SUBMIT ──────────────────────────────────────
+// Intercept submit button to show confirmation sheet
+(function patchSubmit(){
+  const origSubmit = window.submitHarvest;
+  window.submitHarvestConfirm = function(){
+    const breakdownTotal = parseFloat(document.getElementById('coin-total').value)||0;
+    if(!breakdownTotal){ toast('Enter collection details first'); openCollectionSheet(); return; }
+
+    const p1k = _p1k||0, p300 = _p300||0;
+    const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
+    const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+    const free = parseFloat(document.getElementById('coin-free').value)||0;
+    const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+    const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
+    const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
+    const spawn = net * 0.75;
+
+    const vname = document.getElementById('form-vname').textContent||'Vendo';
+    document.getElementById('confirm-vname').textContent = vname;
+    document.getElementById('confirm-total').textContent = '₱'+fmt(spawn);
+    document.getElementById('confirm-p1k').textContent = p1k > 0 ? p1k+' pack(s) = ₱'+fmt(p1k*1000) : '—';
+    document.getElementById('confirm-p300').textContent = p300 > 0 ? p300+' pack(s) = ₱'+fmt(p300*300) : '—';
+    document.getElementById('confirm-bugi').textContent = bugi > 0 ? '₱'+fmt(bugi) : '—';
+    document.getElementById('confirm-cash').textContent = cash > 0 ? '₱'+fmt(cash) : '—';
+    const cnTotal = document.getElementById('confirm-net-total');
+    const cnBreak = document.getElementById('confirm-breakdown-total');
+    if(cnTotal) cnTotal.textContent = '₱'+fmt(net);
+    if(cnBreak) cnBreak.textContent = '₱'+fmt(breakdownTotal);
+    document.getElementById('harvest-confirm-overlay').classList.add('show');
+  };
+  window.confirmAndSubmit = function(){
+    document.getElementById('harvest-confirm-overlay').classList.remove('show');
+    // Save pack data for this vendo
+    if(currentItem){
+      _packData[currentItem.vendo_id||currentItem.id] = {
+        packs_1k: _p1k||0,
+        packs_300: _p300||0,
+        bugi_amount: parseFloat(document.getElementById('bugi-amount').value)||0,
+        cash_amount: parseFloat(document.getElementById('cash-amount').value)||0,
+        vendo_name: document.getElementById('form-vname').textContent,
+        vendo_code: currentItem.vendo_code||''
+      };
+    }
+    if(origSubmit) origSubmit();
+  };
+  window.closeHarvestConfirm = function(){
+    document.getElementById('harvest-confirm-overlay').classList.remove('show');
+  };
+})();
+
+// ── BOTTOM NAV ───────────────────────────────────────────────────────
+function bnavSwitch(tab){
+  const screens = ['screen-expense','screen-eod'];
+  // Only show bottom nav on route/form/expense/eod screens
+  document.querySelectorAll('.bnav-item').forEach(el=>el.classList.remove('active'));
+  const btn = document.getElementById('bnav-'+tab);
+  if(btn) btn.classList.add('active');
+  if(tab==='home'){
+    // Go back to route screen
+    screens.forEach(s=>{ const el=document.getElementById(s); if(el) el.classList.remove('active'); });
+    const route = document.getElementById('screen-route');
+    if(route) route.classList.add('active');
+  } else if(tab==='expense'){
+    screens.forEach(s=>{ const el=document.getElementById(s); if(el) el.classList.remove('active'); });
+    document.getElementById('screen-expense').classList.add('active');
+    renderExpenses();
+  } else if(tab==='eod'){
+    screens.forEach(s=>{ const el=document.getElementById(s); if(el) el.classList.remove('active'); });
+    document.getElementById('screen-eod').classList.add('active');
+    renderEod();
+  }
+}
+
+function showBottomNav(){ document.getElementById('bottom-nav').classList.add('show'); }
+function hideBottomNav(){ document.getElementById('bottom-nav').classList.remove('show'); }
+
+// Hook into existing showScreen / screen transitions
+const _origShowScreen = window.showScreen;
+window.showScreen = function(id){
+  if(_origShowScreen) _origShowScreen(id);
+  const navScreens = ['screen-route','screen-form','screen-gate'];
+  if(navScreens.includes(id)){ showBottomNav(); }
+  else if(['screen-collector','screen-areas','screen-groups'].includes(id)){ hideBottomNav(); }
+};
+
+// ── EXPENSES ─────────────────────────────────────────────────────────
+let _selCat = null;
+let _expPhotoBlob = null;
+
+function showAddExpense(){
+  _selCat = null; _expPhotoBlob = null;
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('exp-amount-inp').value = '';
+  document.getElementById('exp-desc-inp').value = '';
+  document.getElementById('exp-photo-status').textContent = 'No photo';
+  document.getElementById('exp-photo-preview').style.display = 'none';
+  document.getElementById('exp-others-field').style.display = 'none';
+  document.getElementById('add-exp-overlay').classList.add('show');
+}
+
+function closeAddExpense(){
+  document.getElementById('add-exp-overlay').classList.remove('show');
+  // Stop camera if running
+  const vid = document.getElementById('exp-video');
+  if(vid.srcObject){ vid.srcObject.getTracks().forEach(t=>t.stop()); vid.srcObject=null; vid.style.display='none'; }
+}
+
+function selectCat(cat){
+  _selCat = cat;
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('cat-'+cat).classList.add('selected');
+  document.getElementById('exp-others-field').style.display = cat==='others' ? 'block' : 'none';
+}
+
+async function captureExpenseReceipt(){
+  const vid = document.getElementById('exp-video');
+  const canvas = document.getElementById('exp-canvas');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    vid.srcObject = stream;
+    vid.style.display = 'block';
+    vid.onloadedmetadata = () => {
+      // Show capture button in status
+      document.getElementById('exp-photo-status').innerHTML = '<button onclick="snapExpensePhoto()" style="background:#2B7BE8;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">📸 Snap</button>';
+    };
+  } catch(e){ toast('Camera not available'); }
+}
+
+function snapExpensePhoto(){
+  const vid = document.getElementById('exp-video');
+  const canvas = document.getElementById('exp-canvas');
+  canvas.width = Math.min(vid.videoWidth, 960);
+  canvas.height = Math.round(vid.videoHeight * (canvas.width/vid.videoWidth));
+  canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(blob=>{
+    _expPhotoBlob = blob;
+    const preview = document.getElementById('exp-photo-preview');
+    preview.src = URL.createObjectURL(blob);
+    preview.style.display = 'block';
+    document.getElementById('exp-photo-status').textContent = '✅ Photo captured';
+    vid.srcObject.getTracks().forEach(t=>t.stop());
+    vid.srcObject = null;
+    vid.style.display = 'none';
+  }, 'image/jpeg', 0.85);
+}
+
+async function saveExpense(){
+  if(!_selCat){ toast('Select a category'); return; }
+  const amt = parseFloat(document.getElementById('exp-amount-inp').value)||0;
+  if(!amt){ toast('Enter amount'); return; }
+  const desc = _selCat==='others' ? (document.getElementById('exp-desc-inp').value||'Others') : _selCat.replace('_',' ');
+  let photoUrl = null;
+  if(_expPhotoBlob){
+    try {
+      const fname = `expenses/exp_${Date.now()}.jpg`;
+      const ab = await _expPhotoBlob.arrayBuffer();
+      const res = await fetch(`${_SB}/storage/v1/object/harvest-photos/${fname}`,{
+        method:'POST', headers:{...HDR,'Content-Type':'image/jpeg','x-upsert':'true'}, body:ab
+      });
+      if(res.ok) photoUrl = `${_SB}/storage/v1/object/public/harvest-photos/${fname}`;
+    } catch(e){ console.warn('Photo upload failed',e); }
+  }
+  const expense = { category:_selCat, description:desc, amount:amt, receipt_photo_url:photoUrl, created_at:new Date().toISOString() };
+  _expenses.push(expense);
+  // Update badge
+  const badge = document.getElementById('exp-badge');
+  badge.textContent = _expenses.length;
+  badge.style.display = 'block';
+  closeAddExpense();
+  renderExpenses();
+  toast('Expense added ₱'+fmt(amt));
+}
+
+function renderExpenses(){
+  const list = document.getElementById('expense-list');
+  const catIcons = {fuel:'⛽',meals:'🍱',repair:'🔧',coin_wrapper:'📦',padlock:'🔒',others:'📝'};
+  const catColors = {fuel:'#FFF3E0',meals:'#E8F5E9',repair:'#EDE7F6',coin_wrapper:'#E3F2FD',padlock:'#FCE4EC',others:'#F3E5F5'};
+  const total = _expenses.reduce((s,e)=>s+e.amount,0);
+  document.getElementById('exp-total-display').textContent = '₱'+fmt(total);
+  document.getElementById('exp-count-display').textContent = _expenses.length+' entr'+ (_expenses.length===1?'y':'ies');
+  if(!_expenses.length){
+    list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">No expenses yet</div>';
+    return;
+  }
+  list.innerHTML = _expenses.map((e,i)=>`
+    <div class="expense-item">
+      <div class="exp-icon" style="background:${catColors[e.category]||'#f3f4f6'}">${catIcons[e.category]||'📝'}</div>
+      <div class="exp-left">
+        <div class="exp-cat">${e.category.replace('_',' ')}</div>
+        <div class="exp-desc">${e.description}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="exp-amount">₱${fmt(e.amount)}</div>
+        <button onclick="removeExpense(${i})" style="font-size:10px;color:var(--muted);background:none;border:none;cursor:pointer;margin-top:4px">Remove</button>
+      </div>
+      ${e.receipt_photo_url?`<img class="exp-photo" src="${e.receipt_photo_url}" onclick="window.open('${e.receipt_photo_url}')">` : (e._previewUrl?`<img class="exp-photo" src="${e._previewUrl}">`:'')}
+    </div>
+  `).join('');
+}
+
+function removeExpense(i){
+  _expenses.splice(i,1);
+  const badge = document.getElementById('exp-badge');
+  badge.textContent = _expenses.length;
+  badge.style.display = _expenses.length ? 'block' : 'none';
+  renderExpenses();
+}
+
+// ── END OF DAY ────────────────────────────────────────────────────────
+let _eodPin = '';
+
+function renderEod(){
+  const harvested = Object.values(_packData);
+  const ready = harvested.length > 0;
+  document.getElementById('eod-not-ready').style.display = ready ? 'none' : 'block';
+  document.getElementById('eod-content').style.display = ready ? 'block' : 'none';
+  if(!ready) return;
+
+  const totalP1k = harvested.reduce((s,v)=>s+v.packs_1k,0);
+  const totalP300 = harvested.reduce((s,v)=>s+v.packs_300,0);
+  const totalBugi = harvested.reduce((s,v)=>s+v.bugi_amount,0);
+  const totalCash = harvested.reduce((s,v)=>s+v.cash_amount,0);
+  const gross = (totalP1k*1000)+(totalP300*300)+totalBugi+totalCash;
+  const totalExp = _expenses.reduce((s,e)=>s+e.amount,0);
+  const net = gross - totalExp;
+  const today = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  document.getElementById('eod-net-display').textContent = '₱'+fmt(net);
+  document.getElementById('eod-date-display').textContent = today;
+  document.getElementById('eod-vendos-count').textContent = harvested.length;
+  document.getElementById('eod-gross-display').textContent = '₱'+fmt(gross);
+  document.getElementById('eod-exp-display').textContent = '₱'+fmt(totalExp);
+  document.getElementById('eod-packs1k').textContent = totalP1k+' pack(s) = ₱'+fmt(totalP1k*1000);
+  document.getElementById('eod-packs300').textContent = totalP300+' pack(s) = ₱'+fmt(totalP300*300);
+  document.getElementById('eod-bugi').textContent = '₱'+fmt(totalBugi);
+  document.getElementById('eod-cash').textContent = '₱'+fmt(totalCash);
+
+  // Per vendo list
+  document.getElementById('eod-vendo-list').innerHTML = harvested.map(v=>`
+    <div class="eod-vendo-row">
+      <div>
+        ${v.vendo_code?`<span class="eod-code">${v.vendo_code}</span> `:''}<span style="font-size:13px;font-weight:600">${v.vendo_name||'—'}</span>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">
+          ${v.packs_1k?v.packs_1k+'×₱1k ':''}${v.packs_300?v.packs_300+'×₱300 ':''}${v.bugi_amount?'Bugi:₱'+fmt(v.bugi_amount)+' ':''}${v.cash_amount?'Cash:₱'+fmt(v.cash_amount):''}
+        </div>
+      </div>
+      <div style="font-size:15px;font-weight:700;color:#2B7BE8">₱${fmt((v.packs_1k*1000)+(v.packs_300*300)+v.bugi_amount+v.cash_amount)}</div>
+    </div>
+  `).join('');
+
+  // Expense list in EOD
+  const catIcons = {fuel:'⛽',meals:'🍱',repair:'🔧',coin_wrapper:'📦',padlock:'🔒',others:'📝'};
+  document.getElementById('eod-expense-list').innerHTML = _expenses.length
+    ? _expenses.map(e=>`<div class="eod-vendo-row"><span>${catIcons[e.category]||'📝'} ${e.description}</span><span style="color:var(--red)">−₱${fmt(e.amount)}</span></div>`).join('')
+    : '<div style="font-size:13px;color:var(--muted);padding:8px 0">No expenses</div>';
+  document.getElementById('eod-total-exp').textContent = '₱'+fmt(totalExp);
+}
+
+function showEodPin(){
+  _eodPin = '';
+  updateEodPinDisplay();
+  document.getElementById('eod-pin-error').style.display = 'none';
+  document.getElementById('eod-pin-overlay').classList.add('show');
+}
+function closeEodPin(){ document.getElementById('eod-pin-overlay').classList.remove('show'); }
+
+function eodPinKey(k){
+  if(_eodPin.length >= 4) return;
+  _eodPin += k;
+  updateEodPinDisplay();
+  if(_eodPin.length === 4) setTimeout(checkEodPin, 150);
+}
+function eodPinDel(){
+  _eodPin = _eodPin.slice(0,-1);
+  updateEodPinDisplay();
+}
+function updateEodPinDisplay(){
+  for(let i=0;i<4;i++){
+    document.getElementById('epd-'+i).classList.toggle('filled', i < _eodPin.length);
+  }
+}
+async function checkEodPin(){
+  const stored = sessionStorage.getItem('col_pin')||'0000';
+  if(_eodPin !== stored){
+    document.getElementById('eod-pin-error').style.display = 'block';
+    _eodPin = '';
+    updateEodPinDisplay();
+    return;
+  }
+  closeEodPin();
+  await submitEodSession();
+}
+
+async function submitEodSession(){
+  const harvested = Object.values(_packData);
+  const totalP1k = harvested.reduce((s,v)=>s+v.packs_1k,0);
+  const totalP300 = harvested.reduce((s,v)=>s+v.packs_300,0);
+  const totalBugi = harvested.reduce((s,v)=>s+v.bugi_amount,0);
+  const totalCash = harvested.reduce((s,v)=>s+v.cash_amount,0);
+  const gross = (totalP1k*1000)+(totalP300*300)+totalBugi+totalCash;
+  const totalExp = _expenses.reduce((s,e)=>s+e.amount,0);
+  const net = gross - totalExp;
+  const collectorId = parseInt(sessionStorage.getItem('col_id'))||null;
+  const collectorName = sessionStorage.getItem('col_name')||'';
+
+  try {
+    toast('Submitting…');
+    // Create session record
+    const sessRes = await fetch(`${_SB}/rest/v1/collector_sessions`,{
+      method:'POST',
+      headers:{...HDR,'Prefer':'return=representation'},
+      body: JSON.stringify({
+        collector_id: collectorId,
+        collector_name: collectorName,
+        session_date: new Date().toISOString().split('T')[0],
+        total_packs_1k: totalP1k,
+        total_packs_300: totalP300,
+        total_bugi: totalBugi,
+        total_cash: totalCash,
+        total_gross: gross,
+        total_expenses: totalExp,
+        net_collectible: net,
+        vendos_harvested: harvested.length,
+        status: 'submitted',
+        submitted_at: new Date().toISOString()
+      })
+    });
+    const sessData = await sessRes.json();
+    const sessId = Array.isArray(sessData) ? sessData[0]?.id : sessData?.id;
+
+    if(sessId){
+      // Save pack data per vendo
+      if(harvested.length){
+        await fetch(`${_SB}/rest/v1/collector_packs`,{
+          method:'POST', headers:{...HDR},
+          body: JSON.stringify(harvested.map(v=>({
+            session_id: sessId,
+            vendo_name: v.vendo_name,
+            vendo_code: v.vendo_code,
+            packs_1k: v.packs_1k,
+            packs_300: v.packs_300,
+            bugi_amount: v.bugi_amount,
+            cash_amount: v.cash_amount
+          })))
+        });
+      }
+      // Save expenses
+      if(_expenses.length){
+        await fetch(`${_SB}/rest/v1/collector_expenses`,{
+          method:'POST', headers:{...HDR},
+          body: JSON.stringify(_expenses.map(e=>({
+            session_id: sessId,
+            category: e.category,
+            description: e.description,
+            amount: e.amount,
+            receipt_photo_url: e.receipt_photo_url||null
+          })))
+        });
+      }
+    }
+    toast('✅ End of Day submitted!');
+    setTimeout(()=>{ _packData={}; _expenses=[]; renderEod(); },1500);
+  } catch(e){
+    toast('Error submitting. Try again.');
+    console.error(e);
+  }
+}
+</script>
+
+<div class="screen" id="screen-expense">
+  <div class="hero-balance" id="exp-hero">
+    <div class="hero-label">Total Expenses Today</div>
+    <div class="hero-amount" id="exp-total-display">₱0</div>
+    <div class="hero-sub" id="exp-count-display">0 entries</div>
+  </div>
+
+  <div id="expense-list"></div>
+
+  <button class="btn btn-blue" onclick="showAddExpense()" style="margin-bottom:12px">+ Add Expense</button>
+
+  <!-- Add Expense Sheet -->
+  <div class="confirm-overlay" id="add-exp-overlay">
+    <div class="confirm-sheet">
+      <div class="confirm-handle"></div>
+      <div class="confirm-title">Add Expense</div>
+      <div class="confirm-sub">Select category and enter amount</div>
+
+      <div class="cat-grid">
+        <button class="cat-btn" onclick="selectCat('fuel')" id="cat-fuel">
+          <div class="cat-btn-icon">⛽</div>
+          <div class="cat-btn-label">Fuel</div>
+        </button>
+        <button class="cat-btn" onclick="selectCat('meals')" id="cat-meals">
+          <div class="cat-btn-icon">🍱</div>
+          <div class="cat-btn-label">Meals</div>
+        </button>
+        <button class="cat-btn" onclick="selectCat('repair')" id="cat-repair">
+          <div class="cat-btn-icon">🔧</div>
+          <div class="cat-btn-label">Repair</div>
+        </button>
+        <button class="cat-btn" onclick="selectCat('coin_wrapper')" id="cat-coin_wrapper">
+          <div class="cat-btn-icon">📦</div>
+          <div class="cat-btn-label">Coin Wrapper</div>
+        </button>
+        <button class="cat-btn" onclick="selectCat('padlock')" id="cat-padlock">
+          <div class="cat-btn-icon">🔒</div>
+          <div class="cat-btn-label">Padlock</div>
+        </button>
+        <button class="cat-btn" onclick="selectCat('others')" id="cat-others">
+          <div class="cat-btn-icon">📝</div>
+          <div class="cat-btn-label">Others</div>
+        </button>
+      </div>
+
+      <div class="field" id="exp-others-field" style="display:none">
+        <label>Description</label>
+        <input type="text" class="text-input" id="exp-desc-inp" placeholder="e.g. parking fee">
+      </div>
+
+      <div class="field">
+        <label>Amount (₱)</label>
+        <input type="number" class="coin-input" id="exp-amount-inp" placeholder="0" min="0" inputmode="numeric" step="1">
+      </div>
+
+      <div class="field">
+        <label>Receipt Photo (optional)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-outline btn-sm" onclick="captureExpenseReceipt()">📷 Take Photo</button>
+          <span id="exp-photo-status" style="font-size:12px;color:var(--muted)">No photo</span>
+        </div>
+        <canvas id="exp-canvas" style="display:none"></canvas>
+        <video id="exp-video" style="display:none;width:100%;border-radius:8px;margin-top:8px" autoplay playsinline></video>
+        <img id="exp-photo-preview" style="display:none;width:100%;border-radius:8px;margin-top:8px;max-height:200px;object-fit:cover">
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeAddExpense()">Cancel</button>
+        <button class="btn btn-blue btn-sm" style="flex:2" onclick="saveExpense()">Save Expense</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-eod">
+  <div id="eod-not-ready" style="text-align:center;padding:40px 16px">
+    <div style="font-size:48px;margin-bottom:12px">📋</div>
+    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">End of Day</div>
+    <div style="font-size:13px;color:var(--muted)">Complete your harvest first to unlock End of Day summary</div>
+  </div>
+
+  <div id="eod-content" style="display:none">
+    <div class="hero-balance">
+      <div class="hero-label">Net Collectible</div>
+      <div class="hero-amount" id="eod-net-display">₱0</div>
+      <div class="hero-sub" id="eod-date-display">—</div>
+    </div>
+
+    <div class="quick-stats">
+      <div class="qs-box">
+        <div class="qs-val" id="eod-vendos-count">0</div>
+        <div class="qs-lbl">Vendos</div>
+      </div>
+      <div class="qs-box">
+        <div class="qs-val" id="eod-gross-display">₱0</div>
+        <div class="qs-lbl">Gross</div>
+      </div>
+      <div class="qs-box">
+        <div class="qs-val" id="eod-exp-display">₱0</div>
+        <div class="qs-lbl">Expenses</div>
+      </div>
+    </div>
+
+    <!-- Pack Summary -->
+    <div class="card">
+      <div class="card-title">📦 Pack Breakdown</div>
+      <div class="eod-summary-row">
+        <span class="eod-lbl">₱1,000 packs</span>
+        <span class="eod-val" id="eod-packs1k">0 packs = ₱0</span>
+      </div>
+      <div class="eod-summary-row">
+        <span class="eod-lbl">₱300 packs</span>
+        <span class="eod-val" id="eod-packs300">0 packs = ₱0</span>
+      </div>
+      <div class="eod-summary-row">
+        <span class="eod-lbl">Total Bugi</span>
+        <span class="eod-val" id="eod-bugi">₱0</span>
+      </div>
+      <div class="eod-summary-row">
+        <span class="eod-lbl">Total Cash</span>
+        <span class="eod-val" id="eod-cash">₱0</span>
+      </div>
+    </div>
+
+    <!-- Per Vendo -->
+    <div class="card">
+      <div class="card-title">📍 Per Vendo</div>
+      <div id="eod-vendo-list"></div>
+    </div>
+
+    <!-- Expenses -->
+    <div class="card" id="eod-exp-card">
+      <div class="card-title">🧾 Expenses</div>
+      <div id="eod-expense-list"></div>
+      <div class="eod-summary-row">
+        <span class="eod-lbl" style="font-weight:700">Total Expenses</span>
+        <span class="eod-val" style="color:var(--red)" id="eod-total-exp">₱0</span>
+      </div>
+    </div>
+
+    <!-- Submit Button -->
+    <button class="btn btn-blue" id="eod-submit-btn" onclick="showEodPin()">
+      ✅ Submit & End Day
+    </button>
+  </div>
+
+  <!-- PIN confirmation overlay -->
+  <div class="confirm-overlay" id="eod-pin-overlay">
+    <div class="confirm-sheet">
+      <div class="confirm-handle"></div>
+      <div style="text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">🔐</div>
+        <div class="confirm-title" style="text-align:center">Confirm with PIN</div>
+        <div class="confirm-sub" style="text-align:center">Enter your PIN to submit End of Day</div>
+        <div class="pin-display">
+          <div class="pin-dot" id="epd-0"></div>
+          <div class="pin-dot" id="epd-1"></div>
+          <div class="pin-dot" id="epd-2"></div>
+          <div class="pin-dot" id="epd-3"></div>
+        </div>
+        <div id="eod-pin-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none">Incorrect PIN</div>
+        <div class="pin-pad">
+          <button class="pin-key" onclick="eodPinKey('1')">1</button>
+          <button class="pin-key" onclick="eodPinKey('2')">2</button>
+          <button class="pin-key" onclick="eodPinKey('3')">3</button>
+          <button class="pin-key" onclick="eodPinKey('4')">4</button>
+          <button class="pin-key" onclick="eodPinKey('5')">5</button>
+          <button class="pin-key" onclick="eodPinKey('6')">6</button>
+          <button class="pin-key" onclick="eodPinKey('7')">7</button>
+          <button class="pin-key" onclick="eodPinKey('8')">8</button>
+          <button class="pin-key" onclick="eodPinKey('9')">9</button>
+          <button class="pin-key empty"></button>
+          <button class="pin-key" onclick="eodPinKey('0')">0</button>
+          <button class="pin-key del" onclick="eodPinDel()">⌫</button>
+        </div>
+      </div>
+      <button class="btn btn-gray" style="margin-top:12px" onclick="closeEodPin()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-nav" id="bottom-nav">
+  <button class="bnav-item active" id="bnav-home" onclick="bnavSwitch('home')">
+    <div class="bnav-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a1 1 0 01-1 1H5a1 1 0 01-1-1z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    </div>
+    <div class="bnav-label">Home</div>
+  </button>
+  <button class="bnav-item" id="bnav-expense" onclick="bnavSwitch('expense')">
+    <div class="bnav-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+    </div>
+    <div class="bnav-label">Expenses</div>
+    <div class="bnav-badge" id="exp-badge" style="display:none">0</div>
+  </button>
+  <button class="bnav-item" id="bnav-eod" onclick="bnavSwitch('eod')">
+    <div class="bnav-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/><path d="M16 17l1.5 1.5L20 16"/></svg>
+    </div>
+    <div class="bnav-label">End of Day</div>
+  </button>
+</div>
+
+  <!-- Collection Sheet Popup -->
+  <div class="confirm-overlay" id="collection-sheet-overlay">
+    <div class="confirm-sheet" style="max-height:90vh;overflow-y:auto">
+      <div class="confirm-handle"></div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:4px">Collection Details</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Enter packs, bugi, cash and deductions</div>
+
+      <!-- Packs -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Packs</div>
+      <div class="pack-row" style="background:#f7f8fc">
+        <div class="pack-denom">₱1,000 packs <span>Each = ₱1,000</span></div>
+        <div class="pack-counter">
+          <button class="pack-btn" onclick="adjustPack('p1k',-1)">−</button>
+          <span class="pack-count" id="p1k-count">0</span>
+          <button class="pack-btn" onclick="adjustPack('p1k',1)">+</button>
+        </div>
+        <span class="pack-total" id="p1k-total">₱0</span>
+      </div>
+      <div class="pack-row" style="background:#f7f8fc">
+        <div class="pack-denom">₱300 packs <span>Each = ₱300</span></div>
+        <div class="pack-counter">
+          <button class="pack-btn" onclick="adjustPack('p300',-1)">−</button>
+          <span class="pack-count" id="p300-count">0</span>
+          <button class="pack-btn" onclick="adjustPack('p300',1)">+</button>
+        </div>
+        <span class="pack-total" id="p300-total">₱0</span>
+      </div>
+
+      <!-- Bugi & Cash -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:12px">Loose / Cash</div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label">Bugi <span>Loose coins/small bills</span></div>
+        <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="coin-label">Cash <span>Paper bills</span></div>
+        <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+
+      <!-- Deductions -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Deductions</div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label" style="color:var(--red)">Free time <span>Promo / free sessions</span></div>
+        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label" style="color:var(--orange)">Saloy <span>Refund to customer</span></div>
+        <input type="number" class="coin-input saloy" id="coin-saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="coin-label" style="color:var(--red)">Free time coins <span>Additional free coins</span></div>
+        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+
+      <!-- Live total in sheet -->
+      <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Breakdown total</span>
+          <span style="font-size:14px;font-weight:700" id="sheet-breakdown-total">₱0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Net (after deductions)</span>
+          <span style="font-size:14px;font-weight:700" id="sheet-net">₱0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid #BDD5F8">
+          <span style="font-size:13px;font-weight:700;color:#2B7BE8">Spawn Share (75%)</span>
+          <span style="font-size:16px;font-weight:700;color:#2B7BE8" id="sheet-spawn">₱0</span>
+        </div>
+      </div>
+
+      <button class="btn btn-blue" onclick="closeCollectionSheet()">✓ Done</button>
+    </div>
+  </div>
+
+  <!-- Harvest Confirm Sheet -->
+  <div class="confirm-overlay" id="harvest-confirm-overlay">
+    <div class="confirm-sheet">
+      <div class="confirm-handle"></div>
+      <div class="confirm-title" id="confirm-vname">Confirm Harvest</div>
+      <div class="confirm-sub">Spawn Share — bring this to office</div>
+      <div class="confirm-amount" id="confirm-total">₱0</div>
+      <div class="confirm-breakdown">
+        <div class="cb-row"><span class="cb-lbl">₱1,000 packs</span><span class="cb-val" id="confirm-p1k">—</span></div>
+        <div class="cb-row"><span class="cb-lbl">₱300 packs</span><span class="cb-val" id="confirm-p300">—</span></div>
+        <div class="cb-row"><span class="cb-lbl">Bugi</span><span class="cb-val" id="confirm-bugi">—</span></div>
+        <div class="cb-row"><span class="cb-lbl">Cash</span><span class="cb-val" id="confirm-cash">—</span></div>
+        <div class="cb-row" style="border-top:1px solid #BDD5F8;margin-top:6px;padding-top:6px">
+          <span class="cb-lbl">Collection Total</span><span class="cb-val" id="confirm-breakdown-total">₱0</span>
+        </div>
+        <div class="cb-row">
+          <span class="cb-lbl">Net (after deductions)</span><span class="cb-val" id="confirm-net-total">₱0</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeHarvestConfirm()">Edit</button>
+        <button class="btn btn-green btn-sm" style="flex:2" onclick="confirmAndSubmit()">✅ Confirm & Save</button>
+      </div>
+    </div>
+  </div>
+
+<div class="picker-sheet" id="area-picker-sheet">
+  <div class="picker-body">
+    <div class="picker-header">
+      <div class="picker-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="picker-title">Select Area</div>
+        <button onclick="closeAreaPicker()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div class="picker-scroll" id="area-picker-list"></div>
+  </div>
+</div>
+<div class="picker-sheet" id="group-picker-sheet">
+  <div class="picker-body">
+    <div class="picker-header">
+      <div class="picker-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <button onclick="closeGroupPicker();document.getElementById('area-picker-sheet').classList.add('show')" style="background:none;border:none;font-size:13px;color:#2B7BE8;cursor:pointer;font-family:inherit;font-weight:600;padding:0;margin-bottom:4px">← Back</button>
+          <div class="picker-title" id="group-picker-title">Select Group</div>
+        </div>
+        <button onclick="closeGroupPicker()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div class="picker-scroll" id="group-picker-list"></div>
+  </div>
+</div>
+</body>
+</html>
