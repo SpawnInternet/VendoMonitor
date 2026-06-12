@@ -658,36 +658,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <canvas id="camera-canvas" style="display:none"></canvas>
   </div>
 
-  <!-- Coins - Original required fields + optional breakdown -->
+  <!-- Coins Section - Reorganized: Spawn Share is hero -->
+  <!-- Step 1: Pack Breakdown (what you collected) -->
   <div class="card">
-    <div class="card-title">💰 Coins Collected</div>
-    <div style="margin-bottom:12px">
-      <div class="coin-label">Total coins <span>All coins in box</span></div>
-      <input type="number" class="coin-input" id="coin-total" step="1" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()">
-    </div>
-    <div style="margin-bottom:12px">
-      <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div style="margin-bottom:12px">
-      <div class="coin-label" style="color:var(--orange)">− Saloy <span style="color:var(--muted)">Refund returned to customer</span></div>
-      <input type="number" class="coin-input saloy" id="coin-saloy" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div style="margin-bottom:4px">
-      <div class="coin-label" style="color:var(--red)">− Free time coins <span style="color:var(--muted)">Additional free coins deducted</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div style="background:#f1f5f9;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:11px;color:var(--muted);line-height:1.7">
-      Net = Total − Free time − Saloy − Free time coins
-    </div>
-  </div>
+    <div class="card-title">📦 What did you collect?</div>
 
-  <!-- Collection Breakdown (optional) -->
-  <div class="card">
-    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-      📦 Collection Breakdown
-      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">Optional</span>
-    </div>
     <div class="pack-row">
       <div class="pack-denom">₱1,000 packs <span>Each pack = ₱1,000</span></div>
       <div class="pack-counter">
@@ -697,6 +672,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <span class="pack-total" id="p1k-total">₱0</span>
     </div>
+
     <div class="pack-row">
       <div class="pack-denom">₱300 packs <span>Each pack = ₱300</span></div>
       <div class="pack-counter">
@@ -706,32 +682,54 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <span class="pack-total" id="p300-total">₱0</span>
     </div>
+
     <div style="margin-bottom:12px">
-      <div class="coin-label" style="color:#2B7BE8">Bugi amount <span>Loose coins/bills</span></div>
-      <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric">
+      <div class="coin-label">Bugi <span>Loose coins/small bills</span></div>
+      <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
-    <div style="margin-bottom:4px">
-      <div class="coin-label" style="color:#2B7BE8">Cash amount <span>Paper bills</span></div>
-      <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric">
+    <div>
+      <div class="coin-label">Cash <span>Paper bills</span></div>
+      <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
   </div>
 
-  <div class="summary">
-    <div class="sum-row net">
-      <span class="sum-lbl">Total collected</span>
-      <span class="sum-val" id="sum-net">₱0</span>
+  <!-- Step 2: Deductions -->
+  <div class="card">
+    <div class="card-title">➖ Deductions</div>
+    <div style="margin-bottom:12px">
+      <div class="coin-label" style="color:var(--red)">Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
+      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
-    <div class="sum-row spawn">
-      <span class="sum-lbl">Spawn share (75%)</span>
-      <span class="sum-val" id="sum-spawn">₱0</span>
+    <div style="margin-bottom:12px">
+      <div class="coin-label" style="color:var(--orange)">Saloy <span style="color:var(--muted)">Refund returned to customer</span></div>
+      <input type="number" class="coin-input saloy" id="coin-saloy" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
-    <div class="sum-row customer">
-      <span class="sum-lbl">Owner share (25%)</span>
-      <span class="sum-val" id="sum-customer">₱0</span>
+    <div>
+      <div class="coin-label" style="color:var(--red)">Free time coins <span style="color:var(--muted)">Additional free coins</span></div>
+      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
-    <!-- hidden element kept for calcNet() -->
-    <span id="sum-free" style="display:none"></span>
+    <!-- hidden coin-total kept for submitHarvest() compatibility -->
+    <input type="hidden" id="coin-total" value="0">
   </div>
+
+  <!-- Spawn Share HERO — what collector brings to office -->
+  <div style="background:linear-gradient(135deg,#1557C0,#2B7BE8);border-radius:16px;padding:20px;margin-bottom:12px;color:#fff;text-align:center">
+    <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">💼 Bring to Office (Spawn Share)</div>
+    <div style="font-size:42px;font-weight:700;line-height:1" id="sum-spawn">₱0</div>
+    <div style="font-size:12px;opacity:.75;margin-top:6px">75% of net collection</div>
+    <div style="display:flex;justify-content:center;gap:24px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
+      <div style="text-align:center">
+        <div style="font-size:10px;opacity:.7;margin-bottom:2px">NET TOTAL</div>
+        <div style="font-size:16px;font-weight:700" id="sum-net">₱0</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:10px;opacity:.7;margin-bottom:2px">OWNER SHARE</div>
+        <div style="font-size:16px;font-weight:700" id="sum-customer">₱0</div>
+      </div>
+    </div>
+  </div>
+
+  <span id="sum-free" style="display:none"></span>
 
   <!-- Collector note -->
   <div class="card" style="padding:12px 14px">
@@ -749,7 +747,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="confirm-sheet">
       <div class="confirm-handle"></div>
       <div class="confirm-title" id="confirm-vname">Confirm Harvest</div>
-      <div class="confirm-sub">Double-check before saving</div>
+      <div class="confirm-sub">Spawn Share — bring this to office</div>
       <div class="confirm-amount" id="confirm-total">₱0</div>
       <div class="confirm-breakdown">
         <div class="cb-row"><span class="cb-lbl">₱1,000 packs</span><span class="cb-val" id="confirm-p1k">—</span></div>
@@ -2119,21 +2117,27 @@ function adjustPack(type, delta){
     document.getElementById('p300-count').textContent = _p300;
     document.getElementById('p300-total').textContent = '₱'+fmt(_p300*300);
   }
+  calcNet();
 }
 
 function calcNet(){
-  const total=parseFloat(document.getElementById('coin-total').value)||0;
-  const free=parseFloat(document.getElementById('coin-free').value)||0;
-  const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
-  const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
-  const totalDeductions=free+saloy+freeCoins;
-  const net=Math.max(0,total-totalDeductions);
-  const spawn=net*0.75,customer=net*0.25;
-  const sumFree=document.getElementById('sum-free');
-  if(sumFree) sumFree.textContent=totalDeductions > 0 ? '-₱'+fmt(totalDeductions) : '-₱0';
-  document.getElementById('sum-net').textContent='₱'+fmt(net);
-  document.getElementById('sum-spawn').textContent='₱'+fmt(spawn);
-  document.getElementById('sum-customer').textContent='₱'+fmt(customer);
+  const p1k = _p1k||0;
+  const p300 = _p300||0;
+  const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
+  const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+  const total = (p1k*1000) + (p300*300) + bugi + cash;
+  // Write to hidden coin-total so submitHarvest() works
+  document.getElementById('coin-total').value = total;
+  const free = parseFloat(document.getElementById('coin-free').value)||0;
+  const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+  const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
+  const net = Math.max(0, total - free - saloy - freeCoins);
+  const spawn = net * 0.75, customer = net * 0.25;
+  const sumFree = document.getElementById('sum-free');
+  if(sumFree) sumFree.textContent = '-₱'+fmt(free+saloy+freeCoins);
+  document.getElementById('sum-net').textContent = '₱'+fmt(net);
+  document.getElementById('sum-spawn').textContent = '₱'+fmt(spawn);
+  document.getElementById('sum-customer').textContent = '₱'+fmt(customer);
 }
 
 // ── SUBMIT HARVEST ────────────────────────────────────────────────
@@ -2802,11 +2806,14 @@ function resetPackForm(){
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
     const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+    const free = parseFloat(document.getElementById('coin-free').value)||0;
+    const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+    const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
+    const net = Math.max(0, total - free - saloy - freeCoins);
+    const spawn = net * 0.75;
     const vname = document.getElementById('form-vname').textContent||'Vendo';
-    // Build confirm sheet
-    const net = total;
     document.getElementById('confirm-vname').textContent = vname;
-    document.getElementById('confirm-total').textContent = '₱'+fmt(net);
+    document.getElementById('confirm-total').textContent = '₱'+fmt(spawn);
     document.getElementById('confirm-p1k').textContent = p1k > 0 ? p1k+' pack(s) = ₱'+fmt(p1k*1000) : '—';
     document.getElementById('confirm-p300').textContent = p300 > 0 ? p300+' pack(s) = ₱'+fmt(p300*300) : '—';
     document.getElementById('confirm-bugi').textContent = bugi > 0 ? '₱'+fmt(bugi) : '—';
