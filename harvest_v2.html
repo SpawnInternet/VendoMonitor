@@ -307,6 +307,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pin-key:active{background:#EEF4FD;border-color:#2B7BE8}
 .pin-key.del{font-size:16px;color:var(--muted)}
 .pin-key.empty{border:none;background:transparent;cursor:default}
+/* PICKER SHEETS */
+.picker-sheet{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:none;align-items:flex-end;justify-content:center;pointer-events:none}
+.picker-sheet.show{display:flex;pointer-events:all}
+.picker-body{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:80vh;display:flex;flex-direction:column;animation:slideUp .25s ease}
+.picker-header{padding:16px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.picker-handle{width:36px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 12px}
+.picker-title{font-size:17px;font-weight:700;color:var(--text)}
+.picker-scroll{overflow-y:auto;padding:8px 16px 24px;flex:1}
+.picker-item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer}
+.picker-item:last-child{border-bottom:none}
+.picker-item:active{background:#f7f8fc;border-radius:8px}
 </style>
 </head>
 <body>
@@ -1095,37 +1106,102 @@ function pinLogout(){
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
 async function showAreasScreen(){
-  document.getElementById('areas-collector-name').textContent=selectedCollector;
   document.getElementById('topbar-sub').textContent=selectedCollector||'Collector PWA';
-  const listEl = document.getElementById('areas-list');
+  // Show area picker as bottom sheet popup
+  const sheet = document.getElementById('area-picker-sheet');
+  const listEl = document.getElementById('area-picker-list');
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading areas…</span></div>';
-  showScreen('screen-areas');
+  sheet.classList.add('show');
 
-  const groups = await loadPermGroups();
-  const areas = getAreasFromGroups(groups);
-
-  const items = areas.map(area=>{
-    const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
-    const groupCount = areaGroups.length;
-    const meta = area.noGroups ? 'No groups yet — tap to browse vendos' :
-      groupCount===1 ? '1 group' : groupCount+' groups';
-    return {area, meta};
-  });
-  listEl.innerHTML = items.map(({area, meta})=>`<div class="group-item active-group" style="cursor:pointer" data-area="${encodeURIComponent(JSON.stringify(area))}">
-      <div class="gi-icon active" style="font-size:20px;width:44px;height:44px">${area.icon}</div>
-      <div class="gi-left">
-        <div class="gi-name">${area.label}</div>
-        <div class="gi-meta">${meta}</div>
-      </div>
-      <div class="gi-badge"><span class="pill pill-blue">▶</span></div>
-    </div>`).join('');
-  listEl.querySelectorAll('[data-area]').forEach(el=>{
-    el.addEventListener('click',()=>{
-      const area = JSON.parse(decodeURIComponent(el.dataset.area));
-      loadGroupsScreen(selectedCollector, area);
+  loadPermGroups().then(groups=>{
+    const areas = getAreasFromGroups(groups);
+    const items = areas.map(area=>{
+      const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
+      const groupCount = areaGroups.length;
+      const meta = area.noGroups ? 'Tap to browse vendos' :
+        groupCount===1 ? '1 group' : groupCount+' groups';
+      return {area, meta};
+    });
+    listEl.innerHTML = items.map(({area, meta})=>`
+      <div class="picker-item" data-area="${encodeURIComponent(JSON.stringify(area))}">
+        <div class="gi-icon active" style="font-size:20px;width:44px;height:44px;background:linear-gradient(135deg,#1557C0,#2B7BE8)">${area.icon}</div>
+        <div class="gi-left">
+          <div style="font-size:15px;font-weight:700">${area.label}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`).join('');
+    listEl.querySelectorAll('.picker-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        closeAreaPicker();
+        const area = JSON.parse(decodeURIComponent(el.dataset.area));
+        loadGroupsPopup(selectedCollector, area);
+      });
     });
   });
 }
+
+function closeAreaPicker(){
+  document.getElementById('area-picker-sheet').classList.remove('show');
+}
+
+async function loadGroupsPopup(collectorName, area){
+  const sheet = document.getElementById('group-picker-sheet');
+  const title = document.getElementById('group-picker-title');
+  const listEl = document.getElementById('group-picker-list');
+  title.textContent = area.label;
+  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
+  sheet.classList.add('show');
+
+  const groups = await loadPermGroups();
+  const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
+
+  let html = '';
+  // All vendos option
+  html += `<div class="picker-item" data-allarea="${encodeURIComponent(JSON.stringify(area))}">
+    <div class="gi-icon" style="background:#EEF4FD;font-size:20px;width:44px;height:44px">📋</div>
+    <div class="gi-left">
+      <div style="font-size:15px;font-weight:700;color:#2B7BE8">All Vendos — ${area.label}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">Browse all vendos in this area</div>
+    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>`;
+
+  if(areaGroups.length){
+    html += areaGroups.map(g=>`
+      <div class="picker-item" data-group="${encodeURIComponent(JSON.stringify(g))}">
+        <div class="gi-icon active" style="font-size:16px;width:44px;height:44px;background:linear-gradient(135deg,#1557C0,#2B7BE8)">▶</div>
+        <div class="gi-left">
+          <div style="font-size:15px;font-weight:700">${g.group_label}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.barangays||''} · ${g.total_vendos||0} vendos</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`).join('');
+  } else {
+    html += `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet for this area</div>`;
+  }
+
+  listEl.innerHTML = html;
+
+  listEl.querySelectorAll('[data-group]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      closeGroupPicker();
+      const g = JSON.parse(decodeURIComponent(el.dataset.group));
+      loadGroupsScreen(collectorName, area, g);
+    });
+  });
+  listEl.querySelectorAll('[data-allarea]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      closeGroupPicker();
+      loadGroupsScreen(collectorName, area, null);
+    });
+  });
+}
+
+function closeGroupPicker(){
+  document.getElementById('group-picker-sheet').classList.remove('show');
+}
+
 
 function areaSelect(areaJson){
   const area = JSON.parse(areaJson);
@@ -1133,7 +1209,23 @@ function areaSelect(areaJson){
 }
 
 
-async function loadGroupsScreen(collector, area){
+async function loadGroupsScreen(collector, area, preselectedGroup){
+  // If a specific group was pre-selected from popup, go straight to route
+  if(preselectedGroup){
+    showScreen('screen-route');
+    loadGroupRun(collector, area, preselectedGroup);
+    return;
+  }
+  // If null = all vendos
+  if(preselectedGroup === null){
+    showScreen('screen-groups');
+    document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
+    const listEl = document.getElementById('group-list');
+    listEl.innerHTML = '';
+    // Load all vendos directly
+    loadAllVendosForArea(collector, area);
+    return;
+  }
   showScreen('screen-groups');
   document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
   const listEl = document.getElementById('group-list');
@@ -3437,5 +3529,36 @@ async function submitEodSession(){
       </div>
     </div>
   </div>
+
+<!-- Area Picker Sheet -->
+<div class="picker-sheet" id="area-picker-sheet">
+  <div class="picker-body">
+    <div class="picker-header">
+      <div class="picker-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="picker-title">Select Area</div>
+        <button onclick="closeAreaPicker()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div class="picker-scroll" id="area-picker-list"></div>
+  </div>
+</div>
+
+<!-- Group Picker Sheet -->
+<div class="picker-sheet" id="group-picker-sheet">
+  <div class="picker-body">
+    <div class="picker-header">
+      <div class="picker-handle"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <button onclick="closeGroupPicker();document.getElementById('area-picker-sheet').classList.add('show')" style="background:none;border:none;font-size:13px;color:#2B7BE8;cursor:pointer;font-family:inherit;font-weight:600">← Back</button>
+          <div class="picker-title" id="group-picker-title">Select Group</div>
+        </div>
+        <button onclick="closeGroupPicker()" style="background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div class="picker-scroll" id="group-picker-list"></div>
+  </div>
+</div>
 </body>
 </html>
