@@ -856,6 +856,12 @@ const START_LAT=8.5912285,START_LNG=123.3539253;
 // Load all unique permanent groups from DB (deduplicated by group_id+area)
 async function loadPermGroups(forceRefresh=false){
   if(_permGroups && !forceRefresh) return _permGroups;
+  const GROUPS_CACHE_VER = '2';
+  if(localStorage.getItem('perm_groups_ver') !== GROUPS_CACHE_VER){
+    localStorage.removeItem('perm_groups');
+    localStorage.removeItem('perm_groups_ts');
+    localStorage.setItem('perm_groups_ver', GROUPS_CACHE_VER);
+  }
   const cached = localStorage.getItem('perm_groups');
   const cachedAge = parseInt(localStorage.getItem('perm_groups_ts')||'0');
   if(!forceRefresh && cached && (Date.now()-cachedAge < 6*3600*1000)){
