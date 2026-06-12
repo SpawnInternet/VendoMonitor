@@ -392,32 +392,43 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="screen" id="screen-home">
   <!-- Hero balance card -->
   <div class="hero-balance" style="margin-top:4px">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
       <div>
-        <div class="hero-label">This Month's Harvest</div>
-        <div class="hero-amount" id="home-month-total">₱0</div>
-        <div class="hero-sub" id="home-month-label">Loading…</div>
+        <div class="hero-label">Today's Spawn Share</div>
+        <div class="hero-amount" id="home-today-spawn">₱0</div>
+        <div class="hero-sub" id="home-today-label">—</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.06em">Collector</div>
         <div style="font-size:15px;font-weight:700;margin-top:2px" id="home-collector-name">—</div>
       </div>
     </div>
+    <!-- Quota progress bar -->
+    <div style="margin-bottom:4px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.8;margin-bottom:5px">
+        <span id="home-quota-label">Daily Quota</span>
+        <span id="home-quota-pct">0%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,.25);border-radius:4px;overflow:hidden">
+        <div id="home-quota-bar" style="height:100%;width:0%;background:#fff;border-radius:4px;transition:.5s ease"></div>
+      </div>
+      <div style="font-size:10px;opacity:.7;margin-top:4px;text-align:right" id="home-quota-remaining">₱25,000 to go</div>
+    </div>
   </div>
 
-  <!-- Quick stats row -->
+<!-- Quick stats row -->
   <div class="quick-stats" style="margin-bottom:16px">
     <div class="qs-box">
-      <div class="qs-val" id="home-vendos-month">0</div>
-      <div class="qs-lbl">Vendos</div>
+      <div class="qs-val" id="home-vendos-today">0</div>
+      <div class="qs-lbl">Vendos Today</div>
     </div>
     <div class="qs-box">
-      <div class="qs-val" id="home-sessions-month">0</div>
-      <div class="qs-lbl">Sessions</div>
+      <div class="qs-val" id="home-gross-today">₱0</div>
+      <div class="qs-lbl">Gross Today</div>
     </div>
     <div class="qs-box">
       <div class="qs-val" id="home-spawn-month">₱0</div>
-      <div class="qs-lbl">Spawn Share</div>
+      <div class="qs-lbl">Month Total</div>
     </div>
   </div>
 
@@ -2637,55 +2648,73 @@ async function loadHomeStats(){
   if(!collectorName) return;
 
   const now = new Date();
+  const today = now.toISOString().split('T')[0];
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const monthEnd = new Date(now.getFullYear(), now.getMonth()+1, 0).toISOString().split('T')[0];
-  const monthLabel = now.toLocaleDateString('en-PH',{month:'long',year:'numeric'});
+  const todayLabel = now.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
+  const QUOTA = 25000;
 
-  document.getElementById('home-month-label').textContent = monthLabel;
+  document.getElementById('home-today-label').textContent = todayLabel;
 
   try {
-    // Fetch this collector's sessions this month
-    const r = await fetch(
-      `${_SB}/rest/v1/collector_sessions?collector_name=eq.${encodeURIComponent(collectorName)}&session_date=gte.${monthStart}&session_date=lte.${monthEnd}&order=session_date.desc`,
+    // TODAY's harvests for this collector
+    const rToday = await fetch(
+      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
       {headers:HDR}
     );
-    const sessions = await r.json();
+    const todayHarvests = await rToday.json();
 
-    const totalGross = sessions.reduce((s,x)=>s+(parseFloat(x.total_gross)||0),0);
-    const totalVendos = sessions.reduce((s,x)=>s+(parseInt(x.vendos_harvested)||0),0);
-    const totalSpawn = totalGross * 0.75;
+    const todayGross = Array.isArray(todayHarvests) ? todayHarvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0) : 0;
+    const todaySpawn = todayGross * 0.75;
+    const todayVendos = Array.isArray(todayHarvests) ? todayHarvests.length : 0;
 
-    document.getElementById('home-month-total').textContent = '₱'+fmt(totalGross);
-    document.getElementById('home-vendos-month').textContent = totalVendos;
-    document.getElementById('home-sessions-month').textContent = sessions.length;
-    document.getElementById('home-spawn-month').textContent = '₱'+fmt(totalSpawn);
+    // Update hero
+    document.getElementById('home-today-spawn').textContent = '₱'+fmt(todaySpawn);
 
-    // Recent harvests - from harvests table
-    const rh = await fetch(
-      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&order=harvested_at.desc&limit=5`,
+    // Quota bar
+    const pct = Math.min(100, (todaySpawn / QUOTA) * 100);
+    const bar = document.getElementById('home-quota-bar');
+    const remaining = Math.max(0, QUOTA - todaySpawn);
+    bar.style.width = pct+'%';
+    // Color: green when >=100%, yellow when >=70%, white otherwise
+    bar.style.background = pct >= 100 ? '#4ade80' : pct >= 70 ? '#fde68a' : '#fff';
+    document.getElementById('home-quota-pct').textContent = Math.round(pct)+'%';
+    document.getElementById('home-quota-label').textContent = pct >= 100 ? '🎉 Quota reached!' : 'Daily Quota ₱'+fmt(QUOTA);
+    document.getElementById('home-quota-remaining').textContent = pct >= 100 ? 'Great work today!' : '₱'+fmt(remaining)+' to go';
+
+    // Quick stats
+    document.getElementById('home-vendos-today').textContent = todayVendos;
+    document.getElementById('home-gross-today').textContent = '₱'+fmt(todayGross);
+
+    // Month total spawn share
+    const rMonth = await fetch(
+      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
       {headers:HDR}
     );
-    const recent = await rh.json();
+    const monthHarvests = await rMonth.json();
+    const monthGross = Array.isArray(monthHarvests) ? monthHarvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0) : 0;
+    document.getElementById('home-spawn-month').textContent = '₱'+fmt(monthGross*0.75);
+
+    // Recent harvests
     const listEl = document.getElementById('home-recent-list');
-    if(!Array.isArray(recent)||!recent.length){
-      listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet this month</div>';
-      return;
+    if(!Array.isArray(todayHarvests)||!todayHarvests.length){
+      listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div>';
+    } else {
+      listEl.innerHTML = todayHarvests.slice(0,8).map(h=>{
+        const name = h.sheet_name||h.tg_name||'Unknown';
+        const time = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
+        const spawn = (parseFloat(h.coins_total)||0)*0.75;
+        return `<div class="home-recent-row">
+          <div>
+            <div class="home-recent-name">${name}</div>
+            <div class="home-recent-meta">${time}</div>
+          </div>
+          <div class="home-recent-amt">₱${fmt(spawn)}</div>
+        </div>`;
+      }).join('');
     }
-    listEl.innerHTML = recent.map(h=>{
-      const name = h.sheet_name||h.tg_name||'Unknown';
-      const date = h.harvested_at ? new Date(h.harvested_at).toLocaleDateString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : h.harvest_date||'—';
-      const amt = parseFloat(h.coins_total)||0;
-      return `<div class="home-recent-row">
-        <div>
-          <div class="home-recent-name">${name}</div>
-          <div class="home-recent-meta">${date}</div>
-        </div>
-        <div class="home-recent-amt">₱${fmt(amt)}</div>
-      </div>`;
-    }).join('');
   } catch(e){
-    document.getElementById('home-month-total').textContent = '₱—';
-    document.getElementById('home-month-label').textContent = monthLabel+' · offline';
+    document.getElementById('home-today-spawn').textContent = '₱—';
+    document.getElementById('home-quota-remaining').textContent = 'offline';
     document.getElementById('home-recent-list').innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Could not load — check connection</div>';
   }
 }
