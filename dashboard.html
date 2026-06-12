@@ -1812,6 +1812,25 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
   }).join('');
 }
 
+function lfFlyToCollector(collector){
+  // Find last GPS point for this collector from today's harvests
+  const items = lfItems.filter(i=>i.collector===collector && i.lat && i.lng);
+  if(!items.length){ alert('No GPS location for '+collector+' today'); return; }
+  const last = items[0]; // already ordered desc by harvested_at
+  // Switch to dashboard and fly map
+  showP('dash', document.querySelector('[data-panel="dash"]'));
+  setTimeout(()=>{
+    const mapEl = document.getElementById('dash-map');
+    if(window._dashMap){
+      _dashMap.flyTo([parseFloat(last.lat), parseFloat(last.lng)], 15, {animate:true, duration:1.2});
+      // Add a popup marker
+      L.popup().setLatLng([parseFloat(last.lat), parseFloat(last.lng)])
+        .setContent(`<b>${collector}</b><br>${last.sheet_name||''}`)
+        .openOn(_dashMap);
+    }
+  }, 400);
+}
+
 function lfRender(){ lfRenderRows(lfItems,'lf-list','lf-stats','lf-count','lf-search'); }
 function lfHistRender(){ lfRenderRows(lfHistItems,'lf-hist-list','lf-hist-stats','lf-hist-count','lf-hist-search'); }
 
@@ -2306,6 +2325,7 @@ function rcFilter(){
     if(origShowP) origShowP(panel, btn);
     if(panel==='dash') loadDashboard();
     if(panel==='harvest'){ htLoad(); lfConnect(); }
+    if(panel==='vmap-top'){ setTimeout(()=>{ if(window._vmtMap) _vmtMap.invalidateSize(); },200); }
   };
 })();
 
@@ -2380,7 +2400,7 @@ async function loadProgress(){
       const cSpawn = harvests.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
       html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
         <div style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;padding:11px 16px;display:flex;align-items:center;gap:10px;">
-          <div style="font-size:16px;font-weight:700;">👤 ${collector}</div>
+          <div style="font-size:16px;font-weight:700;cursor:pointer;" onclick="lfFlyToCollector('${collector}')" title="Click to locate on map">👤 ${collector}</div>
           <span style="background:rgba(255,255,255,.2);padding:2px 10px;border-radius:10px;font-size:11px;">${harvests.length} harvested</span>
           <div style="margin-left:auto;display:flex;gap:18px;text-align:right;">
             <div><div style="font-size:10px;opacity:.7;">Coins</div><div style="font-weight:700;">₱${Math.round(cCoins).toLocaleString()}</div></div>
