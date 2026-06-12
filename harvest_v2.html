@@ -2193,7 +2193,19 @@ async function uploadPhoto(blob, vendoName){
 }
 
 // ── CALC NET ──────────────────────────────────────────────────────
+function csheetNext(){
+  const total = parseFloat(document.getElementById('coin-total').value)||0;
+  if(!total){ toast('Enter total coins first'); return; }
+  document.getElementById('csheet-step1').style.display='none';
+  document.getElementById('csheet-step2').style.display='block';
+  // Scroll sheet to top
+  document.querySelector('#collection-sheet-overlay .confirm-sheet').scrollTop=0;
+}
+
 function openCollectionSheet(){
+  // Reset to step 1
+  document.getElementById('csheet-step1').style.display='block';
+  document.getElementById('csheet-step2').style.display='none';
   document.getElementById('collection-sheet-overlay').classList.add('show');
 }
 function closeCollectionSheet(){
@@ -2239,9 +2251,11 @@ function calcNet(){
   const sbt = document.getElementById('sheet-breakdown-total');
   const sn = document.getElementById('sheet-net');
   const ss = document.getElementById('sheet-spawn');
+  const ss2 = document.getElementById('sheet-spawn2');
   if(sbt) sbt.textContent = '₱'+fmt(breakdownTotal);
   if(sn) sn.textContent = '₱'+fmt(net);
   if(ss) ss.textContent = '₱'+fmt(spawn);
+  if(ss2) ss2.textContent = '₱'+fmt(spawn);
 
   // Update Enter Collection button label
   const btn = document.querySelector('button[onclick="openCollectionSheet()"]');
@@ -3550,75 +3564,101 @@ async function submitEodSession(){
 
   <!-- Collection Sheet Popup -->
   <div class="confirm-overlay" id="collection-sheet-overlay">
-    <div class="confirm-sheet" style="max-height:90vh;overflow-y:auto">
+    <div class="confirm-sheet" style="max-height:90vh;overflow-y:auto;padding-bottom:24px">
       <div class="confirm-handle"></div>
-      <div style="font-size:17px;font-weight:700;margin-bottom:4px">Collection Details</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Enter packs, bugi, cash and deductions</div>
 
-      <!-- Packs -->
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Packs</div>
-      <div class="pack-row" style="background:#f7f8fc">
-        <div class="pack-denom">₱1,000 packs <span>Each = ₱1,000</span></div>
-        <div class="pack-counter">
-          <button class="pack-btn" onclick="adjustPack('p1k',-1)">−</button>
-          <span class="pack-count" id="p1k-count">0</span>
-          <button class="pack-btn" onclick="adjustPack('p1k',1)">+</button>
+      <!-- Step 1: Coin totals -->
+      <div id="csheet-step1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:17px;font-weight:700">Enter Collection</div>
+          <button onclick="closeCollectionSheet()" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1">✕</button>
         </div>
-        <span class="pack-total" id="p1k-total">₱0</span>
-      </div>
-      <div class="pack-row" style="background:#f7f8fc">
-        <div class="pack-denom">₱300 packs <span>Each = ₱300</span></div>
-        <div class="pack-counter">
-          <button class="pack-btn" onclick="adjustPack('p300',-1)">−</button>
-          <span class="pack-count" id="p300-count">0</span>
-          <button class="pack-btn" onclick="adjustPack('p300',1)">+</button>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Coin count from vendo machine</div>
+
+        <div style="margin-bottom:12px">
+          <div class="coin-label">Total coins <span>All coins in box</span></div>
+          <input type="number" class="coin-input" id="coin-total" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8">
         </div>
-        <span class="pack-total" id="p300-total">₱0</span>
-      </div>
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
+          <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        </div>
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--orange)">− Saloy <span style="color:var(--muted)">Refund to customer</span></div>
+          <input type="number" class="coin-input saloy" id="coin-saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        </div>
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--red)">− Old coins <span style="color:var(--muted)">Coins from previous period</span></div>
+          <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        </div>
 
-      <!-- Bugi & Cash -->
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:12px">Loose / Cash</div>
-      <div style="margin-bottom:12px">
-        <div class="coin-label">Bugi <span>Loose coins/small bills</span></div>
-        <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-      </div>
-      <div style="margin-bottom:16px">
-        <div class="coin-label">Cash <span>Paper bills</span></div>
-        <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-      </div>
+        <!-- Live summary -->
+        <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+            <span style="color:var(--muted)">Net total</span>
+            <span style="font-weight:700" id="sheet-net">₱0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:15px;padding:6px 0 0;border-top:1px solid #BDD5F8;margin-top:6px">
+            <span style="font-weight:700;color:#2B7BE8">Spawn Share (75%)</span>
+            <span style="font-weight:700;color:#2B7BE8;font-size:18px" id="sheet-spawn">₱0</span>
+          </div>
+        </div>
 
-      <!-- Deductions -->
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Deductions</div>
-      <div style="margin-bottom:12px">
-        <div class="coin-label" style="color:var(--red)">Free time <span>Promo / free sessions</span></div>
-        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-      </div>
-      <div style="margin-bottom:12px">
-        <div class="coin-label" style="color:var(--orange)">Saloy <span>Refund to customer</span></div>
-        <input type="number" class="coin-input saloy" id="coin-saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-      </div>
-      <div style="margin-bottom:16px">
-        <div class="coin-label" style="color:var(--red)">Free time coins <span>Additional free coins</span></div>
-        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        <button class="btn btn-blue" onclick="csheetNext()" style="border-radius:12px">Next → Pack Breakdown</button>
       </div>
 
-      <!-- Live total in sheet -->
-      <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:13px;color:var(--muted)">Breakdown total</span>
-          <span style="font-size:14px;font-weight:700" id="sheet-breakdown-total">₱0</span>
+      <!-- Step 2: Pack breakdown -->
+      <div id="csheet-step2" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div>
+            <button onclick="document.getElementById('csheet-step1').style.display='block';document.getElementById('csheet-step2').style.display='none'" style="background:none;border:none;font-size:13px;color:#2B7BE8;cursor:pointer;font-family:inherit;font-weight:600;padding:0;margin-bottom:4px">← Back</button>
+            <div style="font-size:17px;font-weight:700">Pack Breakdown</div>
+          </div>
+          <button onclick="closeCollectionSheet()" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1">✕</button>
         </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-size:13px;color:var(--muted)">Net (after deductions)</span>
-          <span style="font-size:14px;font-weight:700" id="sheet-net">₱0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid #BDD5F8">
-          <span style="font-size:13px;font-weight:700;color:#2B7BE8">Spawn Share (75%)</span>
-          <span style="font-size:16px;font-weight:700;color:#2B7BE8" id="sheet-spawn">₱0</span>
-        </div>
-      </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">How is the collection packed?</div>
 
-      <button class="btn btn-blue" onclick="closeCollectionSheet()">✓ Done</button>
+        <div class="pack-row">
+          <div class="pack-denom">₱1,000 packs <span>Each = ₱1,000</span></div>
+          <div class="pack-counter">
+            <button class="pack-btn" onclick="adjustPack('p1k',-1)">−</button>
+            <span class="pack-count" id="p1k-count">0</span>
+            <button class="pack-btn" onclick="adjustPack('p1k',1)">+</button>
+          </div>
+          <span class="pack-total" id="p1k-total">₱0</span>
+        </div>
+        <div class="pack-row">
+          <div class="pack-denom">₱300 packs <span>Each = ₱300</span></div>
+          <div class="pack-counter">
+            <button class="pack-btn" onclick="adjustPack('p300',-1)">−</button>
+            <span class="pack-count" id="p300-count">0</span>
+            <button class="pack-btn" onclick="adjustPack('p300',1)">+</button>
+          </div>
+          <span class="pack-total" id="p300-total">₱0</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:#2B7BE8">Bugi <span>Loose coins/small bills</span></div>
+          <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric">
+        </div>
+        <div style="margin-bottom:16px">
+          <div class="coin-label" style="color:#2B7BE8">Cash <span>Paper bills</span></div>
+          <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric">
+        </div>
+
+        <!-- Summary -->
+        <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+            <span style="color:var(--muted)">Breakdown total</span>
+            <span style="font-weight:700" id="sheet-breakdown-total">₱0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:15px;padding:6px 0 0;border-top:1px solid #BDD5F8;margin-top:6px">
+            <span style="font-weight:700;color:#2B7BE8">Spawn Share</span>
+            <span style="font-weight:700;color:#2B7BE8;font-size:18px" id="sheet-spawn2">₱0</span>
+          </div>
+        </div>
+
+        <button class="btn btn-blue" onclick="closeCollectionSheet()" style="border-radius:12px">✓ Done — Back to Vendo</button>
+      </div>
     </div>
   </div>
 
