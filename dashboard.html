@@ -1183,7 +1183,7 @@ function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
   ['htable','livefeed','recon','settings','perf','progress','names','ledger'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
-    if(el) el.style.display = t===id ? '' : 'none';
+    if(el) el.style.display = t===id ? 'block' : 'none';
   });
   // destroy leaflet map when leaving progress tab
   const pmap = document.getElementById('progress-map');
@@ -2598,12 +2598,19 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
 var _elData=null,_elFiltered=[];
 async function elLoad(){
   if(_elData)return elFilter();
-  document.getElementById('el-loading').style.display='';
-  document.getElementById('el-table-wrap').style.display='none';
+  const loadEl=document.getElementById('el-loading');
+  const wrapEl=document.getElementById('el-table-wrap');
+  if(loadEl){loadEl.style.display='block';loadEl.textContent='Loading ledger data…';}
+  if(wrapEl) wrapEl.style.display='none';
   try{
-    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json');
-    const d=await r.json();_elData=d.records;elFilter();
-  }catch(e){document.getElementById('el-loading').textContent='Error: '+e.message;}
+    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json?t='+Date.now());
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    _elData=d.records||[];
+    elFilter();
+  }catch(e){
+    if(loadEl) loadEl.textContent='Error loading data: '+e.message;
+  }
 }
 function elFilter(){
   if(!_elData)return;
