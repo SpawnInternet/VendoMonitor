@@ -1156,10 +1156,26 @@ async function loadGroupsPopup(collectorName, area){
   const groups = await loadPermGroups();
   const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
 
-  let html = '';
-  // All vendos option
-  html += `<div class="picker-item" data-allarea="${encodeURIComponent(JSON.stringify(area))}">
-    <div class="gi-icon" style="background:#EEF4FD;font-size:20px;width:44px;height:44px">📋</div>
+  const groups = await loadPermGroups();
+  const areaGroups = groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase());
+
+  // Fetch counts
+  let countMap = {};
+  try {
+    const ids = areaGroups.map(g=>g.id).join(',');
+    if(ids){
+      const r = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids})&select=group_run_id,status`,{headers:HDR});
+      const rows = await r.json();
+      rows.forEach(row=>{
+        if(!countMap[row.group_run_id]) countMap[row.group_run_id]={total:0,harvested:0};
+        countMap[row.group_run_id].total++;
+        if(row.status==='harvested') countMap[row.group_run_id].harvested++;
+      });
+    }
+  } catch(e){}
+
+  let html = `<div class="picker-item" data-allarea="${encodeURIComponent(JSON.stringify(area))}">
+    <div class="gi-icon" style="background:#EEF4FD;font-size:20px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center">📋</div>
     <div class="gi-left">
       <div style="font-size:15px;font-weight:700;color:#2B7BE8">All Vendos — ${area.label}</div>
       <div style="font-size:11px;color:var(--muted);margin-top:2px">Browse all vendos in this area</div>
@@ -1167,33 +1183,20 @@ async function loadGroupsPopup(collectorName, area){
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
   </div>`;
 
-  if(areaGroups.length){
-    html += areaGroups.map(g=>`
-      <div class="picker-item" data-group="${encodeURIComponent(JSON.stringify(g))}">
-        <div class="gi-icon active" style="font-size:16px;width:44px;height:44px;background:linear-gradient(135deg,#1557C0,#2B7BE8)">▶</div>
-        <div class="gi-left">
-          <div style="font-size:15px;font-weight:700">${g.group_label}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.barangays||''} · ${g.total_vendos||0} vendos</div>
-        </div>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2B7BE8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>`).join('');
-  } else {
-    html += `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet for this area</div>`;
-  }
-
   listEl.innerHTML = html;
 
   listEl.querySelectorAll('[data-group]').forEach(el=>{
     el.addEventListener('click',()=>{
       closeGroupPicker();
       const g = JSON.parse(decodeURIComponent(el.dataset.group));
-      loadGroupsScreen(collectorName, area, g);
+      startGroup(g.id);
     });
   });
   listEl.querySelectorAll('[data-allarea]').forEach(el=>{
     el.addEventListener('click',()=>{
       closeGroupPicker();
-      loadGroupsScreen(collectorName, area, null);
+      const area = JSON.parse(decodeURIComponent(el.dataset.allarea));
+      startAllVendos(JSON.stringify(area));
     });
   });
 }
@@ -1210,22 +1213,18 @@ function areaSelect(areaJson){
 
 
 async function loadGroupsScreen(collector, area, preselectedGroup){
-  // If a specific group was pre-selected from popup, go straight to route
-  if(preselectedGroup){
+  // If a specific group was pre-selected from popup, start it directly
+  if(preselectedGroup && preselectedGroup !== null){
     showScreen('screen-route');
-    loadGroupRun(collector, area, preselectedGroup);
+    startGroup(preselectedGroup.id);
     return;
   }
-  // If null = all vendos
+  // null = all vendos for area
   if(preselectedGroup === null){
-    showScreen('screen-groups');
-    document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
-    const listEl = document.getElementById('group-list');
-    listEl.innerHTML = '';
-    // Load all vendos directly
-    loadAllVendosForArea(collector, area);
+    startAllVendos(JSON.stringify(area));
     return;
   }
+  // undefined = show groups screen normally
   showScreen('screen-groups');
   document.getElementById('groups-collector-label').textContent=collector+' — '+(area.label||area.id);
   const listEl = document.getElementById('group-list');
