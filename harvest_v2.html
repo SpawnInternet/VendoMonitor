@@ -2194,11 +2194,14 @@ async function uploadPhoto(blob, vendoName){
 
 // ── CALC NET ──────────────────────────────────────────────────────
 function csheetNext(){
-  const total = parseFloat(document.getElementById('coin-total').value)||0;
+  const total = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   if(!total){ toast('Enter total coins first'); return; }
+  // Update hidden field
+  const hidden = document.getElementById('coin-total');
+  if(hidden) hidden.value = total;
+  calcNet();
   document.getElementById('csheet-step1').style.display='none';
   document.getElementById('csheet-step2').style.display='block';
-  // Scroll sheet to top
   document.querySelector('#collection-sheet-overlay .confirm-sheet').scrollTop=0;
 }
 
@@ -2229,9 +2232,15 @@ function adjustPack(type, delta){
 function calcNet(){
   const p1k = _p1k||0;
   const p300 = _p300||0;
-  const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
-  const cash = parseFloat(document.getElementById('cash-amount').value)||0;
-  const breakdownTotal = (p1k*1000) + (p300*300) + bugi + cash;
+  const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
+  const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
+  // Read from sheet input (step 1) or hidden field
+  const coinInp = document.getElementById('coin-total-inp');
+  const coinTotal = parseFloat(coinInp?.value)||0;
+  // Write to hidden field for submitHarvest compatibility
+  const hiddenTotal = document.getElementById('coin-total');
+  if(hiddenTotal) hiddenTotal.value = coinTotal || ((p1k*1000)+(p300*300)+bugi+cash);
+  const breakdownTotal = coinTotal || (p1k*1000) + (p300*300) + bugi + cash;
   const free = parseFloat(document.getElementById('coin-free').value)||0;
   const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
@@ -2937,7 +2946,7 @@ function resetPackForm(){
 (function patchSubmit(){
   const origSubmit = window.submitHarvest;
   window.submitHarvestConfirm = function(){
-    const breakdownTotal = parseFloat(document.getElementById('coin-total').value)||0;
+    const breakdownTotal = parseFloat(document.getElementById('coin-total-inp')?.value) || parseFloat(document.getElementById('coin-total')?.value)||0;
     if(!breakdownTotal){ toast('Enter collection details first'); openCollectionSheet(); return; }
 
     const p1k = _p1k||0, p300 = _p300||0;
@@ -3577,7 +3586,7 @@ async function submitEodSession(){
 
         <div style="margin-bottom:12px">
           <div class="coin-label">Total coins <span>All coins in box</span></div>
-          <input type="number" class="coin-input" id="coin-total" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8">
+          <input type="number" class="coin-input" id="coin-total-inp" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8">
         </div>
         <div style="margin-bottom:12px">
           <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
