@@ -793,6 +793,68 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <!-- ── SCREEN 6: RECEIPT ──────────────────────────────── -->
+
+<!-- GCash-style per-vendo harvest receipt -->
+<div class="screen" id="screen-harvest-receipt">
+  <div style="text-align:center;padding:8px 0 16px">
+    <!-- Animated checkmark -->
+    <div style="width:72px;height:72px;border-radius:50%;background:#EEF4FD;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;border:3px solid #2B7BE8">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="#2B7BE8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="7 18 14 25 29 11"/>
+      </svg>
+    </div>
+    <div style="font-size:20px;font-weight:700;color:#1557C0">Harvest Recorded!</div>
+    <div style="font-size:13px;color:var(--muted);margin-top:4px" id="hr-vendo-name">—</div>
+  </div>
+
+  <!-- Receipt card -->
+  <div style="background:#fff;border-radius:16px;border:1px solid var(--border);overflow:hidden;margin-bottom:12px">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1557C0,#2B7BE8);padding:16px 20px;color:#fff">
+      <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em">Spawn Share</div>
+      <div style="font-size:40px;font-weight:700;line-height:1.1" id="hr-spawn-share">₱0</div>
+      <div style="font-size:12px;opacity:.75;margin-top:2px">Bring to office</div>
+    </div>
+    <!-- Details -->
+    <div style="padding:16px 20px">
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;color:var(--muted)">Total collected</span>
+        <span style="font-size:13px;font-weight:600" id="hr-total">₱0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;color:var(--muted)">Net (after deductions)</span>
+        <span style="font-size:13px;font-weight:600" id="hr-net">₱0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;color:#7c3aed">Owner share (25%)</span>
+        <span style="font-size:13px;font-weight:600;color:#7c3aed" id="hr-owner">₱0</span>
+      </div>
+      <div id="hr-breakdown-row" style="display:none;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Pack breakdown</div>
+        <div style="font-size:12px;color:var(--text)" id="hr-breakdown"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;color:var(--muted)">Collector</span>
+        <span style="font-size:13px;font-weight:600" id="hr-collector">—</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0">
+        <span style="font-size:13px;color:var(--muted)">Time</span>
+        <span style="font-size:13px;font-weight:600" id="hr-time">—</span>
+      </div>
+    </div>
+    <!-- Dashed divider like GCash receipt -->
+    <div style="border-top:2px dashed var(--border);margin:0 12px"></div>
+    <div style="padding:12px 20px;background:#F7F8FC;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:11px;color:var(--muted)">Spawn Internet · Harvest Receipt</span>
+      <span style="font-size:11px;color:var(--muted)" id="hr-date">—</span>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <button class="btn btn-blue" onclick="hrNextVendo()" style="margin-bottom:8px">→ Next Vendo</button>
+  <button class="btn btn-gray" onclick="showHomeScreen()">⌂ Home</button>
+</div>
+
 <div class="screen" id="screen-receipt">
   <div class="receipt-card">
     <div class="receipt-icon">✅</div>
@@ -2484,7 +2546,7 @@ async function submitHarvest(){
 
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
     toast(navigator.onLine?'✅ Saved!':'⚡ Saved offline');
-    setTimeout(()=>backToRoute(),900);
+    setTimeout(()=>showHarvestReceipt(),600);
   } catch(e){
     toast('❌ '+e.message,4000);
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
@@ -2823,6 +2885,52 @@ async function renderHistory(){
 
   listEl.innerHTML=html;
 }
+
+// ── HARVEST RECEIPT ────────────────────────────────────────────────
+function showHarvestReceipt(){
+  const total = parseFloat(document.getElementById('coin-total-inp')?.value) || parseFloat(document.getElementById('coin-total')?.value) || 0;
+  const free = parseFloat(document.getElementById('coin-free')?.value)||0;
+  const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
+  const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
+  const net = Math.max(0, total - free - saloy - freeCoins);
+  const spawn = net * 0.75;
+  const owner = net * 0.25;
+  const vname = document.getElementById('form-vname')?.textContent || currentItem?.sheet_name || '—';
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
+  const dateStr = now.toLocaleDateString('en-PH', {month:'short', day:'numeric', year:'numeric'});
+  const p1k = _p1k||0, p300 = _p300||0;
+  const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
+  const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
+  const packParts = [];
+  if(p1k) packParts.push(p1k+'×₱1,000');
+  if(p300) packParts.push(p300+'×₱300');
+  if(bugi) packParts.push('Bugi ₱'+fmt(bugi));
+  if(cash) packParts.push('Cash ₱'+fmt(cash));
+  if(currentItem){
+    _packData[currentItem.vendo_id||currentItem.id] = {
+      packs_1k:p1k, packs_300:p300, bugi_amount:bugi, cash_amount:cash,
+      vendo_name:vname, vendo_code:currentItem.vendo_code||'', spawn_share:spawn, harvest_time:now.toISOString()
+    };
+  }
+  document.getElementById('hr-vendo-name').textContent = vname;
+  document.getElementById('hr-spawn-share').textContent = '₱'+fmt(spawn);
+  document.getElementById('hr-total').textContent = '₱'+fmt(total);
+  document.getElementById('hr-net').textContent = '₱'+fmt(net);
+  document.getElementById('hr-owner').textContent = '₱'+fmt(owner);
+  document.getElementById('hr-collector').textContent = selectedCollector||'—';
+  document.getElementById('hr-time').textContent = timeStr;
+  document.getElementById('hr-date').textContent = dateStr;
+  const brRow=document.getElementById('hr-breakdown-row');
+  const brEl=document.getElementById('hr-breakdown');
+  if(packParts.length){ brRow.style.display='block'; brEl.textContent=packParts.join(' · '); }
+  else { brRow.style.display='none'; }
+  showScreen('screen-harvest-receipt');
+  document.getElementById('bottom-nav')?.classList.add('show');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+}
+
+function hrNextVendo(){ backToRoute(); }
 
 // ── HOME SCREEN ───────────────────────────────────────────────────────
 async function showHomeScreen(){
