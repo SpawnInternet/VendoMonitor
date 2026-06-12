@@ -658,86 +658,111 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <canvas id="camera-canvas" style="display:none"></canvas>
   </div>
 
-  <!-- Coins Section - Reorganized: Spawn Share is hero -->
-  <!-- Step 1: Pack Breakdown (what you collected) -->
-  <div class="card">
-    <div class="card-title">📦 What did you collect?</div>
+  <!-- Coins Section V3: Spawn Share hero + popup for breakdown -->
 
-    <div class="pack-row">
-      <div class="pack-denom">₱1,000 packs <span>Each pack = ₱1,000</span></div>
-      <div class="pack-counter">
-        <button class="pack-btn" onclick="adjustPack('p1k',-1)">−</button>
-        <span class="pack-count" id="p1k-count">0</span>
-        <button class="pack-btn" onclick="adjustPack('p1k',1)">+</button>
-      </div>
-      <span class="pack-total" id="p1k-total">₱0</span>
-    </div>
-
-    <div class="pack-row">
-      <div class="pack-denom">₱300 packs <span>Each pack = ₱300</span></div>
-      <div class="pack-counter">
-        <button class="pack-btn" onclick="adjustPack('p300',-1)">−</button>
-        <span class="pack-count" id="p300-count">0</span>
-        <button class="pack-btn" onclick="adjustPack('p300',1)">+</button>
-      </div>
-      <span class="pack-total" id="p300-total">₱0</span>
-    </div>
-
-    <div style="margin-bottom:12px">
-      <div class="coin-label">Bugi <span>Loose coins/small bills</span></div>
-      <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div>
-      <div class="coin-label">Cash <span>Paper bills</span></div>
-      <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-  </div>
-
-  <!-- Step 2: Deductions -->
-  <div class="card">
-    <div class="card-title">➖ Deductions</div>
-    <div style="margin-bottom:12px">
-      <div class="coin-label" style="color:var(--red)">Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div style="margin-bottom:12px">
-      <div class="coin-label" style="color:var(--orange)">Saloy <span style="color:var(--muted)">Refund returned to customer</span></div>
-      <input type="number" class="coin-input saloy" id="coin-saloy" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <div>
-      <div class="coin-label" style="color:var(--red)">Free time coins <span style="color:var(--muted)">Additional free coins</span></div>
-      <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
-    </div>
-    <!-- hidden coin-total kept for submitHarvest() compatibility -->
-    <input type="hidden" id="coin-total" value="0">
-  </div>
-
-  <!-- Spawn Share HERO — what collector brings to office -->
+  <!-- Spawn Share HERO — always visible, collector sees this first -->
   <div style="background:linear-gradient(135deg,#1557C0,#2B7BE8);border-radius:16px;padding:20px;margin-bottom:12px;color:#fff;text-align:center">
-    <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">💼 Bring to Office (Spawn Share)</div>
-    <div style="font-size:42px;font-weight:700;line-height:1" id="sum-spawn">₱0</div>
-    <div style="font-size:12px;opacity:.75;margin-top:6px">75% of net collection</div>
-    <div style="display:flex;justify-content:center;gap:24px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
-      <div style="text-align:center">
+    <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">💼 Bring to Office</div>
+    <div style="font-size:48px;font-weight:700;line-height:1" id="sum-spawn">₱0</div>
+    <div style="font-size:12px;opacity:.75;margin-top:4px">Spawn Share (75% of net)</div>
+    <div style="display:flex;justify-content:center;gap:24px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
+      <div>
         <div style="font-size:10px;opacity:.7;margin-bottom:2px">NET TOTAL</div>
-        <div style="font-size:16px;font-weight:700" id="sum-net">₱0</div>
+        <div style="font-size:15px;font-weight:700" id="sum-net">₱0</div>
       </div>
-      <div style="text-align:center">
+      <div>
         <div style="font-size:10px;opacity:.7;margin-bottom:2px">OWNER SHARE</div>
-        <div style="font-size:16px;font-weight:700" id="sum-customer">₱0</div>
+        <div style="font-size:15px;font-weight:700" id="sum-customer">₱0</div>
       </div>
     </div>
+    <!-- Breakdown match indicator -->
+    <div id="breakdown-match-badge" style="display:none;margin-top:10px;background:rgba(255,255,255,.2);border-radius:8px;padding:6px 12px;font-size:11px"></div>
   </div>
 
+  <!-- Enter Collection button — opens popup -->
+  <button class="btn btn-outline" onclick="openCollectionSheet()" style="margin-bottom:12px;border-color:#2B7BE8;color:#2B7BE8;font-size:15px">
+    📦 Enter Collection Details
+  </button>
+
+  <!-- hidden fields for submitHarvest() compatibility -->
+  <input type="hidden" id="coin-total" value="0">
   <span id="sum-free" style="display:none"></span>
 
-  <!-- Collector note -->
-  <div class="card" style="padding:12px 14px">
-    <div style="font-size:11px;font-weight:700;color:var(--text);margin-bottom:6px">📝 Note <span style="font-weight:400;color:var(--muted);font-size:10px">(optional)</span></div>
-    <textarea id="note-inp" aria-label="Collector note" aria-label="Collector note" rows="2" placeholder="e.g. Coin slot loose, owner not around…" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;resize:none;outline:none;color:var(--text)"></textarea>
+  <!-- Collection Sheet Popup -->
+  <div class="confirm-overlay" id="collection-sheet-overlay">
+    <div class="confirm-sheet" style="max-height:90vh;overflow-y:auto">
+      <div class="confirm-handle"></div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:4px">Collection Details</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Enter packs, bugi, cash and deductions</div>
+
+      <!-- Packs -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Packs</div>
+      <div class="pack-row" style="background:#f7f8fc">
+        <div class="pack-denom">₱1,000 packs <span>Each = ₱1,000</span></div>
+        <div class="pack-counter">
+          <button class="pack-btn" onclick="adjustPack('p1k',-1)">−</button>
+          <span class="pack-count" id="p1k-count">0</span>
+          <button class="pack-btn" onclick="adjustPack('p1k',1)">+</button>
+        </div>
+        <span class="pack-total" id="p1k-total">₱0</span>
+      </div>
+      <div class="pack-row" style="background:#f7f8fc">
+        <div class="pack-denom">₱300 packs <span>Each = ₱300</span></div>
+        <div class="pack-counter">
+          <button class="pack-btn" onclick="adjustPack('p300',-1)">−</button>
+          <span class="pack-count" id="p300-count">0</span>
+          <button class="pack-btn" onclick="adjustPack('p300',1)">+</button>
+        </div>
+        <span class="pack-total" id="p300-total">₱0</span>
+      </div>
+
+      <!-- Bugi & Cash -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:12px">Loose / Cash</div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label">Bugi <span>Loose coins/small bills</span></div>
+        <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="coin-label">Cash <span>Paper bills</span></div>
+        <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+
+      <!-- Deductions -->
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Deductions</div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label" style="color:var(--red)">Free time <span>Promo / free sessions</span></div>
+        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label" style="color:var(--orange)">Saloy <span>Refund to customer</span></div>
+        <input type="number" class="coin-input saloy" id="coin-saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="coin-label" style="color:var(--red)">Free time coins <span>Additional free coins</span></div>
+        <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+      </div>
+
+      <!-- Live total in sheet -->
+      <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Breakdown total</span>
+          <span style="font-size:14px;font-weight:700" id="sheet-breakdown-total">₱0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:13px;color:var(--muted)">Net (after deductions)</span>
+          <span style="font-size:14px;font-weight:700" id="sheet-net">₱0</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid #BDD5F8">
+          <span style="font-size:13px;font-weight:700;color:#2B7BE8">Spawn Share (75%)</span>
+          <span style="font-size:16px;font-weight:700;color:#2B7BE8" id="sheet-spawn">₱0</span>
+        </div>
+      </div>
+
+      <button class="btn btn-blue" onclick="closeCollectionSheet()">✓ Done</button>
+    </div>
   </div>
 
-  <div class="action-row">
+<div class="action-row">
     <button class="btn btn-green" onclick="submitHarvestConfirm()">✅ Submit harvest</button>
     <button class="btn btn-outline" onclick="toggleSkip()">⏸ Skip</button>
   </div>
@@ -754,6 +779,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="cb-row"><span class="cb-lbl">₱300 packs</span><span class="cb-val" id="confirm-p300">—</span></div>
         <div class="cb-row"><span class="cb-lbl">Bugi</span><span class="cb-val" id="confirm-bugi">—</span></div>
         <div class="cb-row"><span class="cb-lbl">Cash</span><span class="cb-val" id="confirm-cash">—</span></div>
+        <div class="cb-row" style="border-top:1px solid #BDD5F8;margin-top:6px;padding-top:6px">
+          <span class="cb-lbl">Collection Total</span><span class="cb-val" id="confirm-breakdown-total">₱0</span>
+        </div>
+        <div class="cb-row">
+          <span class="cb-lbl">Net (after deductions)</span><span class="cb-val" id="confirm-net-total">₱0</span>
+        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-gray btn-sm" style="flex:1" onclick="closeHarvestConfirm()">Edit</button>
@@ -2107,6 +2138,14 @@ async function uploadPhoto(blob, vendoName){
 }
 
 // ── CALC NET ──────────────────────────────────────────────────────
+function openCollectionSheet(){
+  document.getElementById('collection-sheet-overlay').classList.add('show');
+}
+function closeCollectionSheet(){
+  document.getElementById('collection-sheet-overlay').classList.remove('show');
+  calcNet();
+}
+
 function adjustPack(type, delta){
   if(type==='p1k'){
     _p1k = Math.max(0, (_p1k||0) + delta);
@@ -2125,19 +2164,48 @@ function calcNet(){
   const p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
   const cash = parseFloat(document.getElementById('cash-amount').value)||0;
-  const total = (p1k*1000) + (p300*300) + bugi + cash;
-  // Write to hidden coin-total so submitHarvest() works
-  document.getElementById('coin-total').value = total;
+  const breakdownTotal = (p1k*1000) + (p300*300) + bugi + cash;
   const free = parseFloat(document.getElementById('coin-free').value)||0;
   const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-  const net = Math.max(0, total - free - saloy - freeCoins);
-  const spawn = net * 0.75, customer = net * 0.25;
-  const sumFree = document.getElementById('sum-free');
-  if(sumFree) sumFree.textContent = '-₱'+fmt(free+saloy+freeCoins);
+  const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
+  const spawn = net * 0.75;
+  const customer = net * 0.25;
+
+  // Write to hidden coin-total so submitHarvest() works
+  document.getElementById('coin-total').value = breakdownTotal;
+
+  // Update hero
   document.getElementById('sum-net').textContent = '₱'+fmt(net);
   document.getElementById('sum-spawn').textContent = '₱'+fmt(spawn);
   document.getElementById('sum-customer').textContent = '₱'+fmt(customer);
+
+  // Update sheet live totals
+  const sbt = document.getElementById('sheet-breakdown-total');
+  const sn = document.getElementById('sheet-net');
+  const ss = document.getElementById('sheet-spawn');
+  if(sbt) sbt.textContent = '₱'+fmt(breakdownTotal);
+  if(sn) sn.textContent = '₱'+fmt(net);
+  if(ss) ss.textContent = '₱'+fmt(spawn);
+
+  // Update Enter Collection button label
+  const btn = document.querySelector('button[onclick="openCollectionSheet()"]');
+  if(btn && breakdownTotal > 0){
+    btn.textContent = '📦 Breakdown: ₱'+fmt(breakdownTotal)+' · Edit';
+    btn.style.background = '#EEF4FD';
+  } else if(btn){
+    btn.textContent = '📦 Enter Collection Details';
+    btn.style.background = '';
+  }
+
+  // Breakdown match badge
+  const badge = document.getElementById('breakdown-match-badge');
+  if(badge && spawn > 0){
+    badge.style.display = 'block';
+    badge.textContent = '📦 Breakdown: ₱'+fmt(breakdownTotal);
+  } else if(badge){
+    badge.style.display = 'none';
+  }
 }
 
 // ── SUBMIT HARVEST ────────────────────────────────────────────────
@@ -2801,16 +2869,26 @@ function resetPackForm(){
 (function patchSubmit(){
   const origSubmit = window.submitHarvest;
   window.submitHarvestConfirm = function(){
-    const total = parseFloat(document.getElementById('coin-total').value)||0;
-    if(!total){ toast('Enter collection amount first'); return; }
+    const breakdownTotal = parseFloat(document.getElementById('coin-total').value)||0;
+    if(!breakdownTotal){ toast('Enter collection details first'); openCollectionSheet(); return; }
+
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
     const cash = parseFloat(document.getElementById('cash-amount').value)||0;
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const net = Math.max(0, total - free - saloy - freeCoins);
+    const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
     const spawn = net * 0.75;
+
+    // Validate breakdown sum matches total
+    const packSum = (p1k*1000) + (p300*300) + bugi + cash;
+    if(packSum !== breakdownTotal){
+      toast('Breakdown total ₱'+fmt(packSum)+' ≠ collection ₱'+fmt(breakdownTotal));
+      openCollectionSheet();
+      return;
+    }
+
     const vname = document.getElementById('form-vname').textContent||'Vendo';
     document.getElementById('confirm-vname').textContent = vname;
     document.getElementById('confirm-total').textContent = '₱'+fmt(spawn);
@@ -2818,6 +2896,11 @@ function resetPackForm(){
     document.getElementById('confirm-p300').textContent = p300 > 0 ? p300+' pack(s) = ₱'+fmt(p300*300) : '—';
     document.getElementById('confirm-bugi').textContent = bugi > 0 ? '₱'+fmt(bugi) : '—';
     document.getElementById('confirm-cash').textContent = cash > 0 ? '₱'+fmt(cash) : '—';
+    // Add net and total to confirm
+    const cnTotal = document.getElementById('confirm-net-total');
+    const cnBreak = document.getElementById('confirm-breakdown-total');
+    if(cnTotal) cnTotal.textContent = '₱'+fmt(net);
+    if(cnBreak) cnBreak.textContent = '₱'+fmt(breakdownTotal);
     document.getElementById('harvest-confirm-overlay').classList.add('show');
   };
   window.confirmAndSubmit = function(){
