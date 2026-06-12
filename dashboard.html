@@ -996,6 +996,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Performance</button>
+      <button class="hv-hvtab"    id="hbtn-ledger" onclick="hvNewTab('ledger',this);elLoad()">📒 Ledger</button>
     </div>
   </div>
 </div>
@@ -1180,7 +1181,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf','progress','names','ledger'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? '' : 'none';
   });
@@ -1198,6 +1199,7 @@ function hvNewTab(id, btn){
   if(id==='settings'){ csLoad(); daLoad(); }
   if(id==='names'){ if(!_nmRows.length) nmLoad(); else nmRender(); }
   if(id==='progress'){ loadProgress(); }
+  if(id==='ledger'){ elLoad(); }
   else { if(_progressMap){ _progressMap.remove(); _progressMap=null; } }
 }
 
@@ -2549,7 +2551,82 @@ setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
       </div>
     </div>
   </div>
+
+
+<!-- ══ TAB: EXCEL LEDGER ══ -->
+<div id="hvt-ledger" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+<div style="max-width:900px;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+    <div style="font-size:14px;font-weight:700;color:#1e293b;">📒 Excel Ledger 2026</div>
+    <div style="font-size:11px;color:#6b7280;background:#f1f5f9;padding:3px 8px;border-radius:5px;">Spawn Share only · BASHANG Excel · not in harvests table</div>
+    <input id="el-search" type="text" placeholder="Search vendo…" oninput="elFilter()"
+      style="padding:5px 10px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;width:180px;">
+    <select id="el-area" onchange="elFilter()" style="padding:5px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;">
+      <option value="">All areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>POLANCO</option><option>ROXAS</option><option>MIX AREAS</option><option>MINAOG</option>
+    </select>
+    <select id="el-month" onchange="elFilter()" style="padding:5px 9px;border:1px solid #e5e7eb;border-radius:7px;font-size:12px;font-family:inherit;">
+      <option value="">All months</option>
+      <option value="2026-01">Jan 2026</option><option value="2026-02">Feb 2026</option>
+      <option value="2026-03">Mar 2026</option><option value="2026-04">Apr 2026</option>
+      <option value="2026-05">May 2026</option><option value="2026-06">Jun 2026</option>
+    </select>
+    <span id="el-count" style="font-size:11px;color:#6b7280;"></span>
+    <button onclick="elShowSkipped()" style="padding:4px 10px;border:1px solid #fca5a5;background:#fff;color:#dc2626;border-radius:6px;font-size:11px;cursor:pointer;">⚠️ Skipped (13)</button>
+  </div>
+  <div id="el-skipped-box" style="display:none;background:#fff7f7;border:1px solid #fca5a5;border-radius:8px;padding:10px;margin-bottom:10px;font-size:11px;color:#dc2626;">
+    <b>13 names not matched to any vendo in DB:</b><br>
+    Betty Boy Hoyohoy · Carreon Caryl/Dela Torre · Gary Quiros · Jeremiah Piso Wifi · Jocelyn Sumalinog · Kumudas/Jason Comodas · Mark Peralta · Ondo Piso wifi · Ones 2 · Ruben Gumanas Jr. · Sally Bayron · Sinaman Cross/Patangan · Taga Piso Wiifi
+    <button onclick="document.getElementById('el-skipped-box').style.display='none'" style="float:right;border:none;background:none;cursor:pointer;color:#dc2626;">✕</button>
+  </div>
+  <div id="el-loading" style="text-align:center;padding:40px;color:#6b7280;font-size:13px;">Loading…</div>
+  <div id="el-table-wrap" style="display:none;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f8faff;border-bottom:2px solid #e5e7eb;">
+        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#475569;">Vendo</th>
+        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#475569;">Area</th>
+        <th style="padding:8px 10px;text-align:left;font-weight:600;color:#475569;">Date</th>
+        <th style="padding:8px 10px;text-align:right;font-weight:600;color:#15803d;">Spawn Share</th>
+      </tr></thead>
+      <tbody id="el-tbody"></tbody>
+    </table>
+  </div>
 </div>
+</div>
+<script>
+var _elData=null,_elFiltered=[];
+async function elLoad(){
+  if(_elData)return elFilter();
+  document.getElementById('el-loading').style.display='';
+  document.getElementById('el-table-wrap').style.display='none';
+  try{
+    const r=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/excel-ledger-2026-full.json');
+    const d=await r.json();_elData=d.records;elFilter();
+  }catch(e){document.getElementById('el-loading').textContent='Error: '+e.message;}
+}
+function elFilter(){
+  if(!_elData)return;
+  const q=(document.getElementById('el-search').value||'').toLowerCase();
+  const area=document.getElementById('el-area').value;
+  const month=document.getElementById('el-month').value;
+  _elFiltered=_elData.filter(r=>{
+    if(q&&!r.sheet_name.toLowerCase().includes(q))return false;
+    if(area&&r.area!==area)return false;
+    if(month&&!r.collection_date.startsWith(month))return false;
+    return true;
+  });
+  elRender();
+}
+function elRender(){
+  const rows=_elFiltered.slice(0,1000);
+  document.getElementById('el-count').textContent=_elFiltered.length.toLocaleString()+' records'+(_elFiltered.length>1000?' (first 1,000)':'');
+  document.getElementById('el-tbody').innerHTML=rows.map(r=>'<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px 10px;">'+r.sheet_name+'</td><td style="padding:7px 10px;color:#6b7280;font-size:11px;">'+r.area+'</td><td style="padding:7px 10px;color:#6b7280;">'+r.collection_date+'</td><td style="padding:7px 10px;text-align:right;font-weight:600;color:#15803d;">₱'+r.spawn_share.toLocaleString('en-PH',{minimumFractionDigits:0,maximumFractionDigits:0})+'</td></tr>').join('');
+  document.getElementById('el-loading').style.display='none';
+  document.getElementById('el-table-wrap').style.display='';
+}
+function elShowSkipped(){const b=document.getElementById('el-skipped-box');b.style.display=b.style.display==='none'?'':'none';}
+</script>
 
 
 <!-- ══ SKIPPED ══ -->
