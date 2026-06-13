@@ -1169,7 +1169,7 @@ function pinLogout(){
 }
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
-async 
+
 // ── HOME SCREEN ────────────────────────────────────────────
 async function showHomeScreen(){
   showScreen('screen-home');
@@ -2904,9 +2904,11 @@ function showHarvestReceipt(){
   document.getElementById('hr-time').textContent = timeStr;
   document.getElementById('hr-date').textContent = dateStr;
   const brRow=document.getElementById('hr-breakdown-row');
-  const brEl=document.getElementById('hr-breakdown');
-  if(packParts.length){ brRow.style.display='block'; brEl.textContent=packParts.join(' · '); }
-  else { brRow.style.display='none'; }
+  const brEl=document.getElementById('hr-packs')||document.getElementById('hr-breakdown');
+  if(packParts.length && brRow){ brRow.style.display='block'; if(brEl) brEl.textContent=packParts.join(' · '); }
+  else if(brRow){ brRow.style.display='none'; }
+  const refNum = 'HRV-' + Date.now().toString(36).toUpperCase().slice(-8);
+  const refEl = document.getElementById('hr-ref'); if(refEl) refEl.textContent = 'Ref No. ' + refNum;
   document.getElementById('harvest-receipt-overlay').classList.add('show');
 }
 
@@ -3872,57 +3874,48 @@ async function submitEodSession(){
 </div>
 
   <!-- Harvest Receipt Popup Overlay -->
-  <div class="confirm-overlay" id="harvest-receipt-overlay" style="z-index:400;align-items:flex-end">
-    <div class="confirm-sheet" style="max-height:92vh;overflow-y:auto;padding:0 0 32px;border-radius:20px 20px 0 0">
-      <!-- Green success header -->
-      <div style="background:linear-gradient(135deg,#15803d,#16a34a);padding:24px 20px 20px;text-align:center;color:#fff;border-radius:20px 20px 0 0">
-        <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 10px">
-          <svg width="30" height="30" viewBox="0 0 36 36" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 18 14 25 29 11"/></svg>
+  <div class="confirm-overlay" id="harvest-receipt-overlay">
+    <div style="background:#1a73e8;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 48px;overflow-y:auto;">
+      <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:400px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.22);">
+        <div style="background:#28a745;padding:30px 20px 22px;text-align:center;">
+          <div style="width:58px;height:58px;background:rgba(255,255,255,0.22);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
+            <svg width="34" height="34" viewBox="0 0 36 36" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 18 14 25 29 11"/></svg>
+          </div>
+          <div id="hr-vendo-name" style="color:#fff;font-size:1.18rem;font-weight:700;letter-spacing:.2px;line-height:1.3;margin-bottom:3px;">—</div>
+          <div id="hr-collector" style="color:rgba(255,255,255,0.82);font-size:0.82rem;margin-bottom:1px;">—</div>
+          <div style="color:rgba(255,255,255,0.68);font-size:0.78rem;">Harvest Remittance</div>
         </div>
-        <div style="font-size:18px;font-weight:700">Harvest Recorded!</div>
-        <div style="font-size:13px;opacity:.85;margin-top:3px" id="hr-vendo-name">—</div>
+        <div style="text-align:center;padding:20px 20px 14px;border-bottom:1.5px solid #eee;">
+          <div style="color:#888;font-size:0.78rem;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Spawn Share to Remit</div>
+          <div id="hr-spawn-share" style="color:#1a73e8;font-size:2.3rem;font-weight:800;letter-spacing:-1.5px;line-height:1;">₱0</div>
+        </div>
+        <div style="padding:4px 24px 0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f2f2f2;">
+            <span style="color:#999;font-size:0.82rem;">Collection Total</span>
+            <span id="hr-total" style="color:#222;font-weight:600;font-size:0.93rem;">₱0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f2f2f2;">
+            <span style="color:#999;font-size:0.82rem;">Net (after deductions)</span>
+            <span id="hr-net" style="color:#222;font-weight:600;font-size:0.93rem;">₱0</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f2f2f2;">
+            <span style="color:#999;font-size:0.82rem;">Owner Share (25%)</span>
+            <span id="hr-owner" style="color:#7c3aed;font-weight:600;font-size:0.93rem;">₱0</span>
+          </div>
+          <div id="hr-breakdown-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
+            <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Pack Breakdown</div>
+            <div id="hr-packs" style="color:#333;font-size:0.88rem;line-height:1.6;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;">
+            <span id="hr-ref" style="color:#bbb;font-size:0.76rem;letter-spacing:.3px;">Ref No. —</span>
+            <span style="color:#bbb;font-size:0.76rem;"><span id="hr-date">—</span> <span id="hr-time">—</span></span>
+          </div>
+        </div>
+        <div style="height:20px;background:radial-gradient(circle at 50% 100%,#1a73e8 10px,#fff 10px) bottom/20px 20px repeat-x;"></div>
       </div>
-      <!-- Spawn share big number -->
-      <div style="background:#1557C0;padding:16px 20px;text-align:center;color:#fff">
-        <div style="font-size:10px;opacity:.8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Spawn Share — Bring to Office</div>
-        <div style="font-size:44px;font-weight:700;line-height:1" id="hr-spawn-share">₱0</div>
-      </div>
-      <!-- Details -->
-      <div style="padding:4px 20px 0">
-        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--muted)">Total collected</span>
-          <span style="font-size:13px;font-weight:600" id="hr-total">₱0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--muted)">Net (after deductions)</span>
-          <span style="font-size:13px;font-weight:600" id="hr-net">₱0</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:#7c3aed">Owner share (25%)</span>
-          <span style="font-size:13px;font-weight:600;color:#7c3aed" id="hr-owner">₱0</span>
-        </div>
-        <div id="hr-breakdown-row" style="padding:10px 0;border-bottom:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Pack breakdown</div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)" id="hr-breakdown">—</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--muted)">Collector</span>
-          <span style="font-size:13px;font-weight:600" id="hr-collector">—</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px;color:var(--muted)">Date &amp; Time</span>
-          <span style="font-size:13px;font-weight:600"><span id="hr-date">—</span> <span id="hr-time">—</span></span>
-        </div>
-      </div>
-      <!-- Dashed divider -->
-      <div style="border-top:2px dashed var(--border);margin:12px 16px 12px"></div>
-      <div style="padding:0 20px 4px;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:11px;color:var(--muted)">Spawn Internet · Harvest Receipt</span>
-      </div>
-      <!-- Actions -->
-      <div style="padding:12px 20px 0;display:flex;gap:10px">
-        <button class="btn btn-blue" onclick="hrNextVendo()" style="flex:2">→ Next Vendo</button>
-        <button class="btn btn-gray" onclick="hrHome()" style="flex:1">⌂ Home</button>
+      <div style="display:flex;gap:10px;margin-top:16px;width:100%;max-width:400px;">
+        <button class="btn btn-blue" onclick="hrNextVendo()" style="flex:2;border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;border:1.5px solid rgba(255,255,255,0.45);">→ Next Vendo</button>
+        <button class="btn btn-gray" onclick="hrHome()" style="flex:1;border-radius:12px;background:rgba(255,255,255,0.10);color:#fff;border:1.5px solid rgba(255,255,255,0.3);">⌂ Home</button>
       </div>
     </div>
   </div>
