@@ -2,732 +2,532 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<title>Spawn Coins — Office</title>
+<title>Spawn Office</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="theme-color" content="#1e3cb8">
 <style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
-  --blue:#1565c0;--green:#15803d;--red:#dc2626;--orange:#d97706;
-  --bg:#f0f4ff;--card:#fff;--border:#e5e7eb;--text:#1e293b;--mu:#9ca3af;
+  --blue:#1e3cb8;--blue-light:#eef2ff;--blue-mid:#c7d2fe;
+  --green:#16a34a;--green-light:#f0fdf4;--green-mid:#bbf7d0;
+  --red:#dc2626;--red-light:#fef2f2;
+  --amber:#d97706;--amber-light:#fffbeb;
+  --purple:#7c3aed;--purple-light:#f5f3ff;
+  --teal:#0d9488;--teal-light:#f0fdfa;
+  --gray:#6b7280;--border:#e5e7eb;--bg:#f8fafc;
+  --text:#111827;--muted:#6b7280;
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);min-height:100vh;color:var(--text);font-size:15px}
+.topbar{background:var(--blue);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar-logo{font-size:15px;font-weight:700}
+.topbar-sub{font-size:10px;opacity:.75;margin-top:1px}
+.topbar-logout{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:none}
+.screen{display:none;padding:16px;max-width:700px;margin:0 auto}
+.screen.active{display:block}
+.card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:12px}
+.card-title{font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.btn{width:100%;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:active{opacity:.85}
+.btn-gray{background:#f3f4f6;color:var(--muted)}
+.btn-sm{padding:7px 14px;font-size:12px;width:auto;border-radius:8px}
+.pill{font-size:10px;font-weight:700;padding:3px 9px;border-radius:10px;white-space:nowrap}
+.pill-blue{background:var(--blue-light);color:var(--blue)}
+.pill-green{background:#dcfce7;color:#15803d}
+.pill-amber{background:#fef3c7;color:#92400e}
+.pill-gray{background:#f3f4f6;color:var(--muted)}
+.pill-red{background:#fef2f2;color:var(--red)}
+.tabs{display:flex;border-radius:10px;overflow:hidden;border:1.5px solid var(--border);margin-bottom:14px;background:#fff}
+.tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;border:none;background:transparent;font-family:inherit;color:var(--muted)}
+.tab.active{background:var(--blue);color:#fff}
 
-/* TOP BAR */
-.topbar{background:linear-gradient(135deg,#0f1f6e,#1565c0);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;}
-.topbar-logo{font-weight:800;font-size:15px;}
-.topbar-sub{font-size:11px;opacity:.7;}
-.topbar-date{margin-left:auto;font-size:11px;opacity:.8;text-align:right;}
+/* PIN SCREEN */
+.pin-wrap{max-width:340px;margin:40px auto 0}
+.account-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.account-btn{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;font-family:inherit;transition:.15s}
+.account-btn:active{transform:scale(.97)}
+.account-btn.selected{border-color:var(--blue);background:var(--blue-light)}
+.account-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;margin:0 auto 6px;background:#e0e7ff;color:var(--blue)}
+.account-btn.selected .account-av{background:var(--blue);color:#fff}
+.account-name{font-size:13px;font-weight:700;color:#1e2d5a}
+.account-role{font-size:10px;color:var(--muted);margin-top:2px}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin:20px 0 16px}
+.pin-dot{width:16px;height:16px;border-radius:50%;background:var(--border);transition:.2s}
+.pin-dot.filled{background:var(--blue)}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pin-key{background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:16px;font-size:22px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center;color:var(--text);transition:.1s}
+.pin-key:active{background:var(--blue-light);transform:scale(.95)}
+.pin-key.del{font-size:16px;color:var(--muted)}
+.pin-error{text-align:center;color:var(--red);font-size:13px;font-weight:600;margin-top:10px;min-height:20px}
 
-/* SCREENS */
-.screen{display:none;min-height:100vh;}
-.screen.active{display:block;}
+/* COLLECTOR ROW */
+.col-row{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:.15s}
+.col-row:active{background:var(--blue-light)}
+.col-row.open{border-color:var(--blue);background:var(--blue-light)}
+.col-header{display:flex;align-items:center;justify-content:space-between}
+.col-av{width:36px;height:36px;border-radius:50%;background:var(--blue-light);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.col-info{flex:1;margin-left:12px}
+.col-name{font-size:15px;font-weight:700;color:var(--text)}
+.col-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.col-totals{text-align:right;flex-shrink:0}
+.col-total-val{font-size:16px;font-weight:700;color:var(--green)}
+.col-total-lbl{font-size:9px;color:var(--muted);margin-top:1px}
+.col-detail{display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--blue-mid)}
+.col-row.open .col-detail{display:block}
 
-/* LOGIN */
-.login-wrap{padding:32px 20px;max-width:400px;margin:0 auto;}
-.login-card{background:#fff;border-radius:16px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,.1);}
-.login-title{font-size:20px;font-weight:800;color:var(--blue);margin-bottom:4px;}
-.login-sub{font-size:12px;color:var(--mu);margin-bottom:20px;}
-.inp{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:inherit;outline:none;color:var(--text);margin-bottom:12px;}
-.inp:focus{border-color:var(--blue);}
-.btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
-.btn-blue{background:var(--blue);color:#fff;}
-.btn-green{background:var(--green);color:#fff;}
-.btn-red{background:var(--red);color:#fff;}
-.btn-gray{background:#f3f4f6;color:#374151;}
-.btn-sm{padding:7px 14px;font-size:12px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;}
+/* PACK TABLE */
+.pack-table{width:100%;border-collapse:collapse;font-size:12px}
+.pack-table th{text-align:left;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;border-bottom:1.5px solid var(--border)}
+.pack-table td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.pack-table tr:last-child td{border-bottom:none}
+.pack-code{font-size:13px;font-weight:900;color:var(--blue);letter-spacing:.06em;font-family:monospace}
+.pack-type-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px}
+.pt-mix{background:#fef3c7;color:#92400e}
+.pt-peso{background:#dbeafe;color:#1e40af}
+.pt-bugi{background:#f3e8ff;color:#6b21a8}
+.pt-bills{background:#dcfce7;color:#15803d}
 
-/* CARDS */
-.card{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.06);}
-.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;}
-.section-pad{padding:14px 16px;}
+/* VENDO TABLE */
+.vendo-row{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--border);cursor:default}
+.vendo-row:last-child{border-bottom:none}
+.vendo-code-chip{font-size:12px;font-weight:900;color:#fff;background:var(--blue);border-radius:6px;padding:3px 10px;letter-spacing:.06em;font-family:monospace;flex-shrink:0;min-width:44px;text-align:center}
+.vendo-name{flex:1;margin-left:10px;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vendo-area{font-size:10px;color:var(--muted);margin-left:6px;flex-shrink:0}
+.vendo-last{font-size:10px;color:var(--muted);margin-left:8px;flex-shrink:0}
+.search-bar{display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px}
+.search-bar input{flex:1;border:none;outline:none;font-size:14px;font-family:inherit;color:var(--text);background:transparent}
 
-/* TABS */
-.tab-bar{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:52px;z-index:90;}
-.tab-btn{flex:1;padding:11px 6px;font-size:12px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--mu);border-bottom:2.5px solid transparent;font-family:inherit;}
-.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+/* SUMMARY TOTALS */
+.summary-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.sum-card{background:#fff;border-radius:10px;border:1px solid var(--border);padding:12px;text-align:center}
+.sum-val{font-size:20px;font-weight:700;color:var(--blue)}
+.sum-lbl{font-size:10px;color:var(--muted);margin-top:3px}
 
-/* SESSION LIST */
-.session-item{background:#fff;border-radius:12px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;border-left:4px solid var(--border);}
-.session-item.submitted{border-left-color:var(--orange);}
-.session-item.confirmed{border-left-color:var(--green);}
-.session-collector{font-size:15px;font-weight:700;color:var(--text);}
-.session-meta{font-size:11px;color:var(--mu);margin-top:3px;}
-.session-totals{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;}
-.session-stat{background:#f8faff;border-radius:8px;padding:5px 10px;font-size:11px;text-align:center;}
-.session-stat-val{font-weight:700;font-size:14px;color:var(--blue);}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
-.badge-orange{background:#fef3c7;color:#d97706;}
-.badge-green{background:#dcfce7;color:#15803d;}
-.badge-red{background:#fee2e2;color:#dc2626;}
-.badge-blue{background:#dbeafe;color:#1565c0;}
+/* DATE PICKER */
+.date-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.date-row label{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}
+.date-row input[type=date]{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;outline:none;color:var(--text);flex:1}
+.date-row input[type=date]:focus{border-color:var(--blue)}
+.refresh-btn{background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;font-family:inherit;white-space:nowrap}
+.refresh-btn:active{background:var(--blue-light)}
 
-/* BUGI VERIFICATION */
-.vendo-row{background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:8px;border:1.5px solid var(--border);}
-.vendo-row.verified{border-color:#bbf7d0;}
-.vendo-row.discrepancy{border-color:#fca5a5;}
-.vendo-code{font-size:18px;font-weight:800;color:var(--blue);font-family:monospace;}
-.vendo-name{font-size:13px;font-weight:600;color:var(--text);}
-.vendo-declared{font-size:11px;color:var(--mu);}
-.bugi-inp{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:18px;font-weight:700;text-align:center;font-family:monospace;outline:none;margin-top:8px;}
-.bugi-inp:focus{border-color:var(--blue);}
-
-/* SUMMARY */
-.sum-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px;}
-.sum-row:last-child{border-bottom:none;}
-.sum-label{color:#6b7280;}
-.sum-val{font-weight:600;}
-.sum-total{font-weight:800;font-size:15px;color:var(--blue);}
-
-/* EXPENSE LIST */
-.exp-item{background:#fff;border-radius:10px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);}
-.exp-icon{font-size:20px;flex-shrink:0;}
-.exp-details{flex:1;}
-.exp-cat{font-size:12px;font-weight:700;color:var(--text);}
-.exp-desc{font-size:11px;color:var(--mu);}
-.exp-amount{font-size:15px;font-weight:700;color:var(--red);flex-shrink:0;}
-.exp-receipt{width:60px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:pointer;}
-
-/* PHOTO MODAL */
-.photo-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;align-items:center;justify-content:center;}
-.photo-modal img{max-width:95%;max-height:90vh;border-radius:8px;}
-
-/* EMPTY STATE */
-.empty{text-align:center;padding:40px 20px;color:var(--mu);}
-.empty-icon{font-size:40px;margin-bottom:8px;}
-
-/* STATUS BAR */
-.status-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:10px;z-index:100;}
-
-/* SPINNER */
-.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;}
+/* LOADING */
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;gap:10px;color:var(--muted)}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* TOAST */
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;z-index:9999;display:none;white-space:nowrap;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e3cb8;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:.3s;white-space:nowrap;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+.empty-state{text-align:center;padding:32px 16px;color:var(--muted);font-size:13px}
 </style>
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div class="topbar">
   <div>
-    <div class="topbar-logo">🪙 Spawn Coins</div>
-    <div class="topbar-sub">Coin Counter &amp; Verification</div>
+    <div class="topbar-logo">🏢 Spawn Office</div>
+    <div class="topbar-sub" id="topbar-sub">Coin Pack Recount</div>
   </div>
-  <div class="topbar-date" id="top-date"></div>
+  <button class="topbar-logout" id="logout-btn" onclick="doLogout()">Logout</button>
 </div>
 
-<!-- ══ LOGIN SCREEN ══ -->
+<!-- ── SCREEN: LOGIN ── -->
 <div class="screen active" id="screen-login">
-  <div class="login-wrap">
-    <div style="text-align:center;margin-bottom:24px;">
-      <div style="font-size:48px;">🏢</div>
-      <div style="font-size:22px;font-weight:800;color:var(--blue);">Spawn Coins</div>
-      <div style="font-size:13px;color:var(--mu);margin-top:4px;">Spawn Internetan — Office Verification</div>
+  <div class="pin-wrap">
+    <div class="card" style="margin-bottom:12px;text-align:center;padding:14px">
+      <div style="font-size:15px;font-weight:700;color:var(--blue)">Select Account</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">then enter your PIN</div>
     </div>
-    <div class="login-card">
-      <div class="login-title">Sign In</div>
-      <div class="login-sub">Enter your office credentials</div>
-      <input class="inp" type="text" id="login-user" placeholder="Username" autocomplete="username">
-      <input class="inp" type="password" id="login-pass" placeholder="Password" autocomplete="current-password">
-      <div id="login-error" style="color:var(--red);font-size:12px;margin-bottom:10px;display:none;"></div>
-      <button class="btn btn-blue" onclick="doLogin()">Sign In →</button>
+    <div class="account-grid" id="account-grid"></div>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="d0"></div>
+      <div class="pin-dot" id="d1"></div>
+      <div class="pin-dot" id="d2"></div>
+      <div class="pin-dot" id="d3"></div>
     </div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key" style="opacity:.3" disabled></button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="pin-error" id="pin-error"></div>
   </div>
 </div>
 
-<!-- ══ MAIN SCREEN ══ -->
+<!-- ── SCREEN: MAIN ── -->
 <div class="screen" id="screen-main">
-  <!-- TAB BAR -->
-  <div class="tab-bar">
-    <button class="tab-btn active" id="tab-sessions-btn" onclick="switchMainTab('sessions')">📋 Sessions</button>
-    <button class="tab-btn" id="tab-expenses-btn" onclick="switchMainTab('expenses')">💸 Expenses</button>
-    <button class="tab-btn" id="tab-summary-btn" onclick="switchMainTab('summary')">📊 Summary</button>
-    <button class="tab-btn" id="tab-collections-btn" onclick="switchMainTab('collections')">💰 Collections</button>
+  <div class="tabs">
+    <button class="tab active" id="tab-packs" onclick="switchTab('packs')">📦 Packs</button>
+    <button class="tab" id="tab-vendos" onclick="switchTab('vendos')">🖥 Vendos</button>
   </div>
 
-  <!-- SESSIONS TAB -->
-  <div id="tab-sessions" style="padding:14px 16px 80px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:700;">Collector Sessions</div>
-      <input type="date" id="sessions-date" onchange="loadSessions()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;">
-    </div>
-    <div id="sessions-list"><div class="empty"><div class="spinner"></div></div></div>
+  <!-- DATE + REFRESH -->
+  <div class="date-row">
+    <label>Date:</label>
+    <input type="date" id="date-picker" oninput="loadData()">
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
   </div>
 
-  <!-- EXPENSES TAB -->
-  <div id="tab-expenses" style="display:none;padding:14px 16px 80px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:700;">Expenses</div>
-      <input type="date" id="expenses-date" onchange="loadAllExpenses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;">
-    </div>
-    <div id="expenses-list"><div class="empty"><div class="empty-icon">💸</div><div>No expenses</div></div></div>
-  </div>
-
-  <!-- SUMMARY TAB -->
-  <div id="tab-summary" style="display:none;padding:14px 16px 80px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:14px;font-weight:700;">Daily Summary</div>
-      <input type="date" id="summary-date" onchange="loadSummary()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;">
-    </div>
-    <div id="summary-content"><div class="empty"><div class="empty-icon">📊</div><div>Select a date</div></div></div>
-  </div>
-
-  <!-- COLLECTIONS TAB -->
-  <div id="tab-collections" style="display:none;padding:14px 16px 80px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-      <div style="font-size:14px;font-weight:700;">💰 Collections</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="date" id="collections-date" onchange="loadCollections()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;">
-        <button onclick="loadCollections()" style="padding:6px 12px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻</button>
-      </div>
-    </div>
-    <!-- Route code filter -->
-    <div id="col-route-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+  <!-- PACKS TAB -->
+  <div id="tab-content-packs">
     <!-- Summary cards -->
-    <div id="col-summary-cards" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;"></div>
-    <!-- Collections list -->
-    <div id="col-list-office"></div>
-  </div>
-</div>
+    <div class="summary-grid" id="summary-cards">
+      <div class="sum-card"><div class="sum-val" id="sum-spawn">₱0</div><div class="sum-lbl">Total spawn share</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-packs">0</div><div class="sum-lbl">Total packs</div></div>
+      <div class="sum-card"><div class="sum-val" id="sum-vendos-harvested">0</div><div class="sum-lbl">Vendos harvested</div></div>
+    </div>
 
-<!-- ══ VERIFICATION SCREEN ══ -->
-<div class="screen" id="screen-verify">
-  <div style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;">
-    <button onclick="showMain()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 12px;border-radius:8px;cursor:pointer;font-family:inherit;">← Back</button>
-    <div>
-      <div id="verify-title" style="font-weight:700;font-size:15px;">Verify Session</div>
-      <div id="verify-sub" style="font-size:11px;opacity:.8;"></div>
+    <!-- Collectors list -->
+    <div id="collectors-list">
+      <div class="loading"><div class="spinner"></div><span>Loading…</span></div>
     </div>
   </div>
 
-  <!-- Pack Summary -->
-  <div class="section-pad">
-    <div class="card">
-      <div class="card-title">📦 Declared Packs</div>
-      <div id="verify-packs"></div>
+  <!-- VENDOS TAB -->
+  <div id="tab-content-vendos" style="display:none">
+    <div class="search-bar">
+      <span style="font-size:16px">🔍</span>
+      <input type="text" id="vendo-search" placeholder="Search by name, code, area…" oninput="renderVendoTab()">
     </div>
-
-    <!-- Bugi Verification -->
-    <div class="card">
-      <div class="card-title">🪙 Bugi Verification <span style="font-size:11px;font-weight:400;color:var(--mu);">— enter actual count per vendo</span></div>
-      <div id="verify-bugi-list"></div>
+    <div id="vendo-list">
+      <div class="loading"><div class="spinner"></div><span>Loading…</span></div>
     </div>
-
-    <!-- Expenses -->
-    <div class="card" id="verify-expenses-card" style="display:none;">
-      <div class="card-title">💸 Expenses to Verify</div>
-      <div id="verify-expenses-list"></div>
-    </div>
-
-    <!-- Discrepancy Summary -->
-    <div class="card" id="verify-diff-card" style="display:none;">
-      <div class="card-title">⚖️ Verification Result</div>
-      <div id="verify-diff-content"></div>
-    </div>
-
-    <button onclick="confirmVerification()" id="confirm-btn" style="width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-bottom:80px;">
-      ✅ Confirm Verification
-    </button>
   </div>
 </div>
 
-<!-- PHOTO MODAL -->
-<div class="photo-modal" id="photo-modal" onclick="this.style.display='none'">
-  <img id="photo-modal-img" src="">
-</div>
-
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
 
 <script>
 const SB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
-const HDR = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTA5MTY0NTEsImV4cCI6MjAyNjQ5MjQ1MX0.9rSLGHFXHFWELnzxONMGnOzjHIgjwFyMVTnBSWKHSJU';
+const HDR = {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json'};
 
-// Credentials
-const OFFICE_USERS = { 'weng': 'spawn2024', 'admin': 'spawn2024' };
-let currentUser = null;
-let currentSession = null;
+// ── ACCOUNTS (name + PIN — change PINs here) ──
+const ACCOUNTS = [
+  {id:'office1', name:'Office 1', role:'Staff',    pin:'1234', initials:'O1'},
+  {id:'office2', name:'Office 2', role:'Staff',    pin:'2345', initials:'O2'},
+  {id:'admin',   name:'Admin',    role:'Manager',  pin:'0000', initials:'AD'},
+];
 
-/* ══ UTILS ══ */
-function fmt(n){ return '₱'+(Math.round(n)||0).toLocaleString(); }
-function toast(msg, dur=3000){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.style.display='block';
-  setTimeout(()=>el.style.display='none', dur);
+let selectedAccount = null;
+let pinBuffer = '';
+let currentTab = 'packs';
+let allHarvests = [];
+let allPackItems = [];
+let allVendos = [];
+
+// ── PIN LOGIN ──
+function renderAccounts(){
+  const grid = document.getElementById('account-grid');
+  grid.innerHTML = ACCOUNTS.map(a => `
+    <button class="account-btn" id="acct-${a.id}" onclick="selectAccount('${a.id}')">
+      <div class="account-av">${a.initials}</div>
+      <div class="account-name">${a.name}</div>
+      <div class="account-role">${a.role}</div>
+    </button>`).join('');
 }
-function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+
+function selectAccount(id){
+  selectedAccount = ACCOUNTS.find(a => a.id === id);
+  document.querySelectorAll('.account-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('acct-'+id).classList.add('selected');
+  pinBuffer = '';
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
 }
-function showMain(){ showScreen('screen-main'); }
-function todayPHT(){ return new Date(Date.now()+8*3600000).toISOString().slice(0,10); }
 
-/* ══ INIT ══ */
-window.addEventListener('DOMContentLoaded',()=>{
-  // Update date display
-  const now = new Date(Date.now()+8*3600000);
-  document.getElementById('top-date').textContent = now.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
-  // Set date inputs to today
-  const today = todayPHT();
-  ['sessions-date','expenses-date','summary-date','collections-date'].forEach(id=>{
-    document.getElementById(id).value=today;
-  });
-  // Check stored login
-  const stored = localStorage.getItem('office_user');
-  if(stored){ currentUser=stored; showScreen('screen-main'); loadSessions(); }
-});
+function pinKey(k){
+  if(!selectedAccount){ toast('Select an account first'); return; }
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += k;
+  updateDots();
+  if(pinBuffer.length === 4) setTimeout(checkPin, 150);
+}
 
-/* ══ LOGIN ══ */
-function doLogin(){
-  const user = document.getElementById('login-user').value.trim().toLowerCase();
-  const pass = document.getElementById('login-pass').value.trim();
-  const errEl = document.getElementById('login-error');
-  if(OFFICE_USERS[user] && OFFICE_USERS[user]===pass){
-    currentUser=user;
-    localStorage.setItem('office_user',user);
-    errEl.style.display='none';
+function pinDel(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+}
+
+function updateDots(){
+  for(let i=0;i<4;i++){
+    document.getElementById('d'+i).classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function checkPin(){
+  if(!selectedAccount) return;
+  if(pinBuffer === selectedAccount.pin){
+    document.getElementById('topbar-sub').textContent = selectedAccount.name + ' — ' + selectedAccount.role;
+    document.getElementById('logout-btn').style.display = 'block';
     showScreen('screen-main');
-    loadSessions();
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('date-picker').value = today;
+    loadData();
   } else {
-    errEl.textContent='Incorrect username or password';
-    errEl.style.display='block';
+    document.getElementById('pin-error').textContent = 'Wrong PIN — try again';
+    pinBuffer = '';
+    updateDots();
   }
 }
 
-/* ══ MAIN TABS ══ */
-function switchMainTab(tab){
-  ['sessions','expenses','summary','collections'].forEach(t=>{
-    document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
-    document.getElementById('tab-'+t+'-btn').classList.toggle('active', t===tab);
-  });
-  if(tab==='expenses') loadAllExpenses();
-  if(tab==='summary') loadSummary();
-  if(tab==='collections'){ colSetDateDefault(); loadCollections(); }
+function doLogout(){
+  selectedAccount = null; pinBuffer = '';
+  document.querySelectorAll('.account-btn').forEach(b => b.classList.remove('selected'));
+  updateDots();
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('topbar-sub').textContent = 'Coin Pack Recount';
+  document.getElementById('logout-btn').style.display = 'none';
+  showScreen('screen-login');
 }
 
-/* ══ SESSIONS ══ */
-async function loadSessions(){
-  const date = document.getElementById('sessions-date').value;
-  const el = document.getElementById('sessions-list');
-  el.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
-  try {
-    const r = await fetch(`${SB}/rest/v1/collector_sessions?session_date=eq.${date}&order=created_at.desc`,{headers:HDR});
-    const sessions = await r.json();
-    if(!sessions.length){
-      el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div>No sessions for this date</div></div>';
-      return;
-    }
-    el.innerHTML = sessions.map(s=>{
-      const statusBadge = s.status==='confirmed'
-        ? '<span class="badge badge-green">✅ Confirmed</span>'
-        : s.status==='submitted'
-        ? '<span class="badge badge-orange">⏳ Pending</span>'
-        : '<span class="badge badge-blue">🔄 Open</span>';
-      const diff = (s.total_declared||0) - (s.total_expected||0);
-      const diffColor = Math.abs(diff)<1?'var(--green)':diff<0?'var(--red)':'var(--orange)';
-      const diffStr = Math.abs(diff)<1?'✅ Match':(diff<0?'▼ Short ₱'+Math.abs(diff).toLocaleString():'▲ Over ₱'+diff.toLocaleString());
-      return `<div class="session-item ${s.status}" onclick="openSession(${s.id})">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div class="session-collector">👤 ${s.collector}</div>
-          ${statusBadge}
-        </div>
-        <div class="session-meta">${s.session_date} · Submitted: ${s.submitted_at?new Date(s.submitted_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—'}</div>
-        <div class="session-totals">
-          <div class="session-stat"><div class="session-stat-val">${fmt(s.total_expected||0)}</div><div>Expected</div></div>
-          <div class="session-stat"><div class="session-stat-val">${fmt(s.total_declared||0)}</div><div>Declared</div></div>
-          <div class="session-stat"><div class="session-stat-val" style="color:${diffColor};">${diffStr}</div><div>Diff</div></div>
-          <div class="session-stat"><div class="session-stat-val" style="color:var(--red);">${fmt(s.total_expenses||0)}</div><div>Expenses</div></div>
-        </div>
-      </div>`;
-    }).join('');
-  } catch(e){ el.innerHTML=`<div class="empty"><div style="color:var(--red);">Error: ${e.message}</div></div>`; }
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
 }
 
-/* ══ OPEN SESSION FOR VERIFICATION ══ */
-async function openSession(sessionId){
-  document.getElementById('verify-bugi-list').innerHTML='<div class="empty"><div class="spinner"></div></div>';
-  showScreen('screen-verify');
-  try {
-    // Get session details
-    const rS = await fetch(`${SB}/rest/v1/collector_sessions?id=eq.${sessionId}`,{headers:HDR});
-    const sessions = await rS.json();
-    const s = sessions[0];
-    currentSession = s;
-
-    document.getElementById('verify-title').textContent = '👤 ' + s.collector;
-    document.getElementById('verify-sub').textContent = s.session_date + ' · ' + (s.status==='confirmed'?'✅ Confirmed':'⏳ Pending verification');
-
-    // Pack summary
-    document.getElementById('verify-packs').innerHTML = `
-      <div class="sum-row"><span class="sum-label">₱1,000 packs</span><span class="sum-val">${s.total_packs_1000||0} packs = ${fmt((s.total_packs_1000||0)*1000)}</span></div>
-      <div class="sum-row"><span class="sum-label">₱300 packs</span><span class="sum-val">${s.total_packs_300||0} packs = ${fmt((s.total_packs_300||0)*300)}</span></div>
-      <div class="sum-row"><span class="sum-label">Cash</span><span class="sum-val">${fmt(s.total_cash||0)}</span></div>
-      <div class="sum-row"><span class="sum-label">Total Bugi (declared)</span><span class="sum-val sum-total">${fmt(s.total_bugi||0)}</span></div>
-    `;
-
-    // Get harvest packs for bugi verification
-    const rP = await fetch(`${SB}/rest/v1/harvest_packs?session_id=eq.${sessionId}&order=vendo_code.asc`,{headers:HDR});
-    const packs = await rP.json();
-
-    if(!packs.length){
-      document.getElementById('verify-bugi-list').innerHTML='<div style="color:var(--mu);font-size:12px;text-align:center;padding:12px;">No pack data — collector did not enter packs</div>';
-    } else {
-      document.getElementById('verify-bugi-list').innerHTML = packs.map(p=>`
-        <div class="vendo-row" id="vrow-${p.id}">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <span class="vendo-code">${p.vendo_code||'—'}</span>
-              <span class="vendo-name" style="margin-left:8px;">${p.vendo_id?'':'—'}</span>
-            </div>
-            <div class="vendo-declared">Declared: ${fmt(p.bugi||0)}</div>
-          </div>
-          <input type="number" class="bugi-inp" id="bugi-actual-${p.id}" placeholder="Enter actual bugi" inputmode="numeric"
-            value="${p.bugi||0}" oninput="checkBugiDiff(${p.id},${p.bugi||0})">
-          <div id="bugi-diff-${p.id}" style="font-size:11px;margin-top:4px;"></div>
-        </div>
-      `).join('');
-    }
-
-    // Get expenses
-    const rE = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(s.collector)}&expense_date=eq.${s.session_date}&order=created_at.asc`,{headers:HDR});
-    const expenses = await rE.json();
-
-    const expCard = document.getElementById('verify-expenses-card');
-    if(expenses.length){
-      expCard.style.display='block';
-      const catIcons={fuel:'⛽',meals:'🍱',repair:'🔧',coin_wrapper:'📦',padlock:'🔒',others:'📝'};
-      document.getElementById('verify-expenses-list').innerHTML = expenses.map(e=>`
-        <div class="exp-item">
-          <div class="exp-icon">${catIcons[e.category]||'📝'}</div>
-          <div class="exp-details">
-            <div class="exp-cat">${e.category.replace('_',' ')}</div>
-            <div class="exp-desc">${e.description||''}</div>
-            ${e.receipt_photo_url?`<img src="${e.receipt_photo_url}" class="exp-receipt" onclick="openPhoto('${e.receipt_photo_url}')">`:'<div style="font-size:10px;color:var(--mu);">No receipt</div>'}
-            <div style="margin-top:4px;">
-              <button class="btn-sm btn-green" onclick="confirmExpense(${e.id},this)" ${e.confirmed?'style="opacity:.5"':''}>
-                ${e.confirmed?'✅ Confirmed':'Confirm'}
-              </button>
-            </div>
-          </div>
-          <div class="exp-amount">${fmt(e.amount)}</div>
-        </div>
-      `).join('');
-    } else { expCard.style.display='none'; }
-
-  } catch(e){ toast('Error: '+e.message); }
+// ── TABS ──
+function switchTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+tab).classList.add('active');
+  document.getElementById('tab-content-packs').style.display = tab === 'packs' ? 'block' : 'none';
+  document.getElementById('tab-content-vendos').style.display = tab === 'vendos' ? 'block' : 'none';
+  if(tab === 'vendos' && allVendos.length === 0) loadVendos();
 }
 
-function checkBugiDiff(packId, declared){
-  const actual = parseFloat(document.getElementById('bugi-actual-'+packId).value)||0;
-  const diff = actual - declared;
-  const el = document.getElementById('bugi-diff-'+packId);
-  const row = document.getElementById('vrow-'+packId);
-  if(Math.abs(diff)<1){
-    el.innerHTML='<span style="color:var(--green);">✅ Match</span>';
-    row.className='vendo-row verified';
-  } else if(diff<0){
-    el.innerHTML=`<span style="color:var(--red);">⚠️ Short ₱${Math.abs(diff).toLocaleString()}</span>`;
-    row.className='vendo-row discrepancy';
-  } else {
-    el.innerHTML=`<span style="color:var(--orange);">ℹ️ Over ₱${diff.toLocaleString()}</span>`;
-    row.className='vendo-row';
-  }
-  updateVerifyDiff();
-}
-
-function updateVerifyDiff(){
-  // Calculate total discrepancy
-  const inputs = document.querySelectorAll('[id^="bugi-actual-"]');
-  let totalDeclared=0, totalActual=0;
-  inputs.forEach(inp=>{
-    const id = inp.id.replace('bugi-actual-','');
-    const declaredEl = document.getElementById('bugi-diff-'+id);
-    totalActual += parseFloat(inp.value)||0;
-  });
-  if(!inputs.length) return;
-  const diff = totalActual - (currentSession?.total_bugi||0);
-  const card = document.getElementById('verify-diff-card');
-  card.style.display='block';
-  const color = Math.abs(diff)<1?'var(--green)':diff<0?'var(--red)':'var(--orange)';
-  document.getElementById('verify-diff-content').innerHTML=`
-    <div class="sum-row"><span class="sum-label">Declared bugi</span><span class="sum-val">${fmt(currentSession?.total_bugi||0)}</span></div>
-    <div class="sum-row"><span class="sum-label">Actual bugi</span><span class="sum-val">${fmt(totalActual)}</span></div>
-    <div class="sum-row"><span class="sum-label">Difference</span><span class="sum-val" style="color:${color};font-weight:700;">${Math.abs(diff)<1?'✅ Match':(diff<0?'▼ Short ':'▲ Over ')+'₱'+Math.abs(diff).toLocaleString()}</span></div>
-  `;
-}
-
-async function confirmExpense(expId, btn){
-  try {
-    await fetch(`${SB}/rest/v1/collector_expenses?id=eq.${expId}`,{
-      method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
-      body:JSON.stringify({confirmed:true})
-    });
-    btn.textContent='✅ Confirmed';
-    btn.style.opacity='.5';
-    toast('Expense confirmed');
-  } catch(e){ toast('Error: '+e.message); }
-}
-
-async function confirmVerification(){
-  if(!currentSession){ toast('No session loaded'); return; }
-  const btn = document.getElementById('confirm-btn');
-  btn.disabled=true; btn.textContent='Confirming…';
-
-  // Collect actual bugi values
-  const inputs = document.querySelectorAll('[id^="bugi-actual-"]');
-  const verifications = [];
-  inputs.forEach(inp=>{
-    const packId = inp.id.replace('bugi-actual-','');
-    verifications.push({ actual: parseFloat(inp.value)||0, packId });
-  });
-
-  try {
-    // Update session status
-    await fetch(`${SB}/rest/v1/collector_sessions?id=eq.${currentSession.id}`,{
-      method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
-      body:JSON.stringify({
-        status:'confirmed',
-        confirmed_at:new Date().toISOString(),
-        confirmed_by:currentUser
-      })
-    });
-
-    toast('✅ Session confirmed!', 3000);
-    setTimeout(()=>{ showMain(); loadSessions(); }, 1500);
-  } catch(e){ toast('Error: '+e.message); btn.disabled=false; btn.textContent='✅ Confirm Verification'; }
-}
-
-/* ══ ALL EXPENSES ══ */
-async function loadAllExpenses(){
-  const date = document.getElementById('expenses-date').value;
-  const el = document.getElementById('expenses-list');
-  el.innerHTML='<div class="empty"><div class="spinner"></div></div>';
-  try {
-    const r = await fetch(`${SB}/rest/v1/collector_expenses?expense_date=eq.${date}&order=collector.asc,created_at.asc`,{headers:HDR});
-    const expenses = await r.json();
-    if(!expenses.length){ el.innerHTML='<div class="empty"><div class="empty-icon">💸</div><div>No expenses</div></div>'; return; }
-    const total = expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    const catIcons={fuel:'⛽',meals:'🍱',repair:'🔧',coin_wrapper:'📦',padlock:'🔒',others:'📝'};
-    el.innerHTML = `<div style="background:var(--blue);color:#fff;border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;justify-content:space-between;">
-      <span style="font-weight:700;">Total Expenses</span><span style="font-weight:800;">${fmt(total)}</span>
-    </div>` +
-    expenses.map(e=>`
-      <div class="exp-item">
-        <div class="exp-icon">${catIcons[e.category]||'📝'}</div>
-        <div class="exp-details">
-          <div class="exp-cat">${e.collector} — ${e.category.replace('_',' ')}</div>
-          <div class="exp-desc">${e.description||''}</div>
-          ${e.receipt_photo_url?`<img src="${e.receipt_photo_url}" class="exp-receipt" onclick="openPhoto('${e.receipt_photo_url}')">`:'<span style="font-size:10px;color:var(--mu);">No receipt</span>'}
-          <span class="badge ${e.confirmed?'badge-green':'badge-orange'}" style="margin-top:4px;display:inline-block;">${e.confirmed?'✅ Confirmed':'⏳ Pending'}</span>
-        </div>
-        <div class="exp-amount">${fmt(e.amount)}</div>
-      </div>
-    `).join('');
-  } catch(e){ el.innerHTML=`<div class="empty" style="color:var(--red);">Error: ${e.message}</div>`; }
-}
-
-/* ══ DAILY SUMMARY ══ */
-async function loadSummary(){
-  const date = document.getElementById('summary-date').value;
-  const el = document.getElementById('summary-content');
-  el.innerHTML='<div class="empty"><div class="spinner"></div></div>';
-  try {
-    const [rS,rH,rE] = await Promise.all([
-      fetch(`${SB}/rest/v1/collector_sessions?session_date=eq.${date}`,{headers:HDR}),
-      fetch(`${SB}/rest/v1/harvests?harvest_date=eq.${date}&select=collector,coins_total,spawn_share,net_collectible`,{headers:HDR}),
-      fetch(`${SB}/rest/v1/collector_expenses?expense_date=eq.${date}`,{headers:HDR})
-    ]);
-    const sessions=await rS.json(), harvests=await rH.json(), expenses=await rE.json();
-
-    const totalCoins = harvests.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
-    const totalSpawn = harvests.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
-    const totalExpenses = expenses.reduce((s,e)=>s+(parseFloat(e.amount)||0),0);
-    const confirmedSessions = sessions.filter(s=>s.status==='confirmed').length;
-
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-        <div class="card" style="text-align:center;"><div style="color:var(--mu);font-size:11px;">Harvests</div><div style="font-size:24px;font-weight:800;color:var(--blue);">${harvests.length}</div></div>
-        <div class="card" style="text-align:center;"><div style="color:var(--mu);font-size:11px;">Total Coins</div><div style="font-size:20px;font-weight:800;color:var(--green);">${fmt(totalCoins)}</div></div>
-        <div class="card" style="text-align:center;"><div style="color:var(--mu);font-size:11px;">Spawn Share</div><div style="font-size:20px;font-weight:800;color:var(--green);">${fmt(totalSpawn)}</div></div>
-        <div class="card" style="text-align:center;"><div style="color:var(--mu);font-size:11px;">Expenses</div><div style="font-size:20px;font-weight:800;color:var(--red);">${fmt(totalExpenses)}</div></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Sessions (${confirmedSessions}/${sessions.length} confirmed)</div>
-        ${sessions.map(s=>{
-          const diff = (s.total_declared||0)-(s.total_expected||0);
-          const dColor = Math.abs(diff)<1?'var(--green)':diff<0?'var(--red)':'var(--orange)';
-          return `<div class="sum-row">
-            <span class="sum-label">👤 ${s.collector}</span>
-            <span style="text-align:right;">
-              <span style="font-weight:600;">${fmt(s.total_expected||0)}</span>
-              <span style="color:${dColor};font-size:11px;margin-left:6px;">${Math.abs(diff)<1?'✅':(diff<0?'▼':'▲')+'₱'+Math.abs(diff).toLocaleString()}</span>
-            </span>
-          </div>`;
-        }).join('')||'<div style="color:var(--mu);font-size:12px;text-align:center;">No sessions</div>'}
-      </div>
-      <div class="card" style="margin-bottom:80px;">
-        <div class="card-title">Net Summary</div>
-        <div class="sum-row"><span class="sum-label">Total Collected</span><span class="sum-val">${fmt(totalCoins)}</span></div>
-        <div class="sum-row"><span class="sum-label">Total Expenses</span><span class="sum-val" style="color:var(--red);">-${fmt(totalExpenses)}</span></div>
-        <div class="sum-row"><span class="sum-label" style="font-weight:700;">Net</span><span class="sum-val sum-total">${fmt(totalCoins-totalExpenses)}</span></div>
-      </div>
-    `;
-  } catch(e){ el.innerHTML=`<div class="empty" style="color:var(--red);">Error: ${e.message}</div>`; }
-}
-
-/* ══ COLLECTIONS ══ */
-let _colOfficeData = [], _colRouteFilter = 'ALL';
-
-function colSetDateDefault(){
-  const el = document.getElementById('collections-date');
-  if(el && !el.value){
-    const d = new Date(Date.now()+8*3600000);
-    const pad = n => String(n).padStart(2,'0');
-    el.value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-  }
-}
-
-async function loadCollections(){
-  colSetDateDefault();
-  const date = document.getElementById('collections-date').value;
+// ── DATA LOAD ──
+async function loadData(){
+  const date = document.getElementById('date-picker').value;
   if(!date) return;
-  const listEl = document.getElementById('col-list-office');
-  const sumEl = document.getElementById('col-summary-cards');
-  const filterEl = document.getElementById('col-route-filter');
-  listEl.innerHTML = '<div class="empty"><div class="spinner"></div></div>';
-  sumEl.innerHTML = ''; filterEl.innerHTML = '';
+  document.getElementById('collectors-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+
   try {
-    const r = await fetch(`${SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,sheet_name,tg_name,route_code,area,collector,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at&order=route_code.asc,sheet_name.asc,harvested_at.desc`,{headers:HDR});
-    _colOfficeData = await r.json() || [];
-    _colRouteFilter = 'ALL';
-    colRenderOffice();
+    // Fetch harvests for date
+    const hResp = await fetch(`${SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,collector,vendo_id,vendo_name,tg_name,area,coins_total,spawn_share,net_collectible,harvested_at&order=harvested_at.desc`,{headers:HDR});
+    allHarvests = await hResp.json();
+
+    // Fetch pack items for date
+    const pResp = await fetch(`${SB}/rest/v1/harvest_pack_items?harvest_date=eq.${date}&select=*&order=created_at.asc`,{headers:HDR});
+    allPackItems = await pResp.json();
+
+    renderPacksTab();
   } catch(e){
-    listEl.innerHTML = `<div class="empty" style="color:var(--red);">Error: ${e.message}</div>`;
+    document.getElementById('collectors-list').innerHTML = '<div class="empty-state">Error loading data</div>';
+    console.error(e);
   }
 }
 
-function colRenderOffice(){
-  const listEl = document.getElementById('col-list-office');
-  const sumEl = document.getElementById('col-summary-cards');
-  const filterEl = document.getElementById('col-route-filter');
+async function loadVendos(){
+  document.getElementById('vendo-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
+  try {
+    const resp = await fetch(`${SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area,vendo_code,last_harvest_date&order=area.asc,sheet_name.asc&limit=2000`,{headers:HDR});
+    allVendos = await resp.json();
+    renderVendoTab();
+  } catch(e){
+    document.getElementById('vendo-list').innerHTML = '<div class="empty-state">Error loading vendos</div>';
+  }
+}
 
-  // Detect duplicates: same sheet_name on same day submitted more than once
-  const nameCount = {};
-  _colOfficeData.forEach(r => {
-    const key = (r.sheet_name||r.tg_name||'').toLowerCase();
-    nameCount[key] = (nameCount[key]||0) + 1;
-  });
+// ── RENDER PACKS TAB ──
+function renderPacksTab(){
+  // Group harvests by collector
+  const byCollector = {};
+  for(const h of allHarvests){
+    const c = h.collector || 'Unknown';
+    if(!byCollector[c]) byCollector[c] = {harvests:[], packs:[]};
+    byCollector[c].harvests.push(h);
+  }
+  for(const p of allPackItems){
+    const c = p.collector || 'Unknown';
+    if(!byCollector[c]) byCollector[c] = {harvests:[], packs:[]};
+    byCollector[c].packs.push(p);
+  }
 
-  // Filter by route
-  const rows = _colRouteFilter === 'ALL' ? _colOfficeData
-    : _colOfficeData.filter(r => (r.route_code||'—') === _colRouteFilter);
+  // Summary totals
+  const totalSpawn = allHarvests.reduce((s,h) => s + parseFloat(h.spawn_share||0), 0);
+  const totalPacks = allPackItems.length;
+  const totalVendos = allHarvests.length;
+  document.getElementById('sum-spawn').textContent = '₱'+fmt(totalSpawn);
+  document.getElementById('sum-packs').textContent = totalPacks;
+  document.getElementById('sum-vendos-harvested').textContent = totalVendos;
 
-  // Route filter buttons
-  const routes = ['ALL', ...new Set(_colOfficeData.map(r => r.route_code||'—').sort())];
-  filterEl.innerHTML = routes.map(rc => `
-    <button onclick="_colSetRoute('${rc}')" style="padding:4px 11px;border-radius:14px;border:1.5px solid ${rc===_colRouteFilter?'#15803d':'#e5e7eb'};background:${rc===_colRouteFilter?'#15803d':'#fff'};color:${rc===_colRouteFilter?'#fff':'#374151'};font-size:11px;font-weight:700;cursor:pointer;font-family:monospace;letter-spacing:.5px;">${rc}</button>
-  `).join('');
-
-  // Summary
-  const totalCoins = rows.reduce((s,r)=>s+(+r.coins_total||0),0);
-  const totalNet = rows.reduce((s,r)=>s+(+r.net_collectible||0),0);
-  const totalSpawn = rows.reduce((s,r)=>s+(+r.spawn_share||0),0);
-  const dupeCount = rows.filter(r=>nameCount[(r.sheet_name||r.tg_name||'').toLowerCase()]>1).length;
-  sumEl.innerHTML = [
-    ['Vendos', rows.length, '#1e40af','#dbeafe'],
-    ['Total Coins', '₱'+totalCoins.toLocaleString(), '#15803d','#dcfce7'],
-    ['Net', '₱'+totalNet.toLocaleString(), '#d97706','#fef3c7'],
-    ['⚠ Duplicates', dupeCount, '#dc2626','#fee2e2'],
-  ].map(([l,v,c,bg])=>`
-    <div style="background:${bg};border-radius:10px;padding:10px;text-align:center;">
-      <div style="font-size:18px;font-weight:800;color:${c};">${v}</div>
-      <div style="font-size:10px;color:#6b7280;margin-top:2px;">${l}</div>
-    </div>
-  `).join('');
-
-  if(!rows.length){
-    listEl.innerHTML = '<div class="empty"><div class="empty-icon">💰</div><div>No collections for this date</div></div>';
+  if(Object.keys(byCollector).length === 0){
+    document.getElementById('collectors-list').innerHTML = '<div class="empty-state">No harvests recorded for this date</div>';
     return;
   }
 
-  // Group by route_code
-  const byRoute = {};
-  rows.forEach(r => {
-    const rc = r.route_code || '—';
-    if(!byRoute[rc]) byRoute[rc] = [];
-    byRoute[rc].push(r);
-  });
+  let html = '';
+  for(const [cname, data] of Object.entries(byCollector)){
+    const collSpawn = data.harvests.reduce((s,h) => s + parseFloat(h.spawn_share||0), 0);
+    const collPacks = data.packs.length;
+    const initials = cname.substring(0,2).toUpperCase();
 
-  listEl.innerHTML = Object.entries(byRoute).map(([rc, rRows]) => {
-    const rNet = rRows.reduce((s,r)=>s+(+r.net_collectible||0),0);
-    const rTotal = rRows.reduce((s,r)=>s+(+r.coins_total||0),0);
+    // Group packs by vendo_code for this collector
+    const packsByVendo = {};
+    for(const p of data.packs){
+      const key = p.vendo_code || '—';
+      if(!packsByVendo[key]) packsByVendo[key] = [];
+      packsByVendo[key].push(p);
+    }
 
-    const vendoRows = rRows.map(r => {
-      const key = (r.sheet_name||r.tg_name||'').toLowerCase();
-      const isDupe = nameCount[key] > 1;
-      const time = r.harvested_at ? new Date(r.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
-      return `
-        <div style="border:1.5px solid ${isDupe?'#fca5a5':'#e5e7eb'};border-radius:10px;padding:10px 12px;margin-bottom:6px;background:${isDupe?'#fff5f5':'#fff'};">
-          ${isDupe?'<div style="font-size:10px;font-weight:700;color:#dc2626;margin-bottom:4px;">⚠ DUPLICATE ENTRY</div>':''}
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:700;color:#1e293b;">${r.sheet_name||r.tg_name||'—'}</div>
-              <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${r.collector||'—'} · ${r.area||'—'} · ${time}</div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:15px;font-weight:800;color:#15803d;">₱${(+r.net_collectible||0).toLocaleString()}</div>
-              <div style="font-size:10px;color:#9ca3af;">net</div>
-            </div>
+    // Pack rows
+    let packTableRows = '';
+    let packRowCount = 0;
+    // Also include harvests with no pack items (show as pending)
+    const harvestCodes = new Set(data.harvests.map(h => (h.vendo_code||'').toUpperCase()).filter(Boolean));
+    const packCodes = new Set(Object.keys(packsByVendo));
+
+    for(const [vcode, packs] of Object.entries(packsByVendo)){
+      const totalAmt = packs.reduce((s,p) => s + parseFloat(p.amount||0), 0);
+      for(const p of packs){
+        packRowCount++;
+        const typeLabel = {mix:'Mix 1k', peso:'Peso 300', bugi:'Bugi', bills:'Bills'}[p.pack_type] || p.pack_type;
+        const typeCls = {mix:'pt-mix', peso:'pt-peso', bugi:'pt-bugi', bills:'pt-bills'}[p.pack_type] || 'pt-mix';
+        const vendoName = data.harvests.find(h => h.vendo_code === vcode || (h.tg_name||'').toUpperCase() === vcode)?.vendo_name || '';
+        packTableRows += `
+          <tr>
+            <td><span class="pack-code">${vcode}</span></td>
+            <td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${vendoName||p.vendo_id||'—'}</td>
+            <td><span class="pack-type-badge ${typeCls}">${typeLabel}</span></td>
+            <td style="text-align:right;font-weight:700;color:var(--text)">₱${fmt(parseFloat(p.amount||0))}</td>
+          </tr>`;
+      }
+    }
+
+    // Harvests without pack data
+    const harvestsNoPacks = data.harvests.filter(h => {
+      const hPacks = data.packs.filter(p => p.harvest_id === h.id);
+      return hPacks.length === 0;
+    });
+    for(const h of harvestsNoPacks){
+      packTableRows += `
+        <tr>
+          <td><span class="pack-code" style="background:var(--amber-light);color:var(--amber)">${(h.vendo_code||'—').toUpperCase()}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${h.vendo_name||h.tg_name||'—'}</td>
+          <td><span class="pill pill-amber">No packs yet</span></td>
+          <td style="text-align:right;font-size:11px;color:var(--muted)">Spawn: ₱${fmt(parseFloat(h.spawn_share||0))}</td>
+        </tr>`;
+    }
+
+    const overallTotal = data.packs.reduce((s,p) => s + parseFloat(p.amount||0), 0);
+    const diff = Math.round(overallTotal - collSpawn);
+    const diffBadge = diff === 0 && collPacks > 0
+      ? '<span class="pill pill-green">✓ Balanced</span>'
+      : diff !== 0 && collPacks > 0
+        ? `<span class="pill pill-red">${diff > 0 ? '▲' : '▼'} ₱${fmt(Math.abs(diff))}</span>`
+        : '<span class="pill pill-gray">Pending</span>';
+
+    html += `
+      <div class="col-row" id="colrow-${cname.replace(/\s/g,'_')}" onclick="toggleCollector(this)">
+        <div class="col-header">
+          <div class="col-av">${initials}</div>
+          <div class="col-info">
+            <div class="col-name">${cname}</div>
+            <div class="col-meta">${data.harvests.length} vendo${data.harvests.length!==1?'s':''} · ${collPacks} pack${collPacks!==1?'s':''} · ${diffBadge}</div>
           </div>
-          <!-- Coin breakdown -->
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:8px;">
-            <div style="background:#f0fdf4;border-radius:7px;padding:5px;text-align:center;">
-              <div style="font-size:13px;font-weight:800;color:#15803d;">₱${(+r.coins_total||0).toLocaleString()}</div>
-              <div style="font-size:9px;color:#6b7280;">Total</div>
-            </div>
-            <div style="background:#fef9c3;border-radius:7px;padding:5px;text-align:center;">
-              <div style="font-size:13px;font-weight:800;color:#854d0e;">${(+r.coins_free||0)}</div>
-              <div style="font-size:9px;color:#6b7280;">Free</div>
-            </div>
-            <div style="background:#fce7f3;border-radius:7px;padding:5px;text-align:center;">
-              <div style="font-size:13px;font-weight:800;color:#9d174d;">${(+r.coins_saloy||0)}</div>
-              <div style="font-size:9px;color:#6b7280;">Saloy</div>
-            </div>
-            <div style="background:#f1f5f9;border-radius:7px;padding:5px;text-align:center;">
-              <div style="font-size:13px;font-weight:800;color:#475569;">${(+r.coins_old||0)}</div>
-              <div style="font-size:9px;color:#6b7280;">Old</div>
-            </div>
+          <div class="col-totals">
+            <div class="col-total-val">₱${fmt(collSpawn)}</div>
+            <div class="col-total-lbl">Spawn share</div>
           </div>
         </div>
-      `;
-    }).join('');
-
-    return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f0fdf4;border-radius:10px;margin-bottom:8px;border-left:4px solid #15803d;">
-          <div style="font-size:14px;font-weight:800;color:#15803d;font-family:monospace;">${rc} <span style="font-weight:400;color:#6b7280;font-family:sans-serif;font-size:12px;">(${rRows.length} vendos)</span></div>
-          <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:700;color:#15803d;">₱${rNet.toLocaleString()} net</div>
-            <div style="font-size:10px;color:#6b7280;">₱${rTotal.toLocaleString()} total</div>
+        <div class="col-detail">
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+            <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.04em">Pack breakdown</div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <span class="pill pill-blue">Total packs: ₱${fmt(overallTotal)}</span>
+              <span class="pill pill-green">Spawn share: ₱${fmt(collSpawn)}</span>
+              ${diff !== 0 ? `<span class="pill pill-red">Gap: ₱${fmt(Math.abs(diff))}</span>` : ''}
+            </div>
           </div>
+          ${packTableRows ? `
+          <div style="overflow-x:auto">
+            <table class="pack-table">
+              <thead><tr><th>Code</th><th>Vendo</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead>
+              <tbody>${packTableRows}</tbody>
+            </table>
+          </div>` : '<div class="empty-state" style="padding:12px">No pack data yet</div>'}
         </div>
-        ${vendoRows}
-      </div>
-    `;
-  }).join('');
+      </div>`;
+  }
+
+  document.getElementById('collectors-list').innerHTML = html;
 }
 
-window._colSetRoute = function(rc){ _colRouteFilter=rc; colRenderOffice(); };
-
-/* ══ PHOTO MODAL ══ */
-function openPhoto(url){
-  document.getElementById('photo-modal-img').src=url;
-  document.getElementById('photo-modal').style.display='flex';
+function toggleCollector(el){
+  el.classList.toggle('open');
 }
+
+// ── RENDER VENDO TAB ──
+function renderVendoTab(){
+  const q = (document.getElementById('vendo-search').value||'').toLowerCase().trim();
+  let vendos = allVendos;
+  if(q) vendos = vendos.filter(v =>
+    (v.sheet_name||'').toLowerCase().includes(q) ||
+    (v.tg_name||'').toLowerCase().includes(q) ||
+    (v.area||'').toLowerCase().includes(q) ||
+    (v.vendo_code||'').toLowerCase().includes(q)
+  );
+
+  if(!vendos.length){
+    document.getElementById('vendo-list').innerHTML = '<div class="empty-state">No vendos found</div>';
+    return;
+  }
+
+  // Group by area
+  const byArea = {};
+  for(const v of vendos){
+    const a = v.area || 'Unknown';
+    if(!byArea[a]) byArea[a] = [];
+    byArea[a].push(v);
+  }
+
+  let html = '';
+  for(const [area, vs] of Object.entries(byArea)){
+    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="padding:10px 14px;background:var(--blue-light);border-bottom:1px solid var(--blue-mid)">
+        <span style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em">${area}</span>
+        <span style="font-size:10px;color:var(--muted);margin-left:6px">${vs.length} vendos</span>
+      </div>`;
+    for(const v of vs){
+      const code = v.vendo_code ? v.vendo_code.toUpperCase() : '—';
+      const lastHarvest = v.last_harvest_date ? v.last_harvest_date : 'Never';
+      html += `<div class="vendo-row">
+        <span class="vendo-code-chip">${code}</span>
+        <span class="vendo-name" title="${v.sheet_name||v.tg_name||'—'}">${v.sheet_name||v.tg_name||'—'}</span>
+        <span class="vendo-area">${v.area||''}</span>
+        <span class="vendo-last">${lastHarvest}</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  document.getElementById('vendo-list').innerHTML = html;
+}
+
+// ── UTILS ──
+function fmt(n){ return isNaN(n) ? '0' : Number(n).toLocaleString('en-PH',{maximumFractionDigits:2}); }
+
+function toast(msg, dur=2200){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── INIT ──
+renderAccounts();
 </script>
 </body>
 </html>
