@@ -3048,11 +3048,6 @@ window.showScreen = function(id){
   }
 };
 
-var _p1k = 0, _p300 = 0;
-var _sessionId = null;
-var _expenses = [];
-var _packData = {}; // keyed by vendo_id
-
 // Reset pack form when opening a new vendo
 const _origShowForm = typeof showForm === 'function' ? showForm : null;
 function resetPackForm(){
@@ -3102,30 +3097,28 @@ function resetPackForm(){
   };
   window.confirmAndSubmit = async function(){
     document.getElementById('harvest-confirm-overlay').classList.remove('show');
-    // Save pack data for this vendo
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
     const cash = parseFloat(document.getElementById('cash-amount').value)||0;
     const vcode = (currentItem&&currentItem.vendo_code)||'';
     if(currentItem){
       _packData[currentItem.vendo_id||currentItem.id] = {
-        packs_1k: p1k,
-        packs_300: p300,
-        bugi_amount: bugi,
-        cash_amount: cash,
+        packs_1k: p1k, packs_300: p300, bugi_amount: bugi, cash_amount: cash,
         vendo_name: document.getElementById('form-vname').textContent,
         vendo_code: vcode
       };
     }
-    // Save individual pack rows to harvest_pack_items (keyed by harvest after insert)
-    // We queue them and save after submitHarvest resolves via a patched approach
     window._pendingPackItems = [];
-    const today = new Date().toISOString().split('T')[0];
     if(p1k > 0) for(let i=0;i<p1k;i++) window._pendingPackItems.push({pack_type:'mix',amount:1000,vendo_code:vcode});
     if(p300 > 0) for(let i=0;i<p300;i++) window._pendingPackItems.push({pack_type:'peso',amount:300,vendo_code:vcode});
     if(bugi > 0) window._pendingPackItems.push({pack_type:'bugi',amount:bugi,vendo_code:vcode});
     if(cash > 0) window._pendingPackItems.push({pack_type:'bills',amount:cash,vendo_code:vcode});
-    if(origSubmit) origSubmit();
+    try{
+      if(origSubmit) await origSubmit();
+    } catch(e){
+      toast('❌ Submit error: '+e.message, 4000);
+      document.querySelectorAll('.action-row .btn-green').forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
+    }
   };
   window.closeHarvestConfirm = function(){
     document.getElementById('harvest-confirm-overlay').classList.remove('show');
