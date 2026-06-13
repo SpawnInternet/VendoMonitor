@@ -1643,6 +1643,7 @@ async function htLoad(){
         if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
         if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
         htFilter();
+        loadTodaySummary();
         if(age > 60*60*1000) htRebuildCache();
         return;
       }
@@ -1696,7 +1697,61 @@ async function htLoad(){
     collectors.forEach(c=>{ rcSel.innerHTML += `<option>${c}</option>`; });
   }
   htFilter();
+  loadTodaySummary();
 }
+
+async function loadTodaySummary(){
+  const el = document.getElementById('harvest-collector-summary');
+  if(!el) return;
+  el.innerHTML = '<div style="font-size:11px;color:var(--mu);padding:4px 0">Loading today…</div>';
+  try {
+    const today = new Date().toISOString().slice(0,10);
+    const r = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=collector,vendo_name,area,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.desc`,{headers:_HDR});
+    const rows = await r.json();
+    if(!Array.isArray(rows)||!rows.length){
+      el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;color:var(--mu)">📭 No harvests recorded today yet</div>';
+      return;
+    }
+    // Group by collector
+    const byCol = {};
+    rows.forEach(h=>{
+      const c = h.collector||'Unknown';
+      if(!byCol[c]) byCol[c]={count:0,spawn:0,areas:new Set()};
+      byCol[c].count++;
+      byCol[c].spawn += Number(h.spawn_share||0);
+      if(h.area) byCol[c].areas.add(h.area);
+    });
+    const totalCount = rows.length;
+    const totalSpawn = rows.reduce((s,h)=>s+Number(h.spawn_share||0),0);
+    const colColors = ['#1565c0','#15803d','#b45309','#7c3aed','#0d9488'];
+    const colEntries = Object.entries(byCol).sort((a,b)=>b[1].spawn-a[1].spawn);
+    el.innerHTML = `
+      <div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 14px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+          <div style="font-size:12px;font-weight:700;color:#1565c0;">📅 Today's Harvest Summary</div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span style="font-size:11px;color:var(--mu);">${totalCount} vendos</span>
+            <span style="font-size:14px;font-weight:700;color:#15803d;">₱${_php(totalSpawn)} spawn share</span>
+            <button onclick="loadTodaySummary()" style="padding:2px 8px;border:1px solid var(--bd);border-radius:5px;background:#fff;font-size:11px;cursor:pointer;color:var(--mu)">↻</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${colEntries.map(([name,d],i)=>`
+            <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;">
+              <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:${colColors[i%colColors.length]};flex-shrink:0;"></div>
+                <span style="font-size:12px;font-weight:700;color:#1e293b;">${name}</span>
+              </div>
+              <div style="font-size:13px;font-weight:700;color:#15803d;">₱${_php(d.spawn)}</div>
+              <div style="font-size:10px;color:var(--mu);margin-top:1px;">${d.count} vendo${d.count!==1?'s':''} · ${[...d.areas].join(', ')||'—'}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  } catch(e){
+    el.innerHTML = '<div style="font-size:11px;color:#dc2626;padding:4px 0">Error loading today summary</div>';
+  }
+}
+
 
 function htFilter(){
   const area = document.getElementById('ht-area').value;
