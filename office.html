@@ -212,12 +212,31 @@ const SB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTA5MTY0NTEsImV4cCI6MjAyNjQ5MjQ1MX0.9rSLGHFXHFWELnzxONMGnOzjHIgjwFyMVTnBSWKHSJU';
 const HDR = {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json'};
 
-// ── ACCOUNTS (name + PIN — change PINs here) ──
-const ACCOUNTS = [
-  {id:'office1', name:'Office 1', role:'Staff',    pin:'1234', initials:'O1'},
-  {id:'office2', name:'Office 2', role:'Staff',    pin:'2345', initials:'O2'},
-  {id:'admin',   name:'Admin',    role:'Manager',  pin:'0000', initials:'AD'},
-];
+// ── ACCOUNTS — loaded from office_accounts table ──
+let ACCOUNTS = [];
+
+async function loadAccounts(){
+  try{
+    const r = await fetch(`${SB}/rest/v1/office_accounts?active=eq.true&select=id,name,pin,role&order=name.asc`,{headers:HDR});
+    const rows = await r.json();
+    ACCOUNTS = rows.map(a=>({
+      id: String(a.id),
+      name: a.name,
+      role: a.role||'Staff',
+      pin: a.pin||'0000',
+      initials: a.name.substring(0,2).toUpperCase()
+    }));
+    renderAccounts();
+  }catch(e){
+    // Fallback to defaults if DB unreachable
+    ACCOUNTS = [
+      {id:'1',name:'Gilbert',role:'Staff',pin:'1189',initials:'GI'},
+      {id:'2',name:'Ailyn',  role:'Staff',pin:'2274',initials:'AI'},
+      {id:'3',name:'Joi',    role:'Staff',pin:'3361',initials:'JO'},
+    ];
+    renderAccounts();
+  }
+}
 
 let selectedAccount = null;
 let pinBuffer = '';
@@ -527,7 +546,7 @@ function toast(msg, dur=2200){
 }
 
 // ── INIT ──
-renderAccounts();
+loadAccounts();
 </script>
 </body>
 </html>
