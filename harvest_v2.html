@@ -2271,6 +2271,12 @@ function openCollectionSheet(){
   // Reset to step 1
   document.getElementById('csheet-step1').style.display='block';
   document.getElementById('csheet-step2').style.display='none';
+  // Show vendo code badge
+  const vcode = (currentItem && currentItem.vendo_code) ? currentItem.vendo_code.toUpperCase() : '';
+  const badge = document.getElementById('csheet-vcode-badge');
+  const val = document.getElementById('csheet-vcode-val');
+  if(badge && val && vcode){ badge.style.display='block'; val.textContent=vcode; }
+  else if(badge){ badge.style.display='none'; }
   document.getElementById('collection-sheet-overlay').classList.add('show');
 }
 function closeCollectionSheet(){
@@ -2284,11 +2290,21 @@ function doneCollectionSheet(){
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-  if(coinTotal > 0 && packTotal > 0 && packTotal !== coinTotal){
-    const warn = document.getElementById('sheet-match-warning');
-    if(warn){ warn.style.display='block'; warn.textContent='⚠️ Breakdown ₱'+fmt(packTotal)+' ≠ coin total ₱'+fmt(coinTotal)+'. Fix before proceeding.'; }
+  const free = parseFloat(document.getElementById('coin-free')?.value)||0;
+  const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
+  const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
+  const net = Math.max(0, coinTotal - free - saloy - freeCoins);
+  const spawnShare = Math.round(net * 0.75);
+  const warn = document.getElementById('sheet-match-warning');
+  if(coinTotal > 0 && packTotal > 0 && packTotal !== spawnShare){
+    const diff = packTotal - spawnShare;
+    const msg = diff > 0
+      ? '⚠️ Packs ₱'+fmt(packTotal)+' is ₱'+fmt(diff)+' OVER spawn share ₱'+fmt(spawnShare)+'. Fix packs.'
+      : '⚠️ Packs ₱'+fmt(packTotal)+' is ₱'+fmt(Math.abs(diff))+' SHORT of spawn share ₱'+fmt(spawnShare)+'. Add more packs.';
+    if(warn){ warn.style.display='block'; warn.textContent=msg; }
     return;
   }
+  if(warn) warn.style.display='none';
   closeCollectionSheet();
 }
 
@@ -2495,7 +2511,24 @@ async function submitHarvest(){
       // Update group item
       await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(itemUpdate)});
       // Save harvest record
-      await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(harvestRecord)});
+      const _hResp = await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(harvestRecord)});
+      const _hRows = await _hResp.json().catch(()=>[]);
+      const _hId = (_hRows&&_hRows[0]&&_hRows[0].id)||null;
+      // Save pack items
+      if(_hId && window._pendingPackItems && window._pendingPackItems.length){
+        const today2 = harvestRecord.harvest_date;
+        const packInserts = window._pendingPackItems.map(p=>({
+          harvest_id:_hId,
+          vendo_id:currentItem.vendo_id||null,
+          vendo_code:p.vendo_code||'',
+          collector:selectedCollector||'',
+          harvest_date:today2,
+          pack_type:p.pack_type,
+          amount:p.amount
+        }));
+        await fetch(`${SB}/rest/v1/harvest_pack_items`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(packInserts)}).catch(()=>{});
+        window._pendingPackItems=[];
+      }
       // Update vendo
       if(currentItem.vendo_id) await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(vendoUpdate)});
       // Update group run counts
@@ -3110,19 +3143,31 @@ function resetPackForm(){
     if(cnBreak) cnBreak.textContent = '₱'+fmt(breakdownTotal);
     document.getElementById('harvest-confirm-overlay').classList.add('show');
   };
-  window.confirmAndSubmit = function(){
+  window.confirmAndSubmit = async function(){
     document.getElementById('harvest-confirm-overlay').classList.remove('show');
     // Save pack data for this vendo
+    const p1k = _p1k||0, p300 = _p300||0;
+    const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
+    const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+    const vcode = (currentItem&&currentItem.vendo_code)||'';
     if(currentItem){
       _packData[currentItem.vendo_id||currentItem.id] = {
-        packs_1k: _p1k||0,
-        packs_300: _p300||0,
-        bugi_amount: parseFloat(document.getElementById('bugi-amount').value)||0,
-        cash_amount: parseFloat(document.getElementById('cash-amount').value)||0,
+        packs_1k: p1k,
+        packs_300: p300,
+        bugi_amount: bugi,
+        cash_amount: cash,
         vendo_name: document.getElementById('form-vname').textContent,
-        vendo_code: currentItem.vendo_code||''
+        vendo_code: vcode
       };
     }
+    // Save individual pack rows to harvest_pack_items (keyed by harvest after insert)
+    // We queue them and save after submitHarvest resolves via a patched approach
+    window._pendingPackItems = [];
+    const today = new Date().toISOString().split('T')[0];
+    if(p1k > 0) for(let i=0;i<p1k;i++) window._pendingPackItems.push({pack_type:'mix',amount:1000,vendo_code:vcode});
+    if(p300 > 0) for(let i=0;i<p300;i++) window._pendingPackItems.push({pack_type:'peso',amount:300,vendo_code:vcode});
+    if(bugi > 0) window._pendingPackItems.push({pack_type:'bugi',amount:bugi,vendo_code:vcode});
+    if(cash > 0) window._pendingPackItems.push({pack_type:'bills',amount:cash,vendo_code:vcode});
     if(origSubmit) origSubmit();
   };
   window.closeHarvestConfirm = function(){
@@ -3766,9 +3811,15 @@ async function submitEodSession(){
             <button onclick="document.getElementById('csheet-step1').style.display='block';document.getElementById('csheet-step2').style.display='none'" style="background:none;border:none;font-size:13px;color:#2B7BE8;cursor:pointer;font-family:inherit;font-weight:600;padding:0;margin-bottom:4px">← Back</button>
             <div style="font-size:17px;font-weight:700">Pack Breakdown</div>
           </div>
-          <button onclick="closeCollectionSheet()" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1">✕</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div id="csheet-vcode-badge" style="background:#1e3cb8;color:#fff;border-radius:10px;padding:6px 14px;text-align:center;display:none">
+              <div style="font-size:8px;font-weight:700;opacity:.8;text-transform:uppercase;letter-spacing:.06em">Vendo code</div>
+              <div id="csheet-vcode-val" style="font-size:20px;font-weight:900;letter-spacing:.05em;line-height:1.1">—</div>
+            </div>
+            <button onclick="closeCollectionSheet()" style="background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1">✕</button>
+          </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">How is the collection packed?</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Mark each pack with this code + amount before bagging</div>
 
         <div class="pack-row">
           <div class="pack-denom">₱1,000 packs <span>Each = ₱1,000</span></div>
