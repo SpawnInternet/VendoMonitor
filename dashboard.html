@@ -5723,17 +5723,18 @@ function closeSuspiciousDetail() {
 
 const RC_DEFAULT_START = '2026-03-01';
 
-async function loadReconciliation() {
+async async function loadReconciliation() {
   const content = document.getElementById('dev-rc-content');
   const grandStats = document.getElementById('dev-rc-stats');
   const statusBar = document.getElementById('dev-rc-status');
   if (!content) return;
-  content.innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">⏳ Loading harvest records…</div>';
+  content.innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">⏳ Loading reconciliation cache…</div>';
   if (grandStats) grandStats.innerHTML = '';
   if (statusBar) statusBar.innerHTML = '';
   try {
-    // 1. Load all harvests
-    const rh = await fetch(SB_URL + '/rest/v1/harvests?select=*&order=harvest_date.desc,created_at.desc&limit=1000', { headers: HDR });
+    // Load from cached bucket instead of querying live
+    const cacheUrl = `https://${SB_URL.split('//')[1].split('.')[0]}.supabase.co/storage/v1/object/public/harvest-history-cache/reconciliation_cache.json`;
+    const rh = await fetch(cacheUrl);
     const allHarvests = await rh.json() || [];
     if (!allHarvests.length) {
       content.innerHTML = '<div style="text-align:center;padding:40px;color:#9ca3af;">No harvest records yet. Complete a harvest route first.</div>';
@@ -5749,31 +5750,8 @@ async function loadReconciliation() {
     content.innerHTML = `<div style="text-align:center;padding:40px;color:#9ca3af;">⏳ Fetching TG income for ${allTgNames.length} vendos…</div>`;
     const tgMap = {};
 
-    await Promise.all(allTgNames.map(async tgName => {
-      const start = windowMap[tgName] || RC_DEFAULT_START;
-      const vendoHarvests = allHarvests.filter(h => h.tg_name === tgName);
-      const latestDate = vendoHarvests.map(h => h.harvest_date).sort().pop();
-      if (!latestDate) return;
-      let allRows = [], page = 0, pageSize = 1000;
-      while (true) {
-        try {
-          const r = await fetch(
-            `${SB_URL}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tgName)}&date=gte.${start}&date=lte.${latestDate}&is_skipped=eq.false&not.and=(total_time.like.*w*,extended.eq.1)&select=amount,date`,
-            { headers: { ...HDR, 'Range': `${page*pageSize}-${(page+1)*pageSize-1}`, 'Prefer': 'count=none' } }
-          );
-          const rows = await r.json() || [];
-          allRows = allRows.concat(rows);
-          if (rows.length < pageSize) break;
-          page++;
-        } catch(e) { break; }
-      }
-      tgMap[tgName] = {};
-      allRows.forEach(tx => {
-        if (!tgMap[tgName][tx.date]) tgMap[tgName][tx.date] = 0;
-        tgMap[tgName][tx.date] += parseFloat(tx.amount) || 0;
-      });
-      tgMap[tgName]._total = allRows.reduce((s, tx) => s + (parseFloat(tx.amount) || 0), 0);
-    }));
+    // TG map already pre-computed in cache
+    const tgMap = cacheData.tg_map || {};
 
     // 4. Group by harvest_date → collector → route_code
     const byDate = {};
