@@ -3067,15 +3067,17 @@ function resetPackForm(){
 (function patchSubmit(){
   const origSubmit = window.submitHarvest;
   window.submitHarvestConfirm = function(){
-    const breakdownTotal = parseFloat(document.getElementById('coin-total-inp')?.value) || parseFloat(document.getElementById('coin-total')?.value)||0;
-    if(!breakdownTotal){ toast('Enter collection details first'); openCollectionSheet(); return; }
-    // Sync hidden field so submitHarvest() reads correct value
-    const _hidden = document.getElementById('coin-total');
-    if(_hidden && document.getElementById('coin-total-inp')?.value) _hidden.value = document.getElementById('coin-total-inp').value;
-
+    const coinTotalInp = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+    if(!coinTotalInp){ toast('Enter collection details first'); openCollectionSheet(); return; }
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
     const cash = parseFloat(document.getElementById('cash-amount').value)||0;
+    const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
+    // breakdownTotal = coin input (what was physically counted)
+    const breakdownTotal = coinTotalInp;
+    // Sync hidden field — submitHarvest reads this
+    const _hidden = document.getElementById('coin-total');
+    if(_hidden) _hidden.value = coinTotalInp;
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
@@ -3794,11 +3796,11 @@ async function submitEodSession(){
         </div>
         <div style="margin-bottom:12px">
           <div class="coin-label" style="color:#2B7BE8">Bugi <span>Loose coins/small bills</span></div>
-          <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric">
+          <input type="number" class="coin-input" id="bugi-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
         </div>
         <div style="margin-bottom:16px">
           <div class="coin-label" style="color:#2B7BE8">Cash <span>Paper bills</span></div>
-          <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric">
+          <input type="number" class="coin-input" id="cash-amount" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
         </div>
 
         <!-- Summary -->
