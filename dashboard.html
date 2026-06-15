@@ -5157,22 +5157,42 @@ async function colLoad() {
     const totalSpawn  = rows.reduce((s,r)=>s+Number(r.spawn_share||0),0);
     const totalOwner  = rows.reduce((s,r)=>s+Number(r.customer_share||0),0);
     const byCollector = {};
-    rows.forEach(r=>{ const c=r.collector||'Unknown'; if(!byCollector[c]) byCollector[c]={count:0,spawn:0}; byCollector[c].count++; byCollector[c].spawn+=Number(r.spawn_share||0); });
+    rows.forEach(r=>{ const c=r.collector||'Unknown'; if(!byCollector[c]) byCollector[c]={count:0,spawn:0,expenses:[]}; byCollector[c].count++; byCollector[c].spawn+=Number(r.spawn_share||0); });
+
+    // Fetch expenses for this date from collector_expenses (harvest_v2)
+    let expenses = [];
+    try {
+      const expRows = await sb('collector_expenses', `expense_date=eq.${date}&select=collector,category,description,amount&order=created_at.asc`, 200);
+      if (Array.isArray(expRows)) {
+        expenses = expRows;
+        expRows.forEach(e=>{ const c=e.collector||'Unknown'; if(byCollector[c]) byCollector[c].expenses.push(e); });
+      }
+    } catch(ex) { /* expenses optional */ }
+
+    const totalExpenses = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+
     if(sumEl) sumEl.innerHTML = `
       <div class="stat"><div class="sl">Vendos</div><div class="sv">${rows.length}</div></div>
       <div class="stat"><div class="sl">Total Coins</div><div class="sv">${_php(totalCoins)}</div></div>
       <div class="stat"><div class="sl">Net Collectible</div><div class="sv">${_php(totalNet)}</div></div>
       <div class="stat" style="border-bottom-color:#15803d"><div class="sl">Spawn Share</div><div class="sv" style="color:#15803d">${_php(totalSpawn)}</div></div>
+      ${totalExpenses>0?`<div class="stat" style="border-bottom-color:#dc2626"><div class="sl">Expenses</div><div class="sv" style="color:#dc2626">${_php(totalExpenses)}</div></div>`:''}
     `;
     // Area filter buttons
     const areas = [...new Set(rows.map(r=>r.area||'—'))].sort();
     if(filterEl) filterEl.innerHTML =
       `<button onclick="colFilter('')" id="col-f-all" style="padding:4px 12px;border-radius:20px;border:1px solid #15803d;background:#15803d;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">All (${rows.length})</button>` +
       areas.map(a=>`<button onclick="colFilter('${a}')" data-col-area="${a}" style="padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:white;font-size:11px;cursor:pointer;font-family:inherit;">${a} (${rows.filter(r=>(r.area||'—')===a).length})</button>`).join('');
-    // Collector summary row
-    const colSummary = Object.entries(byCollector).map(([c,d])=>
-      `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:20px;font-size:11px;font-weight:600;color:#15803d;">👤 ${c} · ${d.count} vendos · ${_php(d.spawn)}</span>`
-    ).join('');
+    // Collector summary row — with expenses
+    const colSummary = Object.entries(byCollector).map(([c,d])=>{
+      const expTotal = d.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+      const expDetail = d.expenses.length ? d.expenses.map(e=>`${e.category}${e.description?' ('+e.description+')':''}: ${_php(e.amount)}`).join(' · ') : '';
+      return `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:6px 12px;font-size:11px;font-weight:600;color:#15803d;">
+        👤 ${c} · ${d.count} vendos · ${_php(d.spawn)}
+        ${expTotal>0?`<span style="color:#dc2626;margin-left:8px;">💸 Expenses: ${_php(expTotal)}</span>`:''}
+        ${expDetail?`<div style="font-size:10px;color:#6b7280;font-weight:400;margin-top:2px;">${expDetail}</div>`:''}
+      </div>`;
+    }).join('');
     // Render rows
     window._colAllRows = rows;
     window._colAreaFilter = '';
