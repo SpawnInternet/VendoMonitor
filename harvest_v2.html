@@ -3253,6 +3253,7 @@ async function saveExpense(){
   if(!_selCat){ toast('Select a category'); return; }
   const amt = parseFloat(document.getElementById('exp-amount-inp').value)||0;
   if(!amt){ toast('Enter amount'); return; }
+  if(!_expPhotoBlob){ toast('📸 Photo required — take a receipt photo first'); return; }
   const desc = _selCat==='others' ? (document.getElementById('exp-desc-inp').value||'Others') : _selCat.replace('_',' ');
   let photoUrl = null;
   if(_expPhotoBlob){
@@ -3455,6 +3456,8 @@ async function submitEodSession(){
           method:'POST', headers:{...HDR},
           body: JSON.stringify(_expenses.map(e=>({
             session_id: sessId,
+            collector: selectedCollector||sessionStorage.getItem('col_name')||'',
+            expense_date: new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
             category: e.category,
             description: e.description,
             amount: e.amount,
