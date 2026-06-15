@@ -362,13 +362,26 @@ async function loadHome(){
 
   try{
     // Load harvests
-    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,vendo_id,vendos(vendo_code)&order=collector.asc,harvested_at.asc`);
+    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,vendo_id&order=collector.asc,harvested_at.asc`);
     if(!Array.isArray(h)){el.innerHTML='<div class="empty">Error loading data</div>';return;}
     allHarvests=h;
 
     if(!allHarvests.length){
       el.innerHTML=`<div class="no-harvest"><div class="icon">🌙</div>No harvests recorded<br>for this date</div>`;
       return;
+    }
+
+    // Fetch vendo codes separately (no FK defined so can't use join)
+    const vendoIds=[...new Set(allHarvests.map(h=>h.vendo_id).filter(Boolean))];
+    if(vendoIds.length){
+      try{
+        const vcRows=await sbFetch(`vendos?id=in.(${vendoIds.join(',')})&select=id,vendo_code`);
+        if(Array.isArray(vcRows)){
+          const vcMap={};
+          vcRows.forEach(v=>{ vcMap[v.id]=v.vendo_code||''; });
+          allHarvests=allHarvests.map(h=>({...h,_vendo_code:vcMap[h.vendo_id]||''}));
+        }
+      }catch{}
     }
 
     // Load pack items
@@ -571,7 +584,7 @@ function renderVendo(h){
   const rec=Number(h.spawn_share||0);
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
-  const vcode=(h.vendos&&h.vendos.vendo_code)||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
+  const vcode=h._vendo_code||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
   const suggest=suggestPacks(rec);
 
   return `
