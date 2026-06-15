@@ -209,7 +209,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const SB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTA5MTY0NTEsImV4cCI6MjAyNjQ5MjQ1MX0.9rSLGHFXHFWELnzxONMGnOzjHIgjwFyMVTnBSWKHSJU';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
 const HDR = {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json'};
 
 // ── ACCOUNTS — loaded from office_accounts table ──
@@ -217,8 +217,12 @@ let ACCOUNTS = [];
 
 async function loadAccounts(){
   try{
-    const r = await fetch(`${SB}/rest/v1/office_accounts?active=eq.true&select=id,name,pin,role&order=name.asc`,{headers:HDR});
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(`${SB}/rest/v1/office_accounts?active=eq.true&select=id,name,pin,role&order=name.asc`,{headers:HDR, signal:ctrl.signal});
+    clearTimeout(t);
     const rows = await r.json();
+    if(!Array.isArray(rows)) throw new Error('Invalid response');
     ACCOUNTS = rows.map(a=>({
       id: String(a.id),
       name: a.name,
@@ -228,7 +232,6 @@ async function loadAccounts(){
     }));
     renderAccounts();
   }catch(e){
-    // Fallback to defaults if DB unreachable
     ACCOUNTS = [
       {id:'1',name:'Gilbert',role:'Staff',pin:'1189',initials:'GI'},
       {id:'2',name:'Ailyn',  role:'Staff',pin:'2274',initials:'AI'},
@@ -334,13 +337,24 @@ async function loadData(){
   document.getElementById('collectors-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
 
   try {
-    // Fetch harvests for date
-    const hResp = await fetch(`${SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,collector,vendo_id,vendo_name,tg_name,area,coins_total,spawn_share,net_collectible,harvested_at&order=harvested_at.desc`,{headers:HDR});
-    allHarvests = await hResp.json();
+    const ctrl1 = new AbortController();
+    const t1 = setTimeout(() => ctrl1.abort(), 30000);
+    const hResp = await fetch(`${SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,collector,vendo_id,vendo_name,tg_name,area,coins_total,spawn_share,net_collectible,harvested_at&order=harvested_at.desc`,{headers:HDR, signal:ctrl1.signal});
+    clearTimeout(t1);
+    const hData = await hResp.json();
+    if(!Array.isArray(hData)){
+      console.error('Harvest fetch error:', hData);
+      document.getElementById('collectors-list').innerHTML = '<div class="empty-state">Error loading data — check Supabase key</div>';
+      return;
+    }
+    allHarvests = hData;
 
-    // Fetch pack items for date
-    const pResp = await fetch(`${SB}/rest/v1/harvest_pack_items?harvest_date=eq.${date}&select=*&order=created_at.asc`,{headers:HDR});
-    allPackItems = await pResp.json();
+    const ctrl2 = new AbortController();
+    const t2 = setTimeout(() => ctrl2.abort(), 30000);
+    const pResp = await fetch(`${SB}/rest/v1/harvest_pack_items?harvest_date=eq.${date}&select=*&order=created_at.asc`,{headers:HDR, signal:ctrl2.signal});
+    clearTimeout(t2);
+    const pData = await pResp.json();
+    allPackItems = Array.isArray(pData) ? pData : [];
 
     renderPacksTab();
   } catch(e){
@@ -352,8 +366,12 @@ async function loadData(){
 async function loadVendos(){
   document.getElementById('vendo-list').innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading…</span></div>';
   try {
-    const resp = await fetch(`${SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area,vendo_code,last_harvest_date&order=area.asc,sheet_name.asc&limit=2000`,{headers:HDR});
-    allVendos = await resp.json();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 30000);
+    const resp = await fetch(`${SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area,vendo_code,last_harvest_date&order=area.asc,sheet_name.asc&limit=2000`,{headers:HDR, signal:ctrl.signal});
+    clearTimeout(t);
+    const data = await resp.json();
+    allVendos = Array.isArray(data) ? data : [];
     renderVendoTab();
   } catch(e){
     document.getElementById('vendo-list').innerHTML = '<div class="empty-state">Error loading vendos</div>';
