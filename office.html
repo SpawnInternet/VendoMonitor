@@ -362,7 +362,7 @@ async function loadHome(){
 
   try{
     // Load harvests
-    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at&order=collector.asc,harvested_at.asc`);
+    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,vendo_id,vendos(vendo_code)&order=collector.asc,harvested_at.asc`);
     if(!Array.isArray(h)){el.innerHTML='<div class="empty">Error loading data</div>';return;}
     allHarvests=h;
 
@@ -571,14 +571,14 @@ function renderVendo(h){
   const rec=Number(h.spawn_share||0);
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
-  const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
+  const vcode=(h.vendos&&h.vendos.vendo_code)||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
   const suggest=suggestPacks(rec);
 
   return `
   <div class="vendo-block" id="vblock-${h.id}">
     <div class="vendo-hd">
       <div class="vhd-left">
-        <div class="vname">${name}</div>
+        <div class="vname">${vcode?`<span style="background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;margin-right:5px;letter-spacing:.03em">${vcode}</span>`:''} ${name}</div>
         <div class="varea">${h.area||'—'}</div>
       </div>
       <div class="vhd-right">
