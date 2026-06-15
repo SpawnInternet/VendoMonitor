@@ -1211,7 +1211,7 @@ async function showHomeScreen(){
   // Load today's spawn share
   try {
     const today = new Date().toISOString().split('T')[0];
-    const r = await fetch(`${SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(name)}&harvest_date=eq.${today}&select=coins_total,sheet_name,harvested_at`,{headers:HDR});
+    const r = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(name)}&harvest_date=eq.${today}&select=coins_total,sheet_name,harvested_at`,{headers:HDR});
     const rows = await r.json();
     if(Array.isArray(rows)){
       const gross = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
@@ -1978,7 +1978,7 @@ async function saveVendoDetails(){
     if(ownerName) currentItem.owner_name=ownerName;
     if(addressEdit){currentItem.address=addressEdit;const ad=document.getElementById('address-display');if(ad)ad.textContent=addressEdit;}
 
-    toast(photoUrl?'✅ Photo, GPS & details saved to vendo':'✅ Details saved',3000);
+    toast(photoUrl?'✅ Photo, GPS & details saved to vendo':'✅ Details saved',3000); setTimeout(loadHomeStats, 500);
     _closeOwnerEdit();
   } catch(e){
     toast('❌ Save failed: '+e.message, 4000);
@@ -2975,7 +2975,7 @@ async function loadHomeStats(){
   try {
     // TODAY's harvests for this collector
     const rToday = await fetch(
-      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
+      `${_SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
       {headers:HDR}
     );
     const todayHarvests = await rToday.json();
@@ -3004,7 +3004,7 @@ async function loadHomeStats(){
 
     // Month total spawn share
     const rMonth = await fetch(
-      `${_SB}/rest/v1/harvests?collector_name=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
+      `${_SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
       {headers:HDR}
     );
     const monthHarvests = await rMonth.json();
@@ -3592,10 +3592,12 @@ async function submitEodSession(){
       </div>
 
       <div class="field">
-        <label>Receipt Photo (optional)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-outline btn-sm" onclick="captureExpenseReceipt()">📷 Take Photo</button>
-          <span id="exp-photo-status" style="font-size:12px;color:var(--muted)">No photo</span>
+        <label style="color:var(--red);font-weight:700">📸 Receipt Photo <span style="font-size:10px">(REQUIRED)</span></label>
+        <button onclick="captureExpenseReceipt()" style="width:100%;padding:14px;border-radius:12px;border:2px dashed #2B7BE8;background:#EEF4FD;color:#2B7BE8;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">
+          📷 Tap to Take Receipt Photo
+        </button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="exp-photo-status" style="font-size:12px;font-weight:600;color:var(--muted)">No photo taken</span>
         </div>
         <canvas id="exp-canvas" style="display:none"></canvas>
         <video id="exp-video" style="display:none;width:100%;border-radius:8px;margin-top:8px" autoplay playsinline></video>
