@@ -368,7 +368,7 @@ function render() {
 
   let gRec=0, gCnt=0;
   allHarvests.forEach(h=>{
-    gRec += Number(h.coins_total||0);
+    gRec += Number(h.spawn_share||0);
     const ps = packState[h.id];
     if (ps) gCnt += counted(ps);
   });
@@ -376,7 +376,7 @@ function render() {
 
   document.getElementById('date-summary').innerHTML = `
     <div class="ds-item"><div class="ds-lbl">Vendos</div><div class="ds-val">${allHarvests.length}</div></div>
-    <div class="ds-item"><div class="ds-lbl">Recorded</div><div class="ds-val">₱${fmt(gRec)}</div></div>
+    <div class="ds-item"><div class="ds-lbl">Spawn Share</div><div class="ds-val">₱${fmt(gRec)}</div></div>
     ${gCnt>0?`
     <div class="ds-item"><div class="ds-lbl">Counted</div><div class="ds-val" style="color:var(--green)">₱${fmt(gCnt)}</div></div>
     <div class="ds-item"><div class="ds-lbl">Gap</div><div class="ds-val" style="color:${gGap<0?'var(--red)':gGap>0?'var(--amber)':'var(--green)'}">
@@ -387,7 +387,7 @@ function render() {
 }
 
 function renderCollector(collector, harvests) {
-  const cRec  = harvests.reduce((s,h)=>s+Number(h.coins_total||0),0);
+  const cRec  = harvests.reduce((s,h)=>s+Number(h.spawn_share||0),0);
   const cCnt  = harvests.reduce((s,h)=>{ const ps=packState[h.id]; return s+(ps?counted(ps):0); },0);
   const cDone = harvests.filter(h=>savedSet.has(h.id)).length;
   const exps  = expState[collector]||[];
@@ -405,7 +405,7 @@ function renderCollector(collector, harvests) {
         </div>
       </div>
       <div class="col-totals">
-        <div class="lbl">Recorded</div><div class="val">₱${fmt(cRec)}</div>
+        <div class="lbl">Spawn Share</div><div class="val">₱${fmt(cRec)}</div>
         ${cCnt>0?`<div class="lbl" style="margin-top:4px">Counted</div><div class="val" style="color:#86efac">₱${fmt(cCnt)}</div>`:''}
       </div>
     </div>
@@ -446,7 +446,7 @@ function renderExpList(collector) {
 
 function renderVendo(h) {
   const ps  = packState[h.id]||{mix:0,peso:0,bugi:0,bills:0};
-  const rec = Number(h.coins_total||0);
+  const rec = Number(h.spawn_share||0);
   const cnt = counted(ps);
   const gap = cnt > 0 ? cnt - rec : null;
   const isSaved = savedSet.has(h.id);
@@ -468,10 +468,15 @@ function renderVendo(h) {
         <div class="vname">${name}</div>
         <div class="varea">${h.area||'—'}</div>
       </div>
-      <div class="vrecorded">
-        <span>Coins recorded</span>
-        <strong>₱${fmt(rec)}</strong>
+      <div style="text-align:right">
+        <div style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase">Coins Total</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text)">₱${fmt(h.coins_total)}</div>
+        <div style="font-size:9px;color:var(--green);font-weight:700;text-transform:uppercase;margin-top:3px">Spawn Share 75%</div>
+        <div style="font-size:18px;font-weight:900;color:var(--green)">₱${fmt(rec)}</div>
       </div>
+    </div>
+    <div style="background:var(--green-light);border:1px solid var(--green-mid);border-radius:8px;padding:6px 10px;margin-bottom:10px;font-size:11px;color:var(--green);font-weight:600">
+      🎯 Pack to reach <strong>₱${fmt(rec)}</strong> — ${suggestPacks(rec)}
     </div>
 
     <div class="pack-grid">
@@ -525,6 +530,19 @@ function renderVendo(h) {
 }
 
 // ── PACK LOGIC ───────────────────────────────────────────
+function suggestPacks(spawnShare) {
+  const s = Math.round(spawnShare);
+  const mix  = Math.floor(s / 1000);
+  const rem1 = s - (mix * 1000);
+  const peso = Math.floor(rem1 / 300);
+  const bugi = rem1 - (peso * 300);
+  const parts = [];
+  if (mix)  parts.push(mix  + '×₱1,000');
+  if (peso) parts.push(peso + '×₱300');
+  if (bugi) parts.push('Bugi ₱' + bugi);
+  return parts.length ? '(' + parts.join(' + ') + ')' : '(₱0 — check harvest)';
+}
+
 function counted(ps) {
   return ((ps.mix||0)*1000) + ((ps.peso||0)*300) + (ps.bugi||0) + (ps.bills||0);
 }
@@ -554,7 +572,7 @@ function refreshStrip(hid) {
   const ps  = packState[hid]||{};
   const h   = allHarvests.find(x=>x.id===hid);
   if (!h) return;
-  const rec = Number(h.coins_total||0);
+  const rec = Number(h.spawn_share||0);
   const cnt = counted(ps);
   const gap = cnt > 0 ? cnt - rec : null;
 
