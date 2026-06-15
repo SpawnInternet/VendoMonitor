@@ -468,9 +468,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="coin-label" style="color:var(--orange)">− Saloy <span style="color:var(--muted)">Refund returned to customer</span></div>
       <input type="number" class="coin-input saloy" id="coin-saloy" step="1" aria-label="Saloy" step="1" aria-label="Saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
-    <div style="margin-bottom:4px">
+    <div style="margin-bottom:12px">
       <div class="coin-label" style="color:var(--red)">− Free time coins <span style="color:var(--muted)">Additional free coins deducted</span></div>
       <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" step="1" aria-label="Free time coins additional" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+    </div>
+    <div style="margin-bottom:4px">
+      <div class="coin-label" style="color:#7c3aed">− Old coins <span style="color:var(--muted)">Leftover from previous harvest</span></div>
+      <input type="number" class="coin-input" style="border-color:#c4b5fd;background:#f5f3ff;color:#7c3aed" id="coin-old" step="1" aria-label="Old coins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
     </div>
     <div style="background:#f1f5f9;border-radius:8px;padding:8px 12px;margin-top:10px;font-size:11px;color:var(--muted);line-height:1.7">
       Net = Total − Free time − Saloy − Free time coins
@@ -1485,7 +1489,7 @@ function openItem(idx){
   document.getElementById('camera-open-btn').disabled=false;
   document.getElementById('camera-open-btn').textContent='📷 Open Camera & Capture GPS';
   document.getElementById('gps-actions').style.display='none';
-  ['coin-total','coin-free','coin-saloy','coin-freecoins'].forEach(id=>document.getElementById(id).value='');
+  ['coin-total','coin-free','coin-saloy','coin-freecoins','coin-old'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('note-inp').value='';
   document.getElementById('skip-note').value='';
   document.getElementById('skip-form').style.display='none';
@@ -1837,7 +1841,8 @@ function calcNet(){
   const free=parseFloat(document.getElementById('coin-free').value)||0;
   const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
-  const totalDeductions=free+saloy+freeCoins;
+  const old=parseFloat(document.getElementById('coin-old')?.value)||0;
+  const totalDeductions=free+saloy+freeCoins+old;
   const net=Math.max(0,total-totalDeductions);
   const spawn=net*0.75,customer=net*0.25;
   document.getElementById('sum-free').textContent=totalDeductions > 0 ? '-₱'+fmt(totalDeductions) : '-₱0'; // dead UI element
@@ -1901,9 +1906,10 @@ async function submitHarvest(){
   const free=parseFloat(document.getElementById('coin-free').value)||0;
   const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
+  const old=parseFloat(document.getElementById('coin-old')?.value)||0;
   if(!total){toast('Enter total coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
 
-  const net=Math.max(0,total-free-saloy-freeCoins);
+  const net=Math.max(0,total-free-saloy-freeCoins-old);
   const spawn=net*0.75,customer=net*0.25;
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
@@ -1918,7 +1924,7 @@ async function submitHarvest(){
   // Update harvest_group_items
   const itemUpdate={
     status:'harvested',
-    coins_total:total,coins_free:free+freeCoins,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,
+    coins_total:total,coins_free:free+freeCoins,coins_saloy:saloy,coins_free_time:free,coins_free_coins:freeCoins,coins_old:old||null,
     net_collectible:net,spawn_share:spawn,customer_share:customer,
     harvested_at:now,collector_note:note,
   };
@@ -1945,7 +1951,7 @@ async function submitHarvest(){
     tg_name:currentItem.tg_name||null,sheet_name:currentItem.sheet_name||null,
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
-    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
+    coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,coins_old:old||null,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
   };
 
