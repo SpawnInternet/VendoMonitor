@@ -1122,18 +1122,18 @@ function pinOnInput(inp){
 function pinCheckReady(){
   const btn=document.getElementById('pin-login-btn');
   const ready=_pinSelectedName&&document.getElementById('pin-inp').value.length===4;
-  btn.disabled=!ready;
+  if(btn) btn.disabled=!ready;
 }
 
 async function pinSubmit(){
   const pin=document.getElementById('pin-inp').value;
   const errEl=document.getElementById('pin-error');
   const btn=document.getElementById('pin-login-btn');
-  if(!_pinSelectedName){errEl.textContent='Please select your name';errEl.style.display='';return;}
-  if(pin.length!==4){errEl.textContent='Enter your 4-digit PIN';errEl.style.display='';return;}
+  if(!_pinSelectedName){errEl.textContent='Please select your name';if(errEl) errEl.style.display='';return;}
+  if(pin.length!==4){errEl.textContent='Enter your 4-digit PIN';if(errEl) errEl.style.display='';return;}
 
-  btn.disabled=true; btn.textContent='Checking…';
-  errEl.style.display='none';
+  if(btn){btn.disabled=true; btn.textContent='Checking…';}
+  if(errEl){errEl.textContent='';if(errEl) errEl.style.display='';}
 
   // Validate against DB with timeout
   try{
@@ -1145,8 +1145,8 @@ async function pinSubmit(){
     const rows=await r.json();
     if(!rows.length||rows[0].pin!==pin){
       errEl.textContent='❌ Wrong PIN — try again';
-      errEl.style.display='';
-      btn.disabled=false; btn.textContent='Login →';
+      if(errEl) errEl.style.display='';
+      if(btn){btn.disabled=false; btn.textContent='Login →';}
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       pinCheckReady();
       return;
@@ -1176,8 +1176,8 @@ async function pinSubmit(){
     }else{
       const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN — try again';
       errEl.textContent=msg;
-      errEl.style.display='';
-      btn.disabled=false; btn.textContent='Login →';
+      if(errEl) errEl.style.display='';
+      if(btn){btn.disabled=false; btn.textContent='Login →';}
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       pinCheckReady();
     }
