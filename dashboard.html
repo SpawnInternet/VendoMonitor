@@ -417,7 +417,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl" style="color:#dc2626">Suspicious</span>
     </button>
     <!-- Job Orders -->
-    <button onclick="showP('joborders',this);colLoad()" data-panel="joborders">
+    <button onclick="showP('joborders',this)" data-panel="joborders">
       <div class="ni" style="background:#f0fdf4">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#16a34a" stroke-width="2"/><path d="M12 7v1m0 8v1M9.5 9.5C9.5 8.67 10.67 8 12 8s2.5.67 2.5 1.5S13.33 11 12 11s-2.5.67-2.5 1.5S10.67 14 12 14s2.5-.67 2.5-1.5" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/></svg>
       </div>
@@ -4722,10 +4722,12 @@ function showP(id, btn) {
   hideBread();
   if(id==="harvest")   loadHarvests();
   if(id==="analytics") loadAnalytics();
-  if(id==="vendos")    loadVendos();
-  if(id==="skipped")   loadSkipped();
-  if(id==="notsus")    loadNotSuspicious();
-  if(id==="status")    loadSystemStatus();
+  if(id==="vendos")     loadVendos();
+  if(id==="skipped")    loadSkipped();
+  if(id==="notsus")     loadNotSuspicious();
+  if(id==="status")     loadSystemStatus();
+  if(id==="suspicious") loadSuspicious();
+  if(id==="joborders")  { colLoad(); }
 }
 
 function showBread(text, backFn) {
@@ -5054,7 +5056,180 @@ document.addEventListener('click', e => {
 
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
-async function csLoad() {
+
+// ── DEVICE APPROVALS ─────────────────────────────────────
+async function daLoad() {
+  const el = document.getElementById('da-list');
+  if (!el) return;
+  el.innerHTML = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:10px;">Loading…</div>';
+  try {
+    const rows = await sb('device_approvals', 'select=id,device_id,device_name,browser,status,requested_at,approved_at,approved_by&order=requested_at.desc', 100);
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">No pending device approvals</div>';
+      return;
+    }
+    const pending = rows.filter(r => r.status === 'pending');
+    const others  = rows.filter(r => r.status !== 'pending');
+    const renderRow = r => {
+      const isPending = r.status === 'pending';
+      const dt = r.requested_at ? new Date(r.requested_at).toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-size:13px;font-weight:600;color:#1e293b;">${r.device_name||'Unknown Device'}</div>
+          <div style="font-size:10px;color:#9ca3af;margin-top:2px;">${(r.device_id||'').slice(0,20)}… · ${r.browser||'—'}</div>
+          <div style="font-size:10px;color:#9ca3af;">${dt}</div>
+        </div>
+        <span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${isPending?'#fef9c3':r.status==='approved'?'#dcfce7':'#fee2e2'};color:${isPending?'#92400e':r.status==='approved'?'#15803d':'#dc2626'};">${r.status.toUpperCase()}</span>
+        ${isPending ? `
+          <button onclick="daApprove(${r.id},'${(r.device_id||'').replace(/'/g,"\\'")}')" style="height:28px;padding:0 12px;background:#15803d;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">✓ Approve</button>
+          <button onclick="daDeny(${r.id})" style="height:28px;padding:0 10px;border:1px solid #fca5a5;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;">✕ Deny</button>
+        ` : `<button onclick="daDelete(${r.id})" style="height:28px;padding:0 10px;border:1px solid #e5e7eb;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#6b7280;">Remove</button>`}
+      </div>`;
+    };
+    el.innerHTML = (pending.length ? `<div style="padding:6px 14px;background:#fef9c3;font-size:11px;font-weight:700;color:#92400e;">⏳ ${pending.length} pending</div>` + pending.map(renderRow).join('') : '') +
+      (others.length ? `<div style="padding:6px 14px;background:#f9fafb;font-size:11px;color:#6b7280;">History</div>` + others.map(renderRow).join('') : '');
+  } catch(e) {
+    el.innerHTML = '<div style="padding:12px;color:#dc2626;font-size:12px;">Error: ' + e.message + '</div>';
+  }
+}
+
+async function daApprove(id, deviceId) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/device_approvals?id=eq.${id}`, {
+      method:'PATCH', headers:{...HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify({status:'approved',approved_at:new Date().toISOString(),approved_by:'admin'})
+    });
+    toast('✅ Device approved'); daLoad();
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function daDeny(id) {
+  if(!confirm('Deny this device?')) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/device_approvals?id=eq.${id}`, {
+      method:'PATCH', headers:{...HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify({status:'denied'})
+    });
+    toast('Device denied'); daLoad();
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function daDelete(id) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/device_approvals?id=eq.${id}`, {
+      method:'DELETE', headers:{...HDR,Prefer:'return=minimal'}
+    });
+    toast('Removed'); daLoad();
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+// ── COLLECTIONS TAB ──────────────────────────────────────
+async function colLoad() {
+  const dateEl = document.getElementById('col-date');
+  if (!dateEl) return;
+  // Auto-set date to today if empty
+  if (!dateEl.value) {
+    const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    dateEl.value = today;
+  }
+  const date = dateEl.value;
+  if (!date) {
+    document.getElementById('col-list').innerHTML = '<div style="color:#9ca3af;text-align:center;padding:40px 0;">Select a date to load collections</div>';
+    return;
+  }
+  const listEl   = document.getElementById('col-list');
+  const sumEl    = document.getElementById('col-summary');
+  const filterEl = document.getElementById('col-area-filter');
+  listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;font-size:13px;"><span style="display:inline-block;width:20px;height:20px;border:2px solid #e5e7eb;border-top-color:#15803d;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</div>';
+  try {
+    const rows = await sb('harvests',
+      `harvest_date=eq.${date}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,tg_income,recon_gap,recon_flag,harvested_at,collector_note&order=harvested_at.asc`,
+      2000
+    );
+    if (!rows || !rows.length) {
+      if(sumEl) sumEl.innerHTML='';
+      if(filterEl) filterEl.innerHTML='';
+      listEl.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:40px 0;">No collections recorded on this date</div>';
+      return;
+    }
+    // Summary stats
+    const totalCoins  = rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
+    const totalNet    = rows.reduce((s,r)=>s+Number(r.net_collectible||0),0);
+    const totalSpawn  = rows.reduce((s,r)=>s+Number(r.spawn_share||0),0);
+    const totalOwner  = rows.reduce((s,r)=>s+Number(r.customer_share||0),0);
+    const byCollector = {};
+    rows.forEach(r=>{ const c=r.collector||'Unknown'; if(!byCollector[c]) byCollector[c]={count:0,spawn:0}; byCollector[c].count++; byCollector[c].spawn+=Number(r.spawn_share||0); });
+    if(sumEl) sumEl.innerHTML = `
+      <div class="stat"><div class="sl">Vendos</div><div class="sv">${rows.length}</div></div>
+      <div class="stat"><div class="sl">Total Coins</div><div class="sv">${_php(totalCoins)}</div></div>
+      <div class="stat"><div class="sl">Net Collectible</div><div class="sv">${_php(totalNet)}</div></div>
+      <div class="stat" style="border-bottom-color:#15803d"><div class="sl">Spawn Share</div><div class="sv" style="color:#15803d">${_php(totalSpawn)}</div></div>
+    `;
+    // Area filter buttons
+    const areas = [...new Set(rows.map(r=>r.area||'—'))].sort();
+    if(filterEl) filterEl.innerHTML =
+      `<button onclick="colFilter('')" id="col-f-all" style="padding:4px 12px;border-radius:20px;border:1px solid #15803d;background:#15803d;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">All (${rows.length})</button>` +
+      areas.map(a=>`<button onclick="colFilter('${a}')" data-col-area="${a}" style="padding:4px 12px;border-radius:20px;border:1px solid #e5e7eb;background:white;font-size:11px;cursor:pointer;font-family:inherit;">${a} (${rows.filter(r=>(r.area||'—')===a).length})</button>`).join('');
+    // Collector summary row
+    const colSummary = Object.entries(byCollector).map(([c,d])=>
+      `<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#f0fdf4;border:1px solid #86efac;border-radius:20px;font-size:11px;font-weight:600;color:#15803d;">👤 ${c} · ${d.count} vendos · ${_php(d.spawn)}</span>`
+    ).join('');
+    // Render rows
+    window._colAllRows = rows;
+    window._colAreaFilter = '';
+    listEl.innerHTML = `
+      <div style="padding:8px 0 10px;display:flex;gap:6px;flex-wrap:wrap;">${colSummary}</div>
+      <div id="col-rows"></div>`;
+    colRenderRows(rows);
+  } catch(e) {
+    listEl.innerHTML = '<div style="color:#dc2626;text-align:center;padding:40px 0;">Error: ' + e.message + '</div>';
+  }
+}
+
+function colFilter(area) {
+  window._colAreaFilter = area;
+  document.querySelectorAll('[data-col-area]').forEach(b=>{ b.style.background='white'; b.style.color='#374151'; b.style.borderColor='#e5e7eb'; });
+  const allBtn = document.getElementById('col-f-all');
+  if (!area) { if(allBtn){allBtn.style.background='#15803d';allBtn.style.color='white';} }
+  else { const ab=document.querySelector(`[data-col-area="${area}"]`); if(ab){ab.style.background='#15803d';ab.style.color='white';ab.style.borderColor='#15803d';} if(allBtn){allBtn.style.background='white';allBtn.style.color='#374151';} }
+  const rows = area ? (window._colAllRows||[]).filter(r=>(r.area||'—')===area) : (window._colAllRows||[]);
+  colRenderRows(rows);
+}
+
+function colRenderRows(rows) {
+  const el = document.getElementById('col-rows');
+  if (!el) return;
+  el.innerHTML = rows.map((r,i) => {
+    const flagColor = r.recon_flag==='SHORT'?'#dc2626':r.recon_flag==='SURPLUS'?'#d97706':r.recon_flag==='OK'?'#15803d':'#9ca3af';
+    const flagBg    = r.recon_flag==='SHORT'?'#fee2e2':r.recon_flag==='SURPLUS'?'#fef3c7':r.recon_flag==='OK'?'#dcfce7':'#f3f4f6';
+    const t = r.harvested_at ? new Date(r.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '—';
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;">
+      <div style="min-width:22px;width:22px;height:22px;border-radius:50%;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#15803d;flex-shrink:0;">${i+1}</div>
+      <div style="flex:1;min-width:160px;">
+        <div style="font-weight:600;font-size:13px;color:#1e293b;">${r.vendo_name||r.sheet_name||r.tg_name||'—'}</div>
+        <div style="font-size:11px;color:#6b7280;">${r.area||'—'} · ${r.collector||'—'} · ${t}</div>
+        ${r.collector_note?`<div style="font-size:11px;color:#7c3aed;margin-top:2px;">📝 ${r.collector_note}</div>`:''}
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#9ca3af;">Coins</div>
+          <div style="font-size:13px;font-weight:700;color:#1e293b;">${_php(r.coins_total)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#9ca3af;">Net</div>
+          <div style="font-size:13px;font-weight:700;color:#1565c0;">${_php(r.net_collectible)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#9ca3af;">Spawn</div>
+          <div style="font-size:13px;font-weight:700;color:#15803d;">${_php(r.spawn_share)}</div>
+        </div>
+        ${r.recon_flag?`<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${flagBg};color:${flagColor};">${r.recon_flag}</span>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">No records</div>';
+}
+
+
   try {
     const [collectors, todayHarvests] = await Promise.all([
       sb('collectors', 'select=id,name,pin,area,active&order=name.asc', 100),
@@ -5718,9 +5893,9 @@ async function loadHarvests() {
   if (_vcScroll) _vcScroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
 
   setTimeout(() => {
-    if (typeof hvLoadVendos === 'function') hvLoadVendos();
+    if (typeof htLoad === 'function') htLoad();
     setTimeout(() => {
-      if (typeof hvRefreshPendingRoutes === 'function') hvRefreshPendingRoutes();
+      if (typeof harvestTabLoad === 'function') harvestTabLoad();
     }, 800);
   }, 50);
 }
