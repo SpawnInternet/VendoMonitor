@@ -411,10 +411,10 @@ async function loadHome(){
     });
 
     // Load expenses
-    const ex=await sbFetch(`collector_expenses?expense_date=eq.${currentDate}&select=id,collector,category,description,amount&order=created_at.asc`);
+    const ex=await sbFetch(`collector_expenses?expense_date=eq.${currentDate}&select=id,collector,category,description,amount,receipt_photo_url&order=created_at.asc`);
     if(Array.isArray(ex)) ex.forEach(e=>{
       if(!expState[e.collector]) expState[e.collector]=[];
-      expState[e.collector].push({id:e.id,cat:e.category,desc:e.description||'',amt:Number(e.amount)});
+      expState[e.collector].push({id:e.id,cat:e.category,desc:e.description||'',amt:Number(e.amount),photo:e.receipt_photo_url||null});
     });
 
     renderCollectorCards();
@@ -543,11 +543,12 @@ function renderExpList(collector){
   const exps=expState[collector]||[];
   if(!exps.length) return '<div style="font-size:12px;color:var(--muted);padding:4px 0 8px">No expenses yet</div>';
   return exps.map((e,i)=>`
-    <div class="exp-item">
+    <div class="exp-item" style="flex-wrap:wrap;gap:6px">
       <div class="exp-cat">${e.cat}</div>
       <div class="exp-desc">${e.desc||'—'}</div>
       <div class="exp-amt">₱${fmt(e.amt)}</div>
       <button class="exp-del" onclick="removeExpense('${collector}',${i})">✕</button>
+      ${e.photo?`<div style="width:100%;margin-top:4px"><img src="${e.photo}" onclick="window.open('${e.photo}')" style="width:80px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border)"></div>`:'<div style="width:100%;font-size:10px;color:var(--red);margin-top:2px">⚠️ No receipt photo</div>'}
     </div>`).join('');
 }
 
