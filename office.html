@@ -362,7 +362,7 @@ async function loadHome(){
 
   try{
     // Load harvests
-    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,area,coins_total,net_collectible,spawn_share,harvested_at&order=collector.asc,harvested_at.asc`);
+    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,route_code,area,coins_total,net_collectible,spawn_share,harvested_at&order=collector.asc,harvested_at.asc`);
     if(!Array.isArray(h)){el.innerHTML='<div class="empty">Error loading data</div>';return;}
     allHarvests=h;
 
@@ -383,7 +383,7 @@ async function loadHome(){
     });
 
     // Load expenses
-    const ex=await sbFetch(`harvest_expenses?harvest_date=eq.${currentDate}&select=id,collector,category,description,amount&order=created_at.asc`);
+    const ex=await sbFetch(`collector_expenses?expense_date=eq.${currentDate}&select=id,collector,category,description,amount&order=created_at.asc`);
     if(Array.isArray(ex)) ex.forEach(e=>{
       if(!expState[e.collector]) expState[e.collector]=[];
       expState[e.collector].push({id:e.id,cat:e.category,desc:e.description||'',amt:Number(e.amount)});
@@ -536,7 +536,7 @@ async function addExpense(collector){
     const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),15000);
     const r=await fetch(`${SB}/rest/v1/harvest_expenses`,{
       method:'POST', headers:{...HDR,Prefer:'return=representation'},
-      body:JSON.stringify({collector,harvest_date:currentDate,category:cat,description:desc,amount:amt}),
+      body:JSON.stringify({collector,expense_date:currentDate,category:cat,description:desc,amount:amt}),
       signal:ctrl.signal
     });
     clearTimeout(t);
@@ -558,7 +558,7 @@ async function addExpense(collector){
 async function removeExpense(collector,idx){
   const e=expState[collector][idx];
   if(e&&e.id){
-    try{ await sbDelete('harvest_expenses?id=eq.'+e.id); }catch{}
+    try{ await sbDelete('collector_expenses?id=eq.'+e.id); }catch{}
   }
   expState[collector].splice(idx,1);
   document.getElementById('explist-'+collector).innerHTML=renderExpList(collector);
@@ -571,14 +571,14 @@ function renderVendo(h){
   const rec=Number(h.spawn_share||0);
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
-  const name=h.vendo_name||h.tg_name||'—';
+  const code=h.route_code||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
   const suggest=suggestPacks(rec);
 
   return `
   <div class="vendo-block" id="vblock-${h.id}">
     <div class="vendo-hd">
       <div class="vhd-left">
-        <div class="vname">${name}</div>
+        <div class="vname">${code?`<span style="background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;margin-right:4px">${code}</span>`:''} ${name}</div>
         <div class="varea">${h.area||'—'}</div>
       </div>
       <div class="vhd-right">
@@ -710,6 +710,20 @@ async function savePacks(hid){
   if(!h) return;
   const btn=document.getElementById('btnsave-'+hid);
   if(btn){btn.disabled=true;btn.textContent='…';}
+
+  // Check deficit/surplus and warn
+  const _rec=Number(h.spawn_share||0);
+  const _cnt=calcCounted(ps);
+  if(_cnt>0 && _cnt!==_rec){
+    const _gap=_cnt-_rec;
+    const _msg=_gap<0
+      ? `⚠️ SHORT by ₱${fmt(Math.abs(_gap))}\nCounted ₱${fmt(_cnt)} is less than Spawn Share ₱${fmt(_rec)}.\n\nSave anyway?`
+      : `⚠️ SURPLUS of ₱${fmt(_gap)}\nCounted ₱${fmt(_cnt)} exceeds Spawn Share ₱${fmt(_rec)}.\n\nSave anyway?`;
+    if(!confirm(_msg)){
+      if(btn){btn.disabled=false;btn.textContent='Save';btn.classList.remove('saved');}
+      return;
+    }
+  }
 
   try{
     await sbDelete('harvest_pack_items?harvest_id=eq.'+hid);
