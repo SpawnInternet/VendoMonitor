@@ -518,8 +518,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
     <!-- COL 1: Trend + Top 20 Strongest scrollable -->
     <div style="display:flex;flex-direction:column;gap:7px;">
-      <div class="cs">
-        <div class="cs-t">📈 7-Day Trend <span id="trend-range" style="font-weight:400;color:var(--mu);text-transform:none;letter-spacing:0;font-size:9px;"></span></div>
+      <div class="cs" style="cursor:pointer" onclick="showP('analytics',document.querySelector('[data-panel=analytics]'))" title="Click for full analytics">
+        <div class="cs-t">📈 7-Day Trend <span id="trend-range" style="font-weight:400;color:var(--mu);text-transform:none;letter-spacing:0;font-size:9px;"></span><span style="float:right;font-size:9px;color:var(--mu);font-weight:400">→ Analytics</span></div>
         <div style="height:110px;position:relative"><canvas id="trend-chart"></canvas></div>
       </div>
       <div class="cs" style="flex:1;min-height:0;">
@@ -530,8 +530,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
     <!-- COL 2: Area chart + Top 20 Weakest scrollable -->
     <div style="display:flex;flex-direction:column;gap:7px;">
-      <div class="cs">
-        <div class="cs-t">🗺 Sales by Area</div>
+      <div class="cs" style="cursor:pointer" onclick="showP('analytics',document.querySelector('[data-panel=analytics]'))" title="Click for full analytics">
+        <div class="cs-t">🗺 Sales by Area<span style="float:right;font-size:9px;color:var(--mu);font-weight:400">→ Analytics</span></div>
         <div style="height:110px;position:relative"><canvas id="area-chart"></canvas></div>
       </div>
       <div class="cs" style="flex:1;min-height:0;">
@@ -543,11 +543,11 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <!-- COL 3: Area grid + Today breakdown -->
     <div style="display:flex;flex-direction:column;gap:7px;">
       <div class="cs">
-        <div class="cs-t">🗂 Areas</div>
+        <div class="cs-t">🗂 Areas<span style="float:right;font-size:9px;color:var(--mu);font-weight:400;cursor:pointer" onclick="showP('vendos',document.querySelector('[data-panel=vendos]'))">→ All Vendos</span></div>
         <div id="area-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;"></div>
       </div>
-      <div class="cs" style="flex:1;">
-        <div class="cs-t">📊 Today by Area</div>
+      <div class="cs" style="flex:1;cursor:pointer" onclick="showP('joborders',document.querySelector('[data-panel=joborders]'))" title="Click for collections">
+        <div class="cs-t">📊 Today by Area<span style="float:right;font-size:9px;color:var(--mu);font-weight:400">→ Collections</span></div>
         <div id="today-strip" style="display:flex;flex-direction:column;gap:2px;"></div>
       </div>
     </div>
@@ -5141,10 +5141,25 @@ async function colLoad() {
   const filterEl = document.getElementById('col-area-filter');
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;font-size:13px;"><span style="display:inline-block;width:20px;height:20px;border:2px solid #e5e7eb;border-top-color:#15803d;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</div>';
   try {
-    const rows = await sb('harvests',
-      `harvest_date=eq.${date}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,tg_income,recon_gap,recon_flag,harvested_at,collector_note&order=harvested_at.asc`,
-      2000
-    );
+    const [rows, packRows] = await Promise.all([
+      sb('harvests',
+        `harvest_date=eq.${date}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,tg_income,recon_gap,recon_flag,harvested_at,collector_note&order=harvested_at.asc`,
+        2000
+      ),
+      sb('harvest_pack_items',
+        `harvest_date=eq.${date}&select=harvest_id,pack_type,amount`,
+        2000
+      )
+    ]);
+    // Build pack totals map
+    const packMap = {};
+    if (Array.isArray(packRows)) {
+      packRows.forEach(p => {
+        if (!packMap[p.harvest_id]) packMap[p.harvest_id] = 0;
+        packMap[p.harvest_id] += Number(p.amount||0);
+      });
+    }
+    window._colPackMap = packMap;
     if (!rows || !rows.length) {
       if(sumEl) sumEl.innerHTML='';
       if(filterEl) filterEl.innerHTML='';
@@ -5222,6 +5237,14 @@ function colRenderRows(rows) {
     const flagColor = r.recon_flag==='SHORT'?'#dc2626':r.recon_flag==='SURPLUS'?'#d97706':r.recon_flag==='OK'?'#15803d':'#9ca3af';
     const flagBg    = r.recon_flag==='SHORT'?'#fee2e2':r.recon_flag==='SURPLUS'?'#fef3c7':r.recon_flag==='OK'?'#dcfce7':'#f3f4f6';
     const t = r.harvested_at ? new Date(r.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '—';
+    const packTotal = (window._colPackMap||{})[r.id]||0;
+    const packGap = packTotal > 0 ? packTotal - Number(r.spawn_share||0) : null;
+    let packChip = `<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#f3f4f6;color:#6b7280;">⏳ Not counted</span>`;
+    if (packTotal > 0) {
+      if (packGap === 0) packChip = `<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#dcfce7;color:#15803d;">✓ Match</span>`;
+      else if (packGap < 0) packChip = `<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#fee2e2;color:#dc2626;">Short ₱${_php(Math.abs(packGap))}</span>`;
+      else packChip = `<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#fef9c3;color:#92400e;">Surplus ₱${_php(packGap)}</span>`;
+    }
     return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 4px;border-bottom:1px solid #f3f4f6;flex-wrap:wrap;">
       <div style="min-width:22px;width:22px;height:22px;border-radius:50%;background:#f0fdf4;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#15803d;flex-shrink:0;">${i+1}</div>
       <div style="flex:1;min-width:160px;">
@@ -5229,20 +5252,23 @@ function colRenderRows(rows) {
         <div style="font-size:11px;color:#6b7280;">${r.area||'—'} · ${r.collector||'—'} · ${t}</div>
         ${r.collector_note?`<div style="font-size:11px;color:#7c3aed;margin-top:2px;">📝 ${r.collector_note}</div>`:''}
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <div style="text-align:right;">
           <div style="font-size:11px;color:#9ca3af;">Coins</div>
           <div style="font-size:13px;font-weight:700;color:#1e293b;">${_php(r.coins_total)}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:11px;color:#9ca3af;">Net</div>
-          <div style="font-size:13px;font-weight:700;color:#1565c0;">${_php(r.net_collectible)}</div>
-        </div>
-        <div style="text-align:right;">
           <div style="font-size:11px;color:#9ca3af;">Spawn</div>
           <div style="font-size:13px;font-weight:700;color:#15803d;">${_php(r.spawn_share)}</div>
         </div>
-        ${r.recon_flag?`<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${flagBg};color:${flagColor};">${r.recon_flag}</span>`:''}
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:#9ca3af;">Counted</div>
+          <div style="font-size:13px;font-weight:700;color:${packTotal>0?'#1565c0':'#9ca3af'};">${packTotal>0?_php(packTotal):'—'}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+          ${r.recon_flag?`<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${flagBg};color:${flagColor};">${r.recon_flag}</span>`:''}
+          ${packChip}
+        </div>
       </div>
     </div>`;
   }).join('') || '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:13px;">No records</div>';
