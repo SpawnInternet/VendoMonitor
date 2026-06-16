@@ -2393,7 +2393,7 @@ async function loadProgress(){
 
     const [rH, rGPS] = await Promise.all([
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
-      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,harvest_groups(collector)&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
+      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,collector,harvest_groups(collector)&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
     ]);
     const rows = await rH.json();
     const gpsRows = await rGPS.json();
@@ -2509,7 +2509,7 @@ function _initProgressMap(gpsRows){
       const color=minsAgo<30?'#16a34a':minsAgo<60?'#d97706':'#dc2626';
       const name=row.sheet_name||row.tg_name||'?';
       const t=row.harvested_at?new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—';
-      const collector=row.harvest_groups?.collector||'';
+      const collector=row.collector||row.harvest_groups?.collector||'';
       const icon=L.divIcon({className:'',html:`<div style="text-align:center;"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>${collector?`<div style="background:#1e293b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;margin-top:2px;display:inline-block;">👤 ${collector}</div>`:''}<div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;margin-top:2px;display:inline-block;">${name}</div><div style="color:#555;font-size:9px;">${t}</div></div>`,iconAnchor:[7,7]});
       L.marker([lat,lng],{icon}).addTo(_progressMap).bindPopup(`<b>${name}</b><br>${collector?'👤 '+collector+'<br>':''}${t}`);
       bounds.push([lat,lng]);
