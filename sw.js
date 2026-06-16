@@ -1,7 +1,7 @@
-// sw.js — Spawn Harvest PWA Service Worker v9.0
-const CACHE = 'spawn-harvest-v9.0';
+// sw.js — Spawn Harvest PWA Service Worker v10.0
+const CACHE = 'spawn-harvest-v10.0';
 const APP_SHELL = [
-  '/VendoMonitor/harvest.html',
+  '/VendoMonitor/harvest_v2.html',
   '/VendoMonitor/manifest.json',
 ];
 
@@ -22,7 +22,7 @@ self.addEventListener('activate', e => {
   );
 });
 
-// ── FETCH ─────────────────────────────────────────────────────────
+// ── FETCH: network first, cache fallback ─────────────────────────
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
@@ -37,7 +37,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Google Maps, external links — network only
+  // External — network only
   if (!url.hostname.includes('spawninternet.github.io') &&
       !url.hostname.includes('localhost') &&
       !url.pathname.includes('VendoMonitor')) {
@@ -45,7 +45,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App shell — network first, fallback to cache
+  // App — always network first to get latest version
   e.respondWith(
     fetch(e.request).then(response => {
       if (response && response.status === 200) {
