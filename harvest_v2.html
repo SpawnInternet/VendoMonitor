@@ -3378,13 +3378,16 @@ function resetPackForm(){
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
     const spawn = Math.round(net * 0.75);
 
-    // Warn if packs don't match but allow submit — Spawn Count will verify
-    if(packTotal > 0 && Math.round(packTotal) !== spawn){
-      const gap = packTotal - spawn;
+    // Get pack total from _packData (set when collection sheet is saved)
+    const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
+    const _pdTotal = _pd ? (_pd.packs_1k*1000)+(_pd.packs_300*300)+(_pd.bugi_amount||0)+(_pd.cash_amount||0) : packTotal;
+    if(_pdTotal > 0 && Math.round(_pdTotal) !== spawn){
+      const gap = _pdTotal - spawn;
       const msg = gap > 0
-        ? `⚠️ Packs surplus ₱${fmt(gap)} vs Spawn ₱${fmt(spawn)} — double check`
-        : `⚠️ Packs short ₱${fmt(Math.abs(gap))} vs Spawn ₱${fmt(spawn)} — double check`;
-      toast(msg, 3000);
+        ? `⚠️ Packs ₱${fmt(_pdTotal)} SURPLUS ₱${fmt(gap)} vs Spawn ₱${fmt(spawn)} — fix before submitting`
+        : `⚠️ Packs ₱${fmt(_pdTotal)} SHORT ₱${fmt(Math.abs(gap))} vs Spawn ₱${fmt(spawn)} — fix before submitting`;
+      toast(msg, 4000);
+      return; // BLOCK
     }
 
     const vname = document.getElementById('form-vname').textContent||'Vendo';
