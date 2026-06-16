@@ -691,7 +691,12 @@ function renderVendo(h){
         <div class="v-spawn">Spawn Share<span>₱${fmt(rec)}</span></div>
       </div>
     </div>
-    <div class="suggest-bar">🎯 Target ₱${fmt(rec)} — ${suggest}</div>
+    <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🎯 Target to Pack — ₱${fmt(rec)}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${suggestPacksDetailed(rec)}
+      </div>
+    </div>
     <div class="vendo-body">
       <div class="pack-grid">
         <div class="pack-field">
@@ -770,6 +775,40 @@ function suggestPacks(spawnShare){
   if(peso) parts.push(peso+'×₱300');
   if(bugi) parts.push('Bugi ₱'+bugi);
   return parts.length?parts.join(' + '):'₱0 check harvest';
+}
+
+function suggestPacksDetailed(spawnShare){
+  const s=Math.round(spawnShare);
+  const mix=Math.floor(s/1000);
+  const rem=s-(mix*1000);
+  const peso=Math.floor(rem/300);
+  const bugi=rem-(peso*300);
+  const rows=[];
+  if(mix) rows.push(`
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+      <div>
+        <span style="font-size:18px;font-weight:900;color:#1e3cb8">${mix}</span>
+        <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${mix>1?'s':''} of ₱1,000</span>
+      </div>
+      <span style="font-size:15px;font-weight:900;color:#1e3cb8">₱${fmt(mix*1000)}</span>
+    </div>`);
+  if(peso) rows.push(`
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+      <div>
+        <span style="font-size:18px;font-weight:900;color:#7c3aed">${peso}</span>
+        <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${peso>1?'s':''} of ₱300</span>
+      </div>
+      <span style="font-size:15px;font-weight:900;color:#7c3aed">₱${fmt(peso*300)}</span>
+    </div>`);
+  if(bugi) rows.push(`
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+      <div>
+        <span style="font-size:13px;font-weight:700;color:#374151">Bugi (loose coins)</span>
+      </div>
+      <span style="font-size:15px;font-weight:900;color:#0d9488">₱${bugi}</span>
+    </div>`);
+  if(!rows.length) rows.push(`<div style="font-size:13px;color:#9ca3af;text-align:center">No packs needed</div>`);
+  return rows.join('');
 }
 
 function adjPack(hid,type,delta){
