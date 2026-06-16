@@ -2493,13 +2493,13 @@ async function submitHarvest(){
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
 
-  const total=parseFloat(document.getElementById('coin-total').value)||0;
+  // Net Coins is primary input — Total = Net + Free + Saloy + Old
+  const net=parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const free=parseFloat(document.getElementById('coin-free').value)||0;
   const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
-  if(!total){toast('Enter total coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
-
-  const net=Math.max(0,total-free-saloy-freeCoins);
+  if(!net){toast('Enter Net Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
+  const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
   const spawn=net*0.75,customer=net*0.25;
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
