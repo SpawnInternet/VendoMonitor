@@ -3683,6 +3683,20 @@ async function renderEod(){
     return;
   }
 
+  // Check if already submitted today and update button
+  const _todayKey = 'eod_submitted_'+today;
+  const _submittedAt = localStorage.getItem(_todayKey);
+  const btn = document.getElementById('eod-submit-btn');
+  if(btn){
+    if(_submittedAt){
+      btn.style.background='#15803d';
+      btn.innerHTML='✅ Submitted at '+_submittedAt+' — Tap to Re-submit';
+    } else {
+      btn.style.background='';
+      btn.innerHTML='✅ Submit & End Day';
+    }
+  }
+
   // Show loading
   document.getElementById('eod-vendo-list').innerHTML='<div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px"><div class="spinner" style="margin:0 auto 8px"></div>Loading…</div>';
 
@@ -3972,8 +3986,20 @@ async function submitEodSession(){
         });
       }
     }
-    toast('✅ End of Day submitted!');
-    setTimeout(()=>{ _packData={}; _expenses=[]; localStorage.setItem('spawn_last_active_date', new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'})); renderEod(); },1500);
+    const _submitTime = new Date().toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
+    localStorage.setItem('eod_submitted_'+new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}), _submitTime);
+    toast('✅ End of Day submitted at '+_submitTime);
+    setTimeout(()=>{
+      _packData={}; _expenses=[];
+      localStorage.setItem('spawn_last_active_date', new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}));
+      // Change button to re-submit
+      const btn = document.getElementById('eod-submit-btn');
+      if(btn){
+        btn.style.background='#15803d';
+        btn.innerHTML='✅ Submitted at '+_submitTime+' — Tap to Re-submit';
+      }
+      renderEod();
+    },1500);
   } catch(e){
     toast('Error submitting. Try again.');
     console.error(e);
