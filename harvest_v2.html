@@ -324,6 +324,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .picker-item{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)}
 .picker-item:last-child{border-bottom:none}
 .picker-item:active{background:#f7f8fc;border-radius:8px}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -2808,6 +2809,66 @@ async function pwLog(type, message, details){
   } catch(e){} // never block on logging
 }
 
+
+// ── HISTORY RECEIPT MODAL ─────────────────────────────────────────
+function showHistReceipt(itemJson) {
+  const item = JSON.parse(itemJson);
+  const net   = parseFloat(item.net_collectible||0);
+  const spawn = parseFloat(item.spawn_share||0);
+  const coins = parseFloat(item.coins_total||0);
+  const date  = item.harvest_date ? new Date(item.harvest_date+'T12:00:00').toLocaleDateString('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric'}) : '—';
+  const time  = item.harvested_at ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'hist-receipt-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)';
+  modal.onclick = e => { if(e.target===modal) modal.remove(); };
+
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:0 0 32px;animation:slideUp .25s ease">
+      <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:24px 20px 20px;border-radius:20px 20px 0 0;text-align:center;color:#fff">
+        <div style="font-size:40px;margin-bottom:6px">✅</div>
+        <div style="font-size:18px;font-weight:800">${item.sheet_name||item.vendo_name||'—'}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:2px">${item.collector||selectedCollector||''} · Harvest Remittance</div>
+      </div>
+      <div style="padding:20px 20px 0">
+        <div style="text-align:center;margin-bottom:16px">
+          <div style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.05em">Spawn Share to Remit</div>
+          <div style="font-size:36px;font-weight:900;color:#1d4ed8">₱${fmt(spawn)}</div>
+        </div>
+        <div style="border-top:1px dashed #e5e7eb;padding-top:14px">
+          ${row('Collection Total', '₱'+fmt(coins))}
+          ${row('Net (after deductions)', '₱'+fmt(net))}
+          ${row('Owner Share (25%)', '₱'+fmt(coins*0.25), '#7c3aed')}
+          ${item.collector_note?row('Note', item.collector_note,'#92400e'):''}
+        </div>
+        ${item.photo_url?`
+        <div style="margin-top:14px;text-align:center">
+          <div style="font-size:11px;color:#6b7280;font-weight:700;margin-bottom:8px">📷 HARVEST PHOTO</div>
+          <img src="${item.photo_url}" onclick="window.open('${item.photo_url}')"
+            style="width:100%;max-height:220px;object-fit:cover;border-radius:12px;cursor:pointer;border:2px solid #e5e7eb">
+          <div style="font-size:10px;color:#6b7280;margin-top:4px">Tap to view full size</div>
+        </div>`:'<div style="margin-top:14px;text-align:center;font-size:12px;color:#9ca3af">No harvest photo</div>'}
+        <div style="margin-top:14px;display:flex;justify-content:space-between;font-size:10px;color:#9ca3af;border-top:1px dashed #e5e7eb;padding-top:10px">
+          <span>📅 ${date} ${time?'· '+time:''}</span>
+          <span>ID #${item.id||'—'}</span>
+        </div>
+        <button onclick="document.getElementById('hist-receipt-modal').remove()" 
+          style="width:100%;margin-top:16px;padding:14px;background:#f3f4f6;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#374151">
+          Close
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function row(label, value, color='') {
+  return `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6">
+    <span style="font-size:13px;color:#6b7280">${label}</span>
+    <span style="font-size:13px;font-weight:700;color:${color||'#1e293b'}">${value}</span>
+  </div>`;
+}
+
 // ── HARVEST HISTORY ───────────────────────────────────────────────
 let _histCache = null;
 async function renderHistory(){
@@ -2819,7 +2880,7 @@ async function renderHistory(){
     listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading history…</span></div>';
     try{
       const r=await fetch(
-        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&order=harvest_date.desc&limit=500`,
+        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&select=id,harvest_date,vendo_name,sheet_name,area,route_code,coins_total,net_collectible,spawn_share,collector_note,photo_url,harvested_at&order=harvest_date.desc,harvested_at.desc&limit=500`,
         {headers:HDR}
       );
       _histCache=await r.json();
@@ -2872,16 +2933,19 @@ async function renderHistory(){
     items.forEach(item=>{
       const net=parseFloat(item.net_collectible||0);
       const note=item.collector_note?`<div style="font-size:10px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-top:3px">📝 ${item.collector_note}</div>`:'';
-      html+=`<div class="vendo-item done" style="cursor:default;margin-bottom:6px">
+      const hasPhoto = !!item.photo_url;
+      const timeStr = item.harvested_at ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
+      html+=`<div class="vendo-item done" style="cursor:pointer;margin-bottom:6px;active:opacity:.8" onclick="showHistReceipt(${JSON.stringify(JSON.stringify(item))})">
         <div class="vi-seq" style="background:#86efac;color:#15803d;font-size:10px">✓</div>
         <div class="vi-left" style="flex:1">
           <div class="vi-name">${item.sheet_name||item.vendo_name||'—'}</div>
-          <div class="vi-sub">${item.area||'—'}${item.route_code?' · '+item.route_code:''}</div>
+          <div class="vi-sub">${item.area||'—'}${item.route_code?' · '+item.route_code:''} ${timeStr?'· '+timeStr:''}</div>
           ${note}
         </div>
-        <div style="text-align:right;flex-shrink:0">
+        <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
           <div style="font-size:13px;font-weight:700;color:#15803d">₱${fmt(net)}</div>
           <div style="font-size:9px;color:var(--muted)">Spawn ₱${fmt(parseFloat(item.spawn_share||0))}</div>
+          ${hasPhoto?'<span style="font-size:9px;background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-weight:700">📷 Receipt</span>':'<span style="font-size:9px;color:#d1d5db">No photo</span>'}
         </div>
       </div>`;
     });
