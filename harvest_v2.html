@@ -2933,19 +2933,20 @@ async function renderHistory(){
     items.forEach(item=>{
       const net=parseFloat(item.net_collectible||0);
       const note=item.collector_note?`<div style="font-size:10px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-top:3px">📝 ${item.collector_note}</div>`:'';
-      const hasPhoto = !!item.photo_url;
       const timeStr = item.harvested_at ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
-      html+=`<div class="vendo-item done" style="cursor:pointer;margin-bottom:6px;active:opacity:.8" onclick="showHistReceipt(${JSON.stringify(JSON.stringify(item))})">
+      html+=`<div class="vendo-item done" style="margin-bottom:6px;cursor:default">
         <div class="vi-seq" style="background:#86efac;color:#15803d;font-size:10px">✓</div>
         <div class="vi-left" style="flex:1">
           <div class="vi-name">${item.sheet_name||item.vendo_name||'—'}</div>
-          <div class="vi-sub">${item.area||'—'}${item.route_code?' · '+item.route_code:''} ${timeStr?'· '+timeStr:''}</div>
+          <div class="vi-sub">${item.area||'—'} ${timeStr?'· '+timeStr:''}</div>
           ${note}
         </div>
-        <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px">
-          <div style="font-size:13px;font-weight:700;color:#15803d">₱${fmt(net)}</div>
-          <div style="font-size:9px;color:var(--muted)">Spawn ₱${fmt(parseFloat(item.spawn_share||0))}</div>
-          ${hasPhoto?'<span style="font-size:9px;background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-weight:700">📷 Receipt</span>':'<span style="font-size:9px;color:#d1d5db">No photo</span>'}
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          ${item.photo_url?`<img src="${item.photo_url}" onclick="window.open('${item.photo_url}')" style="width:36px;height:36px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid #e5e7eb;flex-shrink:0">`:''}
+          <div style="text-align:right">
+            <div style="font-size:13px;font-weight:700;color:#15803d">₱${fmt(net)}</div>
+            <div style="font-size:9px;color:var(--muted)">Spawn ₱${fmt(parseFloat(item.spawn_share||0))}</div>
+          </div>
         </div>
       </div>`;
     });
