@@ -3436,11 +3436,16 @@ function bnavSwitch(tab){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('screen-expense').classList.add('active');
     window.scrollTo(0,0);
-    renderExpenses();
+    loadAndRenderExpenses();
   } else if(tab==='eod'){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('screen-eod').classList.add('active');
     window.scrollTo(0,0);
+    // Ensure selectedCollector is set from localStorage before renderEod
+    if(!selectedCollector){
+      const saved = localStorage.getItem('spawn_collector_name');
+      if(saved) selectedCollector = saved;
+    }
     renderEod();
   } else if(tab==='history'){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -3563,6 +3568,29 @@ async function saveExpense(){
   renderExpenses();
   if(document.getElementById('screen-home')?.classList.contains('active')) setTimeout(loadHomeStats,500);
   toast('✅ Expense saved ₱'+fmt(amt));
+}
+
+async function loadAndRenderExpenses(){
+  const collector = selectedCollector||sessionStorage.getItem('col_name')||localStorage.getItem('spawn_collector_name')||'';
+  const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  if(!collector) { renderExpenses(); return; }
+  try {
+    const r = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url&order=created_at.asc`,{headers:HDR});
+    const data = await r.json();
+    if(Array.isArray(data) && data.length > 0){
+      // Merge DB entries with in-memory (avoid duplicates by id)
+      const existingIds = new Set(_expenses.map(e=>e.id).filter(Boolean));
+      data.forEach(e=>{
+        if(!existingIds.has(e.id)){
+          _expenses.push({id:e.id,category:e.category,description:e.description||'',amount:Number(e.amount),receipt_photo_url:e.receipt_photo_url||null,created_at:''});
+        }
+      });
+      // Update badge
+      const badge = document.getElementById('exp-badge');
+      if(badge){ badge.textContent=_expenses.length; badge.style.display=_expenses.length?'block':'none'; }
+    }
+  } catch(e){ console.warn('Expense load failed',e); }
+  renderExpenses();
 }
 
 function renderExpenses(){
