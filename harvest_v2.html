@@ -1216,6 +1216,15 @@ async function pinSubmit(){
     sessionStorage.setItem('col_name', collector.name||'');
     sessionStorage.setItem('col_pin', pin);
     localStorage.setItem('spawn_collector_name', collector.name||'');
+    // Auto-clear in-memory expenses if it's a new day
+    const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    const _lastDay = localStorage.getItem('spawn_last_active_date');
+    if(_lastDay && _lastDay !== _today){
+      _expenses = [];
+      _packData = {};
+      console.log('[Login] New day detected — cleared in-memory expenses and packs');
+    }
+    localStorage.setItem('spawn_last_active_date', _today);
     showHomeScreen();
   }catch(e){
     // Offline or timeout fallback — check cached collectors
@@ -3964,7 +3973,7 @@ async function submitEodSession(){
       }
     }
     toast('✅ End of Day submitted!');
-    setTimeout(()=>{ _packData={}; _expenses=[]; renderEod(); },1500);
+    setTimeout(()=>{ _packData={}; _expenses=[]; localStorage.setItem('spawn_last_active_date', new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'})); renderEod(); },1500);
   } catch(e){
     toast('Error submitting. Try again.');
     console.error(e);
