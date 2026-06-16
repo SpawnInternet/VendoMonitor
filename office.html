@@ -190,6 +190,47 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .modal-btn.confirm{color:#fff}
 .modal-btn.confirm.surplus{background:var(--amber)}
 .modal-btn.confirm.deficit{background:var(--red)}
+
+/* ── RECONCILIATION SCREEN ── */
+.recon-header{background:linear-gradient(135deg,#1e3cb8,#2563eb);color:#fff;padding:16px;position:sticky;top:53px;z-index:100}
+.recon-col-name{font-size:16px;font-weight:900}
+.recon-date{font-size:11px;opacity:.75;margin-top:2px}
+.recon-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.recon-stat{background:rgba(255,255,255,.15);border-radius:8px;padding:8px;text-align:center}
+.recon-stat-val{font-size:16px;font-weight:900}
+.recon-stat-lbl{font-size:9px;opacity:.75;text-transform:uppercase;margin-top:1px}
+
+.recon-section-title{font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px;padding:0 2px}
+
+.recon-vendo{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.recon-vendo.match{border-color:#86efac;background:#f0fdf4}
+.recon-vendo.short{border-color:#fca5a5;background:#fef2f2}
+.recon-vendo.surplus{border-color:#fcd34d;background:#fffbeb}
+.recon-vendo.uncounted{border-color:#e5e7eb;background:#f9fafb}
+
+.rv-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.rv-code{background:#1e3cb8;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:4px;letter-spacing:.06em;margin-right:5px}
+.rv-name{font-size:13px;font-weight:800;color:#1e293b}
+.rv-time{font-size:10px;color:#9ca3af}
+.rv-coins{font-size:11px;color:#6b7280}
+.rv-packs{font-size:11px;color:#374151;margin:4px 0}
+.rv-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:6px;border-top:1px dashed #e5e7eb}
+.rv-spawn{font-size:14px;font-weight:900;color:#15803d}
+.rv-status{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.rv-status.match{background:#dcfce7;color:#15803d}
+.rv-status.short{background:#fee2e2;color:#dc2626}
+.rv-status.surplus{background:#fef9c3;color:#92400e}
+.rv-status.uncounted{background:#f3f4f6;color:#6b7280}
+
+.recon-exp-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+
+.recon-total-box{background:#f0fdf4;border:2px solid #86efac;border-radius:14px;padding:14px 16px;margin:14px 0}
+.recon-total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.recon-net{font-size:28px;font-weight:900;color:#1e3cb8;text-align:center;margin-top:4px}
+
+.btn-reconcile{width:100%;padding:16px;background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:900;cursor:pointer;font-family:inherit;margin-top:4px;box-shadow:0 4px 12px rgba(21,128,61,.3)}
+.btn-reconcile:active{transform:scale(.98)}
+.btn-reconcile.done{background:linear-gradient(135deg,#6b7280,#9ca3af);box-shadow:none}
 </style>
 </head>
 <body>
@@ -477,6 +518,24 @@ function renderCollectorCards(){
   }).join('');
 
   document.getElementById('collector-cards').innerHTML=html;
+
+  // Load reconciliation status badges
+  try {
+    const reconData = await sbFetch(`harvest_reconciliations?recon_date=eq.${currentDate}&select=collector,confirmed_at,confirmed_by`);
+    if(Array.isArray(reconData)){
+      reconData.forEach(r=>{
+        const t = new Date(r.confirmed_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
+        document.querySelectorAll('.col-card').forEach(card=>{
+          if(card.getAttribute('onclick')===`openCollector('${r.collector}')`){
+            const badge=document.createElement('div');
+            badge.style.cssText='margin:4px 12px 8px;background:#f0fdf4;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:#15803d;text-align:center';
+            badge.textContent='✅ Reconciled '+t;
+            card.appendChild(badge);
+          }
+        });
+      });
+    }
+  } catch(e){}
 }
 
 function toggleDatePicker(){
@@ -490,13 +549,10 @@ function onDateChange(){
 }
 
 // ── DETAIL: VENDOS FOR COLLECTOR ─────────────────────────
-function openCollector(collector){
+async function openCollector(collector){
   activeCollector=collector;
-  const harvests=allHarvests.filter(h=>h.collector===collector);
-  document.getElementById('detail-col-name').textContent='👤 '+collector;
-  renderDetailSummary(harvests);
-  document.getElementById('detail-content').innerHTML=renderExpenseCard(collector)+harvests.map(h=>renderVendo(h)).join('');
-  showScreen('detail');
+  showScreen('recon');
+  await loadRecon(collector);
 }
 
 function goHome(){
@@ -812,6 +868,155 @@ function modalCancel() {
   if (_modalResolve) { _modalResolve(false); _modalResolve = null; }
 }
 
+
+// ── RECONCILIATION ───────────────────────────────────────
+async function loadRecon(collector){
+  const date = document.getElementById('date-picker').value || new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  const dateLabel = new Date(date+'T12:00:00').toLocaleDateString('en-PH',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+  document.getElementById('recon-col-name').textContent = '👤 '+collector;
+  document.getElementById('recon-date').textContent = dateLabel;
+  document.getElementById('recon-vendo-list').innerHTML = '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px"><span style="display:inline-block;width:20px;height:20px;border:2px solid #e5e7eb;border-top-color:#1e3cb8;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px"></span>Loading…</div>';
+
+  try {
+    const [hR, pR, eR, rR] = await Promise.all([
+      sbFetch(`harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=id,vendo_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at`),
+      sbFetch(`harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=harvest_id,pack_type,amount`),
+      sbFetch(`collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${date}&select=id,category,description,amount`),
+      sbFetch(`harvest_reconciliations?collector=eq.${encodeURIComponent(collector)}&recon_date=eq.${date}&select=id,confirmed_at,confirmed_by&limit=1`)
+    ]);
+
+    const harvests = Array.isArray(hR) ? hR : [];
+    const packs    = Array.isArray(pR) ? pR : [];
+    const expenses = Array.isArray(eR) ? eR : [];
+    const existing = Array.isArray(rR) && rR.length > 0 ? rR[0] : null;
+
+    // Build pack map
+    const packMap = {};
+    packs.forEach(p => {
+      if(!packMap[p.harvest_id]) packMap[p.harvest_id]={mix:0,peso:0,bugi:0,bills:0};
+      packMap[p.harvest_id][p.pack_type] = (packMap[p.harvest_id][p.pack_type]||0) + Number(p.amount||0);
+    });
+
+    const totalSpawn = harvests.reduce((s,h)=>s+parseFloat(h.spawn_share||0),0);
+    const totalExp   = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+    const netRemit   = totalSpawn - totalExp;
+
+    // Update header stats
+    document.getElementById('recon-vendos').textContent = harvests.length;
+    document.getElementById('recon-spawn-total').textContent = '₱'+fmt(totalSpawn);
+    document.getElementById('recon-net').textContent = '₱'+fmt(netRemit);
+    document.getElementById('recon-spawn-sum').textContent = '₱'+fmt(totalSpawn);
+    document.getElementById('recon-net-big').textContent = '₱'+fmt(netRemit);
+    const expRow = document.getElementById('recon-exp-row');
+    if(totalExp > 0){ expRow.style.display='flex'; document.getElementById('recon-exp-sum').textContent='−₱'+fmt(totalExp); }
+    else expRow.style.display='none';
+
+    // Render vendos
+    const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bugi:'Bugi',bills:'Cash'};
+    const PACK_COLORS = {mix:'#1e3cb8',peso:'#7c3aed',bugi:'#0d9488',bills:'#d97706'};
+    document.getElementById('recon-vendo-list').innerHTML = harvests.length
+      ? harvests.map(h => {
+          const pm = packMap[h.id]||{};
+          const packed = Object.values(pm).reduce((s,v)=>s+v,0);
+          const spawn  = parseFloat(h.spawn_share||0);
+          const gap    = packed > 0 ? packed - spawn : null;
+          const hasPacks = packed > 0;
+          const cls    = !hasPacks ? 'uncounted' : gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
+          const statusText = !hasPacks ? '⏳ Not counted' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
+          const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
+            `<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':PACK_LABELS[k]+' ₱'+fmt(v)}</span>`
+          ).join(' · ');
+          const t = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
+          return `<div class="recon-vendo ${cls}">
+            <div class="rv-top">
+              <div>
+                <span class="rv-code">${h.vendo_code||(h.sheet_name?(h.sheet_name.substring(0,4).toUpperCase()):'—')}</span>
+                <span class="rv-name">${h.vendo_name||h.sheet_name||'—'}</span>
+              </div>
+              <span class="rv-time">${t}</span>
+            </div>
+            <div class="rv-coins">📍 ${h.area||'—'} · Coins ₱${fmt(h.coins_total)}</div>
+            <div class="rv-packs">${packParts||'<span style="color:#9ca3af;font-style:italic">No packs entered in Spawn Count</span>'}</div>
+            <div class="rv-bottom">
+              <span class="rv-spawn">Spawn ₱${fmt(spawn)}</span>
+              <span class="rv-status ${cls}">${statusText}</span>
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No harvests for this date</div>';
+
+    // Render expenses
+    const catIcons = {Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
+    document.getElementById('recon-expense-list').innerHTML = expenses.length
+      ? expenses.map(e=>`<div class="recon-exp-row">
+          <span>${catIcons[e.category]||'📝'} ${e.category}${e.description?' · '+e.description:''}</span>
+          <span style="font-weight:700;color:#dc2626">−₱${fmt(e.amount)}</span>
+        </div>`).join('')
+      : '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px 0">No expenses</div>';
+
+    // Check if already reconciled
+    const banner = document.getElementById('recon-status-banner');
+    const btn = document.getElementById('btn-reconcile');
+    if(existing){
+      const t = new Date(existing.confirmed_at).toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      banner.style.display='block';
+      document.getElementById('recon-confirmed-text').textContent='✅ Reconciled on '+t;
+      document.getElementById('recon-confirmed-by').textContent='Confirmed by '+existing.confirmed_by;
+      btn.textContent='✅ Already Reconciled — Re-confirm';
+      btn.classList.add('done');
+    } else {
+      banner.style.display='none';
+      btn.textContent='✅ Reconcile & Confirm';
+      btn.classList.remove('done');
+    }
+
+    // Store for reconcile
+    window._reconData = { collector, date, totalSpawn, totalExp, netRemit, vendoCount: harvests.length };
+
+  } catch(e) {
+    document.getElementById('recon-vendo-list').innerHTML='<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">Error: '+e.message+'</div>';
+  }
+}
+
+async function doReconcile(){
+  const d = window._reconData;
+  if(!d) return;
+  const btn = document.getElementById('btn-reconcile');
+  btn.disabled=true; btn.textContent='Saving…';
+
+  try {
+    // Check if harvest_reconciliations table exists, insert reconciliation record
+    const r = await fetch(`${SB}/rest/v1/harvest_reconciliations`,{
+      method:'POST',
+      headers:{...HDR,Prefer:'return=minimal'},
+      body:JSON.stringify({
+        collector: d.collector,
+        recon_date: d.date,
+        confirmed_by: currentUser?.name||'Admin',
+        confirmed_at: new Date().toISOString(),
+        spawn_share: d.totalSpawn,
+        expenses: d.totalExp,
+        net_to_remit: d.netRemit,
+        vendo_count: d.vendoCount
+      })
+    });
+    if(!r.ok && r.status !== 409) throw new Error('HTTP '+r.status);
+    const t = new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const banner = document.getElementById('recon-status-banner');
+    banner.style.display='block';
+    document.getElementById('recon-confirmed-text').textContent='✅ Reconciled on '+t;
+    document.getElementById('recon-confirmed-by').textContent='Confirmed by '+(currentUser?.name||'Admin');
+    btn.disabled=false; btn.textContent='✅ Already Reconciled — Re-confirm'; btn.classList.add('done');
+    toast('✅ Reconciled — '+d.collector+' ₱'+fmt(d.netRemit));
+    // Refresh collector cards
+    renderCollectorCards();
+  } catch(e){
+    toast('Error: '+e.message);
+    btn.disabled=false; btn.textContent='✅ Reconcile & Confirm'; btn.classList.remove('done');
+  }
+}
+
 // ── INIT ─────────────────────────────────────────────────
 loadAccounts();
 </script>
@@ -826,6 +1031,74 @@ loadAccounts();
       <button class="modal-btn cancel" onclick="modalCancel()">← Fix it</button>
       <button class="modal-btn confirm" id="modal-confirm-btn" onclick="modalConfirm()">Save anyway</button>
     </div>
+  </div>
+</div>
+
+<!-- ── RECONCILIATION SCREEN ── -->
+<div class="screen" id="screen-recon">
+  <!-- Sticky header -->
+  <div class="recon-header">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <button onclick="goHome()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">← Back</button>
+      <div>
+        <div class="recon-col-name" id="recon-col-name">—</div>
+        <div class="recon-date" id="recon-date">—</div>
+      </div>
+    </div>
+    <div class="recon-stats">
+      <div class="recon-stat">
+        <div class="recon-stat-val" id="recon-vendos">0</div>
+        <div class="recon-stat-lbl">Vendos</div>
+      </div>
+      <div class="recon-stat">
+        <div class="recon-stat-val" id="recon-spawn-total">₱0</div>
+        <div class="recon-stat-lbl">Spawn Share</div>
+      </div>
+      <div class="recon-stat">
+        <div class="recon-stat-val" id="recon-net">₱0</div>
+        <div class="recon-stat-lbl">Net to Remit</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding:0 12px 100px;max-width:600px;margin:0 auto">
+    <!-- Vendo breakdown -->
+    <div class="recon-section-title">📍 Per Vendo Breakdown</div>
+    <div id="recon-vendo-list">
+      <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">Loading…</div>
+    </div>
+
+    <!-- Expenses -->
+    <div class="recon-section-title">💸 Expenses</div>
+    <div id="recon-expense-list" style="background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:10px 14px;margin-bottom:8px">
+      <div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px 0">No expenses</div>
+    </div>
+
+    <!-- Totals -->
+    <div class="recon-total-box">
+      <div class="recon-total-row">
+        <span style="color:#6b7280">Total Spawn Share</span>
+        <span style="font-weight:700;color:#15803d" id="recon-spawn-sum">₱0</span>
+      </div>
+      <div class="recon-total-row" id="recon-exp-row" style="display:none">
+        <span style="color:#6b7280">Less Expenses</span>
+        <span style="font-weight:700;color:#dc2626" id="recon-exp-sum">−₱0</span>
+      </div>
+      <div class="recon-total-row" style="border-top:2px solid #16a34a;margin-top:6px;padding-top:8px">
+        <span style="font-size:14px;font-weight:800;color:#1e3cb8">NET TO REMIT</span>
+        <div></div>
+      </div>
+      <div class="recon-net" id="recon-net-big">₱0</div>
+    </div>
+
+    <!-- Reconcile button -->
+    <div id="recon-status-banner" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 16px;margin-bottom:10px;text-align:center">
+      <div style="font-size:14px;font-weight:800;color:#15803d" id="recon-confirmed-text">—</div>
+      <div style="font-size:11px;color:#6b7280;margin-top:2px" id="recon-confirmed-by">—</div>
+    </div>
+    <button class="btn-reconcile" id="btn-reconcile" onclick="doReconcile()">
+      ✅ Reconcile & Confirm
+    </button>
   </div>
 </div>
 </body>
