@@ -2321,12 +2321,9 @@ async function uploadPhoto(blob, vendoName){
 
 // ── CALC NET ──────────────────────────────────────────────────────
 function csheetNext(){
-  const total = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
-  if(!total){ toast('Enter total coins first'); return; }
-  // Update hidden field
-  const hidden = document.getElementById('coin-total');
-  if(hidden) hidden.value = total;
-  calcNet();
+  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  if(!net){ toast('Enter Net Coins first'); return; }
+  calcNet(); // recalculate total in background
   document.getElementById('csheet-step1').style.display='none';
   document.getElementById('csheet-step2').style.display='block';
   document.querySelector('#collection-sheet-overlay .confirm-sheet').scrollTop=0;
@@ -2350,15 +2347,12 @@ function closeCollectionSheet(){
 }
 
 function doneCollectionSheet(){
-  const coinTotal = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  // Net Coins is the primary input now — no subtraction needed
+  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const p1k = _p1k||0, p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-  const free = parseFloat(document.getElementById('coin-free')?.value)||0;
-  const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
-  const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
-  const net = Math.max(0, coinTotal - free - saloy - freeCoins);
   const spawnShare = Math.round(net * 0.75);
   const warn = document.getElementById('sheet-match-warning');
   const summaryBox = document.getElementById('pack-summary-box');
