@@ -5140,16 +5140,36 @@ async function colLoad() {
   const filterEl = document.getElementById('col-area-filter');
   listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#6b7280;font-size:13px;"><span style="display:inline-block;width:20px;height:20px;border:2px solid #e5e7eb;border-top-color:#15803d;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</div>';
   try {
-    const [rows, packRows] = await Promise.all([
-      sb('harvests',
-        `harvest_date=eq.${date}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,tg_income,recon_gap,recon_flag,harvested_at,collector_note&order=harvested_at.asc`,
-        2000
-      ),
-      sb('harvest_pack_items',
-        `harvest_date=eq.${date}&select=harvest_id,pack_type,amount`,
-        2000
-      )
-    ]);
+    // Try cache first — fast load from storage bucket
+    let rows, packRows, expenses = [], reconRows = [];
+    const cacheUrl = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/collections-${date}.json?t=${Math.floor(Date.now()/900000)}';
+    let fromCache = false;
+    try {
+      const cr = await fetch(cacheUrl);
+      if (cr.ok) {
+        const cd = await cr.json();
+        rows     = cd.harvests || [];
+        packRows = cd.packs    || [];
+        expenses = cd.expenses || [];
+        reconRows= cd.reconciliations || [];
+        fromCache = true;
+      }
+    } catch(e) {}
+
+    // Fallback: fetch from DB if no cache
+    if (!fromCache) {
+      const [hr, pr, er, rr] = await Promise.all([
+        sb('harvests', `harvest_date=eq.${date}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.asc`, 2000),
+        sb('harvest_pack_items', `harvest_date=eq.${date}&select=harvest_id,pack_type,amount`, 2000),
+        sb('collector_expenses', `expense_date=eq.${date}&select=collector,category,description,amount,receipt_photo_url&order=created_at.asc`, 200),
+        sb('harvest_reconciliations', `recon_date=eq.${date}&select=collector,confirmed_at,confirmed_by`, 50)
+      ]);
+      rows      = Array.isArray(hr) ? hr : [];
+      packRows  = Array.isArray(pr) ? pr : [];
+      expenses  = Array.isArray(er) ? er : [];
+      reconRows = Array.isArray(rr) ? rr : [];
+    }
+
     // Build pack totals map
     const packMap = {};
     if (Array.isArray(packRows)) {
@@ -5173,25 +5193,12 @@ async function colLoad() {
     const byCollector = {};
     rows.forEach(r=>{ const c=r.collector||'Unknown'; if(!byCollector[c]) byCollector[c]={count:0,spawn:0,expenses:[]}; byCollector[c].count++; byCollector[c].spawn+=Number(r.spawn_share||0); });
 
-    // Fetch expenses + reconciliation data
-    let expenses = [];
-    try {
-      const [expRows, reconRows] = await Promise.all([
-        sb('collector_expenses', `expense_date=eq.${date}&select=collector,category,description,amount&order=created_at.asc`, 200),
-        sb('harvest_reconciliations', `recon_date=eq.${date}&select=collector,confirmed_at,confirmed_by`, 50)
-      ]);
-      if (Array.isArray(expRows)) {
-        expenses = expRows;
-        expRows.forEach(e=>{ const c=e.collector||'Unknown'; if(byCollector[c]) byCollector[c].expenses.push(e); });
-      }
-      // Build recon map
-      window._colReconMap = {};
-      if (Array.isArray(reconRows)) reconRows.forEach(r=>{ window._colReconMap[r.collector]=r; });
-      // Build expense map by collector
-      window._colExpMap = {};
-      expenses.forEach(e=>{ const c=e.collector||'Unknown'; if(!window._colExpMap[c]) window._colExpMap[c]=[]; window._colExpMap[c].push(e); });
-    } catch(ex) { /* expenses optional */ }
-
+    // Build recon + expense maps from already-loaded data
+    window._colReconMap = {};
+    reconRows.forEach(r=>{ window._colReconMap[r.collector]=r; });
+    window._colExpMap = {};
+    expenses.forEach(e=>{ const c=e.collector||'Unknown'; if(!window._colExpMap[c]) window._colExpMap[c]=[]; window._colExpMap[c].push(e); });
+    expenses.forEach(e=>{ const c=e.collector||'Unknown'; if(byCollector[c]) byCollector[c].expenses.push(e); });
     const totalExpenses = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
 
     if(sumEl) sumEl.innerHTML = `
@@ -5292,11 +5299,14 @@ function colRenderRows(rows) {
       </div>`;
     }).join('');
 
-    // Expense rows
+    // Expense rows with receipt photo
     const expRows = exps.length ? exps.map(e=>`
-      <div style="display:flex;justify-content:space-between;padding:6px 12px;font-size:12px;border-bottom:1px solid #f3f4f6;">
-        <span style="color:#6b7280">💸 ${e.category}${e.description?' · '+e.description:''}</span>
-        <span style="font-weight:700;color:#dc2626;">−₱${_php(e.amount)}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;font-size:12px;border-bottom:1px solid #f3f4f6;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;flex:1">
+          ${e.receipt_photo_url?`<img src="${e.receipt_photo_url}" onclick="window.open('${e.receipt_photo_url}')" style="width:36px;height:28px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #e5e7eb;flex-shrink:0">`:'<span style="font-size:16px">💸</span>'}
+          <span style="color:#6b7280">${e.category}${e.description?' · '+e.description:''}</span>
+        </div>
+        <span style="font-weight:700;color:#dc2626;flex-shrink:0">−${_php(e.amount)}</span>
       </div>`).join('') : '';
 
     return `
