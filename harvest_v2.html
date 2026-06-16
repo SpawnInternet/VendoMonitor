@@ -2441,28 +2441,13 @@ function calcNet(){
     badge.style.display = 'none';
   }
 
-  // Disable submit button if packs don't match spawn share
+  // Always keep submit button enabled — Spawn Count will verify packs
   const submitBtn = document.querySelector('.action-row .btn-green');
-  if(submitBtn && packTotal > 0 && spawn > 0){
-    const match = Math.round(packTotal) === Math.round(spawn);
-    submitBtn.disabled = !match;
-    if(match){
-      submitBtn.style.background = '';
-      submitBtn.style.opacity = '1';
-      submitBtn.textContent = '✅ Submit harvest';
-    } else {
-      const gap = packTotal - spawn;
-      submitBtn.style.background = '#dc2626';
-      submitBtn.style.opacity = '0.7';
-      submitBtn.textContent = gap > 0
-        ? `⚠️ Surplus ₱${fmt(gap)} — fix packs`
-        : `⚠️ Short ₱${fmt(Math.abs(gap))} — fix packs`;
-    }
-  } else if(submitBtn && packTotal === 0){
-    submitBtn.disabled = true;
-    submitBtn.style.background = '#9ca3af';
-    submitBtn.style.opacity = '0.7';
-    submitBtn.textContent = '📦 Enter packs first';
+  if(submitBtn){
+    submitBtn.disabled = false;
+    submitBtn.style.background = '';
+    submitBtn.style.opacity = '1';
+    submitBtn.textContent = '✅ Submit harvest';
   }
 }
 
@@ -3393,18 +3378,13 @@ function resetPackForm(){
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
     const spawn = Math.round(net * 0.75);
 
-    // BLOCK if packs don't match spawn share
+    // Warn if packs don't match but allow submit — Spawn Count will verify
     if(packTotal > 0 && Math.round(packTotal) !== spawn){
       const gap = packTotal - spawn;
       const msg = gap > 0
-        ? `⚠️ Packs ₱${fmt(packTotal)} is ₱${fmt(gap)} SURPLUS vs Spawn Share ₱${fmt(spawn)} — fix packs before submitting`
-        : `⚠️ Packs ₱${fmt(packTotal)} is ₱${fmt(Math.abs(gap))} SHORT vs Spawn Share ₱${fmt(spawn)} — fix packs before submitting`;
-      toast(msg, 4000);
-      return;
-    }
-    if(packTotal === 0){
-      toast('⚠️ Enter pack breakdown first before submitting', 3000);
-      return;
+        ? `⚠️ Packs surplus ₱${fmt(gap)} vs Spawn ₱${fmt(spawn)} — double check`
+        : `⚠️ Packs short ₱${fmt(Math.abs(gap))} vs Spawn ₱${fmt(spawn)} — double check`;
+      toast(msg, 3000);
     }
 
     const vname = document.getElementById('form-vname').textContent||'Vendo';
