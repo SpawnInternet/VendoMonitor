@@ -482,8 +482,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="qs-lbl">Vendos Today</div>
     </div>
     <div class="qs-box">
-      <div class="qs-val" style="color:#16a34a" id="home-spawn-today">₱0</div>
-      <div class="qs-lbl">Spawn Share</div>
+      <div class="qs-val" style="color:#1e3cb8" id="home-spawn-today">₱0</div>
+      <div class="qs-lbl">Net to Remit</div>
     </div>
     <div class="qs-box">
       <div class="qs-val" style="color:#dc2626" id="home-expense-today">₱0</div>
@@ -1215,6 +1215,7 @@ async function pinSubmit(){
     sessionStorage.setItem('col_id', collector.id||'');
     sessionStorage.setItem('col_name', collector.name||'');
     sessionStorage.setItem('col_pin', pin);
+    localStorage.setItem('spawn_collector_name', collector.name||'');
     showHomeScreen();
   }catch(e){
     // Offline or timeout fallback — check cached collectors
@@ -3266,15 +3267,19 @@ async function loadHomeStats(){
 
     // Quick stats
     document.getElementById('home-vendos-today').textContent = todayVendos;
-    document.getElementById('home-spawn-today').textContent = '₱'+fmt(todaySpawn);
 
-    // Fetch today's expenses
+    // Fetch today's expenses and calculate net to remit
     try {
       const eResp = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collectorName)}&expense_date=eq.${today}&select=amount`,{headers:HDR});
       const eData = await eResp.json();
       const expTotal = Array.isArray(eData) ? eData.reduce((s,e)=>s+Number(e.amount||0),0) : 0;
+      const netToRemit = todaySpawn - expTotal;
+      document.getElementById('home-spawn-today').textContent = '₱'+fmt(netToRemit);
       document.getElementById('home-expense-today').textContent = expTotal > 0 ? '−₱'+fmt(expTotal) : '₱0';
-    } catch(e) { document.getElementById('home-expense-today').textContent = '₱0'; }
+    } catch(e) {
+      document.getElementById('home-spawn-today').textContent = '₱'+fmt(todaySpawn);
+      document.getElementById('home-expense-today').textContent = '₱0';
+    }
 
     // Recent harvests
     const listEl = document.getElementById('home-recent-list');
@@ -3607,10 +3612,21 @@ var _eodPin = '';
 async function renderEod(){
   const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const todayLabel = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const collector = selectedCollector||sessionStorage.getItem('col_name')||'';
+  const collector = selectedCollector
+    || sessionStorage.getItem('col_name')
+    || localStorage.getItem('spawn_collector_name')
+    || '';
 
   document.getElementById('eod-collector-name').textContent = collector;
   document.getElementById('eod-date-display').textContent = todayLabel;
+
+  if(!collector){
+    document.getElementById('eod-vendo-list').innerHTML='<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">⚠️ Not logged in — please logout and login again</div>';
+    return;
+  }
+
+  // Show loading
+  document.getElementById('eod-vendo-list').innerHTML='<div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px"><div class="spinner" style="margin:0 auto 8px"></div>Loading…</div>';
 
   // Fetch today's harvests from DB
   let harvests = [], packs = [], expenses = [];
