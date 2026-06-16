@@ -514,6 +514,14 @@ async function renderCollectorCards(){
       <div class="col-progress">
         <div class="col-progress-fill" style="width:${pct}%"></div>
       </div>
+      <div style="padding:8px 12px 10px;border-top:1px solid #f3f4f6;display:flex;gap:8px" onclick="event.stopPropagation()">
+        <button onclick="openCollector('${col}')" style="flex:1;padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#374151">
+          📦 Count Packs
+        </button>
+        <button onclick="openEodSummary('${col}')" style="flex:1;padding:8px;border:none;border-radius:8px;background:#1e3cb8;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
+          📋 EOD Summary
+        </button>
+      </div>
     </div>`;
   }).join('');
 
@@ -550,6 +558,15 @@ function onDateChange(){
 
 // ── DETAIL: VENDOS FOR COLLECTOR ─────────────────────────
 async function openCollector(collector){
+  activeCollector=collector;
+  const harvests=allHarvests.filter(h=>h.collector===collector);
+  document.getElementById('detail-col-name').textContent='👤 '+collector;
+  renderDetailSummary(harvests);
+  document.getElementById('detail-content').innerHTML=renderExpenseCard(collector)+harvests.map(h=>renderVendo(h)).join('');
+  showScreen('detail');
+}
+
+async function openEodSummary(collector){
   activeCollector=collector;
   showScreen('recon');
   await loadRecon(collector);
