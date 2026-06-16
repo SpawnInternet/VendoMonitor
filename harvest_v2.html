@@ -325,6 +325,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .picker-item:last-child{border-bottom:none}
 .picker-item:active{background:#f7f8fc;border-radius:8px}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+/* ── EOD RECEIPT SCREEN ── */
+.rcpt-screen{background:#f0f4f8;min-height:100vh;padding-bottom:80px}
+.rcpt-paper{background:#fff;margin:0 auto;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:relative}
+.rcpt-header{background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:20px 20px 16px;text-align:center}
+.rcpt-logo{font-size:11px;font-weight:800;letter-spacing:.12em;opacity:.8;text-transform:uppercase;margin-bottom:4px}
+.rcpt-title{font-size:18px;font-weight:900;letter-spacing:.02em}
+.rcpt-subtitle{font-size:11px;opacity:.75;margin-top:3px}
+.rcpt-divider{display:flex;align-items:center;gap:0;margin:0 -1px}
+.rcpt-divider-half{width:12px;height:12px;border-radius:50%;background:#f0f4f8;flex-shrink:0}
+.rcpt-divider-line{flex:1;border-top:2px dashed #e5e7eb}
+.rcpt-section{padding:14px 18px}
+.rcpt-section-title{font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
+.rcpt-vendo{border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;position:relative}
+.rcpt-vendo-code{display:inline-block;background:#1e3cb8;color:#fff;font-size:10px;font-weight:900;padding:2px 8px;border-radius:4px;letter-spacing:.06em;margin-bottom:4px}
+.rcpt-vendo-name{font-size:13px;font-weight:800;color:#1e293b}
+.rcpt-vendo-addr{font-size:10px;color:#9ca3af;margin-top:1px;margin-bottom:6px}
+.rcpt-vendo-packs{font-size:10px;color:#6b7280;background:#f8fafc;border-radius:5px;padding:3px 7px;display:inline-block;margin-bottom:6px}
+.rcpt-vendo-row{display:flex;justify-content:space-between;align-items:center}
+.rcpt-vendo-coins{font-size:11px;color:#6b7280}
+.rcpt-vendo-spawn{font-size:14px;font-weight:900;color:#15803d}
+.rcpt-exp-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
+.rcpt-exp-lbl{color:#374151}
+.rcpt-exp-amt{color:#dc2626;font-weight:700}
+.rcpt-total-box{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #86efac;border-radius:12px;padding:14px 16px;margin:14px 18px 0}
+.rcpt-total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.rcpt-total-row.big{padding:8px 0 0;border-top:2px solid #16a34a;margin-top:6px}
+.rcpt-net{font-size:28px;font-weight:900;color:#1e3cb8;text-align:center;margin-top:4px}
+.rcpt-footer{text-align:center;padding:14px 18px 18px;border-top:2px dashed #e5e7eb;margin-top:14px}
+.rcpt-footer-note{font-size:10px;color:#9ca3af;line-height:1.5}
+.rcpt-zigzag{height:12px;background:repeating-linear-gradient(90deg,#f0f4f8 0,#f0f4f8 8px,transparent 8px,transparent 16px);margin:0 -1px}
+/* Sticky bottom bar for receipt screen */
+.rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
 </style>
 </head>
 <body>
@@ -3673,12 +3706,89 @@ async function renderEod(){
 }
 
 // Generate screenshot-ready receipt
-function generateEodReceipt(){
-  const receiptEl = document.getElementById('eod-receipt');
-  // Scroll to top then prompt screenshot
+async function generateEodReceipt(){
+  const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  const todayLabel = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const collector = selectedCollector||sessionStorage.getItem('col_name')||'';
+  const now = new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const ref = 'HRV-'+Math.random().toString(36).slice(2,8).toUpperCase();
+
+  document.getElementById('rcpt-collector-name').textContent = '👤 '+collector;
+  document.getElementById('rcpt-date').textContent = todayLabel;
+  document.getElementById('rcpt-ref').textContent = ref;
+  document.getElementById('rcpt-generated').textContent = '⏰ Generated: '+now;
+
+  // Fetch data
+  let harvests=[], packs=[], expenses=[];
+  try {
+    const [hR,pR,eR] = await Promise.all([
+      fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}),
+      fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR}),
+      fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=category,description,amount`,{headers:HDR})
+    ]);
+    const hD=await hR.json(); harvests=Array.isArray(hD)?hD:[];
+    const pD=await pR.json(); packs=Array.isArray(pD)?pD:[];
+    const eD=await eR.json(); expenses=Array.isArray(eD)?eD:[];
+  } catch(e){}
+
+  // Build pack map
+  const packMap={};
+  packs.forEach(p=>{
+    if(!packMap[p.harvest_id]) packMap[p.harvest_id]={mix:0,peso:0,bugi:0,bills:0};
+    packMap[p.harvest_id][p.pack_type]=(packMap[p.harvest_id][p.pack_type]||0)+Number(p.amount||0);
+  });
+
+  const totalSpawn = harvests.reduce((s,h)=>s+parseFloat(h.spawn_share||0),0);
+  const totalExp   = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const netRemit   = totalSpawn - totalExp;
+
+  // Render vendos
+  const PACK_MAP = {mix:'×₱1,000',peso:'×₱300',bugi:'Bugi',bills:'Cash'};
+  document.getElementById('rcpt-vendo-list').innerHTML = harvests.length
+    ? harvests.map((h,i)=>{
+        const pm = packMap[h.id]||{};
+        const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
+          k==='mix'?Math.round(v/1000)+PACK_MAP[k]:k==='peso'?Math.round(v/300)+PACK_MAP[k]:PACK_MAP[k]+' ₱'+fmt(v)
+        );
+        const t = h.harvested_at?new Date(h.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}):'';
+        return `<div class="rcpt-vendo">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            ${h.vendo_code?`<span class="rcpt-vendo-code">${h.vendo_code}</span>`:''}
+            <span class="rcpt-vendo-name">${h.vendo_name||h.sheet_name||'—'}</span>
+            ${t?`<span style="font-size:10px;color:#9ca3af;margin-left:auto">${t}</span>`:''}
+          </div>
+          ${h.address?`<div class="rcpt-vendo-addr">📍 ${h.address}</div>`:''}
+          ${packParts.length?`<div class="rcpt-vendo-packs">📦 ${packParts.join(' · ')}</div>`:'<div class="rcpt-vendo-packs" style="color:#f59e0b">⏳ Awaiting count</div>'}
+          <div class="rcpt-vendo-row">
+            <span class="rcpt-vendo-coins">Coins ₱${fmt(h.coins_total)}</span>
+            <span class="rcpt-vendo-spawn">Spawn ₱${fmt(h.spawn_share)}</span>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px">No harvests today</div>';
+
+  // Render expenses
+  const catIcons={Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
+  document.getElementById('rcpt-expense-list').innerHTML = expenses.length
+    ? expenses.map(e=>`<div class="rcpt-exp-row">
+        <span class="rcpt-exp-lbl">${catIcons[e.category]||'📝'} ${e.category}${e.description?' · '+e.description:''}</span>
+        <span class="rcpt-exp-amt">−₱${fmt(e.amount)}</span>
+      </div>`).join('')
+    : '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px 0">No expenses</div>';
+
+  // Totals
+  document.getElementById('rcpt-spawn-total').textContent = '₱'+fmt(totalSpawn);
+  document.getElementById('rcpt-net-total').textContent = '₱'+fmt(netRemit);
+  const expRow = document.getElementById('rcpt-exp-row');
+  if(totalExp > 0){
+    expRow.style.display='flex';
+    document.getElementById('rcpt-exp-total').textContent = '−₱'+fmt(totalExp);
+  } else { expRow.style.display='none'; }
+
+  // Show receipt screen
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-eod-receipt').classList.add('active');
   window.scrollTo(0,0);
-  receiptEl.style.background = '#fff';
-  toast('📸 Take a screenshot now — scroll to capture all vendos', 4000);
 }
 
 function showEodPin(){
@@ -4267,5 +4377,91 @@ async function submitEodSession(){
       </div>
     </div>
   </div>
+
+<!-- ── EOD RECEIPT SCREEN ── -->
+<div class="screen" id="screen-eod-receipt" style="background:#f0f4f8;min-height:100vh;padding-bottom:80px">
+  <div class="rcpt-paper" id="rcpt-paper">
+
+    <!-- Header -->
+    <div class="rcpt-header">
+      <div class="rcpt-logo">🌐 Spawn Internetan</div>
+      <div class="rcpt-title">Daily Harvest Receipt</div>
+      <div class="rcpt-subtitle" id="rcpt-collector-name">—</div>
+      <div class="rcpt-subtitle" id="rcpt-date">—</div>
+    </div>
+
+    <!-- Zigzag top -->
+    <div class="rcpt-zigzag"></div>
+
+    <!-- Collector ref -->
+    <div style="display:flex;justify-content:space-between;padding:10px 18px;background:#f8fafc;border-bottom:1px solid #f3f4f6">
+      <span style="font-size:10px;color:#9ca3af;font-weight:700">REFERENCE</span>
+      <span style="font-size:10px;color:#374151;font-weight:700" id="rcpt-ref">—</span>
+    </div>
+
+    <!-- Vendo list -->
+    <div class="rcpt-section">
+      <div class="rcpt-section-title">📍 Harvested Vendos</div>
+      <div id="rcpt-vendo-list"></div>
+    </div>
+
+    <!-- Divider -->
+    <div class="rcpt-divider" style="padding:0 -1px">
+      <div class="rcpt-divider-half"></div>
+      <div class="rcpt-divider-line"></div>
+      <div class="rcpt-divider-half"></div>
+    </div>
+
+    <!-- Expenses -->
+    <div class="rcpt-section">
+      <div class="rcpt-section-title">💸 Expenses</div>
+      <div id="rcpt-expense-list">
+        <div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px 0">No expenses</div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="rcpt-divider">
+      <div class="rcpt-divider-half"></div>
+      <div class="rcpt-divider-line"></div>
+      <div class="rcpt-divider-half"></div>
+    </div>
+
+    <!-- Totals -->
+    <div class="rcpt-total-box">
+      <div class="rcpt-total-row">
+        <span style="color:#6b7280">Total Spawn Share</span>
+        <span style="font-weight:700;color:#15803d" id="rcpt-spawn-total">₱0</span>
+      </div>
+      <div class="rcpt-total-row" id="rcpt-exp-row" style="display:none">
+        <span style="color:#6b7280">Less Expenses</span>
+        <span style="font-weight:700;color:#dc2626" id="rcpt-exp-total">−₱0</span>
+      </div>
+      <div class="rcpt-total-row big">
+        <span style="font-size:14px;font-weight:800;color:#1e3cb8">NET TO REMIT</span>
+        <div></div>
+      </div>
+      <div class="rcpt-net" id="rcpt-net-total">₱0</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="rcpt-footer">
+      <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px" id="rcpt-generated">—</div>
+      <div class="rcpt-footer-note">
+        ✅ For verification only · Admin will cross-check on app<br>
+        Spawn Internetan · Vendo Monitor System
+      </div>
+    </div>
+
+    <!-- Bottom zigzag -->
+    <div class="rcpt-zigzag"></div>
+  </div>
+
+  <!-- Fixed action bar -->
+  <div class="rcpt-actions">
+    <button onclick="showScreen('screen-eod')" style="flex:1;padding:12px;background:#f3f4f6;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#374151">← Back</button>
+    <button onclick="toast('📸 Screenshot now — scroll up to capture all vendos',4000)" style="flex:2;padding:12px;background:#f59e0b;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">📸 Take Screenshot</button>
+  </div>
+</div>
 </body>
 </html>
