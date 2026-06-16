@@ -3650,8 +3650,14 @@ async function renderEod(){
 
   // Also try reading from topbar DOM as last resort
   if(!collector){
-    const topbarEl = document.getElementById('home-collector-name') || document.querySelector('[id*="collector-name"]');
-    if(topbarEl && topbarEl.textContent && topbarEl.textContent !== '—') collector = topbarEl.textContent.trim();
+    const topbarEl = document.getElementById('topbar-sub');
+    const tv = topbarEl ? topbarEl.textContent.trim() : '';
+    if(tv && tv !== 'Collector PWA' && tv !== '—' && !tv.includes('Group')) collector = tv;
+  }
+  if(!collector){
+    const homeEl = document.getElementById('home-collector-name');
+    const hv = homeEl ? homeEl.textContent.trim() : '';
+    if(hv && hv !== '—') collector = hv;
   }
 
   // Persist it back if found
@@ -3673,16 +3679,22 @@ async function renderEod(){
 
   // Fetch today's harvests from DB
   let harvests = [], packs = [], expenses = [];
+  console.log('[EOD] Fetching for collector:', collector, 'today:', today);
   try {
-    const [hResp, pResp, eResp] = await Promise.all([
-      fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}),
-      fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR}),
-      fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url`,{headers:HDR})
-    ]);
-    const hData = await hResp.json(); harvests = Array.isArray(hData) ? hData : [];
-    const pData = await pResp.json(); packs = Array.isArray(pData) ? pData : [];
-    const eData = await eResp.json(); expenses = Array.isArray(eData) ? eData : [];
-  } catch(e) { console.error('EOD fetch error:', e); }
+    const hResp = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR});
+    const hData = await hResp.json();
+    console.log('[EOD] Harvest response:', hData);
+    harvests = Array.isArray(hData) ? hData : [];
+
+    const pResp = await fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR});
+    const pData = await pResp.json();
+    packs = Array.isArray(pData) ? pData : [];
+
+    const eResp = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url`,{headers:HDR});
+    const eData = await eResp.json();
+    expenses = Array.isArray(eData) ? eData : [];
+    console.log('[EOD] Got harvests:', harvests.length, 'packs:', packs.length, 'expenses:', expenses.length);
+  } catch(e) { console.error('[EOD] fetch error:', e); }
 
   // Build pack map per harvest
   const packMap = {};
