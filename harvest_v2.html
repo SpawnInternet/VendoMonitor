@@ -2975,7 +2975,7 @@ async function loadHomeStats(){
   try {
     // TODAY's harvests for this collector
     const rToday = await fetch(
-      `${_SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
+      `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
       {headers:HDR}
     );
     const todayHarvests = await rToday.json();
@@ -3004,7 +3004,7 @@ async function loadHomeStats(){
 
     // Month total spawn share
     const rMonth = await fetch(
-      `${_SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
+      `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=gte.${monthStart}&select=coins_total`,
       {headers:HDR}
     );
     const monthHarvests = await rMonth.json();
@@ -3260,10 +3260,10 @@ async function saveExpense(){
     try {
       const fname = `expenses/exp_${Date.now()}.jpg`;
       const ab = await _expPhotoBlob.arrayBuffer();
-      const res = await fetch(`${_SB}/storage/v1/object/harvest-photos/${fname}`,{
+      const res = await fetch(`${SB}/storage/v1/object/harvest-photos/${fname}`,{
         method:'POST', headers:{...HDR,'Content-Type':'image/jpeg','x-upsert':'true'}, body:ab
       });
-      if(res.ok) photoUrl = `${_SB}/storage/v1/object/public/harvest-photos/${fname}`;
+      if(res.ok) photoUrl = `${SB}/storage/v1/object/public/harvest-photos/${fname}`;
     } catch(e){ console.warn('Photo upload failed',e); }
   }
   const expense = { category:_selCat, description:desc, amount:amt, receipt_photo_url:photoUrl, created_at:new Date().toISOString() };
@@ -3412,7 +3412,7 @@ async function submitEodSession(){
   try {
     toast('Submitting…');
     // Create session record
-    const sessRes = await fetch(`${_SB}/rest/v1/collector_sessions`,{
+    const sessRes = await fetch(`${SB}/rest/v1/collector_sessions`,{
       method:'POST',
       headers:{...HDR,'Prefer':'return=representation'},
       body: JSON.stringify({
@@ -3437,7 +3437,7 @@ async function submitEodSession(){
     if(sessId){
       // Save pack data per vendo
       if(harvested.length){
-        await fetch(`${_SB}/rest/v1/collector_packs`,{
+        await fetch(`${SB}/rest/v1/collector_packs`,{
           method:'POST', headers:{...HDR},
           body: JSON.stringify(harvested.map(v=>({
             session_id: sessId,
@@ -3452,7 +3452,7 @@ async function submitEodSession(){
       }
       // Save expenses
       if(_expenses.length){
-        await fetch(`${_SB}/rest/v1/collector_expenses`,{
+        await fetch(`${SB}/rest/v1/collector_expenses`,{
           method:'POST', headers:{...HDR},
           body: JSON.stringify(_expenses.map(e=>({
             session_id: sessId,
