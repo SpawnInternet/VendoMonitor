@@ -3556,51 +3556,114 @@ function removeExpense(i){
 // ── END OF DAY ────────────────────────────────────────────────────────
 var _eodPin = '';
 
-function renderEod(){
-  const harvested = Object.values(_packData);
-  const ready = harvested.length > 0;
-  document.getElementById('eod-not-ready').style.display = ready ? 'none' : 'block';
-  document.getElementById('eod-content').style.display = ready ? 'block' : 'none';
-  if(!ready) return;
+async function renderEod(){
+  const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  const todayLabel = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const collector = selectedCollector||sessionStorage.getItem('col_name')||'';
 
-  const totalP1k = harvested.reduce((s,v)=>s+v.packs_1k,0);
-  const totalP300 = harvested.reduce((s,v)=>s+v.packs_300,0);
-  const totalBugi = harvested.reduce((s,v)=>s+v.bugi_amount,0);
-  const totalCash = harvested.reduce((s,v)=>s+v.cash_amount,0);
-  const gross = (totalP1k*1000)+(totalP300*300)+totalBugi+totalCash;
-  const totalExp = _expenses.reduce((s,e)=>s+e.amount,0);
-  const net = gross - totalExp;
-  const today = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('eod-collector-name').textContent = collector;
+  document.getElementById('eod-date-display').textContent = todayLabel;
 
-  document.getElementById('eod-net-display').textContent = '₱'+fmt(net);
-  document.getElementById('eod-date-display').textContent = today;
-  document.getElementById('eod-vendos-count').textContent = harvested.length;
-  document.getElementById('eod-gross-display').textContent = '₱'+fmt(gross);
-  document.getElementById('eod-exp-display').textContent = '₱'+fmt(totalExp);
-  document.getElementById('eod-packs1k').textContent = totalP1k+' pack(s) = ₱'+fmt(totalP1k*1000);
-  document.getElementById('eod-packs300').textContent = totalP300+' pack(s) = ₱'+fmt(totalP300*300);
-  document.getElementById('eod-bugi').textContent = '₱'+fmt(totalBugi);
-  document.getElementById('eod-cash').textContent = '₱'+fmt(totalCash);
+  // Fetch today's harvests from DB
+  let harvests = [], packs = [], expenses = [];
+  try {
+    const [hResp, pResp, eResp] = await Promise.all([
+      fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}),
+      fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR}),
+      fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url`,{headers:HDR})
+    ]);
+    harvests = Array.isArray(await hResp.json()) ? await hResp.clone().json() : [];
+    // Re-fetch since we consumed the body
+    const hData = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}).then(r=>r.json());
+    harvests = Array.isArray(hData) ? hData : [];
+    const pData = await pResp.json(); packs = Array.isArray(pData) ? pData : [];
+    const eData = await eResp.json(); expenses = Array.isArray(eData) ? eData : [];
+  } catch(e) { console.error('EOD fetch error:', e); }
+
+  // Build pack map per harvest
+  const packMap = {};
+  packs.forEach(p => {
+    if(!packMap[p.harvest_id]) packMap[p.harvest_id] = {mix:0,peso:0,bugi:0,bills:0};
+    packMap[p.harvest_id][p.pack_type] = (packMap[p.harvest_id][p.pack_type]||0) + Number(p.amount||0);
+  });
+
+  const totalGross   = harvests.reduce((s,h)=>s+parseFloat(h.coins_total||0),0);
+  const totalSpawn   = harvests.reduce((s,h)=>s+parseFloat(h.spawn_share||0),0);
+  const totalExp     = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const netToRemit   = totalSpawn - totalExp;
+
+  // Update header stats
+  document.getElementById('eod-vendos-count').textContent = harvests.length;
+  document.getElementById('eod-gross-display').textContent = '₱'+fmt(totalGross);
+  document.getElementById('eod-exp-display').textContent = totalExp > 0 ? '−₱'+fmt(totalExp) : '₱0';
+  document.getElementById('eod-spawn-display').textContent = '₱'+fmt(totalSpawn);
+  document.getElementById('eod-net-display').textContent = '₱'+fmt(netToRemit);
+  const expDeduct = document.getElementById('eod-exp-deduct');
+  if(totalExp > 0){ expDeduct.style.display=''; expDeduct.textContent='Less expenses −₱'+fmt(totalExp); }
+  else { expDeduct.style.display='none'; }
 
   // Per vendo list
-  document.getElementById('eod-vendo-list').innerHTML = harvested.map(v=>`
-    <div class="eod-vendo-row">
-      <div>
-        ${v.vendo_code?`<span class="eod-code">${v.vendo_code}</span> `:''}<span style="font-size:13px;font-weight:600">${v.vendo_name||'—'}</span>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">
-          ${v.packs_1k?v.packs_1k+'×₱1k ':''}${v.packs_300?v.packs_300+'×₱300 ':''}${v.bugi_amount?'Bugi:₱'+fmt(v.bugi_amount)+' ':''}${v.cash_amount?'Cash:₱'+fmt(v.cash_amount):''}
+  const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bugi:'Bugi',bills:'Cash'};
+  const PACK_COLORS = {mix:'#1e3cb8',peso:'#7c3aed',bugi:'#0d9488',bills:'#d97706'};
+
+  document.getElementById('eod-vendo-list').innerHTML = harvests.length ? harvests.map((h,i) => {
+    const vcode = h.vendo_code||'';
+    const name  = h.vendo_name||h.sheet_name||'—';
+    const addr  = h.address||h.area||'—';
+    const spawn = parseFloat(h.spawn_share||0);
+    const coins = parseFloat(h.coins_total||0);
+    const pm    = packMap[h.id]||{};
+    const packTotal = (pm.mix||0)+(pm.peso||0)+(pm.bugi||0)+(pm.bills||0);
+    const hasPacks  = packTotal > 0;
+    const packLine  = hasPacks
+      ? Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>`<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':k==='bugi'?'Bugi ₱'+fmt(v):'Cash ₱'+fmt(v)}</span>`).join(' · ')
+      : '<span style="color:#9ca3af;font-style:italic">No packs entered</span>';
+    const gapColor  = !hasPacks?'#9ca3af':Math.round(packTotal)===Math.round(spawn)?'#15803d':packTotal>spawn?'#d97706':'#dc2626';
+    const gapIcon   = !hasPacks?'':Math.round(packTotal)===Math.round(spawn)?'✓':packTotal>spawn?'⚠':'🔴';
+    const t = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
+    return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:11px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div>
+          ${vcode?`<span style="background:#1e3cb8;color:#fff;font-size:10px;font-weight:900;padding:2px 7px;border-radius:5px;letter-spacing:.06em;margin-right:5px">${vcode}</span>`:''}
+          <span style="font-size:13px;font-weight:800;color:#1e293b">${name}</span>
+          ${t?`<span style="font-size:10px;color:#9ca3af;margin-left:5px">${t}</span>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:11px;color:#6b7280">Coins</div>
+          <div style="font-size:13px;font-weight:700;color:#1e293b">₱${fmt(coins)}</div>
         </div>
       </div>
-      <div style="font-size:15px;font-weight:700;color:#2B7BE8">₱${fmt((v.packs_1k*1000)+(v.packs_300*300)+v.bugi_amount+v.cash_amount)}</div>
-    </div>
-  `).join('');
+      <div style="font-size:11px;color:#6b7280;margin-bottom:6px">📍 ${addr}</div>
+      <div style="font-size:11px;margin-bottom:6px">${packLine}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px dashed #e5e7eb;padding-top:7px">
+        <span style="font-size:11px;color:${gapColor};font-weight:700">${gapIcon} ${hasPacks?'Packed ₱'+fmt(packTotal):'Awaiting Spawn Count'}</span>
+        <span style="font-size:14px;font-weight:900;color:#15803d">Spawn ₱${fmt(spawn)}</span>
+      </div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No harvests yet today</div>';
 
-  // Expense list in EOD
-  const catIcons = {fuel:'⛽',meals:'🍱',repair:'🔧',coin_wrapper:'📦',padlock:'🔒',others:'📝'};
-  document.getElementById('eod-expense-list').innerHTML = _expenses.length
-    ? _expenses.map(e=>`<div class="eod-vendo-row"><span>${catIcons[e.category]||'📝'} ${e.description}</span><span style="color:var(--red)">−₱${fmt(e.amount)}</span></div>`).join('')
-    : '<div style="font-size:13px;color:var(--muted);padding:8px 0">No expenses</div>';
-  document.getElementById('eod-total-exp').textContent = '₱'+fmt(totalExp);
+  // Expenses list
+  const catIcons = {Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
+  document.getElementById('eod-expense-list').innerHTML = expenses.length
+    ? expenses.map(e=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6">
+          <div>
+            <span style="font-size:13px">${catIcons[e.category]||'📝'} ${e.category}</span>
+            ${e.description?`<div style="font-size:11px;color:#6b7280">${e.description}</div>`:''}
+            ${e.receipt_photo_url?`<div style="margin-top:4px"><img src="${e.receipt_photo_url}" onclick="window.open('${e.receipt_photo_url}')" style="width:40px;height:30px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid #e5e7eb"></div>`:''}
+          </div>
+          <span style="font-size:14px;font-weight:700;color:#dc2626;flex-shrink:0;margin-left:10px">−₱${fmt(e.amount)}</span>
+        </div>`).join('')
+    : '<div style="text-align:center;padding:12px;color:#9ca3af;font-size:13px">No expenses recorded</div>';
+}
+
+// Generate screenshot-ready receipt
+function generateEodReceipt(){
+  const receiptEl = document.getElementById('eod-receipt');
+  // Scroll to top then prompt screenshot
+  window.scrollTo(0,0);
+  receiptEl.style.background = '#fff';
+  toast('📸 Take a screenshot now — scroll to capture all vendos', 4000);
 }
 
 function showEodPin(){
@@ -3854,75 +3917,72 @@ async function submitEodSession(){
 </div>
 
 <div class="screen" id="screen-eod">
-  <div id="eod-not-ready" style="text-align:center;padding:40px 16px">
-    <div style="font-size:48px;margin-bottom:12px">📋</div>
-    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">End of Day</div>
-    <div style="font-size:13px;color:var(--muted)">Complete your harvest first to unlock End of Day summary</div>
-  </div>
-
-  <div id="eod-content" style="display:none">
-    <div class="hero-balance">
-      <div class="hero-label">Net Collectible</div>
-      <div class="hero-amount" id="eod-net-display">₱0</div>
-      <div class="hero-sub" id="eod-date-display">—</div>
+  <div id="eod-content" style="padding-bottom:100px">
+    <!-- Loading state -->
+    <div id="eod-loading" style="text-align:center;padding:40px 16px;display:none">
+      <div class="spinner" style="margin:0 auto 12px"></div>
+      <div style="font-size:13px;color:var(--muted)">Loading today's harvest…</div>
     </div>
 
-    <div class="quick-stats">
-      <div class="qs-box">
-        <div class="qs-val" id="eod-vendos-count">0</div>
-        <div class="qs-lbl">Vendos</div>
+    <!-- Receipt content -->
+    <div id="eod-receipt">
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#1e3cb8,#2563eb);color:#fff;padding:20px 16px 16px;margin-bottom:0">
+        <div style="font-size:11px;opacity:.7;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Daily Harvest Receipt</div>
+        <div style="font-size:15px;font-weight:800;margin-top:2px" id="eod-collector-name">—</div>
+        <div style="font-size:11px;opacity:.75;margin-top:2px" id="eod-date-display">—</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">
+          <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:8px;text-align:center">
+            <div style="font-size:18px;font-weight:900" id="eod-vendos-count">0</div>
+            <div style="font-size:9px;opacity:.75;text-transform:uppercase">Vendos</div>
+          </div>
+          <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:8px;text-align:center">
+            <div style="font-size:18px;font-weight:900" id="eod-gross-display">₱0</div>
+            <div style="font-size:9px;opacity:.75;text-transform:uppercase">Gross</div>
+          </div>
+          <div style="background:rgba(255,255,255,.12);border-radius:8px;padding:8px;text-align:center">
+            <div style="font-size:18px;font-weight:900" id="eod-exp-display">₱0</div>
+            <div style="font-size:9px;opacity:.75;text-transform:uppercase">Expenses</div>
+          </div>
+        </div>
       </div>
-      <div class="qs-box">
-        <div class="qs-val" id="eod-gross-display">₱0</div>
-        <div class="qs-lbl">Gross</div>
+
+      <!-- Per vendo growing list -->
+      <div style="padding:12px 14px 0">
+        <div style="font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📍 Harvested Vendos</div>
+        <div id="eod-vendo-list">
+          <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No harvests yet today</div>
+        </div>
       </div>
-      <div class="qs-box">
-        <div class="qs-val" id="eod-exp-display">₱0</div>
-        <div class="qs-lbl">Expenses</div>
+
+      <!-- Expenses -->
+      <div style="padding:12px 14px 0;margin-top:4px">
+        <div style="font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">💸 Expenses</div>
+        <div id="eod-expense-list">
+          <div style="text-align:center;padding:12px;color:#9ca3af;font-size:13px">No expenses</div>
+        </div>
+      </div>
+
+      <!-- NET TO REMIT big number -->
+      <div style="margin:16px 14px;background:#f0fdf4;border:2px solid #86efac;border-radius:14px;padding:16px;text-align:center">
+        <div style="font-size:11px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em">Total Spawn Share</div>
+        <div style="font-size:28px;font-weight:900;color:#15803d" id="eod-spawn-display">₱0</div>
+        <div id="eod-exp-deduct" style="display:none;font-size:12px;color:#dc2626;font-weight:700;margin-top:4px"></div>
+        <div style="height:1px;background:#86efac;margin:10px 0"></div>
+        <div style="font-size:11px;font-weight:800;color:#1e3cb8;text-transform:uppercase;letter-spacing:.06em">Net to Remit</div>
+        <div style="font-size:36px;font-weight:900;color:#1e3cb8" id="eod-net-display">₱0</div>
+      </div>
+
+      <!-- Generate Receipt + Submit -->
+      <div style="padding:0 14px 16px;display:flex;flex-direction:column;gap:10px">
+        <button onclick="generateEodReceipt()" style="width:100%;padding:14px;background:#f59e0b;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px">
+          📸 Generate Receipt (Screenshot)
+        </button>
+        <button class="btn btn-blue" id="eod-submit-btn" onclick="showEodPin()" style="width:100%;padding:14px;font-size:14px;font-weight:800">
+          ✅ Submit & End Day
+        </button>
       </div>
     </div>
-
-    <!-- Pack Summary -->
-    <div class="card">
-      <div class="card-title">📦 Pack Breakdown</div>
-      <div class="eod-summary-row">
-        <span class="eod-lbl">₱1,000 packs</span>
-        <span class="eod-val" id="eod-packs1k">0 packs = ₱0</span>
-      </div>
-      <div class="eod-summary-row">
-        <span class="eod-lbl">₱300 packs</span>
-        <span class="eod-val" id="eod-packs300">0 packs = ₱0</span>
-      </div>
-      <div class="eod-summary-row">
-        <span class="eod-lbl">Total Bugi</span>
-        <span class="eod-val" id="eod-bugi">₱0</span>
-      </div>
-      <div class="eod-summary-row">
-        <span class="eod-lbl">Total Cash</span>
-        <span class="eod-val" id="eod-cash">₱0</span>
-      </div>
-    </div>
-
-    <!-- Per Vendo -->
-    <div class="card">
-      <div class="card-title">📍 Per Vendo</div>
-      <div id="eod-vendo-list"></div>
-    </div>
-
-    <!-- Expenses -->
-    <div class="card" id="eod-exp-card">
-      <div class="card-title">🧾 Expenses</div>
-      <div id="eod-expense-list"></div>
-      <div class="eod-summary-row">
-        <span class="eod-lbl" style="font-weight:700">Total Expenses</span>
-        <span class="eod-val" style="color:var(--red)" id="eod-total-exp">₱0</span>
-      </div>
-    </div>
-
-    <!-- Submit Button -->
-    <button class="btn btn-blue" id="eod-submit-btn" onclick="showEodPin()">
-      ✅ Submit & End Day
-    </button>
   </div>
 
   <!-- PIN confirmation overlay -->
