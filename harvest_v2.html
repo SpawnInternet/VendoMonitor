@@ -3504,6 +3504,18 @@ async function saveExpense(){
     } catch(e){ console.warn('Photo upload failed',e); }
   }
   const expense = { category:_selCat, description:desc, amount:amt, receipt_photo_url:photoUrl, created_at:new Date().toISOString() };
+  const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  const _col = selectedCollector||sessionStorage.getItem('col_name')||'';
+  let _savedId = null;
+  try {
+    const _dbR = await fetch(`${SB}/rest/v1/collector_expenses`,{
+      method:'POST', headers:{...HDR,Prefer:'return=representation'},
+      body:JSON.stringify({collector:_col,expense_date:_today,category:_selCat,description:desc,amount:amt,receipt_photo_url:photoUrl})
+    });
+    const _dbD = await _dbR.json();
+    if(Array.isArray(_dbD)&&_dbD[0]) _savedId=_dbD[0].id;
+  } catch(e){ console.warn('Expense DB save failed',e); }
+  expense.id = _savedId;
   _expenses.push(expense);
   // Update badge
   const badge = document.getElementById('exp-badge');
@@ -3511,7 +3523,8 @@ async function saveExpense(){
   badge.style.display = 'block';
   closeAddExpense();
   renderExpenses();
-  toast('Expense added ₱'+fmt(amt));
+  if(document.getElementById('screen-home')?.classList.contains('active')) setTimeout(loadHomeStats,500);
+  toast('✅ Expense saved ₱'+fmt(amt));
 }
 
 function renderExpenses(){
@@ -3541,12 +3554,18 @@ function renderExpenses(){
   `).join('');
 }
 
-function removeExpense(i){
+async function removeExpense(i){
+  const _exp = _expenses[i];
+  if(_exp && _exp.id){
+    try{ await fetch(`${SB}/rest/v1/collector_expenses?id=eq.${_exp.id}`,{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}}); }catch(e){}
+  }
   _expenses.splice(i,1);
   const badge = document.getElementById('exp-badge');
   badge.textContent = _expenses.length;
   badge.style.display = _expenses.length ? 'block' : 'none';
   renderExpenses();
+  if(document.getElementById('screen-home')?.classList.contains('active')) setTimeout(loadHomeStats,300);
+  toast('Expense removed');
 }
 
 // ── END OF DAY ────────────────────────────────────────────────────────
