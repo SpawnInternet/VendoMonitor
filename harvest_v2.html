@@ -2347,13 +2347,18 @@ function closeCollectionSheet(){
 }
 
 function doneCollectionSheet(){
-  // Net Coins is the primary input now — no subtraction needed
   const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const p1k = _p1k||0, p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-  const spawnShare = Math.round(net * 0.75);
+  // Save to _packData so submitHarvestConfirm can validate
+  if(currentItem){
+    _packData[currentItem.vendo_id||currentItem.id] = {
+      packs_1k:p1k, packs_300:p300, bugi_amount:bugi, cash_amount:cash,
+      spawn_share: Math.round(net * 0.75)
+    };
+  }
   const warn = document.getElementById('sheet-match-warning');
   const summaryBox = document.getElementById('pack-summary-box');
   if(warn) warn.style.display='none';
