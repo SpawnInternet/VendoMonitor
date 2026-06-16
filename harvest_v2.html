@@ -3234,8 +3234,8 @@ async function loadHomeStats(){
   if(!collectorName) return;
 
   const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const today = now.toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const todayLabel = now.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
   const QUOTA = 25000;
 
@@ -3620,10 +3620,7 @@ async function renderEod(){
       fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR}),
       fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url`,{headers:HDR})
     ]);
-    harvests = Array.isArray(await hResp.json()) ? await hResp.clone().json() : [];
-    // Re-fetch since we consumed the body
-    const hData = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}).then(r=>r.json());
-    harvests = Array.isArray(hData) ? hData : [];
+    const hData = await hResp.json(); harvests = Array.isArray(hData) ? hData : [];
     const pData = await pResp.json(); packs = Array.isArray(pData) ? pData : [];
     const eData = await eResp.json(); expenses = Array.isArray(eData) ? eData : [];
   } catch(e) { console.error('EOD fetch error:', e); }
