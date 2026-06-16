@@ -2398,15 +2398,17 @@ function calcNet(){
   const p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
-
-  // NEW FORMULA: Net is primary input, Total = Net + deductions
-  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
-  const old_coins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-  const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+  // Read from sheet input (step 1) or hidden field
+  const coinInp = document.getElementById('coin-total-inp');
+  const coinTotal = parseFloat(coinInp?.value)||0;
+  // Write to hidden field for submitHarvest compatibility
+  const hiddenTotal = document.getElementById('coin-total');
+  if(hiddenTotal) hiddenTotal.value = coinTotal || ((p1k*1000)+(p300*300)+bugi+cash);
+  const breakdownTotal = coinTotal || (p1k*1000) + (p300*300) + bugi + cash;
   const free = parseFloat(document.getElementById('coin-free').value)||0;
-
-  // Total = Net + Old + Saloy + Free Time (all additions to the box)
-  const breakdownTotal = net + old_coins + saloy + free;
+  const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
+  const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
+  const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
   const spawn = net * 0.75;
   const customer = net * 0.25;
 
@@ -2424,7 +2426,7 @@ function calcNet(){
   const ss = document.getElementById('sheet-spawn');
   const ss2 = document.getElementById('sheet-spawn2');
   if(sbt) sbt.textContent = '₱'+fmt(breakdownTotal);
-  if(sn) sn.textContent = '₱'+fmt(breakdownTotal); // Total = Net + deductions
+  if(sn) sn.textContent = '₱'+fmt(net);
   if(ss) ss.textContent = '₱'+fmt(spawn);
   // Step 2: spawn share based on breakdown total only (what's physically packed)
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
@@ -4284,36 +4286,32 @@ async function submitEodSession(){
         </div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Coin count from vendo machine</div>
 
-        <!-- NET COINS — primary input -->
-        <div style="margin-bottom:16px">
-          <div class="coin-label" style="font-size:15px;font-weight:900;color:#2B7BE8">Net Coins <span style="color:var(--muted);font-weight:400;font-size:11px">Coins to split 75/25</span></div>
-          <input type="number" class="coin-input" id="coin-total-inp" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8;font-size:28px;font-weight:900;text-align:center">
+        <div style="margin-bottom:12px">
+          <div class="coin-label">Total coins <span>All coins in box</span></div>
+          <input type="number" class="coin-input" id="coin-total-inp" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8">
         </div>
-        <!-- Divider -->
-        <div style="font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">+ Additional coins in box (not split)</div>
-        <div style="margin-bottom:10px">
-          <div class="coin-label" style="color:var(--red)">Old Coins <span style="color:var(--muted)">From previous period</span></div>
-          <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--red)">− Free time <span style="color:var(--muted)">Promo / free session coins</span></div>
+          <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
         </div>
-        <div style="margin-bottom:10px">
-          <div class="coin-label" style="color:var(--orange)">Saloy <span style="color:var(--muted)">Refund to customer</span></div>
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--orange)">− Saloy <span style="color:var(--muted)">Refund to customer</span></div>
           <input type="number" class="coin-input saloy" id="coin-saloy" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
         </div>
-        <div style="margin-bottom:10px">
-          <div class="coin-label" style="color:#7c3aed">Free Time <span style="color:var(--muted)">Promo / free session</span></div>
-          <input type="number" class="coin-input" style="border-color:#c4b5fd;background:#f5f3ff;color:#7c3aed" id="coin-free" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
+        <div style="margin-bottom:12px">
+          <div class="coin-label" style="color:var(--red)">− Old coins <span style="color:var(--muted)">Coins from previous period</span></div>
+          <input type="number" class="coin-input" style="border-color:#fca5a5;background:#fef2f2;color:var(--red)" id="coin-freecoins" placeholder="0" min="0" inputmode="numeric" oninput="calcNet()">
         </div>
 
         <!-- Live summary -->
         <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--muted)">
-            <span>Total Coins (calculated)</span>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">
+            <span style="color:var(--muted)">Net total</span>
             <span style="font-weight:700" id="sheet-net">₱0</span>
           </div>
-          <div style="height:1px;background:#BDD5F8;margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between;font-size:15px;padding:3px 0">
+          <div style="display:flex;justify-content:space-between;font-size:15px;padding:6px 0 0;border-top:1px solid #BDD5F8;margin-top:6px">
             <span style="font-weight:700;color:#2B7BE8">Spawn Share (75%)</span>
-            <span style="font-weight:800;color:#2B7BE8;font-size:20px" id="sheet-spawn">₱0</span>
+            <span style="font-weight:700;color:#2B7BE8;font-size:18px" id="sheet-spawn">₱0</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0 0">
             <span style="color:#7c3aed">Owner Share (25%)</span>
