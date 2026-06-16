@@ -3681,7 +3681,7 @@ async function renderEod(){
   let harvests = [], packs = [], expenses = [];
   console.log('[EOD] Fetching for collector:', collector, 'today:', today);
   try {
-    const hResp = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,net_collectible,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR});
+    const hResp = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at`,{headers:HDR});
     const hData = await hResp.json();
     console.log('[EOD] Harvest response:', hData);
     harvests = Array.isArray(hData) ? hData : [];
@@ -3723,7 +3723,7 @@ async function renderEod(){
   const PACK_COLORS = {mix:'#1e3cb8',peso:'#7c3aed',bugi:'#0d9488',bills:'#d97706'};
 
   document.getElementById('eod-vendo-list').innerHTML = harvests.length ? harvests.map((h,i) => {
-    const vcode = h.vendo_code||'';
+    const vcode = h.vendo_code || (_vendoCacheMap && h.id ? '' : '') || '';
     const name  = h.vendo_name||h.sheet_name||'—';
     const addr  = h.address||h.area||'—';
     const spawn = parseFloat(h.spawn_share||0);
@@ -3790,7 +3790,7 @@ async function generateEodReceipt(){
   let harvests=[], packs=[], expenses=[];
   try {
     const [hR,pR,eR] = await Promise.all([
-      fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,vendo_code,area,address,coins_total,spawn_share,harvested_at&order=harvested_at.asc`,{headers:HDR}),
+      fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=id,vendo_name,sheet_name,area,coins_total,spawn_share,harvested_at`,{headers:HDR}),
       fetch(`${SB}/rest/v1/harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${today}&select=harvest_id,pack_type,amount`,{headers:HDR}),
       fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=category,description,amount`,{headers:HDR})
     ]);
