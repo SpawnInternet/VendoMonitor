@@ -835,6 +835,19 @@ async function savePacks(hid){
     if(btn){btn.disabled=false;btn.textContent='✓ Saved';btn.classList.add('saved');}
     refreshStrip(hid);
     toast('✓ Saved — '+(h.vendo_name||h.tg_name||'Vendo'));
+
+    // Check if ALL vendos for this collector are now saved → prompt to reconcile
+    const colHarvests = allHarvests.filter(x=>x.collector===h.collector);
+    const allSaved = colHarvests.every(x=>savedSet.has(x.id));
+    if(allSaved && colHarvests.length > 0){
+      setTimeout(()=>{
+        if(confirm('✅ All '+colHarvests.length+' vendos saved for '+h.collector+'!\n\nGo to Reconciliation screen now?')){
+          activeCollector = h.collector;
+          showScreen('recon');
+          loadRecon(h.collector);
+        }
+      }, 500);
+    }
   }catch(e){
     toast('Error: '+e.message);
     if(btn){btn.disabled=false;btn.textContent='Retry';btn.classList.remove('saved');}
