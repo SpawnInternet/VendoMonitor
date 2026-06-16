@@ -3358,22 +3358,30 @@ function resetPackForm(){
 (function patchSubmit(){
   const origSubmit = window.submitHarvest;
   window.submitHarvestConfirm = function(){
-    const coinTotalInp = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
-    if(!coinTotalInp){ toast('Enter collection details first'); openCollectionSheet(); return; }
+    const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+    if(!net){ toast('Enter Net Coins first'); openCollectionSheet(); return; }
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
     const cash = parseFloat(document.getElementById('cash-amount').value)||0;
     const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-    // breakdownTotal = coin input (what was physically counted)
-    const breakdownTotal = coinTotalInp;
-    // Sync hidden field — submitHarvest reads this
-    const _hidden = document.getElementById('coin-total');
-    if(_hidden) _hidden.value = coinTotalInp;
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const net = Math.max(0, breakdownTotal - free - saloy - freeCoins);
-    const spawn = net * 0.75;
+    const spawn = Math.round(net * 0.75);
+
+    // BLOCK if packs don't match spawn share
+    if(packTotal > 0 && Math.round(packTotal) !== spawn){
+      const gap = packTotal - spawn;
+      const msg = gap > 0
+        ? `⚠️ Packs ₱${fmt(packTotal)} is ₱${fmt(gap)} SURPLUS vs Spawn Share ₱${fmt(spawn)} — fix packs before submitting`
+        : `⚠️ Packs ₱${fmt(packTotal)} is ₱${fmt(Math.abs(gap))} SHORT vs Spawn Share ₱${fmt(spawn)} — fix packs before submitting`;
+      toast(msg, 4000);
+      return;
+    }
+    if(packTotal === 0){
+      toast('⚠️ Enter pack breakdown first before submitting', 3000);
+      return;
+    }
 
     const vname = document.getElementById('form-vname').textContent||'Vendo';
     document.getElementById('confirm-vname').textContent = vname;
