@@ -3222,6 +3222,8 @@ function hrHome(){
 async function showHomeScreen(){
   showScreen('screen-home');
   document.getElementById('home-collector-name').textContent = selectedCollector||'—';
+  // Always persist collector name
+  if(selectedCollector){ try{ localStorage.setItem('spawn_collector_name', selectedCollector); }catch(e){} }
   // Show bottom nav on home too
   document.getElementById('bottom-nav').classList.add('show');
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
@@ -3640,16 +3642,29 @@ var _eodPin = '';
 async function renderEod(){
   const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const todayLabel = new Date().toLocaleDateString('en-PH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const collector = selectedCollector
+  // Get collector from every possible source
+  let collector = selectedCollector
     || sessionStorage.getItem('col_name')
     || localStorage.getItem('spawn_collector_name')
     || '';
 
-  document.getElementById('eod-collector-name').textContent = collector;
+  // Also try reading from topbar DOM as last resort
+  if(!collector){
+    const topbarEl = document.getElementById('home-collector-name') || document.querySelector('[id*="collector-name"]');
+    if(topbarEl && topbarEl.textContent && topbarEl.textContent !== '—') collector = topbarEl.textContent.trim();
+  }
+
+  // Persist it back if found
+  if(collector){
+    selectedCollector = collector;
+    try{ localStorage.setItem('spawn_collector_name', collector); }catch(e){}
+  }
+
+  document.getElementById('eod-collector-name').textContent = collector || '—';
   document.getElementById('eod-date-display').textContent = todayLabel;
 
   if(!collector){
-    document.getElementById('eod-vendo-list').innerHTML='<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">⚠️ Not logged in — please logout and login again</div>';
+    document.getElementById('eod-vendo-list').innerHTML='<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">⚠️ Session expired — please logout and login again</div>';
     return;
   }
 
