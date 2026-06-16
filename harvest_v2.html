@@ -2922,8 +2922,9 @@ function row(label, value, color='') {
 
 
 // ── HISTORY DETAIL POPUP ──────────────────────────────────────────
-function showHistDetail(itemJson){
-  const h = JSON.parse(itemJson);
+function showHistDetail(idx){
+  const h = (window._histItems||[])[idx];
+  if(!h) return;
   const coins  = parseFloat(h.coins_total||0);
   const free   = parseFloat(h.coins_free_time||0);
   const freeC  = parseFloat(h.coins_free_coins||0);
@@ -3036,6 +3037,7 @@ async function renderHistory(){
     byDate[d].push(r);
   });
 
+  window._histItems=[];
   let html='';
   Object.entries(byDate).forEach(([date,items])=>{
     const dateLabel=date!=='Unknown'
@@ -3057,8 +3059,10 @@ async function renderHistory(){
       const net=parseFloat(item.net_collectible||0);
       const note=item.collector_note?`<div style="font-size:10px;color:#92400e;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-top:3px">📝 ${item.collector_note}</div>`:'';
       const timeStr = item.harvested_at ? new Date(item.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}) : '';
-      const _si = JSON.stringify(JSON.stringify(item));
-      html+=`<div class="vendo-item done" style="margin-bottom:6px;cursor:pointer" onclick="showHistDetail(${_si})">
+      const _hi = window._histItems ? window._histItems.length : 0;
+      if(!window._histItems) window._histItems=[];
+      window._histItems.push(item);
+      html+=`<div class="vendo-item done" style="margin-bottom:6px;cursor:pointer" onclick="showHistDetail(${_hi})">
         <div class="vi-seq" style="background:#86efac;color:#15803d;font-size:10px">✓</div>
         <div class="vi-left" style="flex:1">
           <div class="vi-name">${item.sheet_name||item.vendo_name||'—'}</div>
