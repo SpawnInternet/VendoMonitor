@@ -625,6 +625,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- ── SCREEN 4: HARVEST FORM ─────────────────────────── -->
 <div class="screen" id="screen-form">
   <div class="form-header" id="form-header-el">
+    <div id="form-vcode" style="display:none;margin-bottom:5px">
+      <span style="background:rgba(255,255,255,.25);color:#fff;font-size:14px;font-weight:900;padding:3px 12px;border-radius:6px;letter-spacing:.1em"></span>
+    </div>
     <div class="form-vname" id="form-vname">—</div>
     <div class="form-vmeta" id="form-vmeta">—</div>
   </div>
@@ -829,6 +832,24 @@ var cameraStream = null;
 var capturedPhotoBlob = null;
 
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const VENDO_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/vendo-cache/vendos.json';
+
+// Preloaded vendo data from storage cache — avoids batch DB fetches
+let _vendoCacheMap = null; // {id: vendoObj}
+async function preloadVendoCache(){
+  try{
+    const r = await fetch(VENDO_CACHE_URL + '?t=' + Math.floor(Date.now()/300000));
+    if(!r.ok) return;
+    const data = await r.json();
+    if(data && Array.isArray(data.vendos)){
+      _vendoCacheMap = {};
+      data.vendos.forEach(v => { _vendoCacheMap[v.id] = v; });
+      console.log('[VendoCache] Loaded', data.vendos.length, 'vendos from storage cache');
+    }
+  }catch(e){ console.warn('[VendoCache] Failed to preload:', e.message); }
+}
+// Start preloading immediately on script load
+preloadVendoCache();
 // V2 state vars - declared at top to avoid temporal dead zone
 var _p1k = 0, _p300 = 0;
 var _sessionId = null;
@@ -1454,21 +1475,35 @@ async function startGroup(groupId){
       offset+=500;
     }
 
-    // Fetch fresh last_harvest_date
+    // Use storage cache for vendo data — avoids slow batch DB fetches
     const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
     let lhdMap = {};
-    for(let i=0;i<vendoIds.length;i+=200){
-      try{
-        const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
-        (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; });
-      }catch(e){}
+    if(_vendoCacheMap && Object.keys(_vendoCacheMap).length > 0){
+      // Fast path: use preloaded cache
+      vendoIds.forEach(id=>{ if(_vendoCacheMap[id]) lhdMap[id]=_vendoCacheMap[id].last_harvest_date; });
+      console.log('[VendoCache] Used cache for', vendoIds.length, 'vendos');
+    } else {
+      // Fallback: fetch from DB in batches
+      for(let i=0;i<vendoIds.length;i+=200){
+        try{
+          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,vendo_code`,{headers:HDR});
+          (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; if(!_vendoCacheMap) _vendoCacheMap={}; _vendoCacheMap[v.id]=v; });
+        }catch(e){}
+      }
     }
 
-    currentItems = allItems.map(item=>({
-      ...item, status:'pending',
-      last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
-      coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
-    }));
+    currentItems = allItems.map(item=>{
+      const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
+      return {
+        ...item, status:'pending',
+        last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
+        address: item.address || (cached && cached.address) || '',
+        owner_name: item.owner_name || (cached && cached.owner_name) || '',
+        contact_number: item.contact_number || (cached && cached.contact_number) || '',
+        coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
+      };
+    });
 
     // Save to cache (only if we actually got items)
     if(currentItems.length > 0){
@@ -1803,6 +1838,12 @@ function openItem(idx){
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
+  const _vcodeEl=document.getElementById('form-vcode');
+  const _vcode=currentItem.vendo_code||'';
+  if(_vcodeEl){
+    if(_vcode){ _vcodeEl.style.display=''; _vcodeEl.querySelector('span').textContent=_vcode.toUpperCase(); }
+    else { _vcodeEl.style.display='none'; }
+  }
   const fmtLastDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
   document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(currentItem.last_harvest_date)}`;
   const _ds=currentItem.last_harvest_date?Math.floor((Date.now()-new Date(currentItem.last_harvest_date+'T12:00:00'))/86400000):null;
