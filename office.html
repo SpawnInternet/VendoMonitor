@@ -942,13 +942,7 @@ async function savePacks(hid){
     const colHarvests = allHarvests.filter(x=>x.collector===h.collector);
     const allSaved = colHarvests.every(x=>savedSet.has(x.id));
     if(allSaved && colHarvests.length > 0){
-      setTimeout(()=>{
-        if(confirm('✅ All '+colHarvests.length+' vendos saved for '+h.collector+'!\n\nGo to Reconciliation screen now?')){
-          activeCollector = h.collector;
-          showScreen('recon');
-          loadRecon(h.collector);
-        }
-      }, 500);
+      setTimeout(()=>showReconPrompt(h.collector, colHarvests.length), 500);
     }
   }catch(e){
     toast('Error: '+e.message);
@@ -956,6 +950,44 @@ async function savePacks(hid){
   }
 }
 
+
+// ── RECON PROMPT MODAL ───────────────────────────────────
+function showReconPrompt(collector, count){
+  const existing = document.getElementById('recon-prompt-overlay');
+  if(existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'recon-prompt-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)';
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;padding:0;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden;animation:modalPop .2s ease">
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#15803d,#22c55e);padding:24px 20px 20px;text-align:center;color:#fff">
+        <div style="font-size:44px;margin-bottom:8px">✅</div>
+        <div style="font-size:17px;font-weight:900">All Packs Saved!</div>
+        <div style="font-size:12px;opacity:.85;margin-top:4px">${count} vendo${count>1?'s':''} counted for <b>${collector}</b></div>
+      </div>
+      <!-- Body -->
+      <div style="padding:20px 20px 8px;text-align:center">
+        <div style="font-size:14px;color:#374151;line-height:1.5">Ready to verify and reconcile<br><b>${collector}</b>'s End of Day?</div>
+      </div>
+      <!-- Buttons -->
+      <div style="padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px">
+        <button onclick="document.getElementById('recon-prompt-overlay').remove();activeCollector='${collector}';showScreen('recon');loadRecon('${collector}')"
+          style="width:100%;padding:14px;background:linear-gradient(135deg,#1e3cb8,#2563eb);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit">
+          📋 Go to EOD Summary →
+        </button>
+        <button onclick="document.getElementById('recon-prompt-overlay').remove()"
+          style="width:100%;padding:11px;background:#f3f4f6;color:#6b7280;border:none;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          Continue Counting
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+}
 
 // ── CUSTOM MODAL ─────────────────────────────────────────
 let _modalResolve = null;
