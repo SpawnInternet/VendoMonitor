@@ -2187,6 +2187,165 @@ async function rcRunFresh(from,to,fromISO,toISO,el){
   await rcRun();
   rcBypassCache = false;
 }
+
+async function rcShowNames(vendoName, sheetName, tgName, area){
+  // Create overlay
+  let overlay = document.getElementById('rc-names-overlay');
+  if(overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'rc-names-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+
+  const matchStatus = tgName
+    ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">✅ Matched</span>'
+    : '<span style="background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">⚠ Unmatched</span>';
+
+  overlay.innerHTML = `
+  <div style="background:#fff;border-radius:14px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:14px;font-weight:700;">${sheetName||vendoName||'—'}</div>
+        <div style="font-size:11px;opacity:.8;">${area||''}</div>
+      </div>
+      <button onclick="document.getElementById('rc-names-overlay').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:16px;width:28px;height:28px;border-radius:50%;cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:16px;" id="rcn-body">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:700;color:#1e293b;">Name Matching Status</div>
+        ${matchStatus}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px;">
+          <div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">📋 Excel / Sheet Name</div>
+          <div style="font-size:13px;font-weight:700;color:#0c4a6e;">${sheetName||'<span style="color:#9ca3af;font-style:italic;font-weight:400;">Not set</span>'}</div>
+          ${sheetName?'<div style="font-size:10px;color:#0369a1;margin-top:4px;">Used in dashboard display</div>':''}
+        </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;">
+          <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">📡 TG Name</div>
+          <div style="font-size:13px;font-weight:600;color:#14532d;">${tgName||'<span style="color:#9ca3af;font-style:italic;font-weight:400;">Not linked</span>'}</div>
+          ${tgName?'<div style="font-size:10px;color:#15803d;margin-top:4px;">Used for TG income matching</div>':'<div style="font-size:10px;color:#d97706;margin-top:4px;">⚠ No TG income can be fetched</div>'}
+        </div>
+      </div>
+      <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:10px;">Edit Names</div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:11px;color:#6b7280;font-weight:500;">Excel / Sheet Name</label>
+          <input id="rcn-sheet" value="${(sheetName||'').replace(/"/g,'&quot;')}" placeholder="Name from Excel file..."
+            style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:11px;color:#6b7280;font-weight:500;">TG Name (for income matching)</label>
+          <div style="position:relative;margin-top:3px;">
+            <input id="rcn-tg" value="${(tgName||'').replace(/"/g,'&quot;')}" placeholder="Search TG name..." oninput="rcnTgSearch(this.value)"
+              style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
+            <div id="rcn-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:160px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>
+          </div>
+        </div>
+        <button onclick="rcnSaveNames(${JSON.stringify(vendoName)})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
+        <span id="rcn-msg" style="margin-left:10px;font-size:11px;"></span>
+      </div>
+      <div id="rcn-suggestions"></div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  // Load suggestions if unmatched
+  if(!tgName && sheetName){
+    const words = sheetName.split(/\s+/).filter(w=>w.length>3);
+    const q = words.slice(0,2).join(' ');
+    if(q){
+      try{
+        const r = await fetch(`${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=5&order=tg_name.asc`,{headers:_HDR});
+        const suggestions = await r.json();
+        if(suggestions.length){
+          const sd = document.getElementById('rcn-suggestions');
+          if(sd){
+            let sh = `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px;">
+              <div style="font-size:12px;font-weight:600;color:#b45309;margin-bottom:8px;">💡 Possible TG matches — click to link immediately</div>`;
+            suggestions.forEach(s=>{
+              const safeTg = JSON.stringify(s.tg_name);
+              sh += `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:6px;border:1px solid #fde68a;">
+                <div><div style="font-weight:500;color:#1e293b;">${s.tg_name}</div><div style="font-size:10px;color:#6b7280;">${s.area||''} · VLAN ${s.vlan||'—'}</div></div>
+                <button onclick="rcnQuickLink(${JSON.stringify(vendoName)},${safeTg})" style="height:28px;padding:0 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">✅ Link & Save</button>
+              </div>`;
+            });
+            sh += '</div>';
+            sd.innerHTML = sh;
+          }
+        }
+      }catch(e){}
+    }
+  }
+}
+
+let _rcnTgResults = [];
+async function rcnTgSearch(q){
+  const el = document.getElementById('rcn-tg-results');
+  if(!el) return;
+  q = (q||'').trim();
+  if(!q){el.style.display='none';return;}
+  el.style.display='';
+  el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">Searching…</div>';
+  try{
+    const r = await fetch(`${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,{headers:_HDR});
+    _rcnTgResults = await r.json();
+    if(!_rcnTgResults.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
+    el.innerHTML=_rcnTgResults.map((v,i)=>`<div onclick="rcnTgPick(${i})"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;"
+      onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+      <div style="font-weight:600">${v.tg_name}</div>
+      <div style="font-size:10px;color:var(--mu)">${v.sheet_name||''} · ${v.area||''}</div>
+    </div>`).join('');
+  }catch(e){}
+}
+function rcnTgPick(i){
+  const v=_rcnTgResults[i]; if(!v)return;
+  const inp=document.getElementById('rcn-tg');
+  if(inp){inp.value=v.tg_name;}
+  const el=document.getElementById('rcn-tg-results');
+  if(el)el.style.display='none';
+}
+
+async function rcnSaveNames(vendoName){
+  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const sheet=(document.getElementById('rcn-sheet')?.value||'').trim();
+  const tg=(document.getElementById('rcn-tg')?.value||'').trim();
+  const msg=document.getElementById('rcn-msg');
+  try{
+    // Find vendo by vendo_name
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    const rows=await r.json();
+    if(!rows.length){if(msg){msg.textContent='Vendo not found';msg.style.color='#dc2626';}return;}
+    const id=rows[0].id;
+    const u={};
+    if(sheet) u.sheet_name=sheet;
+    if(tg) u.tg_name=tg;
+    const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
+    if(r2.ok){
+      toast('✅ Names saved!');
+      if(msg){msg.textContent='✅ Saved';msg.style.color='#15803d';}
+      htAllRows=[];
+      setTimeout(()=>{if(msg)msg.textContent='';},3000);
+    }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
+  }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
+}
+
+async function rcnQuickLink(vendoName, tgName){
+  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  try{
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    const rows=await r.json();
+    if(!rows.length){toast('Vendo not found');return;}
+    const id=rows[0].id;
+    const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({tg_name:tgName,tg_match_confirmed:true})});
+    if(r2.ok){
+      toast('✅ Linked! TG name saved.');
+      htAllRows=[];
+      document.getElementById('rc-names-overlay')?.remove();
+    }else toast('Save failed');
+  }catch(e){toast('Error: '+e.message);}
+}
 function rcFilter(){
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
@@ -2334,7 +2493,12 @@ function rcFilter(){
             const tgStr=h.tg_income!=null?fmtP(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>';
             const noTgBadge=!h.tg_name?'<span style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 4px;border-radius:3px;margin-left:4px;">no TG</span>':'';
             return `<tr style="${rowBg}">
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <span>${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
+                  <button onclick="rcShowNames(${JSON.stringify(h.vendo_name)},${JSON.stringify(h.sheet_name||'')},${JSON.stringify(h.tg_name||'')},${JSON.stringify(h.area||'')})" title="View/Edit TG Name matching" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="Names matching">${h.tg_name?'🔗':'🔗'}</button>
+                </div>
+              </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${h.harvest_window_start||'—'} → ${h.harvest_date||'—'}</td>
