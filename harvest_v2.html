@@ -2328,8 +2328,8 @@ async function uploadPhoto(blob, vendoName){
 
 // ── CALC NET ──────────────────────────────────────────────────────
 function csheetNext(){
-  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
-  if(!net){ toast('Enter Net Coins first'); return; }
+  const total = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  if(!total){ toast('Enter Total Coins first'); return; }
   calcNet(); // recalculate total in background
   document.getElementById('csheet-step1').style.display='none';
   document.getElementById('csheet-step2').style.display='block';
@@ -2354,7 +2354,11 @@ function closeCollectionSheet(){
 }
 
 function doneCollectionSheet(){
-  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  const total = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  const free2 = parseFloat(document.getElementById('coin-free')?.value)||0;
+  const saloy2 = parseFloat(document.getElementById('coin-saloy')?.value)||0;
+  const freeCoins2 = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
+  const net = Math.max(0, total - free2 - saloy2 - freeCoins2);
   const p1k = _p1k||0, p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
@@ -2407,12 +2411,13 @@ function calcNet(){
   const p300 = _p300||0;
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
-  // Net is what collector inputs — Total = Net + Free + Saloy + Old
-  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  // Total Coins is what collector inputs — Net = Total - Free - Saloy - Old
+  const total = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const free = parseFloat(document.getElementById('coin-free').value)||0;
   const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-  const breakdownTotal = net + free + saloy + freeCoins;
+  const net = Math.max(0, total - free - saloy - freeCoins);
+  const breakdownTotal = total;
   window._lastBreakdownTotal = breakdownTotal;
   window._lastNetCoins = net;
   const spawn = net * 0.75;
@@ -2539,13 +2544,13 @@ async function submitHarvest(){
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
 
-  // Net Coins is primary input — Total = Net + Free + Saloy + Old
-  const net=parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+  // Total Coins is primary input — Net = Total - Free - Saloy - Old
+  const total=parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const free=parseFloat(document.getElementById('coin-free').value)||0;
   const saloy=parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
-  if(!net){toast('Enter Net Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
-  const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
+  if(!total){toast('Enter Total Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
+  const net=Math.max(0,total-free-saloy-freeCoins); // Net = Total - deductions
   const spawn=net*0.75,customer=net*0.25;
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
@@ -4323,7 +4328,7 @@ async function submitEodSession(){
 
         <!-- NET COINS — primary input -->
         <div style="margin-bottom:16px">
-          <div class="coin-label" style="font-size:14px;font-weight:900;color:#2B7BE8">Net Coins <span style="color:var(--muted);font-size:11px;font-weight:400">To be split 75/25</span></div>
+          <div class="coin-label" style="font-size:14px;font-weight:900;color:#2B7BE8">Total Coins <span style="color:var(--muted);font-size:11px;font-weight:400">Net auto-computed below</span></div>
           <input type="number" class="coin-input" id="coin-total-inp" placeholder="0" min="0" inputmode="numeric" required oninput="calcNet()" style="border-color:#2B7BE8;font-size:28px;font-weight:900;text-align:center">
         </div>
         <!-- Plus additions -->
@@ -4344,7 +4349,7 @@ async function submitEodSession(){
         <!-- Live summary -->
         <div style="background:#EEF4FD;border-radius:12px;padding:14px;margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #BDD5F8;padding-bottom:8px;margin-bottom:8px">
-            <span style="color:var(--muted)">Total Coins (auto)</span>
+            <span style="color:var(--muted)">Net Coins (auto)</span>
             <span style="font-weight:800;color:#1e293b" id="sheet-net">₱0</span>
           </div>
           <div style="display:flex;justify-content:space-between;font-size:15px;padding:4px 0">
