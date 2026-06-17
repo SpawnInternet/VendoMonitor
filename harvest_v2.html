@@ -413,6 +413,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       style="position:absolute;opacity:0;pointer-events:none;width:1px;height:1px"
       oninput="pinOnInput(this)">
 
+    <!-- PIN error (above numpad so it's visible without scrolling) -->
+    <div id="pin-error" style="color:var(--red);font-size:13px;font-weight:600;text-align:center;margin-bottom:10px;min-height:20px"></div>
+
     <!-- Numpad -->
     <div class="pin-pad" style="max-width:300px;margin:0 auto 12px">
       <button class="pin-key" onclick="hvPinKey('1')">1</button>
@@ -428,8 +431,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="pin-key" onclick="hvPinKey('0')">0</button>
       <button class="pin-key del" onclick="hvPinKey('clr')">✕</button>
     </div>
-
-    <div id="pin-error" style="color:var(--red);font-size:13px;font-weight:600;text-align:center;margin-bottom:10px;min-height:20px"></div>
 
     <!-- Resume banner -->
     <div id="resume-banner" style="display:none;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:14px;padding:14px;margin-bottom:12px">
@@ -1144,11 +1145,12 @@ async function pinLoadCollectors(){
     const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR,signal:ctrl.signal});
     clearTimeout(tid);
     const data=await r.json();
-    if(Array.isArray(data)&&data.length){ _pinCollectors=data; render(data); }
+    if(Array.isArray(data)&&data.length){ _pinCollectors=data; render(data); _pinDbReady=true; }
   }catch(e){}
 }
 
 let _pinSelectedName=null;
+let _pinDbReady=false;
 
 function pinSelectName(el,name){
   _pinSelectedName=name;
@@ -1190,6 +1192,11 @@ async function pinSubmit(){
   if(btn){btn.disabled=true; btn.textContent='Checking…';}
   if(errEl){errEl.textContent='';if(errEl) errEl.style.display='';}
 
+  // Wait for DB collectors to load if not ready yet
+  if(!_pinDbReady){
+    await new Promise(r=>setTimeout(r,800));
+  }
+
   // Validate against DB with timeout
   try{
     const ctrl=new AbortController();
@@ -1200,7 +1207,7 @@ async function pinSubmit(){
     const rows=await r.json();
     if(!rows.length||rows[0].pin!==pin){
       errEl.textContent='❌ Wrong PIN — try again';
-      if(errEl) errEl.style.display='';
+      if(errEl){errEl.style.display='';errEl.style.animation='none';void errEl.offsetWidth;errEl.style.animation='shake .4s ease';}
       if(btn){btn.disabled=false; btn.textContent='Login →';}
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       pinCheckReady();
@@ -2423,7 +2430,7 @@ function calcNet(){
   if(ctl) ctl.textContent = '₱'+fmt(net);
   // Show warning if pack total ≠ coin total
   const warn = document.getElementById('sheet-match-warning');
-  if(warn) warn.style.display = (packTotal > 0 && coinTotal > 0 && packTotal !== coinTotal) ? 'block' : 'none';
+  if(warn) warn.style.display = (packTotal > 0 && net > 0 && Math.round(packTotal) !== Math.round(net * 0.75)) ? 'block' : 'none';
   const so = document.getElementById('sheet-owner');
   if(so) so.textContent = '₱'+fmt(customer);
 
@@ -2446,13 +2453,20 @@ function calcNet(){
     badge.style.display = 'none';
   }
 
-  // Always keep submit button enabled — Spawn Count will verify packs
+  // Disable submit until net > 0
   const submitBtn = document.querySelector('.action-row .btn-green');
   if(submitBtn){
-    submitBtn.disabled = false;
-    submitBtn.style.background = '';
-    submitBtn.style.opacity = '1';
-    submitBtn.textContent = '✅ Submit harvest';
+    if(net > 0){
+      submitBtn.disabled = false;
+      submitBtn.style.background = '';
+      submitBtn.style.opacity = '1';
+      submitBtn.textContent = '✅ Submit harvest';
+    } else {
+      submitBtn.disabled = true;
+      submitBtn.style.background = '#e5e7eb';
+      submitBtn.style.opacity = '0.5';
+      submitBtn.textContent = 'Enter Net Coins first';
+    }
   }
 }
 
@@ -3381,7 +3395,7 @@ function resetPackForm(){
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const spawn = Math.round(net * 0.75);
+    const spawn = net * 0.75;
 
     // Get pack total from _packData (set when collection sheet is saved)
     const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
@@ -3404,8 +3418,11 @@ function resetPackForm(){
     document.getElementById('confirm-cash').textContent = cash > 0 ? '₱'+fmt(cash) : '—';
     const cnTotal = document.getElementById('confirm-net-total');
     const cnBreak = document.getElementById('confirm-breakdown-total');
+    const _breakdownTotal = net + (parseFloat(document.getElementById('coin-free').value)||0)
+      + (parseFloat(document.getElementById('coin-saloy').value)||0)
+      + (parseFloat(document.getElementById('coin-freecoins').value)||0);
     if(cnTotal) cnTotal.textContent = '₱'+fmt(net);
-    if(cnBreak) cnBreak.textContent = '₱'+fmt(breakdownTotal);
+    if(cnBreak) cnBreak.textContent = '₱'+fmt(_breakdownTotal);
     document.getElementById('harvest-confirm-overlay').classList.add('show');
   };
   window.confirmAndSubmit = async function(){
