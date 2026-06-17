@@ -2649,7 +2649,7 @@ async function loadProgress(){
 
     const [rH, rGPS] = await Promise.all([
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
-      (async()=>{ const vids=new Set(); return []; })()  // GPS built from vendo table below
+      Promise.resolve([])  // GPS built from vendo table below
     ]);
     const rows = await rH.json();
     // Build GPS points from vendos table using today's harvested vendo names
@@ -9927,6 +9927,7 @@ async function harvestTabLoad() {
 // Store rows per collector for popup
 let _collectorRows = {};
 
+function daysSince(dateStr){ if(!dateStr) return 999; return Math.floor((Date.now()-new Date(dateStr).getTime())/86400000); }
 function harvestSummaryRenderLive(rows, totalPending, overdue) {
   const el = document.getElementById('harvest-collector-summary');
   if (!el) return;
