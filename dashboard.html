@@ -514,7 +514,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div id="suspicious-alert" style="display:none;background:#fee2e2;border:1px solid #fecaca;border-radius:7px;padding:6px 12px;margin-bottom:7px;align-items:center;gap:10px;">
     <span>🚨</span>
     <div style="flex:1;font-size:11px;font-weight:600;color:#dc2626" id="alert-detail"></div>
-    <button onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()" style="padding:3px 10px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">View →</button>
+    <button onclick="showP('suspicious',document.querySelector('[data-panel="suspicious"]'));loadSuspicious()" style="padding:3px 10px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:11px;cursor:pointer;font-weight:600;font-family:inherit;">View →</button>
   </div>
 
   <!-- 4-column main grid — all columns same height -->
@@ -565,7 +565,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <div class="cs" style="border:1.5px solid rgba(220,38,38,.2);background:#fff8f8;">
         <div class="cs-t" style="color:#dc2626;">🚨 Suspicious <span id="susp-count" class="pill red" style="font-size:8px;">0</span></div>
         <div id="suspicious-sidebar" style="max-height:180px;overflow-y:auto;scrollbar-width:thin;"></div>
-        <button onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()" style="width:100%;padding:4px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:10px;cursor:pointer;font-weight:700;margin-top:6px;font-family:inherit;">View All →</button>
+        <button onclick="showP('suspicious',document.querySelector('[data-panel="suspicious"]'));loadSuspicious()" style="width:100%;padding:4px;background:#dc2626;color:white;border:none;border-radius:5px;font-size:10px;cursor:pointer;font-weight:700;margin-top:6px;font-family:inherit;">View All →</button>
       </div>
     </div>
 
@@ -625,7 +625,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <!-- Vendo detail -->
   <div id="view-vtxns" style="display:none;">
     <div style="margin-bottom:12px">
-      <button onclick="closeVendo()" style="padding:6px 16px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:10px;">← Back to Vendos</button>
       <div style="font-size:18px;font-weight:700;color:#1565c0" id="vtxn-title">—</div>
       <div style="font-size:12px;color:var(--mu);margin-top:2px" id="vtxn-sub">—</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px" id="vtxn-stats"></div>
@@ -634,7 +633,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="tab-btn active" onclick="showVTab('txns',this)">📝 Transactions</button>
       <button class="tab-btn" onclick="showVTab('chart',this)">📊 Monthly Chart</button>
       <button class="tab-btn" onclick="showVTab('suspicious',this)" id="sus-tab-btn" style="color:#dc2626;">⚠️ Suspicious</button>
-      <button class="tab-btn" onclick="showVTab('harvest',this);loadVendoHarvestRecords();cyclesLoad();" style="color:#15803d;">📋 Harvest</button>
+      <button class="tab-btn" onclick="showVTab('harvest',this);loadVendoHarvestRecords();" style="color:#15803d;min-width:80px;">📋 Harvest</button>
     </div>
 
     <!-- Transactions tab -->
@@ -5427,7 +5426,25 @@ function goBack() {
   }
 }
 
-function changeYear(y) { currentYear = y; loadDashboard(); }
+function changeYear(y) {
+  currentYear = y;
+  // Show year indicator
+  const sel = document.getElementById('year-select');
+  if(sel) sel.style.fontWeight = '800';
+  // Bypass cache for year-filtered data
+  const trend  = sb('trend_7day_mat','order=date.asc',7);
+  const areas  = sb('summary_by_area','order=total_sales.desc');
+  Promise.all([trend, areas]).then(([t, a]) => {
+    // Re-render with year note — full year filtering requires materialized view changes
+    // For now show toast that year filter affects new DB queries only
+    if(y !== '2026') {
+      document.getElementById('dash-stats').insertAdjacentHTML('afterbegin',
+        '<div style="background:#fef9c3;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;font-weight:700;color:#854d0e">⚠️ Year filter ('+y+'): Dashboard stats are from materialized views — contact admin to refresh for historical years.</div>'
+      );
+    }
+  });
+  loadDashboard();
+}
 
 // ══════════════════════════════════════════════════════════
 // GLOBAL SEARCH
@@ -6364,7 +6381,7 @@ async function loadDashboard() {
       <div class="stat" style="border-bottom-color:#1565c0"><div class="sl">Total Transactions</div><div class="sv blue">${totalTx.toLocaleString()}</div></div>
       <div class="stat" style="border-bottom-color:#1565c0"><div class="sl">Total Sales</div><div class="sv blue">${fmt(totalSales)}</div></div>
       <div class="stat" style="border-bottom-color:#16a34a"><div class="sl">Today's Sales</div><div class="sv green">${fmt(todaySales)}</div></div>
-      <div class="stat" style="border-bottom-color:#dc2626;border-color:rgba(220,38,38,.15)" onclick="showP('suspicious',document.querySelector('.nav-bar button:nth-child(4)'));loadSuspicious()"><div class="sl" style="color:#dc2626">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
+      <div class="stat" style="border-bottom-color:#dc2626;border-color:rgba(220,38,38,.15)" onclick="showP('suspicious',document.querySelector('[data-panel="suspicious"]'));loadSuspicious()"><div class="sl" style="color:#dc2626">Suspicious Txns</div><div class="sv red">${hackedCnt.toLocaleString()}</div></div>
     `;
 
     if(hackedCnt>0){
@@ -6839,6 +6856,7 @@ function closeVendo() {
   document.getElementById("view-vlist").style.display="block";
   document.getElementById("view-vtxns").style.display="none";
   currentVendo="";
+  hideBread();
 }
 
 // ══════════════════════════════════════════════════════════
