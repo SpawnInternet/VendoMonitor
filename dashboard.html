@@ -5457,6 +5457,168 @@ async function colLoad() {
   }
 }
 
+let _colMode = 'date';
+function colSetMode(mode){
+  _colMode = mode;
+  const dateBtn=document.getElementById('colmode-date');
+  const allBtn=document.getElementById('colmode-all');
+  const dateView=document.getElementById('col-date-view');
+  const allView=document.getElementById('col-all-view');
+  const dateCtrl=document.getElementById('col-date-controls');
+  if(mode==='date'){
+    dateBtn.style.background='#15803d'; dateBtn.style.color='#fff';
+    allBtn.style.background='transparent'; allBtn.style.color='#15803d';
+    dateView.style.display=''; allView.style.display='none';
+    if(dateCtrl) dateCtrl.style.display='';
+  }else{
+    allBtn.style.background='#15803d'; allBtn.style.color='#fff';
+    dateBtn.style.background='transparent'; dateBtn.style.color='#15803d';
+    dateView.style.display='none'; allView.style.display='';
+    if(dateCtrl) dateCtrl.style.display='none';
+    colLoadAll();
+  }
+}
+
+let _colAllData = null;
+async function colLoadAll(){
+  const listEl=document.getElementById('col-all-list');
+  const sumEl=document.getElementById('col-all-summary');
+  const tabsEl=document.getElementById('col-all-tabs');
+  listEl.innerHTML='<div style="text-align:center;padding:40px;color:#6b7280;font-size:13px;">⏳ Loading all collections…</div>';
+  try{
+    // Fetch ALL harvests (paginated) + packs + reconciliations regardless of date
+    const [hr, pr, rr] = await Promise.all([
+      sbAll('harvests', 'select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvest_date,harvested_at&order=harvest_date.desc'),
+      sbAll('harvest_pack_items', 'select=harvest_id,amount'),
+      sbAll('harvest_reconciliations', 'select=collector,recon_date,confirmed_at')
+    ]);
+    const rows=Array.isArray(hr)?hr:[];
+    const packs=Array.isArray(pr)?pr:[];
+    const recons=Array.isArray(rr)?rr:[];
+
+    // Pack total per harvest
+    const packMap={};
+    packs.forEach(p=>{ packMap[p.harvest_id]=(packMap[p.harvest_id]||0)+Number(p.amount||0); });
+
+    // Recon set: collector|date
+    const reconSet=new Set();
+    recons.forEach(r=>{ reconSet.add((r.collector||'')+'|'+(r.recon_date||'')); });
+
+    // Classify each harvest
+    const enriched=rows.map(r=>{
+      const packTotal=packMap[r.id]||0;
+      const spawn=Number(r.spawn_share||0);
+      const counted=packTotal>0;
+      const gap=counted?Math.round(packTotal-spawn):null;
+      const reconciled=reconSet.has((r.collector||'')+'|'+(r.harvest_date||''));
+      let status;
+      if(!counted) status='uncounted';
+      else if(gap===0) status='match';
+      else if(gap<0) status='short';
+      else status='surplus';
+      return {...r, packTotal, gap, counted, reconciled, status};
+    });
+
+    _colAllData=enriched;
+
+    // Summary
+    const uncounted=enriched.filter(r=>r.status==='uncounted');
+    const matched=enriched.filter(r=>r.status==='match');
+    const shorts=enriched.filter(r=>r.status==='short');
+    const surplus=enriched.filter(r=>r.status==='surplus');
+    const reconciled=enriched.filter(r=>r.reconciled);
+
+    sumEl.innerHTML=`
+      <div class="stat" style="border-bottom-color:#6b7280;cursor:pointer;" onclick="colAllTab('uncounted')"><div class="sl">⏳ Uncounted</div><div class="sv" style="color:#6b7280">${uncounted.length}</div></div>
+      <div class="stat" style="border-bottom-color:#15803d;cursor:pointer;" onclick="colAllTab('match')"><div class="sl">✓ Matched</div><div class="sv" style="color:#15803d">${matched.length}</div></div>
+      <div class="stat" style="border-bottom-color:#dc2626;cursor:pointer;" onclick="colAllTab('short')"><div class="sl">🔴 Short</div><div class="sv" style="color:#dc2626">${shorts.length}</div></div>
+      <div class="stat" style="border-bottom-color:#d97706;cursor:pointer;" onclick="colAllTab('surplus')"><div class="sl">🟡 Surplus</div><div class="sv" style="color:#d97706">${surplus.length}</div></div>`;
+
+    tabsEl.innerHTML=[
+      ['uncounted','⏳ Uncounted ('+uncounted.length+')','#6b7280'],
+      ['match','✓ Matched ('+matched.length+')','#15803d'],
+      ['short','🔴 Short ('+shorts.length+')','#dc2626'],
+      ['surplus','🟡 Surplus ('+surplus.length+')','#d97706'],
+      ['reconciled','🤝 Reconciled ('+reconciled.length+')','#1565c0'],
+      ['all','📊 All ('+enriched.length+')','#374151'],
+    ].map(([key,label,color])=>`<button data-colall-tab="${key}" onclick="colAllTab('${key}')" style="padding:5px 12px;border-radius:20px;border:1px solid ${color};background:white;color:${color};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">${label}</button>`).join('');
+
+    colAllTab('uncounted');
+  }catch(e){
+    listEl.innerHTML='<div style="color:#dc2626;text-align:center;padding:40px 0;">Error: '+e.message+'</div>';
+  }
+}
+
+function colAllTab(tabKey){
+  if(!_colAllData) return;
+  // highlight active tab
+  document.querySelectorAll('[data-colall-tab]').forEach(b=>{
+    const k=b.getAttribute('data-colall-tab');
+    const active=k===tabKey;
+    const color=b.style.color;
+    if(active){ b.style.background=color; b.dataset._fg=color; b.style.color='#fff'; }
+    else if(b.dataset._fg){ b.style.background='white'; b.style.color=b.dataset._fg; }
+  });
+  // re-fix colors (since we overwrote color)
+  const colorMap={uncounted:'#6b7280',match:'#15803d',short:'#dc2626',surplus:'#d97706',reconciled:'#1565c0',all:'#374151'};
+  document.querySelectorAll('[data-colall-tab]').forEach(b=>{
+    const k=b.getAttribute('data-colall-tab');
+    if(k===tabKey){ b.style.background=colorMap[k]; b.style.color='#fff'; b.style.borderColor=colorMap[k]; }
+    else { b.style.background='white'; b.style.color=colorMap[k]; b.style.borderColor=colorMap[k]; }
+  });
+
+  let rows;
+  if(tabKey==='all') rows=_colAllData;
+  else if(tabKey==='reconciled') rows=_colAllData.filter(r=>r.reconciled);
+  else rows=_colAllData.filter(r=>r.status===tabKey);
+
+  const listEl=document.getElementById('col-all-list');
+  if(!rows.length){ listEl.innerHTML='<div style="color:#9ca3af;text-align:center;padding:40px 0;">None in this category 🎉</div>'; return; }
+
+  // Group by collector
+  const byCol={};
+  rows.forEach(r=>{ const c=r.collector||'Unknown'; if(!byCol[c])byCol[c]=[]; byCol[c].push(r); });
+
+  const statusChip=(r)=>{
+    if(r.status==='uncounted') return '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">⏳ Not counted</span>';
+    if(r.status==='match') return '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✓ Match</span>';
+    if(r.status==='short') return '<span style="background:#fee2e2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Short '+_php(Math.abs(r.gap))+'</span>';
+    return '<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">Surplus '+_php(r.gap)+'</span>';
+  };
+
+  listEl.innerHTML=Object.entries(byCol).sort((a,b)=>a[0].localeCompare(b[0])).map(([col,hs])=>{
+    const tCoins=hs.reduce((s,r)=>s+Number(r.coins_total||0),0);
+    const tSpawn=hs.reduce((s,r)=>s+Number(r.spawn_share||0),0);
+    const vendoRows=hs.sort((a,b)=>(b.harvest_date||'').localeCompare(a.harvest_date||'')).map((r,i)=>`
+      <div style="display:grid;grid-template-columns:1fr 90px 90px 110px;gap:0;padding:9px 12px;border-bottom:1px solid #f3f4f6;align-items:center;${i%2===1?'background:#fafbff;':''}">
+        <div>
+          <div style="font-weight:700;font-size:13px;color:#1e293b;">${r.sheet_name||r.vendo_name||r.tg_name||'—'} ${r.reconciled?'<span title="Reconciled" style="font-size:10px;">🤝</span>':''}</div>
+          <div style="font-size:10px;color:#9ca3af;">${r.area||'—'} · ${r.harvest_date||'—'}</div>
+        </div>
+        <div style="text-align:right;font-size:12px;font-weight:700;color:#15803d;">${_php(r.spawn_share)}</div>
+        <div style="text-align:right;font-size:12px;color:${r.counted?'#1e3cb8':'#9ca3af'};">${r.counted?_php(r.packTotal):'—'}</div>
+        <div style="text-align:right;">${statusChip(r)}</div>
+      </div>`).join('');
+    return `<div style="background:#fff;border:1.5px solid #e0e7ff;border-radius:12px;margin-bottom:12px;overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="font-size:15px;font-weight:700;">👤 ${col}</div>
+        <span style="background:rgba(255,255,255,.2);padding:2px 10px;border-radius:10px;font-size:11px;">${hs.length} vendo${hs.length!==1?'s':''}</span>
+        <div style="margin-left:auto;display:flex;gap:14px;text-align:right;font-size:12px;">
+          <div><div style="opacity:.7;font-size:10px;">Coins</div><div style="font-weight:700;">${_php(tCoins)}</div></div>
+          <div><div style="opacity:.7;font-size:10px;">Spawn</div><div style="font-weight:700;">${_php(tSpawn)}</div></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 90px 90px 110px;gap:0;padding:6px 12px;background:#f8fafc;border-bottom:2px solid #e5e7eb;">
+        <div style="font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;">Vendo</div>
+        <div style="font-size:10px;font-weight:800;color:#15803d;text-transform:uppercase;text-align:right;">Spawn</div>
+        <div style="font-size:10px;font-weight:800;color:#1e3cb8;text-transform:uppercase;text-align:right;">Count</div>
+        <div style="font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;text-align:right;">Status</div>
+      </div>
+      ${vendoRows}
+    </div>`;
+  }).join('');
+}
+
 function colFilter(area) {
   window._colAreaFilter = area;
   document.querySelectorAll('[data-col-area]').forEach(b=>{ b.style.background='white'; b.style.color='#374151'; b.style.borderColor='#e5e7eb'; });
@@ -9050,16 +9212,30 @@ async function nmUnlink(id){
 <!-- ══ JOB ORDERS PANEL ══ -->
 <div id="panel-joborders" class="panel">
 <div class="w" style="padding:14px 16px 80px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <div style="font-size:16px;font-weight:800;color:#15803d;">💰 Collections</div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;" id="col-date-controls">
       <input type="date" id="col-date" onchange="colLoad()" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;outline:none;">
       <button onclick="colLoad()" style="padding:7px 14px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↻</button>
     </div>
   </div>
-  <div id="col-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
-  <div id="col-area-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
-  <div id="col-list" style="color:#9ca3af;text-align:center;padding:40px 0;">Select a date to load collections</div>
+  <!-- Mode tabs -->
+  <div style="display:flex;gap:4px;background:#f0fdf4;padding:4px;border-radius:10px;margin-bottom:14px;border:1px solid #bbf7d0;">
+    <button id="colmode-date" onclick="colSetMode('date')" style="flex:1;padding:8px;border:none;border-radius:7px;background:#15803d;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">📅 By Date</button>
+    <button id="colmode-all" onclick="colSetMode('all')" style="flex:1;padding:8px;border:none;border-radius:7px;background:transparent;color:#15803d;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Overview (All Pending)</button>
+  </div>
+  <!-- By Date view -->
+  <div id="col-date-view">
+    <div id="col-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
+    <div id="col-area-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
+    <div id="col-list" style="color:#9ca3af;text-align:center;padding:40px 0;">Select a date to load collections</div>
+  </div>
+  <!-- Overview (All Pending) view -->
+  <div id="col-all-view" style="display:none;">
+    <div id="col-all-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
+    <div id="col-all-tabs" style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;"></div>
+    <div id="col-all-list" style="color:#9ca3af;text-align:center;padding:40px 0;">Loading…</div>
+  </div>
 </div>
 
 
