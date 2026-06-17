@@ -599,6 +599,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <option>MINAOG</option><option>MIX AREAS</option>
       </select>
       <select id="v-sort" onchange="filterVendos()">
+        <option value="recent" selected>Most recent harvest</option>
         <option value="desc">Highest sales first</option>
         <option value="asc">Lowest sales first</option>
         <option value="name">A-Z name</option>
@@ -6225,7 +6226,7 @@ function colRenderRows(rows) {
         </div>
       </div>
       <!-- Toggle hint -->
-      <div style="text-align:center;padding:4px;font-size:10px;opacity:.6">▼ tap to expand</div>
+      <div style="text-align:center;padding:4px;font-size:10px;opacity:.6;cursor:pointer;" onclick="var b=document.getElementById('${colId}');b.style.display=b.style.display==='none'?'block':'none';">▼ tap to expand / collapse</div>
       <!-- Vendo rows (collapsed by default) -->
       <div id="${colId}" style="display:none;">
         ${vendoRows}
@@ -6546,7 +6547,8 @@ function filterVendos() {
     return true;
   });
 
-  if(sort==="asc")         filteredVendos.sort((a,b)=>(a.sales||0)-(b.sales||0));
+  if(sort==="recent")      filteredVendos.sort((a,b)=>(b.last_date||'').localeCompare(a.last_date||''));
+  else if(sort==="asc")    filteredVendos.sort((a,b)=>(a.sales||0)-(b.sales||0));
   else if(sort==="desc")   filteredVendos.sort((a,b)=>(b.sales||0)-(a.sales||0));
   else if(sort==="name")   filteredVendos.sort((a,b)=>a.vendo.localeCompare(b.vendo));
   else if(sort==="suspicious") filteredVendos.sort((a,b)=>(suspMap[b.vendo]||0)-(suspMap[a.vendo]||0));
@@ -6616,6 +6618,7 @@ async function openVendoDetail(vendo, area) {
   if(txnPanel) txnPanel.classList.add('active');
   document.getElementById("vtxn-title").textContent=vendo;
   document.getElementById("vtxn-sub").textContent=area+" area";
+  document.getElementById("vtxn-stats").innerHTML="<div style='color:#9ca3af;font-size:11px;padding:4px 0'>Loading…</div>";
   showBread(`Vendos → ${vendo}`, closeVendo);
 
   // No default date filter — load ALL transactions
@@ -6861,6 +6864,8 @@ function closeVendo() {
   document.getElementById("view-vtxns").style.display="none";
   currentVendo="";
   hideBread();
+  // Re-render vendo list to restore rows
+  if(typeof renderVendos==='function') renderVendos();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -6945,7 +6950,7 @@ function filterSuspicious() {
 function renderSuspiciousTodo(rows) {
   document.getElementById("suspicious-todo").innerHTML = rows.map(h=>{
     const note=localStorage.getItem("hacked_note_vendo_"+h.vendo)||"";
-    return `<div class="todo-item" id="hack-${btoa(encodeURIComponent(h.vendo)).replace(/[^a-zA-Z0-9]/g,"")}">
+    return `<div class="todo-item" id="hack-${(h.vendo||"").replace(/[^a-zA-Z0-9]/g,"_").slice(0,30)}}">
       <div style="flex:1;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span style="font-weight:600;color:#dc2626;cursor:pointer;font-size:14px;" onclick="openSuspiciousDetail('${esc(h.vendo)}','${h.area}')">${h.vendo}</span>
@@ -9720,6 +9725,7 @@ async function nmUnlink(id){
 
 <!-- ══ SUSPICIOUS — TODO LIST ══ -->
 <div id="panel-suspicious" class="panel">
+<div class="w" style="padding:14px 16px 80px;">
   <div class="stats" id="suspicious-stats"></div>
   <!-- Hacked vendo list -->
   <div id="suspicious-vlist">
