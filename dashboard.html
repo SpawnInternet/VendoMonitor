@@ -2095,13 +2095,18 @@ async function rcRun(){
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
       const d = await rc.json();
-      if (d.rows && d.rows.length && d.from === from && d.to === to) {
-        rcAllRows = d.rows;
+      // Cache hit if cache window COVERS requested window (superset) — filter client-side
+      const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
+      if (cacheCovers) {
+        rcAllRows = d.rows.filter(r=>{
+          const hd = r.harvest_date || '';
+          return hd >= from && hd <= to;
+        });
         const age = Math.round((Date.now() - new Date(d.generated_at||0).getTime())/60000);
         document.getElementById('rc-count').textContent = rcAllRows.length + ' harvests · cache ' + age + 'min ago';
         rcFilter();
-        // Refresh in background if older than 5min
-        if (age > 5) setTimeout(()=>rcRunFresh(from,to,fromISO,toISO,el), 100);
+        // Refresh in background if older than 10min OR no rows matched (new harvests not in cache)
+        if (age > 10 || !rcAllRows.length) setTimeout(()=>rcRunFresh(from,to,fromISO,toISO,el), 100);
         return;
       }
     }
