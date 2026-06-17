@@ -1272,7 +1272,7 @@ async function htShowVendoProfile(name, area) {
   try {
     const enc=encodeURIComponent(name);
     const [vr,hr]=await Promise.all([
-      sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
+      sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
       sb('harvests','sheet_name=eq.'+enc+'&select=harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
@@ -1296,11 +1296,7 @@ function vpRenderInfo(){
   const dc=days===null?'#6b7280':days>46?'#dc2626':days>30?'#d97706':'#15803d';
   const tgB=v&&v.tg_name?'<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">matched</span>':'<span style="background:#fef9c3;color:#b45309;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">unmatched</span>';
   const gpsL=v&&v.lat&&v.lng?'&nbsp;<a href="https://www.google.com/maps?q='+v.lat+','+v.lng+'" target="_blank" style="color:#1565c0;font-size:11px;">Maps &#x2197;</a>':'';
-  let h1='';
-  if(v&&v.photo_url){
-    h1+='<div style="text-align:center;margin-bottom:14px;"><img src="'+v.photo_url+'" style="max-width:100%;max-height:200px;border-radius:10px;border:1px solid #e5e7eb;object-fit:cover;"></div>';
-  }
-    h1+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;background:#f8faff;border-radius:8px;padding:14px;">';
+  let h1='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;background:#f8faff;border-radius:8px;padding:14px;">';
   h1+='<div><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Identity</div>';
   h1+=_vf('Store / Vendo name',v&&v.sheet_name,null,false);
   h1+=edit?_vf('Owner name',v&&v.owner_name,'owner_name',true):'<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">Owner name</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(v&&v.owner_name||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
@@ -1524,11 +1520,15 @@ async function vpSaveNames(){
     if(r.ok){
       Object.assign(window._vpVendo,u);
       document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name||u.tg_name||'—';
-      htAllRows=[]; // invalidate cache so next Refresh picks up new name
+      htAllRows=[];
       toast('✅ Names saved!');
       vpRenderNames();
-    } else toast('Save failed');
-  }catch(e){toast('Error: '+e.message);}
+    } else {
+      const errText = await r.text();
+      toast('Save failed: '+errText.slice(0,80));
+      console.error('vpSaveNames failed:', r.status, errText);
+    }
+  }catch(e){toast('Error: '+e.message); console.error('vpSaveNames error:',e);}
 }
 
 async function vpSave(){
@@ -1732,6 +1732,8 @@ async function loadTodaySummary(){
     const totalCount = rows.length;
     const totalSpawn = rows.reduce((s,h)=>s+Number(h.spawn_share||0),0);
     const colColors = ['#1565c0','#15803d','#b45309','#7c3aed','#0d9488'];
+    Object.values(byCol).forEach(d=>{if(d.areas instanceof Set)d.areas=[...d.areas];});
+    window._htColByCol=byCol;
     const colEntries = Object.entries(byCol).sort((a,b)=>b[1].spawn-a[1].spawn);
     el.innerHTML = `
       <div style="background:#fff;border:1px solid var(--bd);border-radius:10px;padding:10px 14px;margin-bottom:8px;">
@@ -1745,7 +1747,7 @@ async function loadTodaySummary(){
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${colEntries.map(([name,d],i)=>`
-            <div onclick="htShowCollectorPopup(${JSON.stringify(name)},byCol)" style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;cursor:pointer;" onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#e0e7ff'">
+            <div onclick="htShowCollectorPopup(${JSON.stringify(name)})" style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;cursor:pointer;" onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#e0e7ff'">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                 ${collectorAvatar(name, 26)}
                 <span style="font-size:12px;font-weight:700;color:#1e293b;">${name}</span>
@@ -1761,7 +1763,8 @@ async function loadTodaySummary(){
 }
 
 
-function htShowCollectorPopup(collectorName, byCol){
+function htShowCollectorPopup(collectorName){
+  const byCol = window._htColByCol||{};
   const d = byCol[collectorName];
   if(!d) return;
   let ov = document.getElementById('ht-col-popup');
@@ -2270,6 +2273,11 @@ async function rcRunFresh(from,to,fromISO,toISO,el){
   rcBypassCache = false;
 }
 
+function rcShowNamesById(harvestId){
+  const row=(rcAllRows||[]).find(r=>r.id===harvestId);
+  if(!row){toast('Row not found');return;}
+  rcShowNames(row.vendo_name||row.sheet_name||'',row.sheet_name||'',row.tg_name||'',row.area||'');
+}
 async function rcShowNames(vendoName, sheetName, tgName, area){
   // Create overlay
   let overlay = document.getElementById('rc-names-overlay');
@@ -2580,7 +2588,7 @@ function rcFilter(){
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">
                 <div style="display:flex;align-items:center;gap:4px;">
                   <span>${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
-                  <button onclick="rcShowNames(${JSON.stringify(h.sheet_name||h.tg_name||'')},${JSON.stringify(h.sheet_name||'')},${JSON.stringify(h.tg_name||'')},${JSON.stringify(h.area||'')})" title="View/Edit TG Name matching" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="Names matching">${h.tg_name?'🔗':'🔗'}</button>
+                  <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="View/Edit TG Name">🔗</button>
                 </div>
               </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
@@ -2641,10 +2649,35 @@ async function loadProgress(){
 
     const [rH, rGPS] = await Promise.all([
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,vendo_name,sheet_name,tg_name,area,collector,coins_total,net_collectible,spawn_share,harvested_at,collector_note&order=harvested_at.desc&limit=300`,{headers:_HDR}),
-      fetch(`${_SB}/rest/v1/harvest_group_items?select=sheet_name,tg_name,lat_captured,lng_captured,harvested_at,collector,harvest_groups(collector)&lat_captured=not.is.null&harvested_at=gte.${today}T00:00:00Z&order=harvested_at.desc&limit=500`,{headers:_HDR})
+      (async()=>{ const vids=new Set(); return []; })()  // GPS built from vendo table below
     ]);
     const rows = await rH.json();
-    const gpsRows = await rGPS.json();
+    // Build GPS points from vendos table using today's harvested vendo names
+    let gpsRows = [];
+    if(rows.length){
+      const names = [...new Set(rows.map(h=>h.tg_name||h.sheet_name||h.vendo_name).filter(Boolean))];
+      // fetch GPS from vendos for these names
+      const nameChunks = [];
+      for(let i=0;i<names.length;i+=20) nameChunks.push(names.slice(i,i+20));
+      const gpsVendos = [];
+      for(const chunk of nameChunks){
+        const q = chunk.map(n=>`tg_name.eq.${encodeURIComponent(n)},sheet_name.eq.${encodeURIComponent(n)}`).join(',');
+        try{
+          const rv = await fetch(`${_SB}/rest/v1/vendos?or=(${q})&select=tg_name,sheet_name,lat,lng&lat=not.is.null`,{headers:_HDR});
+          const vd = await rv.json();
+          if(Array.isArray(vd)) gpsVendos.push(...vd);
+        }catch(e){}
+      }
+      // Match harvest rows with vendo GPS
+      const vendoGpsMap = {};
+      gpsVendos.forEach(v=>{ const k=v.tg_name||v.sheet_name; if(k&&v.lat) vendoGpsMap[k]={lat:v.lat,lng:v.lng}; });
+      gpsRows = rows.map(h=>{
+        const key = h.tg_name||h.sheet_name||h.vendo_name;
+        const gps = vendoGpsMap[key];
+        if(!gps) return null;
+        return {...h, lat_captured:gps.lat, lng_captured:gps.lng};
+      }).filter(Boolean);
+    }
 
     const totalCoins = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
     const totalSpawn = rows.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
@@ -4462,15 +4495,11 @@ const _VMT_COLORS = {
 async function vmTopLoad(){
   const mapEl = document.getElementById('vmap-top-map');
   if(!mapEl||!window.L) return;
-  // Ensure panel is visible before init so Leaflet gets correct dimensions
-  await new Promise(r=>setTimeout(r,50));
   if(!_vmtMap){
     _vmtMap = L.map('vmap-top-map').setView([8.15,123.27],10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_vmtMap);
   }
-  setTimeout(()=>{ _vmtMap.invalidateSize(); },200);
-  setTimeout(()=>{ _vmtMap.invalidateSize(); },600);
-  setTimeout(()=>{ _vmtMap.invalidateSize(); },1200);
+  setTimeout(()=>_vmtMap.invalidateSize(),300);setTimeout(()=>_vmtMap.invalidateSize(),700);
   const cnt=document.getElementById('vmap-top-count');
   if(cnt) cnt.textContent='Loading…';
   try{
@@ -4515,7 +4544,6 @@ function vmTopFilter(){
   if(cnt)cnt.textContent=`${_vmtMarkers.length} of ${_vmtRows.length} vendos with GPS`;
   if(bounds.length===1)_vmtMap.setView(bounds[0],16);
   else if(bounds.length>1)_vmtMap.fitBounds(bounds,{padding:[20,20],maxZoom:13});
-  setTimeout(()=>_vmtMap.invalidateSize(),300);
 }
 setInterval(()=>{if(document.getElementById('panel-vmap-top')?.classList.contains('active'))vmTopLoad();},60000);
 
@@ -4538,6 +4566,7 @@ async function loadCollectorPhotos(){
 // Returns an avatar HTML snippet (thumbnail). Click → upload if empty, fullview if set.
 function collectorAvatar(name, size){
   size = size || 32;
+  if(!window._collectorPhotos) return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:#e0e7ff;flex-shrink:0;display:inline-block;"></div>';
   const url = window._collectorPhotos[(name||'').toLowerCase()];
   const initials = (name||'?').trim().slice(0,1).toUpperCase();
   const safeName = JSON.stringify(name||'');
@@ -5496,8 +5525,8 @@ async function htShowVendoById(id, name, area) {
   try {
     // Look up by id (most reliable)
     const [vr, hr] = await Promise.all([
-      id ? sb('vendos','id=eq.'+id+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1)
-         : sb('vendos','sheet_name=eq.'+encodeURIComponent(name)+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
+      id ? sb('vendos','id=eq.'+id+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1)
+         : sb('vendos','sheet_name=eq.'+encodeURIComponent(name)+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
       sb('harvests','sheet_name=eq.'+encodeURIComponent(name)+'&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
@@ -5678,7 +5707,12 @@ async function dashSearch(q) {
 }
 function showVendoFromDash(name, area) {
   document.getElementById('dash-search-results').style.display = 'none';
-  htShowVendoProfile(name, area);
+  // Switch to vendos tab and show profile
+  showP('vendos', document.querySelector('.nav-bar button:nth-child(2)'));
+  setTimeout(() => {
+    const s = document.getElementById('v-search');
+    if (s) { s.value = name; filterVendos(); }
+  }, 200);
 }
 // Close search on outside click
 document.addEventListener('click', e => {
