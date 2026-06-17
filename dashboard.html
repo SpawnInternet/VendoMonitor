@@ -26,7 +26,7 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,.5)}70%{box-shadow:0 0 0 5px rgba(74,222,128,0)}}
 
 /* ── WHITE ICON NAV ── */
-.nav-bar{background:#fff;border-bottom:1.5px solid #e8eeff;padding:0;display:flex;align-items:stretch;position:sticky;top:44px;z-index:49}
+.nav-bar{background:#fff;border-bottom:1.5px solid #e8eeff;padding:0;display:flex;align-items:stretch;position:sticky;top:44px;z-index:49;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .nav-bar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:5px 4px;border:none;border-bottom:3px solid transparent;background:transparent;cursor:pointer;flex:1;font-family:inherit;transition:background .12s;position:relative;min-width:0}
 .nav-bar button .ni{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:6px}
 .nav-bar button .nl{font-size:8px;font-weight:600;color:#6b7394;text-transform:uppercase;letter-spacing:.03em;text-align:center;line-height:1.2;white-space:nowrap}
@@ -1715,9 +1715,11 @@ async function loadTodaySummary(){
     const byCol = {};
     rows.forEach(h=>{
       const c = h.collector||'Unknown';
-      if(!byCol[c]) byCol[c]={count:0,spawn:0,areas:new Set()};
+      if(!byCol[c]) byCol[c]={count:0,spawn:0,coins:0,areas:new Set(),vendos:[]};
       byCol[c].count++;
       byCol[c].spawn += Number(h.spawn_share||0);
+      byCol[c].coins += Number(h.coins_total||0);
+      byCol[c].vendos.push(h);
       if(h.area) byCol[c].areas.add(h.area);
     });
     const totalCount = rows.length;
@@ -1736,13 +1738,13 @@ async function loadTodaySummary(){
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${colEntries.map(([name,d],i)=>`
-            <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;">
+            <div onclick="htShowCollectorPopup(${JSON.stringify(name)},byCol)" style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;cursor:pointer;" onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#e0e7ff'">
               <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
                 <div style="width:8px;height:8px;border-radius:50%;background:${colColors[i%colColors.length]};flex-shrink:0;"></div>
                 <span style="font-size:12px;font-weight:700;color:#1e293b;">${name}</span>
               </div>
               <div style="font-size:13px;font-weight:700;color:#15803d;">${_php(d.spawn)}</div>
-              <div style="font-size:10px;color:var(--mu);margin-top:1px;">${d.count} vendo${d.count!==1?'s':''} · ${[...d.areas].join(', ')||'—'}</div>
+              <div style="font-size:10px;color:var(--mu);margin-top:1px;">${d.count} vendo${d.count!==1?'s':''} · ${[...d.areas].join(', ')||'—'} <span style="color:#1565c0">▸</span></div>
             </div>`).join('')}
         </div>
       </div>`;
@@ -1751,6 +1753,71 @@ async function loadTodaySummary(){
   }
 }
 
+
+function htShowCollectorPopup(collectorName, byCol){
+  const d = byCol[collectorName];
+  if(!d) return;
+  let ov = document.getElementById('ht-col-popup');
+  if(ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'ht-col-popup';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;';
+  ov.onclick = e => { if(e.target===ov) ov.remove(); };
+  const vendoRows = (d.vendos||[]).map(h=>{
+    const t=h.harvested_at?new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—';
+    return `<tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;font-weight:500;font-size:12px;">${h.sheet_name||h.vendo_name||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;font-size:11px;color:#6b7280;">${h.area||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#9ca3af;">${t}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-size:12px;color:#1e293b;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-size:12px;font-weight:700;color:#15803d;">₱${Math.round(h.spawn_share||0).toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+  ov.innerHTML = `
+  <div style="background:#fff;border-radius:14px;width:92%;max-width:500px;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1;">
+      <div>
+        <div style="font-size:16px;font-weight:700;">👤 ${collectorName}</div>
+        <div style="font-size:11px;opacity:.8;">${d.count} vendo${d.count!==1?'s':''} · ${[...d.areas].join(', ')||'—'}</div>
+      </div>
+      <button onclick="document.getElementById('ht-col-popup').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;width:30px;height:30px;border-radius:50%;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #f3f4f6;">
+      <div style="padding:12px 16px;text-align:center;border-right:1px solid #f3f4f6;">
+        <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Coins Total</div>
+        <div style="font-size:20px;font-weight:700;color:#1e293b;">₱${Math.round(d.coins||0).toLocaleString()}</div>
+      </div>
+      <div style="padding:12px 16px;text-align:center;">
+        <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">Spawn Share</div>
+        <div style="font-size:20px;font-weight:700;color:#15803d;">₱${Math.round(d.spawn||0).toLocaleString()}</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#f8faff;">
+          <th style="padding:7px 10px;text-align:left;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Vendo</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Area</th>
+          <th style="padding:7px 10px;text-align:left;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Time</th>
+          <th style="padding:7px 10px;text-align:right;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Coins</th>
+          <th style="padding:7px 10px;text-align:right;font-size:10px;color:#6b7280;font-weight:600;border-bottom:1px solid #f3f4f6;">Spawn</th>
+        </tr></thead>
+        <tbody>${vendoRows||'<tr><td colspan="5" style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">No vendos yet</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function progressFlyTo(name){
+  const btn = document.getElementById('hbtn-progress');
+  if(btn) hvNewTab('progress',btn);
+  setTimeout(()=>{
+    if(!_progressMap||!window._progressMarkers) return;
+    const m = window._progressMarkers[name];
+    if(m){ _progressMap.setView(m.getLatLng(),17); m.openPopup(); }
+    else toast('No GPS pin for '+name);
+  },350);
+}
 
 function htFilter(){
   const area = document.getElementById('ht-area').value;
@@ -2324,9 +2391,11 @@ async function rcnSaveNames(vendoName){
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
     if(r2.ok){
       toast('✅ Names saved!');
-      if(msg){msg.textContent='✅ Saved';msg.style.color='#15803d';}
       htAllRows=[];
-      setTimeout(()=>{if(msg)msg.textContent='';},3000);
+      const newSheet=(document.getElementById('rcn-sheet')?.value||'').trim();
+      const newTg=(document.getElementById('rcn-tg')?.value||'').trim();
+      document.getElementById('rc-names-overlay')?.remove();
+      setTimeout(()=>rcShowNames(vendoName,newSheet||vendoName,newTg,area),80);
     }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
   }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
 }
@@ -2590,7 +2659,7 @@ async function loadProgress(){
       html += `<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
         <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;">
           🗺 Live Field Map — Zamboanga del Norte
-          <span style="font-size:10px;font-weight:400;opacity:.6;">${gpsRows.length} GPS points today</span>
+          <span style="font-size:10px;font-weight:400;opacity:.6;">${Array.isArray(gpsRows)?gpsRows.length:0} GPS points today</span>
           <div style="margin-left:auto;display:flex;gap:12px;font-size:10px;font-weight:400;">
             <span>🟢 &lt;30min</span><span>🟡 30–60min</span><span>🔴 &gt;1hr</span>
           </div>
@@ -2637,7 +2706,7 @@ async function loadProgress(){
         const sn = (name).replace(/'/g,"\'");
         html += `<tr style="background:${bg};cursor:pointer;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'" onclick="vmZoomToProgress('${sn}')">
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;white-space:nowrap;">${t}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;">${name} <span style="font-size:9px;color:#9ca3af;">📍</span></td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;cursor:pointer;" onclick="progressFlyTo(${JSON.stringify(sn)})" title="Show on map">${name} <span style="font-size:9px;color:#1565c0;">📍</span></td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:11px;">${h.area||'—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#1e293b;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#15803d;">₱${Math.round(h.spawn_share||0).toLocaleString()}</td>
@@ -2663,7 +2732,8 @@ function _initProgressMap(gpsRows){
     if(_progressMap){ _progressMap.remove(); _progressMap=null; }
     _progressMap = L.map('progress-map').setView([8.15,123.27],10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_progressMap);
-    if(!gpsRows||!gpsRows.length) return;
+    if(!Array.isArray(gpsRows)||!gpsRows.length) return;
+    window._progressMarkers={};
     const now=Date.now(), bounds=[];
     gpsRows.forEach(row=>{
       if(!row.lat_captured||!row.lng_captured) return;
@@ -2675,7 +2745,7 @@ function _initProgressMap(gpsRows){
       const t=row.harvested_at?new Date(row.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'—';
       const collector=row.collector||row.harvest_groups?.collector||'';
       const icon=L.divIcon({className:'',html:`<div style="text-align:center;"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>${collector?`<div style="background:#1e293b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;margin-top:2px;display:inline-block;">👤 ${collector}</div>`:''}<div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;margin-top:2px;display:inline-block;">${name}</div><div style="color:#555;font-size:9px;">${t}</div></div>`,iconAnchor:[7,7]});
-      L.marker([lat,lng],{icon}).addTo(_progressMap).bindPopup(`<b>${name}</b><br>${collector?'👤 '+collector+'<br>':''}${t}`);
+      const _m=L.marker([lat,lng],{icon}).addTo(_progressMap).bindPopup(`<b>${name}</b><br>${collector?'👤 '+collector+'<br>':''}${t}`); window._progressMarkers[name]=_m;
       bounds.push([lat,lng]);
     });
     if(bounds.length===1)_progressMap.setView(bounds[0],15);
