@@ -2397,6 +2397,8 @@ function calcNet(){
   const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
   const breakdownTotal = net + free + saloy + freeCoins;
+  window._lastBreakdownTotal = breakdownTotal;
+  window._lastNetCoins = net;
   const spawn = net * 0.75;
   const customer = net * 0.25;
 
@@ -2414,7 +2416,7 @@ function calcNet(){
   const ss = document.getElementById('sheet-spawn');
   const ss2 = document.getElementById('sheet-spawn2');
   if(sbt) sbt.textContent = '₱'+fmt(breakdownTotal);
-  if(sn) sn.textContent = '₱'+fmt(breakdownTotal); // Total = Net + Free + Saloy + Old
+  if(sn) sn.textContent = '₱'+fmt(net); // Net Coins (collector input)
   if(ss) ss.textContent = '₱'+fmt(spawn);
   // Step 2: spawn share based on breakdown total only (what's physically packed)
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
@@ -3386,7 +3388,7 @@ function resetPackForm(){
 (function patchSubmit(){
   const origSubmit = window.submitHarvest;
   window.submitHarvestConfirm = function(){
-    const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
+    const net = parseFloat(document.getElementById('coin-total-inp')?.value)||(window._lastNetCoins||0);
     if(!net){ toast('Enter Net Coins first'); openCollectionSheet(); return; }
     const p1k = _p1k||0, p300 = _p300||0;
     const bugi = parseFloat(document.getElementById('bugi-amount').value)||0;
@@ -3400,7 +3402,7 @@ function resetPackForm(){
     // Get pack total from _packData (set when collection sheet is saved)
     const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
     const _pdTotal = _pd ? (_pd.packs_1k*1000)+(_pd.packs_300*300)+(_pd.bugi_amount||0)+(_pd.cash_amount||0) : packTotal;
-    if(_pdTotal > 0 && Math.round(_pdTotal) !== spawn){
+    if(_pdTotal > 0 && Math.round(_pdTotal) !== Math.round(spawn)){
       const gap = _pdTotal - spawn;
       const msg = gap > 0
         ? `⚠️ Packs ₱${fmt(_pdTotal)} SURPLUS ₱${fmt(gap)} vs Spawn ₱${fmt(spawn)} — fix before submitting`
@@ -3418,9 +3420,7 @@ function resetPackForm(){
     document.getElementById('confirm-cash').textContent = cash > 0 ? '₱'+fmt(cash) : '—';
     const cnTotal = document.getElementById('confirm-net-total');
     const cnBreak = document.getElementById('confirm-breakdown-total');
-    const _breakdownTotal = net + (parseFloat(document.getElementById('coin-free').value)||0)
-      + (parseFloat(document.getElementById('coin-saloy').value)||0)
-      + (parseFloat(document.getElementById('coin-freecoins').value)||0);
+    const _breakdownTotal = window._lastBreakdownTotal || net;
     if(cnTotal) cnTotal.textContent = '₱'+fmt(net);
     if(cnBreak) cnBreak.textContent = '₱'+fmt(_breakdownTotal);
     document.getElementById('harvest-confirm-overlay').classList.add('show');
