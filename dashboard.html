@@ -453,13 +453,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">System</span>
     </button>
 
-    <!-- GPS Tracing -->
-    <button onclick="showP('gpstrace',this);gpsTraceLoad()" data-panel="gpstrace">
-      <div class="ni" style="background:#dcfce7">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#16a34a" stroke-width="2" fill="none"/><circle cx="12" cy="9" r="2.5" fill="#16a34a"/></svg>
-      </div>
-      <span class="nl" style="color:#16a34a">GPS</span>
-    </button>
     <!-- Import -->
     <button onclick="showP('import',this);importInit()" data-panel="import">
       <div class="ni" style="background:#fef3c7">
@@ -1003,6 +996,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab"    id="hbtn-settings" onclick="hvNewTab('settings',this)">⚙️ Settings</button>
       <button class="hv-hvtab"    id="hbtn-perf" onclick="hvNewTab('perf',this);if(!document.getElementById('perf-month').value){const n=new Date();document.getElementById('perf-month').value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}perfLoad()">🏅 Perf</button>
       <button class="hv-hvtab"    id="hbtn-ledger" onclick="hvNewTab('ledger',this);elLoad()">📒 Ledger</button>
+<button class="hv-hvtab"    id="hbtn-gps" onclick="hvNewTab('gps',this);gpsTraceLoad()">📍 GPS</button>
     </div>
   </div>
 </div>
@@ -1186,7 +1180,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names','ledger'].forEach(t=>{
+  ['htable','livefeed','recon','settings','perf','progress','names','ledger','gps'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
@@ -1205,7 +1199,9 @@ function hvNewTab(id, btn){
   if(id==='names'){ if(!_nmRows.length) nmLoad(); else nmRender(); }
   if(id==='progress'){ loadProgress(); }
   if(id==='ledger'){ elLoad(); }
+  if(id==='gps'){ gpsTraceLoad(); }
   if(id!=='progress'&&id!=='ledger'){ if(_progressMap){ _progressMap.remove(); _progressMap=null; } }
+  if(id!=='gps'){ if(typeof _gpsMap!=='undefined'&&_gpsMap){ _gpsMap.remove(); _gpsMap=null; } }
 }
 
 
@@ -3019,6 +3015,50 @@ function elRender(){
 }
 function elShowSkipped(){const b=document.getElementById('el-skipped-box');b.style.display=b.style.display==='none'?'':'none';}
 </script>
+
+<div id="hvt-gps" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <div style="font-size:16px;font-weight:800;color:#16a34a;">📍 GPS Tracing & Coverage</div>
+    <button onclick="gpsTraceLoad()" style="padding:7px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>
+  </div>
+  <div id="gps-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
+  <div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+    <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      🗺 All Vendo Pins
+      <span id="gps-map-count" style="font-size:10px;font-weight:400;opacity:.6;"></span>
+      <div style="margin-left:auto;display:flex;gap:10px;font-size:10px;font-weight:400;">
+        <span>🟢 Updated &lt;30d</span><span>🟡 30–90d</span><span>🔴 &gt;90d / unknown</span>
+      </div>
+    </div>
+    <div id="gps-map" style="height:320px;width:100%;"></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+    <input id="gps-search" placeholder="🔍 Search vendo / owner..." oninput="gpsTraceFilter()" style="flex:1;min-width:160px;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;outline:none;">
+    <select id="gps-area" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
+      <option value="">All Areas</option>
+      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
+      <option>MINAOG</option><option>MIX AREAS</option>
+    </select>
+    <select id="gps-status" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
+      <option value="">All Status</option>
+      <option value="missing">❌ Missing GPS</option>
+      <option value="old">🔴 Old (&gt;90d)</option>
+      <option value="aging">🟡 Aging (30-90d)</option>
+      <option value="fresh">🟢 Fresh (&lt;30d)</option>
+      <option value="nophoto">📷 No Photo</option>
+    </select>
+    <select id="gps-sort" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
+      <option value="oldest">Oldest GPS first</option>
+      <option value="newest">Newest GPS first</option>
+      <option value="name">Name A-Z</option>
+    </select>
+  </div>
+  <div id="gps-count" style="font-size:11px;color:#6b7280;margin-bottom:8px;"></div>
+  <div id="gps-list"></div>
+</div>
+
+
 
 
 <!-- ══ SKIPPED ══ -->
@@ -5318,7 +5358,6 @@ function showP(id, btn) {
   if(id==="status")     loadSystemStatus();
   if(id==="suspicious") loadSuspicious();
   if(id==="joborders")  { colLoad(); }
-  if(id==="gpstrace")   gpsTraceLoad();
 }
 
 function showBread(text, backFn) {
@@ -9600,54 +9639,6 @@ async function nmUnlink(id){
   </div>
 </div>
 
-
-<!-- ══ GPS TRACING PANEL ══ -->
-<div id="panel-gpstrace" class="panel">
-<div class="w" style="padding:14px 16px 80px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-    <div style="font-size:16px;font-weight:800;color:#16a34a;">📍 GPS Tracing & Coverage</div>
-    <button onclick="gpsTraceLoad()" style="padding:7px 14px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>
-  </div>
-  <!-- Coverage summary -->
-  <div id="gps-summary" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;"></div>
-  <!-- Map -->
-  <div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
-    <div style="background:#1e293b;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      🗺 All Vendo Pins
-      <span id="gps-map-count" style="font-size:10px;font-weight:400;opacity:.6;"></span>
-      <div style="margin-left:auto;display:flex;gap:10px;font-size:10px;font-weight:400;">
-        <span>🟢 Updated &lt;30d</span><span>🟡 30–90d</span><span>🔴 &gt;90d / unknown</span>
-      </div>
-    </div>
-    <div id="gps-map" style="height:320px;width:100%;"></div>
-  </div>
-  <!-- Filters -->
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
-    <input id="gps-search" placeholder="🔍 Search vendo / owner..." oninput="gpsTraceFilter()" style="flex:1;min-width:160px;padding:8px 12px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;outline:none;">
-    <select id="gps-area" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
-      <option value="">All Areas</option>
-      <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-      <option>SINAMAN</option><option>ROXAS</option><option>POLANCO</option>
-      <option>MINAOG</option><option>MIX AREAS</option>
-    </select>
-    <select id="gps-status" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
-      <option value="">All Status</option>
-      <option value="missing">❌ Missing GPS</option>
-      <option value="old">🔴 Old (&gt;90d)</option>
-      <option value="aging">🟡 Aging (30-90d)</option>
-      <option value="fresh">🟢 Fresh (&lt;30d)</option>
-      <option value="nophoto">📷 No Photo</option>
-    </select>
-    <select id="gps-sort" onchange="gpsTraceFilter()" style="padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
-      <option value="oldest">Oldest GPS first</option>
-      <option value="newest">Newest GPS first</option>
-      <option value="name">Name A-Z</option>
-    </select>
-  </div>
-  <div id="gps-count" style="font-size:11px;color:#6b7280;margin-bottom:8px;"></div>
-  <div id="gps-list"></div>
-</div>
-</div>
 
 <!-- ══ SUSPICIOUS — TODO LIST ══ -->
 <div id="panel-suspicious" class="panel">
