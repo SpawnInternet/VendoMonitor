@@ -5363,6 +5363,12 @@ function gNavBack() {
   const navBtn = document.querySelector(`.nav-bar button[data-panel="${prev}"]`);
   showP(prev, navBtn);
 }
+function ahSourceBadge(routeCode) {
+  if (!routeCode) return '';
+  return '<span style="background:#e0f2fe;color:#0369a1;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px">' + routeCode + '</span>';
+}
+function cyclesLoad() { /* reserved */ }
+
 function gUpdateBackBtn(id) {
   const btn   = document.getElementById('g-back-btn');
   const label = document.getElementById('g-back-label');
@@ -5378,9 +5384,10 @@ function gUpdateBackBtn(id) {
 
 function showP(id, btn) {
   // Hide all fixed overlays when switching panels
-  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings'].forEach(function(oid){
+  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps'].forEach(function(oid){
     var oel=document.getElementById(oid); if(oel) oel.style.display='none';
   });
+  _navHistory = [];
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
   const panel = document.getElementById("panel-"+id);
@@ -6579,6 +6586,13 @@ async function openVendoDetail(vendo, area) {
   document.querySelector(".nav-bar button:nth-child(2)").classList.add("active");
   document.getElementById("view-vlist").style.display="none";
   document.getElementById("view-vtxns").style.display="block";
+  // Reset to Transactions tab (default)
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const txnTabBtn = document.querySelector('.tab-btn[onclick*="txns"]');
+  if(txnTabBtn) txnTabBtn.classList.add('active');
+  document.querySelectorAll('.vtab-panel').forEach(p=>p.style.display='none');
+  const txnPanel = document.getElementById('vtab-txns');
+  if(txnPanel) txnPanel.style.display='block';
   document.getElementById("vtxn-title").textContent=vendo;
   document.getElementById("vtxn-sub").textContent=area+" area";
   showBread(`Vendos → ${vendo}`, closeVendo);
