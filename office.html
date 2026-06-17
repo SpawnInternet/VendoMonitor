@@ -306,6 +306,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="detail-topbar">
     <button class="btn-back" onclick="goHome()">← Back</button>
     <div class="detail-col-name" id="detail-col-name"></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button id="col-prev-btn" onclick="navCollector(-1)" style="background:#f3f4f6;border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#374151">‹ Prev</button>
+      <button id="col-next-btn" onclick="navCollector(1)" style="background:#1e3cb8;border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff">Next ›</button>
+    </div>
   </div>
   <div class="detail-summary" id="detail-summary"></div>
   <div class="detail-content" id="detail-content"></div>
@@ -565,7 +569,22 @@ async function openCollector(collector){
   document.getElementById('detail-col-name').textContent='👤 '+collector;
   renderDetailSummary(harvests);
   document.getElementById('detail-content').innerHTML=renderExpenseCard(collector)+harvests.map(h=>renderVendo(h)).join('');
+  // Update prev/next button states
+  const collectors=[...new Set(allHarvests.map(h=>h.collector))].filter(Boolean).sort();
+  const idx=collectors.indexOf(collector);
+  const prevBtn=document.getElementById('col-prev-btn');
+  const nextBtn=document.getElementById('col-next-btn');
+  if(prevBtn) prevBtn.style.opacity=idx>0?'1':'0.3';
+  if(nextBtn) nextBtn.style.opacity=idx<collectors.length-1?'1':'0.3';
   showScreen('detail');
+}
+
+function navCollector(dir){
+  const collectors=[...new Set(allHarvests.map(h=>h.collector))].filter(Boolean).sort();
+  const idx=collectors.indexOf(activeCollector);
+  const next=collectors[idx+dir];
+  if(next) openCollector(next);
+  else toast(dir>0?'Last collector':'First collector');
 }
 
 async function openEodSummary(collector){
