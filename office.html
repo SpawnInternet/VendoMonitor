@@ -606,12 +606,18 @@ function renderDetailSummary(harvests){
   const collector=activeCollector||'';
   const totalExp=(expState[collector]||[]).reduce((s,e)=>s+e.amt,0);
   const netRemit=totalSpawn-totalExp;
+  const _diff=totalCounted-netRemit;
+  const _statusChip=totalCounted>0?(
+    _diff>0?'<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--green)">Surplus +₱'+fmt(_diff)+'</span></div>':
+    _diff<0?'<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--red)">Deficit −₱'+fmt(Math.abs(_diff))+'</span></div>':
+    '<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--teal)">Match ✓</span></div>'
+  ):'<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--muted)">—</span></div>';
   document.getElementById('detail-summary').innerHTML=`
     <div class="ds-chip"><span class="ds-lbl">Spawn Share</span><span class="ds-val" style="color:var(--green)">₱${fmt(totalSpawn)}</span></div>
-    ${totalExp>0?'<div class="ds-chip"><span class="ds-lbl" style="color:var(--red)">Expenses</span><span class="ds-val" style="color:var(--red)">−₱'+fmt(totalExp)+'</span></div>':''}
-    ${totalExp>0?'<div class="ds-chip"><span class="ds-lbl" style="color:var(--blue)">Net Remit</span><span class="ds-val" style="color:var(--blue);font-size:16px">₱'+fmt(netRemit)+'</span></div>':''}
-    ${totalCounted>0?'<div class="ds-chip"><span class="ds-lbl">Counted</span><span class="ds-val" style="color:var(--blue)">₱'+fmt(totalCounted)+'</span></div>':''}
-    ${(()=>{const diff=totalCounted-netRemit;if(totalCounted<=0)return '';if(diff>0)return '<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--green)">Surplus +₱'+fmt(diff)+'</span></div>';if(diff<0)return '<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--red)">Deficit −₱'+fmt(Math.abs(diff))+'</span></div>';return '<div class="ds-chip"><span class="ds-lbl">Status</span><span class="ds-val" style="color:var(--teal)">Match ✓</span></div>';})()}
+    <div class="ds-chip"><span class="ds-lbl" style="color:var(--red)">Expenses</span><span class="ds-val" style="color:${totalExp>0?'var(--red)':'var(--muted)'}">−₱${fmt(totalExp)}</span></div>
+    <div class="ds-chip"><span class="ds-lbl" style="color:var(--blue)">Net Remit</span><span class="ds-val" style="color:var(--blue);font-size:16px">₱${fmt(netRemit)}</span></div>
+    <div class="ds-chip"><span class="ds-lbl">Counted</span><span class="ds-val" style="color:${totalCounted>0?'var(--blue)':'var(--muted)'}">₱${fmt(totalCounted)}</span></div>
+    ${_statusChip}
     <div class="ds-chip"><span class="ds-lbl">Saved</span><span class="ds-val" style="color:var(--muted);font-size:13px">${saved}/${harvests.length}</span></div>
   `;
 }
