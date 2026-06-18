@@ -1213,10 +1213,75 @@ async function doReconcile(){
     toast('✅ Reconciled — '+d.collector+' ₱'+fmt(d.netRemit));
     // Refresh collector cards
     renderCollectorCards();
+    // Show receipt
+    showReconReceipt(d);
   } catch(e){
     toast('Error: '+e.message);
     btn.disabled=false; btn.textContent='✅ Reconcile & Confirm'; btn.classList.remove('done');
   }
+}
+
+// ── RECON RECEIPT ────────────────────────────────────────
+function showReconReceipt(d){
+  const now = new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const refNo = 'RC-'+d.collector.substring(0,2).toUpperCase()+'-'+Date.now().toString().slice(-6);
+  const hasExp = d.totalExp > 0;
+  const overlay = document.createElement('div');
+  overlay.id = 'recon-receipt-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:20px;width:100%;max-width:360px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#15803d,#16a34a);padding:20px 20px 16px;text-align:center;color:#fff">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.8;margin-bottom:4px">SPAWN INTERNETAN</div>
+        <div style="font-size:18px;font-weight:900">COLLECTION RECEIPT</div>
+        <div style="font-size:11px;opacity:.75;margin-top:4px">${now}</div>
+      </div>
+      <!-- Stamp -->
+      <div style="background:#f0fdf4;border-bottom:2px dashed #86efac;padding:14px;text-align:center">
+        <div style="display:inline-block;border:3px solid #15803d;border-radius:10px;padding:6px 20px">
+          <div style="font-size:20px;font-weight:900;color:#15803d;letter-spacing:.05em">✓ CLEARED</div>
+          <div style="font-size:11px;font-weight:700;color:#16a34a">NO SHORT · FULLY REMITTED</div>
+        </div>
+      </div>
+      <!-- Details -->
+      <div style="padding:16px 20px">
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#6b7280">Collector</span>
+          <span style="font-weight:800;color:#111">${d.collector}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#6b7280">Date</span>
+          <span style="font-weight:700;color:#111">${d.date}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#6b7280">Vendos</span>
+          <span style="font-weight:700;color:#111">${d.vendoCount} machine${d.vendoCount>1?'s':''}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#6b7280">Spawn Share</span>
+          <span style="font-weight:700;color:#111">₱${fmt(d.totalSpawn)}</span>
+        </div>
+        ${hasExp?`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#ef4444">Expenses</span>
+          <span style="font-weight:700;color:#ef4444">−₱${fmt(d.totalExp)}</span>
+        </div>`:''}
+        <div style="display:flex;justify-content:space-between;padding:10px 0 4px;font-size:15px">
+          <span style="font-weight:800;color:#1e3cb8">NET REMITTED</span>
+          <span style="font-weight:900;color:#1e3cb8">₱${fmt(d.netRemit)}</span>
+        </div>
+      </div>
+      <!-- Ref + Close -->
+      <div style="padding:0 20px 20px">
+        <div style="background:#f9fafb;border-radius:8px;padding:8px 12px;text-align:center;margin-bottom:12px">
+          <div style="font-size:10px;color:#9ca3af;font-weight:700">REFERENCE NO.</div>
+          <div style="font-size:13px;font-weight:800;color:#374151;letter-spacing:.05em">${refNo}</div>
+        </div>
+        <button onclick="document.getElementById('recon-receipt-overlay').remove()" style="width:100%;padding:13px;background:#1e3cb8;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
 }
 
 // ── INIT ─────────────────────────────────────────────────
