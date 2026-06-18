@@ -450,7 +450,7 @@ async function loadHome(){
     }
 
     // Load pack items
-    const p=await sbFetch(`harvest_pack_items?harvest_date=eq.${currentDate}&select=harvest_id,pack_type,amount`);
+    const p=await sbFetch(`harvest_pack_items?harvest_date=eq.${currentDate}&saved_by=eq.office&select=harvest_id,pack_type,amount`);
     if(Array.isArray(p)) p.forEach(pk=>{
       if(!packState[pk.harvest_id]) packState[pk.harvest_id]={mix:0,peso:0,bugi:0,bills:0};
       if(pk.pack_type==='mix')   packState[pk.harvest_id].mix  =(packState[pk.harvest_id].mix||0)+Number(pk.amount)/1000;
@@ -952,8 +952,8 @@ async function savePacks(hid){
   }
 
   try{
-    await sbDelete('harvest_pack_items?harvest_id=eq.'+hid);
-    const base={harvest_id:hid,vendo_id:h.vendo_id||null,collector:h.collector,harvest_date:currentDate,note:_packNote||null};
+    await sbDelete('harvest_pack_items?harvest_id=eq.'+hid+'&saved_by=eq.office');
+    const base={harvest_id:hid,vendo_id:h.vendo_id||null,collector:h.collector,harvest_date:currentDate,saved_by:'office',note:_packNote||null};
     const rows=[];
     if((ps.mix||0)>0)   rows.push({...base,pack_type:'mix',  amount:ps.mix*1000});
     if((ps.peso||0)>0)  rows.push({...base,pack_type:'peso', amount:ps.peso*300});
@@ -1083,7 +1083,7 @@ async function loadRecon(collector){
   try {
     const [hR, pR, eR, rR] = await Promise.all([
       sbFetch(`harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=id,vendo_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at`),
-      sbFetch(`harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=harvest_id,pack_type,amount`),
+      sbFetch(`harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&saved_by=eq.office&select=harvest_id,pack_type,amount`),
       sbFetch(`collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${date}&select=id,category,description,amount`),
       sbFetch(`harvest_reconciliations?collector=eq.${encodeURIComponent(collector)}&recon_date=eq.${date}&select=id,confirmed_at,confirmed_by&limit=1`)
     ]);
