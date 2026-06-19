@@ -857,17 +857,16 @@ function renderVendo(h){
         <div class="v-spawn">Spawn Share<span>₱${fmt(rec)}</span></div>
       </div>
     </div>
-    <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:14px 16px;margin-bottom:10px">
-      <div style="font-size:11px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">🎯 Target to Pack — ₱${fmt(rec)}${hasExp?` <span style="background:#fef9c3;color:#854d0e;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:6px">Net to Remit ₱${fmt(netTarget)} after expenses</span>`:''}</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 10px;margin-bottom:6px">
+      <div style="font-size:10px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">🎯 Target ₱${fmt(rec)}${hasExp?` · <span style="color:#854d0e">Net ₱${fmt(netTarget)}</span>`:''}</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
         ${targetPacksDetailed(h.id, rec)}
       </div>
     </div>
     <div class="vendo-body">
       <div class="pack-grid">
         <div class="pack-field">
-          <div class="pack-label mix">₱1,000 Pack</div>
-          <div class="pack-hint">Mix ₱5 · ₱10 · ₱20</div>
+          <div class="pack-label mix">₱1,000 Mix</div>
           <div class="pack-counter">
             <button class="pc-btn mix" onclick="adjPack(${h.id},'mix',-1)">−</button>
             <div class="pc-count" id="mix-cnt-${h.id}">${ps.mix||0}</div>
@@ -876,8 +875,7 @@ function renderVendo(h){
           </div>
         </div>
         <div class="pack-field">
-          <div class="pack-label peso">₱300 Pack</div>
-          <div class="pack-hint">All ₱1 coins</div>
+          <div class="pack-label peso">₱300 Peso</div>
           <div class="pack-counter">
             <button class="pc-btn peso" onclick="adjPack(${h.id},'peso',-1)">−</button>
             <div class="pc-count" id="peso-cnt-${h.id}">${ps.peso||0}</div>
@@ -886,28 +884,22 @@ function renderVendo(h){
           </div>
         </div>
         <div class="pack-field">
-          <div class="pack-label bugi">Bungkig (Remainder)</div>
-          <div class="pack-hint">Leftover coins &lt; ₱300 or ₱1,000</div>
+          <div class="pack-label bugi">Bungkig</div>
           <input class="amt-inp" id="bungkig-${h.id}" type="number" inputmode="decimal"
             value="${ps.bungkig||''}" placeholder="₱0" min="0"
             oninput="onAmt(${h.id},'bungkig')">
-          <div class="amt-lbl bugi" id="bungkig-lbl-${h.id}">${ps.bungkig?'₱'+fmt(ps.bungkig):''}</div>
         </div>
         <div class="pack-field">
-          <div class="pack-label" style="color:#b45309">Bugi (Old Coins)</div>
-          <div class="pack-hint">Old or worn coins</div>
+          <div class="pack-label" style="color:#b45309">Bugi (Old)</div>
           <input class="amt-inp" id="bugi-${h.id}" type="number" inputmode="decimal"
             value="${ps.bugi||''}" placeholder="₱0" min="0"
             oninput="onAmt(${h.id},'bugi')" style="border-color:#b45309">
-          <div class="amt-lbl" style="color:#b45309" id="bugi-lbl-${h.id}">${ps.bugi?'₱'+fmt(ps.bugi):''}</div>
         </div>
         <div class="pack-field">
-          <div class="pack-label bills">Cash / Bills</div>
-          <div class="pack-hint">Customer paid in bills</div>
+          <div class="pack-label bills">Cash/Bills</div>
           <input class="amt-inp" id="bills-${h.id}" type="number" inputmode="decimal"
             value="${ps.bills||''}" placeholder="₱0" min="0"
             oninput="onAmt(${h.id},'bills')">
-          <div class="amt-lbl bills" id="bills-lbl-${h.id}">${ps.bills?'₱'+fmt(ps.bills):''}</div>
         </div>
       </div>
       <div class="def-strip" id="defstrip-${h.id}">
@@ -957,24 +949,24 @@ function targetPacksDetailed(harvestId, spawnShare){
   if(hasPacks){
     const rows=[];
     if(ps.mix)  rows.push(`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
         <div><span style="font-size:18px;font-weight:900;color:#1e3cb8">${ps.mix}</span>
         <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${ps.mix>1?'s':''} of ₱1,000</span></div>
         <span style="font-size:15px;font-weight:900;color:#1e3cb8">₱${fmt(ps.mix*1000)}</span>
       </div>`);
     if(ps.peso) rows.push(`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
         <div><span style="font-size:18px;font-weight:900;color:#7c3aed">${ps.peso}</span>
         <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${ps.peso>1?'s':''} of ₱300</span></div>
-        <span style="font-size:15px;font-weight:900;color:#7c3aed">₱${fmt(ps.peso*300)}</span>
+        <span style="font-size:13px;font-weight:900;color:#7B4FA6">₱${fmt(ps.peso*300)}</span>
       </div>`);
     if(ps.bugi) rows.push(`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
-        <div><span style="font-size:13px;font-weight:700;color:#374151">Bugi (loose coins)</span></div>
-        <span style="font-size:15px;font-weight:900;color:#0d9488">₱${ps.bugi}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
+        <div><span style="font-size:13px;font-weight:700;color:#374151">Bungkig</span></div>
+        <span style="font-size:13px;font-weight:900;color:#2BA89A">₱${ps.bugi}</span>
       </div>`);
     if(ps.bills) rows.push(`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8f0;border-radius:8px;padding:8px 12px;border:1px solid #fed7aa">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8f0;border-radius:7px;padding:5px 10px;border:1px solid #fed7aa">
         <div><span style="font-size:13px;font-weight:700;color:#374151">Cash / Bills</span>
         <div style="font-size:10px;color:#9ca3af">Customer paid in bills</div></div>
         <span style="font-size:15px;font-weight:900;color:#d97706">₱${fmt(ps.bills)}</span>
@@ -993,39 +985,32 @@ function suggestPacksDetailed(spawnShare){
   const bugi=rem-(peso*300);
   const rows=[];
   if(mix) rows.push(`
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
       <div>
-        <span style="font-size:18px;font-weight:900;color:#1e3cb8">${mix}</span>
+        <span style="font-size:15px;font-weight:900;color:#3B6FD4">${mix}</span>
         <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${mix>1?'s':''} of ₱1,000</span>
       </div>
-      <span style="font-size:15px;font-weight:900;color:#1e3cb8">₱${fmt(mix*1000)}</span>
+      <span style="font-size:13px;font-weight:900;color:#3B6FD4">₱${fmt(mix*1000)}</span>
     </div>`);
   if(peso) rows.push(`
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
       <div>
-        <span style="font-size:18px;font-weight:900;color:#7c3aed">${peso}</span>
+        <span style="font-size:15px;font-weight:900;color:#7B4FA6">${peso}</span>
         <span style="font-size:13px;font-weight:700;color:#374151;margin-left:4px">pack${peso>1?'s':''} of ₱300</span>
       </div>
-      <span style="font-size:15px;font-weight:900;color:#7c3aed">₱${fmt(peso*300)}</span>
+      <span style="font-size:13px;font-weight:900;color:#7B4FA6">₱${fmt(peso*300)}</span>
     </div>`);
   if(bugi) rows.push(`
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:8px 12px;border:1px solid #86efac">
+    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:7px;padding:5px 10px;border:1px solid #86efac">
       <div>
-        <span style="font-size:13px;font-weight:700;color:#374151">Bugi (loose coins)</span>
+        <span style="font-size:13px;font-weight:700;color:#374151">Bungkig</span>
       </div>
-      <span style="font-size:15px;font-weight:900;color:#0d9488">₱${bugi}</span>
+      <span style="font-size:13px;font-weight:900;color:#2BA89A">₱${bugi}</span>
     </div>`);
   // Bills are separate — show if any
   // (bills come from packState, not from suggested breakdown)
   // Add a bills row placeholder so counter knows to check
-  rows.push(`
-    <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8f0;border-radius:8px;padding:8px 12px;border:1px solid #fed7aa">
-      <div>
-        <span style="font-size:13px;font-weight:700;color:#374151">Cash / Bills</span>
-        <div style="font-size:10px;color:#9ca3af">Customer paid in bills — enter exact amount</div>
-      </div>
-      <span style="font-size:13px;font-weight:700;color:#d97706">+ any bills</span>
-    </div>`);
+  // bills entered separately in pack grid
   if(!rows.length) rows.push(`<div style="font-size:13px;color:#9ca3af;text-align:center">No packs needed</div>`);
   return rows.join('');
 }
