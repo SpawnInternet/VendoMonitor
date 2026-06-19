@@ -492,7 +492,7 @@ async function htLoad(){
         if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
         if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
         htFilter();
-        loadTodaySummary();
+        loadTodaySummary(true);
         if(age > 60*60*1000) htRebuildCache();
         return;
       }
@@ -546,13 +546,20 @@ async function htLoad(){
     collectors.forEach(c=>{ rcSel.innerHTML += `<option>${c}</option>`; });
   }
   htFilter();
-  loadTodaySummary();
+  loadTodaySummary(true);
 }
 
-async function loadTodaySummary(){
+let _todaySummaryLoading = false;
+let _todaySummaryLoaded = false;
+async function loadTodaySummary(force){
   const el = document.getElementById('harvest-collector-summary');
   if(!el) return;
-  el.innerHTML = '<div style="font-size:11px;color:var(--mu);padding:4px 0">Loading today…</div>';
+  // Prevent concurrent/duplicate runs that cause the flash + unclickable cards
+  if(_todaySummaryLoading) return;
+  // If already loaded and not forcing, skip re-render (avoids blink)
+  if(_todaySummaryLoaded && !force && el.querySelector('[onclick^="htShowCollectorPopup"]')) return;
+  _todaySummaryLoading = true;
+  if(!_todaySummaryLoaded) el.innerHTML = '<div style="font-size:11px;color:var(--mu);padding:4px 0"><span style="display:inline-block;width:14px;height:14px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px;"></span>Loading today…</div>';
   try {
     const today = new Date().toISOString().slice(0,10);
     const r = await fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${today}&select=id,collector,vendo_name,sheet_name,tg_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,collector_note,photo_url&order=harvested_at.asc`,{headers:_HDR});
@@ -585,7 +592,7 @@ async function loadTodaySummary(){
           <div style="display:flex;gap:10px;align-items:center;">
             <span style="font-size:11px;color:var(--mu);">${totalCount} vendos</span>
             <span style="font-size:14px;font-weight:700;color:#15803d;">${_php(totalSpawn)} spawn share</span>
-            <button onclick="loadTodaySummary()" style="padding:2px 8px;border:1px solid var(--bd);border-radius:5px;background:#fff;font-size:11px;cursor:pointer;color:var(--mu)">↻</button>
+            <button onclick="loadTodaySummary(true)" style="padding:2px 8px;border:1px solid var(--bd);border-radius:5px;background:#fff;font-size:11px;cursor:pointer;color:var(--mu)">↻</button>
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -600,8 +607,11 @@ async function loadTodaySummary(){
             </div>`).join('')}
         </div>
       </div>`;
+    _todaySummaryLoaded = true;
   } catch(e){
     el.innerHTML = '<div style="font-size:11px;color:#dc2626;padding:4px 0">Error loading today summary</div>';
+  } finally {
+    _todaySummaryLoading = false;
   }
 }
 
