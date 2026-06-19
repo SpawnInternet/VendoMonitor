@@ -939,13 +939,17 @@ function renderVendo(h){
 function defStripHtml(hid,rec,cnt,isSaved,netTarget){
   const target=netTarget!==undefined?netTarget:rec;
   const gap=cnt>0?cnt-target:null;
+  const ps=packState[hid]||{};
+  const bugi=ps.bugi||0;
   let chips='';
   if(cnt>0){
-    chips+=`<span class="dchip spawn">Target ₱${fmt(target)}</span>`;
+    const _gc=gap===0?'var(--spawn-teal)':gap>0?'#F5A623':'var(--red)';
+    const _gl=gap===0?'✓ Match':gap>0?`+₱${fmt(gap)} Surplus`:`-₱${fmt(Math.abs(gap))} Deficit`;
     chips+=`<span class="dchip counted">Counted ₱${fmt(cnt)}</span>`;
-
+    chips+=`<span class="dchip" style="background:#f3f4f6;color:${_gc};font-weight:800">${_gl}</span>`;
+    if(bugi>0) chips+=`<span class="dchip" style="background:#FEF7E8;color:#b45309;font-weight:700">Bugi −₱${fmt(bugi)}</span>`;
   } else {
-    chips+=`<span class="dchip pending">Not counted yet</span>`;
+    chips+=`<span class="dchip pending">⏳ Pending</span>`;
   }
   chips+=`<button class="btn-save ${isSaved?'saved':''}" id="btnsave-${hid}" onclick="savePacks(${hid})">${isSaved?'✓ Saved':'Save'}</button>`;
   return chips;
@@ -953,7 +957,8 @@ function defStripHtml(hid,rec,cnt,isSaved,netTarget){
 
 // ── PACK INTERACTIONS ────────────────────────────────────
 function calcCounted(ps){
-  return ((ps.mix||0)*1000)+((ps.peso||0)*300)+(ps.bungkig||0)+(ps.bugi||0)+(ps.bills||0);
+  // Bugi (old coins) excluded — deducted separately, not part of spawn share match
+  return ((ps.mix||0)*1000)+((ps.peso||0)*300)+(ps.bungkig||0)+(ps.bills||0);
 }
 
 function suggestPacks(spawnShare){
