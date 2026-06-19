@@ -2646,25 +2646,52 @@ function closeCalc(){ document.getElementById('calc-overlay').style.display='non
 function calcRender(){
   const disp = document.getElementById('calc-display');
   const exprEl = document.getElementById('calc-expr');
-  if(exprEl) exprEl.innerHTML = _calcExpr ? _calcExpr.replace(/\+/g,' + ').replace(/-/g,' − ') : '&nbsp;';
+  if(exprEl) exprEl.innerHTML = _calcExpr
+    ? _calcExpr.replace(/\*/g,' × ').replace(/\//g,' ÷ ').replace(/\+/g,' + ').replace(/-/g,' − ')
+    : '&nbsp;';
   // Show live running result, or the last number if no operator yet
   let shown = '0';
   try{
-    const safe = _calcExpr.replace(/[^0-9+\-]/g,'');
-    if(safe && /[0-9]$/.test(safe)){ shown = String(_calcSafeEval(safe)); }
-    else if(safe){ shown = safe.replace(/[+\-]$/,'')||'0'; }
+    const safe = _calcExpr.replace(/[+\-*/]$/,''); // drop trailing operator
+    if(safe){ const r = _calcSafeEval(safe); shown = (r===null) ? '0' : String(r); }
   }catch(e){ shown='0'; }
   if(disp) disp.textContent = shown;
 }
 function _calcSafeEval(expr){
-  // Evaluate simple +/- chains without eval()
-  const tokens = expr.match(/[+\-]?\d+/g) || [];
-  return tokens.reduce((sum,t)=>sum+(parseInt(t,10)||0), 0);
+  // Evaluate +,-,*,/ with correct operator precedence, no eval()
+  if(!expr || !/[0-9]/.test(expr)) return null;
+  if(/[+\-*/]$/.test(expr)) return null; // dangling operator
+  // Tokenize numbers and operators
+  const tokens = expr.match(/(\d+\.?\d*)|[+\-*/]/g);
+  if(!tokens) return null;
+  // First pass: resolve * and /
+  const pass1 = [];
+  for(let i=0;i<tokens.length;i++){
+    const t = tokens[i];
+    if(t==='*'||t==='/'){
+      const prev = parseFloat(pass1.pop());
+      const next = parseFloat(tokens[++i]);
+      if(isNaN(prev)||isNaN(next)) return null;
+      pass1.push(t==='*' ? prev*next : (next===0 ? 0 : prev/next));
+    } else {
+      pass1.push(t);
+    }
+  }
+  // Second pass: resolve + and -
+  let result = parseFloat(pass1[0]);
+  if(isNaN(result)) return null;
+  for(let i=1;i<pass1.length;i+=2){
+    const op = pass1[i];
+    const val = parseFloat(pass1[i+1]);
+    if(isNaN(val)) return null;
+    result = op==='+' ? result+val : result-val;
+  }
+  return Math.round(result*100)/100; // 2-decimal precision
 }
 function calcInput(ch){
-  if(ch==='+'||ch==='-'){
-    if(!_calcExpr) { if(ch==='-') _calcExpr='-'; return; } // allow leading minus only
-    if(/[+\-]$/.test(_calcExpr)) _calcExpr = _calcExpr.slice(0,-1)+ch; // replace trailing operator
+  if(ch==='+'||ch==='-'||ch==='*'||ch==='/'){
+    if(!_calcExpr){ if(ch==='-') _calcExpr='-'; return; } // allow leading minus only
+    if(/[+\-*/]$/.test(_calcExpr)) _calcExpr = _calcExpr.slice(0,-1)+ch; // replace trailing operator
     else _calcExpr += ch;
   } else {
     _calcExpr += ch;
@@ -2674,15 +2701,17 @@ function calcInput(ch){
 function calcBackspace(){ _calcExpr = _calcExpr.slice(0,-1); calcRender(); }
 function calcClear(){ _calcExpr=''; calcRender(); }
 function calcEquals(){
-  const safe = _calcExpr.replace(/[+\-]$/,'');
+  const safe = _calcExpr.replace(/[+\-*/]$/,'');
   if(!safe){ return; }
   const result = _calcSafeEval(safe);
+  if(result===null) return;
   _calcExpr = String(result);
   calcRender();
 }
 function calcConfirm(){
-  const safe = _calcExpr.replace(/[+\-]$/,'');
-  const result = safe ? _calcSafeEval(safe) : 0;
+  const safe = _calcExpr.replace(/[+\-*/]$/,'');
+  const r = safe ? _calcSafeEval(safe) : 0;
+  const result = (r===null) ? 0 : r;
   const inp = document.getElementById('coin-total-inp');
   if(inp){ inp.value = result>0 ? String(result) : ''; }
   calcNet();
@@ -4921,25 +4950,28 @@ async function submitEodSession(){
       <div style="padding:14px 16px 8px">
         <div id="calc-expr" style="min-height:20px;font-size:13px;color:#9ca3af;text-align:right;word-break:break-all;font-family:inherit">&nbsp;</div>
         <div id="calc-display" style="font-size:34px;font-weight:900;color:#1e293b;text-align:right;padding:4px 0 10px;border-bottom:2px solid #e5e7eb;min-height:44px">0</div>
-        <div style="font-size:11px;color:#64748b;text-align:center;margin-top:6px">Add up your coin counts, then Confirm</div>
+        <div style="font-size:11px;color:#64748b;text-align:center;margin-top:6px">Compute your coin counts (+ − × ÷), then Confirm</div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:12px 16px">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:12px 16px">
         <button type="button" onclick="calcInput('7')" class="calc-btn">7</button>
         <button type="button" onclick="calcInput('8')" class="calc-btn">8</button>
         <button type="button" onclick="calcInput('9')" class="calc-btn">9</button>
+        <button type="button" onclick="calcInput('/')" class="calc-btn" style="background:#ede9fe;color:#7c3aed;font-size:24px">÷</button>
         <button type="button" onclick="calcClear()" class="calc-btn" style="background:#fee2e2;color:#dc2626">C</button>
         <button type="button" onclick="calcInput('4')" class="calc-btn">4</button>
         <button type="button" onclick="calcInput('5')" class="calc-btn">5</button>
         <button type="button" onclick="calcInput('6')" class="calc-btn">6</button>
+        <button type="button" onclick="calcInput('*')" class="calc-btn" style="background:#ede9fe;color:#7c3aed;font-size:24px">×</button>
         <button type="button" onclick="calcBackspace()" class="calc-btn" style="background:#f1f5f9">⌫</button>
         <button type="button" onclick="calcInput('1')" class="calc-btn">1</button>
         <button type="button" onclick="calcInput('2')" class="calc-btn">2</button>
         <button type="button" onclick="calcInput('3')" class="calc-btn">3</button>
+        <button type="button" onclick="calcInput('-')" class="calc-btn" style="background:#fef3c7;color:#b45309;font-size:24px">−</button>
         <button type="button" onclick="calcInput('+')" class="calc-btn" style="background:#dbeafe;color:#2B7BE8;font-size:24px">+</button>
         <button type="button" onclick="calcInput('0')" class="calc-btn">0</button>
         <button type="button" onclick="calcInput('00')" class="calc-btn">00</button>
-        <button type="button" onclick="calcEquals()" class="calc-btn" style="background:#dcfce7;color:#16a34a;font-size:24px">=</button>
-        <button type="button" onclick="calcInput('-')" class="calc-btn" style="background:#fef3c7;color:#b45309;font-size:24px">−</button>
+        <button type="button" onclick="calcInput('.')" class="calc-btn">.</button>
+        <button type="button" onclick="calcEquals()" class="calc-btn" style="grid-column:span 2;background:#dcfce7;color:#16a34a;font-size:24px">=</button>
       </div>
       <div style="padding:0 16px 16px">
         <button type="button" onclick="calcConfirm()" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer">✓ Confirm — use this total</button>
