@@ -849,7 +849,7 @@ function renderVendo(h){
   <div class="vendo-block ${savedSet.has(h.id)?'done':''}" id="vblock-${h.id}">
     <div class="vendo-hd">
       <div class="vhd-left">
-        <div class="vname">${vcode?`<span style="background:var(--blue-light);color:var(--blue);font-size:10px;font-weight:800;padding:2px 7px;border-radius:5px;margin-right:5px;letter-spacing:.03em">${vcode}</span>`:''} ${name}</div>
+        <div class="vname">${vcode?`<span style="background:var(--spawn-blue);color:#fff;font-size:13px;font-weight:900;padding:3px 10px;border-radius:6px;margin-right:7px;letter-spacing:.06em">${vcode}</span>`:''} ${name}</div>
         <div class="varea">${h.area||'—'}</div>
       </div>
       <div class="vhd-right">
@@ -901,6 +901,12 @@ function renderVendo(h){
             value="${ps.bills||''}" placeholder="₱0" min="0"
             oninput="onAmt(${h.id},'bills')">
         </div>
+      </div>
+      <div style="margin-top:6px">
+        <textarea id="packnote-${h.id}" rows="2" placeholder="📝 Note (optional)..."
+          style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:inherit;resize:none;outline:none;color:var(--text);background:#fff"
+          onfocus="this.style.borderColor='var(--spawn-blue)'" onblur="this.style.borderColor='var(--border)'"
+        >${h._officeNote||''}</textarea>
       </div>
       <div class="def-strip" id="defstrip-${h.id}">
         ${defStripHtml(h.id,rec,cnt,isSaved,netTarget)}
@@ -1074,7 +1080,8 @@ async function savePacks(hid){
   const _totalExp=_collExp.reduce((s,e)=>s+e.amt,0);
   const _netTarget=Math.max(0,_rec-_totalExp);
   const _cnt=calcCounted(ps);
-  let _packNote='';
+  // Always read the note textarea first
+  let _packNote=(document.getElementById('packnote-'+hid)||{}).value||'';
   if(_cnt>0 && _cnt!==_netTarget){
     const _gap=_cnt-_netTarget;
     const _type=_gap>0?'surplus':'deficit';
@@ -1083,7 +1090,7 @@ async function savePacks(hid){
       if(btn){btn.disabled=false;btn.textContent='Save';btn.classList.remove('saved');}
       return;
     }
-    if(typeof _result==='string') _packNote=_result;
+    if(typeof _result==='string') _packNote=(_packNote?_packNote+'\n':'')+_result;
   }
 
   try{
