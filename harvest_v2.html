@@ -957,7 +957,7 @@ async function loadPermGroups(forceRefresh=false){
   }
   const cached = localStorage.getItem('perm_groups');
   const cachedAge = parseInt(localStorage.getItem('perm_groups_ts')||'0');
-  if(!forceRefresh && cached && (Date.now()-cachedAge < 6*3600*1000)){
+  if(!forceRefresh && cached && (Date.now()-cachedAge < 24*3600*1000)){ // 24h — survives full offline day
     _permGroups = JSON.parse(cached);
     return _permGroups;
   }
@@ -1471,12 +1471,11 @@ async function startGroup(groupId){
   const CACHE_TS_KEY = 'grp_cache_ts_'+groupId;
   const cachedRaw = localStorage.getItem(CACHE_KEY);
   const cachedTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
-  const CACHE_TTL = 1*3600*1000; // 1 hour — ensures GPS updates reflect quickly
+  const CACHE_TTL = 12*3600*1000; // 12 hours — safe for full-day offline harvesting
   const _cachedParsed = cachedRaw ? JSON.parse(cachedRaw) : null;
   const cacheHit = _cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0 && (Date.now()-cachedTs < CACHE_TTL);
-  // Bust cache if pending items are missing GPS (GPS may have been captured since cache was built)
-  const _noGpsPending = cacheHit && _cachedParsed.items.filter(i=>i.status!=='harvested'&&(!i.lat||!i.lng)).length > 0;
-  const _effectiveCacheHit = cacheHit && !_noGpsPending;
+  // GPS refreshed silently in background — no cache bust needed
+  const _effectiveCacheHit = cacheHit;
 
   if(_effectiveCacheHit){
     // Serve from cache instantly — no network needed
