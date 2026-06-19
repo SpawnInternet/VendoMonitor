@@ -1295,15 +1295,32 @@ async function pinLoadCollectors(){
       <button style="padding:10px 20px;border-radius:22px;border:2px solid #e0e4f0;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#1e2d5a;transition:.15s" class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">${c.name}</button>`
     ).join('');
   };
-  render(FALLBACK);
-  _pinCollectors=FALLBACK;
+  // Seed from cached collectors (with PINs) so offline re-login works after app close
+  let _seeded=false;
+  try{
+    const cachedRaw=localStorage.getItem('spawn_collectors_cache');
+    if(cachedRaw){
+      const cachedList=JSON.parse(cachedRaw);
+      if(Array.isArray(cachedList)&&cachedList.length){
+        _pinCollectors=cachedList;
+        render(cachedList);
+        _pinDbReady=true; // cached PINs allow offline validation
+        _seeded=true;
+      }
+    }
+  }catch(e){}
+  if(!_seeded){ render(FALLBACK); _pinCollectors=FALLBACK; }
+  // Refresh from DB when online
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),5000);
     const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR,signal:ctrl.signal});
     clearTimeout(tid);
     const data=await r.json();
-    if(Array.isArray(data)&&data.length){ _pinCollectors=data; render(data); _pinDbReady=true; }
+    if(Array.isArray(data)&&data.length){
+      _pinCollectors=data; render(data); _pinDbReady=true;
+      try{ localStorage.setItem('spawn_collectors_cache', JSON.stringify(data)); }catch(e){}
+    }
   }catch(e){}
 }
 
@@ -1353,6 +1370,33 @@ async function pinSubmit(){
   // Wait for DB collectors to load if not ready yet
   if(!_pinDbReady){
     await new Promise(r=>setTimeout(r,800));
+  }
+
+  // ── Offline: validate directly against cached collectors (no network) ──
+  if(!navigator.onLine){
+    const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&String(c.pin)===String(pin));
+    if(cached){
+      selectedCollector=cached.name;
+      selectedTeam=cached.team||(cached.name==='Tandoy'?'TeamB':'TeamA');
+      document.getElementById('topbar-sub').textContent=cached.name;
+      document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
+      sessionStorage.setItem('col_id', cached.id||'');
+      sessionStorage.setItem('col_name', cached.name||'');
+      sessionStorage.setItem('col_pin', pin);
+      localStorage.setItem('spawn_collector_name', cached.name||'');
+      const _today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+      localStorage.setItem('spawn_last_active_date', _today);
+      showHomeScreen();
+      return;
+    }
+    // No cached PIN match — give a clear offline message
+    const hasCache=_pinCollectors.some(c=>c.pin!==undefined);
+    errEl.textContent=hasCache?'❌ Wrong PIN — try again':'📴 Offline — connect once to enable offline login';
+    if(errEl){errEl.style.display='';errEl.style.animation='none';void errEl.offsetWidth;errEl.style.animation='shake .4s ease';}
+    if(btn){btn.disabled=false; btn.textContent='Login →';}
+    document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
+    pinCheckReady();
+    return;
   }
 
   // Validate against DB with timeout
