@@ -2426,12 +2426,15 @@ async function loadHarvests() {
   const _vcScroll = document.getElementById('vc-scroll');
   if (_vcScroll) _vcScroll.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);font-size:12px;">Loading vendos…</div>';
 
+  // Clear stale harvest summary IMMEDIATELY (synchronously) to prevent flash-of-old-content
+  const _hsum = document.getElementById('harvest-collector-summary');
+  if (_hsum) _hsum.innerHTML = '<div style="padding:16px;text-align:center;color:var(--mu);font-size:12px;"><span style="display:inline-block;width:16px;height:16px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading harvest summary…</div>';
+
+  // Run both loads in parallel — no artificial delay (was causing 800ms stale flash)
   setTimeout(() => {
     if (typeof htLoad === 'function') htLoad();
-    setTimeout(() => {
-      if (typeof harvestTabLoad === 'function') harvestTabLoad();
-    }, 800);
-  }, 50);
+    if (typeof harvestTabLoad === 'function') harvestTabLoad();
+  }, 30);
 }
 
 function renderHarvests(rows){ }
