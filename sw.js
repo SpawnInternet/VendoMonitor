@@ -1,5 +1,6 @@
-// sw.js — Spawn Harvest PWA Service Worker v11.0
-const CACHE = 'spawn-harvest-v12.0';
+// sw.js — Spawn Harvest PWA Service Worker v13.0
+const CACHE = 'spawn-harvest-v13.0';
+const APP_HTML = '/VendoMonitor/harvest_v2.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v2.html',
   '/VendoMonitor/manifest.json',
@@ -9,7 +10,7 @@ const APP_SHELL = [
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE).then(cache => cache.addAll(APP_SHELL).catch(()=>{}))
   );
 });
 
@@ -22,13 +23,41 @@ self.addEventListener('activate', e => {
   );
 });
 
-// ── FETCH: network first, cache fallback ─────────────────────────
+// ── Helper: serve the app HTML from cache, ignoring query strings ──
+async function serveAppHtml(request) {
+  const cache = await caches.open(CACHE);
+  // Try exact, then ignore query string, then the canonical app HTML
+  let hit = await cache.match(request, { ignoreSearch: true });
+  if (hit) return hit;
+  hit = await cache.match(APP_HTML, { ignoreSearch: true });
+  if (hit) return hit;
+  // Last resort: try network
+  try { return await fetch(request); }
+  catch (e) { return new Response('Offline — please reconnect once to install the app.', {status:503, headers:{'Content-Type':'text/html'}}); }
+}
+
+// ── FETCH ─────────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
+  const req = e.request;
+  const url = new URL(req.url);
+
+  // Navigation requests (opening/reopening the app) — cache-first for reliability offline
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(response => {
+        if (response && response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE).then(cache => cache.put(APP_HTML, clone)).catch(()=>{});
+        }
+        return response;
+      }).catch(() => serveAppHtml(req))
+    );
+    return;
+  }
 
   // Supabase API & Storage — network only, no caching
   if (url.hostname.includes('supabase.co')) {
-    e.respondWith(fetch(e.request).catch(() =>
+    e.respondWith(fetch(req).catch(() =>
       new Response(JSON.stringify({error:'offline'}), {
         status: 503,
         headers: {'Content-Type':'application/json'}
@@ -37,24 +66,26 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // External — network only
+  // External (non-app) — network only
   if (!url.hostname.includes('spawninternet.github.io') &&
       !url.hostname.includes('localhost') &&
       !url.pathname.includes('VendoMonitor')) {
-    e.respondWith(fetch(e.request).catch(() => new Response('Offline', {status:503})));
+    e.respondWith(fetch(req).catch(() => new Response('Offline', {status:503})));
     return;
   }
 
-  // App — always network first to get latest version
+  // App assets — network first, cache fallback (ignoreSearch so query-string busts still resolve)
   e.respondWith(
-    fetch(e.request).then(response => {
+    fetch(req).then(response => {
       if (response && response.status === 200) {
         const clone = response.clone();
-        caches.open(CACHE).then(cache => cache.put(e.request, clone));
+        caches.open(CACHE).then(cache => cache.put(req, clone)).catch(()=>{});
       }
       return response;
     }).catch(() =>
-      caches.match(e.request)
+      caches.match(req, { ignoreSearch: true }).then(hit =>
+        hit || caches.match(APP_HTML, { ignoreSearch: true })
+      )
     )
   );
 });
