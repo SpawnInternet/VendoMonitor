@@ -1,5 +1,5 @@
-// sw.js — Spawn Harvest PWA Service Worker v13.0
-const CACHE = 'spawn-harvest-v13.0';
+// sw.js — Spawn Harvest PWA Service Worker v14.0
+const CACHE = 'spawn-harvest-v14.0';
 const APP_HTML = '/VendoMonitor/harvest_v2.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v2.html',
@@ -21,6 +21,11 @@ self.addEventListener('activate', e => {
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
+});
+
+// ── MESSAGE: allow page to trigger immediate activation ───────────
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 // ── Helper: serve the app HTML from cache, ignoring query strings ──
