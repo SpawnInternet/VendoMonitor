@@ -739,7 +739,9 @@ function renderDetailSummary(harvests){
   const collector=activeCollector||'';
   const totalExp=(expState[collector]||[]).reduce((s,e)=>s+e.amt,0);
   const netRemit=totalSpawn-totalExp;
-  const _gap=totalCounted>0?totalCounted-netRemit:null;
+  const totalBugi=harvests.reduce((s,h)=>{ const ps=packState[h.id]; return s+(ps?Number(ps.bugi||0):0); },0);
+  const netRemitActual=netRemit-totalBugi;
+  const _gap=totalCounted>0?totalCounted-netRemitActual:null;
   const _sc=_gap===null?'var(--muted)':_gap===0?'var(--spawn-teal)':_gap>0?'#F5A623':'var(--red)';
   const _st=_gap===null?'⏳ Pending':_gap===0?'✓ Match':_gap>0?`+₱${fmt(_gap)} Surplus`:`-₱${fmt(Math.abs(_gap))} Deficit`;
   document.getElementById('detail-summary').innerHTML=`
@@ -1120,18 +1122,15 @@ async function savePacks(hid){
   const btn=document.getElementById('btnsave-'+hid);
   if(btn){btn.disabled=true;btn.textContent='…';}
 
-  // Check deficit/surplus vs netTarget (spawn share minus expenses)
+  // Match per vendo = counted vs spawn share only (expenses/bugi handled at collector level)
   const _rec=Number(h.spawn_share||0);
-  const _collExp=expState[h.collector]||[];
-  const _totalExp=_collExp.reduce((s,e)=>s+e.amt,0);
-  const _netTarget=Math.max(0,_rec-_totalExp);
   const _cnt=calcCounted(ps);
   // Always read the note textarea first
   let _packNote=(document.getElementById('packnote-'+hid)||{}).value||'';
-  if(_cnt>0 && _cnt!==_netTarget){
-    const _gap=_cnt-_netTarget;
+  if(_cnt>0 && _cnt!==_rec){
+    const _gap=_cnt-_rec;
     const _type=_gap>0?'surplus':'deficit';
-    const _result = await showModal(_type,_gap,_cnt,_netTarget,_collExp);
+    const _result = await showModal(_type,_gap,_cnt,_rec,[]);
     if(_result===false){
       if(btn){btn.disabled=false;btn.textContent='Save';btn.classList.remove('saved');}
       return;
