@@ -3968,8 +3968,25 @@ function updateEodPinDisplay(){
   }
 }
 async function checkEodPin(){
-  const stored = sessionStorage.getItem('col_pin')||'0000';
-  if(_eodPin !== stored){
+  // First try cached PIN (fast path)
+  const stored = sessionStorage.getItem('col_pin');
+  let valid = stored && _eodPin === stored;
+  // If no cached PIN (session expired) or mismatch, validate against DB live
+  if(!valid){
+    try{
+      const colName = selectedCollector || sessionStorage.getItem('col_name') || localStorage.getItem('spawn_collector_name') || '';
+      if(colName){
+        const r = await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(colName)}&select=pin&limit=1`,{headers:HDR});
+        const rows = await r.json();
+        if(Array.isArray(rows) && rows.length && String(rows[0].pin) === _eodPin){
+          valid = true;
+          // refresh the cache for next time
+          sessionStorage.setItem('col_pin', _eodPin);
+        }
+      }
+    }catch(e){ console.error('[EOD] PIN DB check failed:', e); }
+  }
+  if(!valid){
     document.getElementById('eod-pin-error').style.display = 'block';
     _eodPin = '';
     updateEodPinDisplay();
