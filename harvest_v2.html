@@ -442,7 +442,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <div style="text-align:center;padding-top:4px">
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.0</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.1</div>
     </div>
 
   </div>
@@ -1208,9 +1208,17 @@ updateOnline();
 // Register service worker for offline support
 if('serviceWorker' in navigator){
   let _swReloading = false;
-  // When a new SW takes control, reload once so the new version is active immediately
+  window._swPendingReload = false;
+  // When a new SW takes control, reload — but never interrupt active data entry
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
     if(_swReloading) return;
+    const _active = document.querySelector('.screen.active');
+    const _onForm = _active && (_active.id==='screen-form' || _active.id==='screen-camera');
+    const _sheetOpen = document.querySelector('.confirm-overlay.show, #collection-sheet-overlay.show');
+    if(_onForm || _sheetOpen){
+      window._swPendingReload = true; // reload later when safely off the form
+      return;
+    }
     _swReloading = true;
     window.location.reload();
   });
@@ -1243,12 +1251,23 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.0';
+const APP_VERSION = 'v10.1';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
-  showScreen('screen-collector');
   pinLoadCollectors();
+
+  // Restore session if collector was already logged in before a reload (e.g. SW update)
+  const _savedName = sessionStorage.getItem('col_name');
+  const _savedTeam = sessionStorage.getItem('col_team');
+  if(_savedName){
+    selectedCollector = _savedName;
+    selectedTeam = _savedTeam || (_savedName==='Tandoy'?'TeamB':'TeamA');
+    document.getElementById('topbar-sub').textContent = _savedName;
+    showHomeScreen();
+  } else {
+    showScreen('screen-collector');
+  }
 
   // Clear ALL stale data from previous app versions
   const savedVersion = localStorage.getItem('harvest_app_version');
@@ -1409,6 +1428,7 @@ async function pinSubmit(){
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       sessionStorage.setItem('col_id', cached.id||'');
       sessionStorage.setItem('col_name', cached.name||'');
+      sessionStorage.setItem('col_team', selectedTeam||'');
       sessionStorage.setItem('col_pin', pin);
       localStorage.setItem('spawn_collector_name', cached.name||'');
       const _today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
@@ -1450,6 +1470,7 @@ async function pinSubmit(){
     document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
     sessionStorage.setItem('col_id', collector.id||'');
     sessionStorage.setItem('col_name', collector.name||'');
+    sessionStorage.setItem('col_team', selectedTeam||'');
     sessionStorage.setItem('col_pin', pin);
     localStorage.setItem('spawn_collector_name', collector.name||'');
     // Auto-clear in-memory expenses if it's a new day
@@ -1474,6 +1495,7 @@ async function pinSubmit(){
       document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
       sessionStorage.setItem('col_id', cached.id||'');
       sessionStorage.setItem('col_name', cached.name||'');
+      sessionStorage.setItem('col_team', selectedTeam||'');
       sessionStorage.setItem('col_pin', pin);
       showHomeScreen();
     }else{
@@ -2245,6 +2267,10 @@ function openItem(idx){
   { const _e=document.getElementById('note-inp'); if(_e) _e.value=''; }
   { const _e=document.getElementById('skip-note'); if(_e) _e.value=''; }
   document.getElementById('skip-form').style.display='none';
+  // Always clear pack form + pending packs so previous vendo's values never carry over
+  resetPackForm();
+  window._pendingPackItems = [];
+  if(currentItem && _packData){ delete _packData[currentItem.vendo_id||currentItem.id]; }
   calcNet();
 
   if(currentItem.status==='harvested'){
@@ -2255,8 +2281,6 @@ function openItem(idx){
     if(currentItem.coins_saloy) { const _e=document.getElementById('coin-saloy'); if(_e) _e.value=currentItem.coins_saloy; }
     if(currentItem.collector_note) { const _e=document.getElementById('note-inp'); if(_e) _e.value=currentItem.collector_note; }
     calcNet(); toast('Already harvested — re-submit to update');
-  } else {
-    resetPackForm();
   }
   showScreen('screen-form');
 }
@@ -2998,7 +3022,7 @@ async function submitSkip(){
     setTimeout(()=>backToRoute(),900);
   } catch(e){toast('❌ '+e.message,4000);}
 }
-function backToRoute(){renderVendoList();showScreen('screen-route');}
+function backToRoute(){if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}renderVendoList();showScreen('screen-route');}
 
 // ── FINISH / GATE ─────────────────────────────────────────────────
 function checkFinish(){
@@ -3580,6 +3604,7 @@ function hrHome(){
 
 // ── HOME SCREEN ───────────────────────────────────────────────────────
 async function showHomeScreen(){
+  if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}
   showScreen('screen-home');
   document.getElementById('home-collector-name').textContent = selectedCollector||'—';
   // Always persist collector name
