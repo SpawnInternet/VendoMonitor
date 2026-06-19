@@ -2613,8 +2613,8 @@ function calcNet(){
   const breakdownTotal = net + free + saloy + freeCoins;
   window._lastBreakdownTotal = breakdownTotal;
   window._lastNetCoins = net;
-  const spawn = net * 0.75;
-  const customer = net * 0.25;
+  const spawn = Math.round(net * 0.75);
+  const customer = net - spawn;
 
   // Write total to hidden field for submitHarvest()
   document.getElementById('coin-total').value = breakdownTotal;
@@ -2744,7 +2744,7 @@ async function submitHarvest(){
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
   if(!net){toast('Enter Coins Total first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
   const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
-  const spawn=net*0.75,customer=net*0.25;
+  const spawn=Math.round(net*0.75),customer=net-spawn;
   const now=new Date().toISOString(),today=now.split('T')[0];
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
   const ownerRealName=(document.getElementById('owner-real-name-inp')||{}).value||'';
@@ -3458,8 +3458,8 @@ function showHarvestReceipt(){
   const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
   const total = parseFloat(document.getElementById('coin-total')?.value) || (net + free + saloy + freeCoins);
-  const spawn = net * 0.75;
-  const owner = net * 0.25;
+  const spawn = Math.round(net * 0.75);
+  const owner = net - spawn;
   const vname = document.getElementById('form-vname')?.textContent || currentItem?.sheet_name || '—';
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit'});
@@ -3662,7 +3662,7 @@ function resetPackForm(){
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const spawn = net * 0.75;
+    const spawn = Math.round(net * 0.75);
 
     // Get pack total from _packData (set when collection sheet is saved)
     const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
