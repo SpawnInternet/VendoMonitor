@@ -742,8 +742,9 @@ function renderDetailSummary(harvests){
   const totalExp=(expState[collector]||[]).reduce((s,e)=>s+e.amt,0);
   const netRemit=totalSpawn-totalExp;
   const totalBugi=harvests.reduce((s,h)=>{ const ps=packState[h.id]; return s+(ps?Number(ps.bugi||0):0); },0);
-  const netRemitActual=netRemit-totalBugi;
-  const _gap=totalCounted>0?totalCounted-netRemitActual:null;
+  // Option B: Total Counted + Expenses + Bugi should equal Total Spawn Share
+  const totalAccountedFor=totalCounted+totalExp+totalBugi;
+  const _gap=totalCounted>0?totalAccountedFor-totalSpawn:null;
   const _sc=_gap===null?'var(--muted)':_gap===0?'var(--spawn-teal)':_gap>0?'#F5A623':'var(--red)';
   const _st=_gap===null?'⏳ Pending':_gap===0?'✓ Match':_gap>0?`+₱${fmt(_gap)} Surplus`:`-₱${fmt(Math.abs(_gap))} Deficit`;
   document.getElementById('detail-summary').innerHTML=`
@@ -961,16 +962,12 @@ function renderVendo(h){
 }
 
 function defStripHtml(hid,rec,cnt,isSaved,netTarget){
-  const target=rec; // match per vendo against full spawn share
-  const gap=cnt>0?cnt-target:null;
   const ps=packState[hid]||{};
   const bugi=ps.bugi||0;
   let chips='';
   if(cnt>0){
-    const _gc=gap===0?'var(--spawn-teal)':gap>0?'#F5A623':'var(--red)';
-    const _gl=gap===0?'✓ Match':gap>0?`+₱${fmt(gap)} Surplus`:`-₱${fmt(Math.abs(gap))} Deficit`;
     chips+=`<span class="dchip counted">Counted ₱${fmt(cnt)}</span>`;
-    chips+=`<span class="dchip" style="background:#f3f4f6;color:${_gc};font-weight:800">${_gl}</span>`;
+    chips+=`<span class="dchip spawn">Target ₱${fmt(rec)}</span>`;
     if(bugi>0) chips+=`<span class="dchip" style="background:#FEF7E8;color:#b45309;font-weight:700">Bugi −₱${fmt(bugi)}</span>`;
   } else {
     chips+=`<span class="dchip pending">⏳ Pending</span>`;
@@ -1124,21 +1121,11 @@ async function savePacks(hid){
   const btn=document.getElementById('btnsave-'+hid);
   if(btn){btn.disabled=true;btn.textContent='…';}
 
-  // Match per vendo = counted vs spawn share only (expenses/bugi handled at collector level)
+  // No per-vendo match check — reconciliation happens at collector total level
   const _rec=Number(h.spawn_share||0);
   const _cnt=calcCounted(ps);
   // Always read the note textarea first
   let _packNote=(document.getElementById('packnote-'+hid)||{}).value||'';
-  if(_cnt>0 && _cnt!==_rec){
-    const _gap=_cnt-_rec;
-    const _type=_gap>0?'surplus':'deficit';
-    const _result = await showModal(_type,_gap,_cnt,_rec,[]);
-    if(_result===false){
-      if(btn){btn.disabled=false;btn.textContent='Save';btn.classList.remove('saved');}
-      return;
-    }
-    if(typeof _result==='string') _packNote=(_packNote?_packNote+'\n':'')+_result;
-  }
 
   try{
     await sbDelete('harvest_pack_items?harvest_id=eq.'+hid+'&saved_by=eq.office');
