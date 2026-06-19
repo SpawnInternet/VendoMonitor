@@ -442,6 +442,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <div style="text-align:center;padding-top:4px">
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.0</div>
     </div>
 
   </div>
@@ -1206,17 +1207,43 @@ window.addEventListener('offline',updateOnline);
 updateOnline();
 // Register service worker for offline support
 if('serviceWorker' in navigator){
+  let _swReloading = false;
+  // When a new SW takes control, reload once so the new version is active immediately
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(_swReloading) return;
+    _swReloading = true;
+    window.location.reload();
+  });
   navigator.serviceWorker.register('/VendoMonitor/sw.js')
     .then(reg=>{
       console.log('SW registered:', reg.scope);
+      // If an updated SW is already waiting, activate it now
+      if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
+      // Watch for a new SW installing, then activate it as soon as it's ready
+      reg.addEventListener('updatefound', ()=>{
+        const nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener('statechange', ()=>{
+          if(nw.state==='installed' && navigator.serviceWorker.controller){
+            // New version installed and an old one is controlling — switch over
+            nw.postMessage({type:'SKIP_WAITING'});
+          }
+        });
+      });
       // Check for updates on each load
       reg.update();
     })
     .catch(err=>console.warn('SW registration failed:', err));
+  // Re-check for updates whenever app regains focus (collector reopens after idle)
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible'){
+      navigator.serviceWorker.getRegistration().then(r=>{ if(r) r.update(); }).catch(()=>{});
+    }
+  });
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v9.3b';
+const APP_VERSION = 'v10.0';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
@@ -3059,20 +3086,23 @@ function startNextGroup(){
   else showAreasScreen();
 }
 function hardReset(){
-  // Clear ALL harvest-related localStorage
+  // Clear cached group/vendo data, but PRESERVE offline queue (hq), sync log (hs),
+  // and collector cache (so pending harvests + offline login survive)
   const keysToRemove = Object.keys(localStorage).filter(k=>
-    k.startsWith('harvest_') || k.startsWith('cached_') || k==='hq' || k==='hs'
+    (k.startsWith('harvest_') || k.startsWith('cached_') || k.startsWith('grp_cache') || k.startsWith('perm_groups'))
+    && k!=='spawn_collectors_cache'
   );
   keysToRemove.forEach(k=>localStorage.removeItem(k));
   localStorage.setItem('harvest_app_version', APP_VERSION);
-  // Clear SW cache and re-register on reload
+  // Unregister SW and clear SW caches so the newest version installs on reload
   if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>{
       regs.forEach(r=>r.unregister());
     });
     caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))));
   }
-  toast('✅ App reset — reloading…', 2000);
+  const _pending = (JSON.parse(localStorage.getItem('hq')||'[]')).length;
+  toast(_pending?('✅ Reset (kept '+_pending+' pending) — reloading…'):'✅ App reset — reloading…', 2000);
   setTimeout(()=>location.reload(true), 2000);
 }
 
