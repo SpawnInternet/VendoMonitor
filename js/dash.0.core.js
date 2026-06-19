@@ -1,3 +1,23 @@
+// Global toast notification (was missing — caused silent failures in save handlers)
+window.toast = window.toast || function(msg, ms){
+  ms = ms || 2500;
+  var t = document.getElementById('_global_toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = '_global_toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(16px);background:#1e293b;color:#fff;padding:11px 22px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;opacity:0;transition:.25s;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.25);max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(function(){
+    t.style.opacity = '0';
+    t.style.transform = 'translateX(-50%) translateY(16px)';
+  }, ms);
+};
+
 
 (function(){
   const SL_KEY='spawn_admin_auth';
