@@ -800,7 +800,7 @@ function renderExpenseCard(collector){
       </div>
     </div>
   </div>
-  ${total>0?`<div style='background:linear-gradient(135deg,#1e3cb8,#2B7BE8);border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center'><div><div style='font-size:10px;font-weight:800;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.08em'>Net to Remit</div><div style='font-size:11px;color:rgba(255,255,255,.6);margin-top:1px'>Spawn Share − Expenses</div></div><div style='text-align:right'><div style='font-size:26px;font-weight:900;color:#fff'>₱${fmt(_netRemit)}</div><div style='font-size:10px;color:rgba(255,255,255,.6)'>₱${fmt(_spawn)} − ₱${fmt(total)}</div></div></div>`:''}`;
+  ''`;
 }
 
 function renderExpList(collector){
@@ -877,7 +877,7 @@ function renderVendo(h){
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
   const vcode=h._vendo_code||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
-  const suggest=suggestPacks(netTarget);
+  const suggest=suggestPacks(rec);
   // Net target = spawn share minus collector expenses (expenses taken from vendo coins)
   const _collExp=(expState[h.collector]||[]).reduce((s,e)=>s+e.amt,0);
   const netTarget=Math.max(0, rec - _collExp);
@@ -896,9 +896,9 @@ function renderVendo(h){
       </div>
     </div>
     <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 10px;margin-bottom:6px">
-      <div style="font-size:10px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">🎯 TARGET TO PACK — ₱${fmt(netTarget)}${hasExp?` <span style="color:#854d0e;font-weight:600;font-size:9px">(₱${fmt(rec)} − ₱${fmt(_collExp)} exp)</span>`:''}</div>
+      <div style="font-size:10px;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">🎯 TARGET TO PACK — ₱${fmt(rec)}</div>
       <div style="display:flex;flex-direction:column;gap:4px">
-        ${targetPacksDetailed(h.id, netTarget)}
+        ${targetPacksDetailed(h.id, rec)}
       </div>
     </div>
     <div class="vendo-body">
@@ -957,7 +957,7 @@ function renderVendo(h){
 }
 
 function defStripHtml(hid,rec,cnt,isSaved,netTarget){
-  const target=netTarget!==undefined?netTarget:rec;
+  const target=rec; // match per vendo against full spawn share
   const gap=cnt>0?cnt-target:null;
   const ps=packState[hid]||{};
   const bugi=ps.bugi||0;
