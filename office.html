@@ -1282,7 +1282,26 @@ async function loadRecon(collector){
 
     const totalSpawn = harvests.reduce((s,h)=>s+parseFloat(h.spawn_share||0),0);
     const totalExp   = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
-    const netRemit   = totalSpawn - totalExp;
+
+    // Compute per-vendo pack totals (excl bugi for match)
+    const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bungkig:'Bungkig',bugi:'Bugi',bills:'Cash'};
+    const PACK_COLORS = {mix:'#3B6FD4',peso:'#7B4FA6',bungkig:'#2BA89A',bugi:'#b45309',bills:'#F5A623'};
+    let totalCounted=0, totalShort=0, totalSurplus=0, totalBugi=0;
+    harvests.forEach(h=>{
+      const pm=packMap[h.id]||{};
+      const bugi=Number(pm.bugi||0);
+      const counted=Object.entries(pm).filter(([k])=>k!=='bugi').reduce((s,[,v])=>s+v,0);
+      const spawn=parseFloat(h.spawn_share||0);
+      const gap=counted-spawn;
+      totalCounted+=counted;
+      totalBugi+=bugi;
+      if(gap<0) totalShort+=Math.abs(gap);
+      else if(gap>0) totalSurplus+=gap;
+    });
+    // Option B: Counted + Expenses + Bugi should = Spawn Share
+    const totalAccountedFor=totalCounted+totalExp+totalBugi;
+    const overallGap=totalCounted>0?totalAccountedFor-totalSpawn:null;
+    const netRemit=totalSpawn-totalExp-totalBugi;
 
     // Update header stats
     document.getElementById('recon-vendos').textContent = harvests.length;
@@ -1295,17 +1314,16 @@ async function loadRecon(collector){
     else expRow.style.display='none';
 
     // Render vendos
-    const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bungkig:'Bungkig',bugi:'Bugi',bills:'Cash'};
-    const PACK_COLORS = {mix:'#3B6FD4',peso:'#7B4FA6',bungkig:'#2BA89A',bugi:'#b45309',bills:'#F5A623'};
     document.getElementById('recon-vendo-list').innerHTML = harvests.length
       ? harvests.map(h => {
           const pm = packMap[h.id]||{};
-          const packed = Object.values(pm).reduce((s,v)=>s+v,0);
+          const bugi=Number(pm.bugi||0);
+          const packed = Object.entries(pm).filter(([k])=>k!=='bugi').reduce((s,[,v])=>s+v,0);
           const spawn  = parseFloat(h.spawn_share||0);
           const gap    = packed > 0 ? packed - spawn : null;
-          const hasPacks = packed > 0;
-          const cls    = !hasPacks ? 'uncounted' : gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
-          const statusText = !hasPacks ? '⏳ Not counted' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
+          const hasPacks = packed > 0 || bugi > 0;
+          const cls    = !hasPacks ? 'uncounted' : gap===null||gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
+          const statusText = !hasPacks ? '⏳ Pending' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
           const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
             `<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':PACK_LABELS[k]+' ₱'+fmt(v)}</span>`
           ).join(' · ');
@@ -1313,13 +1331,13 @@ async function loadRecon(collector){
           return `<div class="recon-vendo ${cls}">
             <div class="rv-top">
               <div>
-                <span class="rv-code">${h.vendo_code||(h.sheet_name?(h.sheet_name.substring(0,4).toUpperCase()):'—')}</span>
+                <span class="rv-code" style="background:var(--spawn-blue);color:#fff;font-size:11px;font-weight:900;padding:2px 8px;border-radius:5px;margin-right:5px">${h.vendo_code||(h.sheet_name?(h.sheet_name.substring(0,4).toUpperCase()):'—')}</span>
                 <span class="rv-name">${h.vendo_name||h.sheet_name||'—'}</span>
               </div>
               <span class="rv-time">${t}</span>
             </div>
             <div class="rv-coins">📍 ${h.area||'—'} · Coins ₱${fmt(h.coins_total)}</div>
-            <div class="rv-packs">${packParts||'<span style="color:#9ca3af;font-style:italic">No packs entered in Spawn Count</span>'}</div>
+            <div class="rv-packs">${packParts||'<span style="color:#F5A623;font-style:italic;font-weight:600">⏳ Pending office count</span>'}</div>
             <div class="rv-bottom">
               <span class="rv-spawn">Spawn ₱${fmt(spawn)}</span>
               <span class="rv-status ${cls}">${statusText}</span>
@@ -1327,6 +1345,41 @@ async function loadRecon(collector){
           </div>`;
         }).join('')
       : '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No harvests for this date</div>';
+
+    // ── REMITTANCE SUMMARY BOX ──
+    const overallColor = overallGap===null?'#6b7280':overallGap===0?'var(--spawn-teal)':overallGap>0?'#F5A623':'var(--red)';
+    const overallLabel = overallGap===null?'Pending':overallGap===0?'✓ Balanced':overallGap>0?`+₱${fmt(overallGap)} Surplus`:`-₱${fmt(Math.abs(overallGap))} Deficit`;
+    const summaryBox = document.getElementById('recon-summary-box');
+    if(summaryBox) summaryBox.innerHTML = `
+      <div style="font-size:10px;font-weight:800;color:var(--spawn-navy);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Remittance Summary</div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:#6b7280">Total Spawn Share</span>
+        <span style="font-weight:700">₱${fmt(totalSpawn)}</span>
+      </div>
+      ${totalShort>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--red)">Total Short (per vendo)</span>
+        <span style="font-weight:700;color:var(--red)">−₱${fmt(totalShort)}</span>
+      </div>`:''}
+      ${totalSurplus>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:#F5A623">Total Surplus (per vendo)</span>
+        <span style="font-weight:700;color:#F5A623">+₱${fmt(totalSurplus)}</span>
+      </div>`:''}
+      ${totalBugi>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:#b45309">Bugi (Old Coins)</span>
+        <span style="font-weight:700;color:#b45309">−₱${fmt(totalBugi)}</span>
+      </div>`:''}
+      ${totalExp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="color:var(--red)">Expenses</span>
+        <span style="font-weight:700;color:var(--red)">−₱${fmt(totalExp)}</span>
+      </div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;font-size:15px;font-weight:900">
+        <span style="color:var(--spawn-navy)">Net to Remit</span>
+        <span style="color:var(--spawn-blue)">₱${fmt(netRemit)}</span>
+      </div>
+      <div style="text-align:center;margin-top:8px;padding:8px;border-radius:10px;background:${overallGap===0?'var(--green-light)':overallGap===null?'#f3f4f6':'#fef2f2'};border:1.5px solid ${overallGap===0?'var(--green-mid)':overallGap===null?'var(--border)':'#fca5a5'}">
+        <div style="font-size:18px;font-weight:900;color:${overallColor}">${overallLabel}</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:2px">Counted + Expenses + Bugi vs Spawn Share</div>
+      </div>`;
 
     // Render expenses
     const catIcons = {Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
@@ -1354,7 +1407,7 @@ async function loadRecon(collector){
     }
 
     // Store for reconcile
-    window._reconData = { collector, date, totalSpawn, totalExp, netRemit, vendoCount: harvests.length };
+    window._reconData = { collector, date, totalSpawn, totalExp, netRemit, totalBugi, totalShort, totalSurplus, vendoCount: harvests.length };
 
   } catch(e) {
     document.getElementById('recon-vendo-list').innerHTML='<div style="text-align:center;padding:24px;color:#dc2626;font-size:13px">Error: '+e.message+'</div>';
@@ -1523,22 +1576,25 @@ loadAccounts();
       <div style="font-size:12px;color:#9ca3af;text-align:center;padding:6px 0">No expenses</div>
     </div>
 
-    <!-- Totals -->
-    <div class="recon-total-box">
+    <!-- Remittance Summary Box -->
+    <div class="recon-total-box" id="recon-summary-box">
+      <div style="font-size:10px;font-weight:800;color:var(--spawn-navy);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Remittance Summary</div>
       <div class="recon-total-row">
         <span style="color:#6b7280">Total Spawn Share</span>
-        <span style="font-weight:700;color:#15803d" id="recon-spawn-sum">₱0</span>
+        <span style="font-weight:700" id="recon-spawn-sum">₱0</span>
       </div>
       <div class="recon-total-row" id="recon-exp-row" style="display:none">
-        <span style="color:#6b7280">Less Expenses</span>
-        <span style="font-weight:700;color:#dc2626" id="recon-exp-sum">−₱0</span>
+        <span style="color:var(--red)">Expenses</span>
+        <span style="font-weight:700;color:var(--red)" id="recon-exp-sum">−₱0</span>
       </div>
-      <div class="recon-total-row" style="border-top:2px solid #16a34a;margin-top:6px;padding-top:8px">
-        <span style="font-size:14px;font-weight:800;color:#1e3cb8">NET TO REMIT</span>
-        <div></div>
+      <div class="recon-total-row" style="border-top:2px solid var(--green-mid);margin-top:6px;padding-top:8px">
+        <span style="font-size:14px;font-weight:800;color:var(--spawn-blue)">NET TO REMIT</span>
+        <span style="font-size:14px;font-weight:900;color:var(--spawn-blue)" id="recon-net-big">₱0</span>
       </div>
-      <div class="recon-net" id="recon-net-big">₱0</div>
     </div>
+    <!-- hidden fields still needed -->
+    <span id="recon-net" style="display:none"></span>
+    <span id="recon-spawn-sum-old" style="display:none"></span>
 
     <!-- Reconcile button -->
     <div id="recon-status-banner" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:12px;padding:12px 16px;margin-bottom:10px;text-align:center">
