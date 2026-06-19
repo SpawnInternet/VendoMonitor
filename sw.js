@@ -1,5 +1,5 @@
 // sw.js — Spawn Harvest PWA Service Worker v11.0
-const CACHE = 'spawn-harvest-v11.0';
+const CACHE = 'spawn-harvest-v12.0';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v2.html',
   '/VendoMonitor/manifest.json',
