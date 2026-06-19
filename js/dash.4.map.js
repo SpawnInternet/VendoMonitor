@@ -147,7 +147,7 @@ function collectorPhotoUpload(name){
       toast('✅ Photo saved!');
       document.getElementById('col-photo-lightbox')?.remove();
       // Refresh visible views
-      if(typeof loadTodaySummary==='function') loadTodaySummary();
+      if(typeof loadTodaySummary==='function') loadTodaySummary(true);
       if(_colMode==='date' && typeof colLoad==='function') colLoad();
       if(_colMode==='all' && typeof colLoadAll==='function') colLoadAll();
     }catch(e){ toast('Error: '+e.message); }
