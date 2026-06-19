@@ -1102,23 +1102,28 @@ async function rcRun(){
   }
   harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.sheet_name&&sheetTgMap[r.sheet_name]) tgMap[r.id]=sheetTgMap[r.sheet_name]; });
 
-  // Fetch TG income per harvest row using each row's own window
+  // Fetch TG income per unique window — PARALLELIZED in batches for speed
   // Key: "tg_name|window_start|harvest_date" to dedupe identical windows
   const tgRowIncomeMap={};
+  const uniqueWindows=[];
+  const seenKeys=new Set();
   for(const row of harvestRows){
     const tg=tgMap[row.id];
     if(!tg) continue;
     const ws=row.harvest_window_start||from;
     const we=row.harvest_date||to;
     const key=tg+'|'+ws+'|'+we;
-    if(key in tgRowIncomeMap) continue; // already fetched this exact window
-    const wsISO=ws+'T00:00:00+08:00';
-    const weISO=we+'T23:59:59+08:00';
+    if(seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    uniqueWindows.push({tg,ws,we,key});
+  }
+  // Fetch one window's total (handles pagination)
+  async function fetchWindowTotal(w){
     let total=0,off2=0;
     while(true){
       try{
         const rt=await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(tg)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off2}`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount&limit=1000&offset=${off2}`,
           {headers:_HDR}
         );
         const td=await rt.json();
@@ -1128,7 +1133,14 @@ async function rcRun(){
         off2+=1000;
       }catch(e){break;}
     }
-    tgRowIncomeMap[key]=total;
+    return {key:w.key,total};
+  }
+  // Run in parallel batches of 10 (avoid overwhelming the API)
+  for(let i=0;i<uniqueWindows.length;i+=10){
+    const chunk=uniqueWindows.slice(i,i+10);
+    const results=await Promise.all(chunk.map(fetchWindowTotal));
+    results.forEach(r=>{ tgRowIncomeMap[r.key]=r.total; });
+    if(el) el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income… ${Math.min(i+10,uniqueWindows.length)}/${uniqueWindows.length}</div>`;
   }
   const tgIncomeMap={}; // legacy compat placeholder
 
@@ -1156,23 +1168,26 @@ async function rcRun(){
     };
   });
 
-  // Save tg_income, gap, flag to DB for each row — instant reload next time
+  // Render immediately, then save tg_income/gap/flag to DB in the BACKGROUND
+  rcFilter();
   const toSave = rcAllRows.filter(r=>r.tg_income!=null);
   if(toSave.length){
-    for(let i=0;i<toSave.length;i+=50){
-      const batch=toSave.slice(i,i+50);
-      try{
-        await Promise.all(batch.map(r=>
-          fetch(`${_SB}/rest/v1/harvests?id=eq.${r.id}`,{
-            method:'PATCH',
-            headers:{..._HDR,'Prefer':'return=minimal'},
-            body:JSON.stringify({tg_income:r.tg_income,recon_gap:r.gap,recon_flag:r.flag,recon_at:new Date().toISOString()})
-          })
-        ));
-      }catch(e){}
-    }
+    (async()=>{
+      for(let i=0;i<toSave.length;i+=50){
+        const batch=toSave.slice(i,i+50);
+        try{
+          await Promise.all(batch.map(r=>
+            fetch(`${_SB}/rest/v1/harvests?id=eq.${r.id}`,{
+              method:'PATCH',
+              headers:{..._HDR,'Prefer':'return=minimal'},
+              body:JSON.stringify({tg_income:r.tg_income,recon_gap:r.gap,recon_flag:r.flag,recon_at:new Date().toISOString()})
+            })
+          ));
+        }catch(e){}
+      }
+      console.log('[rcRun] background save complete:',toSave.length,'rows');
+    })();
   }
-  rcFilter();
   } catch(e) { console.error('rcRun error',e); document.getElementById('rc-content').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>'; }
 }
 
