@@ -535,6 +535,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </button>
   </div>
 
+  <!-- Offline-ready status -->
+  <div id="offline-ready-card" onclick="downloadAllOffline(true)" style="display:flex;align-items:center;gap:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:14px;padding:12px 14px;margin-bottom:16px;cursor:pointer">
+    <div id="offline-ready-icon" style="width:38px;height:38px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">📥</div>
+    <div style="flex:1;min-width:0">
+      <div id="offline-ready-title" style="font-size:13px;font-weight:700;color:#16a34a">Offline data</div>
+      <div id="offline-ready-sub" style="font-size:11px;color:#15803d;margin-top:1px">Tap to download all groups for offline use</div>
+    </div>
+    <svg id="offline-ready-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+
   <!-- Recent harvests -->
   <div class="card">
     <div class="card-title">Recent Harvests</div>
@@ -982,6 +992,123 @@ async function loadPermGroups(forceRefresh=false){
   }
 }
 
+// ── OFFLINE PREFETCH: cache every group so collector can navigate offline ──
+let _offlineDownloading = false;
+async function downloadAllOffline(manual=false){
+  if(_offlineDownloading) return;
+  if(!navigator.onLine){
+    if(manual) toast('📴 No internet — connect to WiFi first to download',3500);
+    updateOfflineReadyCard();
+    return;
+  }
+  _offlineDownloading = true;
+  setOfflineCardState('downloading','Downloading…','Caching all groups for offline use');
+  try {
+    const groups = await loadPermGroups(true);
+    let done = 0, totalItems = 0;
+    for(const g of groups){
+      const groupId = g.id;
+      try {
+        // Fetch all items for this group (paginated)
+        let allItems = [], offset = 0;
+        while(true){
+          const r = await fetch(
+            `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
+            `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+            `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
+          );
+          const batch = await r.json();
+          if(!Array.isArray(batch)||!batch.length) break;
+          allItems.push(...batch);
+          if(batch.length<500) break;
+          offset += 500;
+        }
+        if(!allItems.length){ done++; continue; }
+        // Pull last_harvest_date from vendo cache if available
+        const items = allItems.map(item=>{
+          const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
+          return {
+            ...item, status:'pending',
+            last_harvest_date:(cached && cached.last_harvest_date)||item.last_harvest_date,
+            vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
+            address: item.address || (cached && cached.address) || '',
+            owner_name: item.owner_name || (cached && cached.owner_name) || '',
+            contact_number: item.contact_number || (cached && cached.contact_number) || '',
+            coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
+          };
+        });
+        // Write to same cache format startGroup() reads
+        localStorage.setItem('grp_cache_'+groupId, JSON.stringify({g, items}));
+        localStorage.setItem('grp_cache_ts_'+groupId, Date.now().toString());
+        totalItems += items.length;
+        done++;
+        setOfflineCardState('downloading','Downloading…','Cached '+done+' of '+groups.length+' groups');
+      } catch(e){ console.warn('Prefetch group '+groupId+' failed:', e.message); }
+    }
+    localStorage.setItem('offline_dl_ts', Date.now().toString());
+    localStorage.setItem('offline_dl_groups', String(done));
+    localStorage.setItem('offline_dl_items', String(totalItems));
+    if(manual) toast('✅ '+done+' groups ready offline ('+totalItems+' vendos)',3500);
+    updateOfflineReadyCard();
+  } catch(e){
+    console.warn('downloadAllOffline failed:', e.message);
+    if(manual) toast('❌ Download failed: '+e.message,4000);
+    updateOfflineReadyCard();
+  } finally {
+    _offlineDownloading = false;
+  }
+}
+
+function setOfflineCardState(state, title, sub){
+  const card=document.getElementById('offline-ready-card');
+  const icon=document.getElementById('offline-ready-icon');
+  const t=document.getElementById('offline-ready-title');
+  const s=document.getElementById('offline-ready-sub');
+  const chev=document.getElementById('offline-ready-chevron');
+  if(!card) return;
+  const palette={
+    ready:   {bg:'#f0fdf4',bd:'#bbf7d0',ic:'#dcfce7',fg:'#16a34a',sub:'#15803d',emoji:'✅'},
+    stale:   {bg:'#fffbeb',bd:'#fde68a',ic:'#fef3c7',fg:'#b45309',sub:'#92400e',emoji:'⚠️'},
+    none:    {bg:'#f0fdf4',bd:'#bbf7d0',ic:'#dcfce7',fg:'#16a34a',sub:'#15803d',emoji:'📥'},
+    downloading:{bg:'#eff6ff',bd:'#bfdbfe',ic:'#dbeafe',fg:'#2563eb',sub:'#1d4ed8',emoji:'⏳'},
+    offline: {bg:'#fef2f2',bd:'#fecaca',ic:'#fee2e2',fg:'#dc2626',sub:'#b91c1c',emoji:'📴'}
+  };
+  const p=palette[state]||palette.none;
+  card.style.background=p.bg; card.style.borderColor=p.bd;
+  icon.style.background=p.ic; icon.textContent=p.emoji;
+  t.style.color=p.fg; t.textContent=title;
+  s.style.color=p.sub; s.textContent=sub;
+  if(chev) chev.setAttribute('stroke',p.fg);
+}
+
+function updateOfflineReadyCard(){
+  const card=document.getElementById('offline-ready-card');
+  if(!card) return;
+  const ts=parseInt(localStorage.getItem('offline_dl_ts')||'0');
+  const grpCount=localStorage.getItem('offline_dl_groups')||'0';
+  const itemCount=localStorage.getItem('offline_dl_items')||'0';
+  if(!navigator.onLine){
+    if(ts){
+      const when=new Date(ts).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit'});
+      setOfflineCardState('ready','Offline ready · '+grpCount+' groups',itemCount+' vendos cached · saved '+when);
+    } else {
+      setOfflineCardState('offline','Not downloaded','Connect to WiFi to enable offline');
+    }
+    return;
+  }
+  if(!ts){
+    setOfflineCardState('none','Download for offline','Tap to cache all groups before going out');
+    return;
+  }
+  const ageH=(Date.now()-ts)/3600000;
+  const when=new Date(ts).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit'});
+  if(ageH > 10){
+    setOfflineCardState('stale','Offline data is old','Saved '+when+' · tap to refresh');
+  } else {
+    setOfflineCardState('ready','Offline ready · '+grpCount+' groups',itemCount+' vendos · updated '+when+' · tap to refresh');
+  }
+}
+
 // Get unique areas that have permanent groups
 function getAreasFromGroups(groups){
   const areas = [];
@@ -1049,6 +1176,7 @@ function updateOnline(){
   const connLbl=document.getElementById('conn-lbl');
   if(connLbl){connLbl.textContent=ok?'Online':'Offline';}
   if(ok&&offlineQueue.length){ toast('🌐 Back online — syncing '+offlineQueue.length+' pending items…',3000); flushQueue(); }
+  if(typeof updateOfflineReadyCard==='function') updateOfflineReadyCard();
 }
 window.addEventListener('online',updateOnline);
 window.addEventListener('offline',updateOnline);
@@ -1240,6 +1368,8 @@ async function pinSubmit(){
     }
     localStorage.setItem('spawn_last_active_date', _today);
     showHomeScreen();
+    // Auto-cache all groups for offline use (background, non-blocking)
+    setTimeout(()=>downloadAllOffline(false), 1200);
   }catch(e){
     // Offline or timeout fallback — check cached collectors
     const cached=_pinCollectors.find(c=>c.name===_pinSelectedName&&c.pin===pin);
@@ -1287,6 +1417,7 @@ async function showHomeScreen(){
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
   const hb = document.getElementById('bnav-home');
   if(hb) hb.classList.add('active');
+  updateOfflineReadyCard();
   // Load today's spawn share
   try {
     const today = new Date().toISOString().split('T')[0];
@@ -1496,6 +1627,36 @@ async function startGroup(groupId){
     renderVendoList();
     // Background: refresh last_harvest_date silently
     _refreshLHD(groupId);
+    return;
+  }
+
+  // ── Offline fallback: serve expired/any cache rather than failing ──
+  if(!navigator.onLine && _cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0){
+    const cached = _cachedParsed;
+    currentGroupDef = cached.g;
+    currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    currentItems = cached.items;
+    document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
+    document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
+    localStorage.setItem('harvest_session',JSON.stringify({
+      collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
+    }));
+    activeTab='pending';
+    renderVendoList();
+    return;
+  }
+  if(!navigator.onLine){
+    listEl.innerHTML='';
+    const div=document.createElement('div');
+    div.className='loading';
+    div.innerHTML='<span style="color:var(--red);text-align:center;line-height:1.8">📴 This group isn\'t downloaded for offline.<br>Connect to WiFi and tap "Download for offline" on the home screen.</span>';
+    const btn=document.createElement('button');
+    btn.textContent='← Back';
+    btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+    btn.onclick=function(){ showHomeScreen(); };
+    div.appendChild(btn);
+    listEl.appendChild(div);
     return;
   }
 
