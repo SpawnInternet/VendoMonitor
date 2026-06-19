@@ -399,7 +399,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <span class="nl">Vendos</span>
     </button>
     <!-- Harvest -->
-    <button data-panel="harvest" onclick="showP('harvest',this);if(typeof harvestTabLoad==='function')harvestTabLoad()">
+    <button data-panel="harvest" onclick="showP('harvest',this);var _ov=document.getElementById('harvest-loading-overlay');if(_ov){_ov.style.display='flex';}if(typeof harvestTabLoad==='function')harvestTabLoad()">
       <div class="ni" style="background:#d1fae5">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M12 3 C8 3 4 7 4 12 C4 16 8 20 12 20 C16 20 20 16 20 12" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 3 C14 6 18 6 20 3" stroke="#16a34a" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M12 8 L12 16 M9 13 L12 16 L15 13" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
       </div>
@@ -983,7 +983,11 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 .hv-hidden{display:none!important;}
 </style>
-<div id="panel-harvest" class="panel">
+<div id="panel-harvest" class="panel" style="position:relative;">
+<div id="harvest-loading-overlay" style="display:none;position:absolute;inset:0;background:#fff;z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+  <span style="display:inline-block;width:28px;height:28px;border:3px solid #e5e7eb;border-top-color:#1e3cb8;border-radius:50%;animation:spin .7s linear infinite;"></span>
+  <span style="font-size:12px;color:#6b7280;">Loading harvests…</span>
+</div>
 <!-- ── HARVEST COLLECTOR SUMMARY (injected by tabs/harvest.js) ── -->
 <div id="harvest-collector-summary" style="padding:10px 12px 0 12px"></div>
 
@@ -1634,6 +1638,7 @@ async function htForceLoad(){
 }
 
 async function htLoad(){
+  const _hideHarvestOverlay = () => { const _ov=document.getElementById('harvest-loading-overlay'); if(_ov) _ov.style.display='none'; };
   document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
   htAllRows = [];
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
@@ -1655,6 +1660,7 @@ async function htLoad(){
         htFilter();
         loadTodaySummary();
         if(age > 60*60*1000) htRebuildCache();
+        _hideHarvestOverlay();
         return;
       }
     }
@@ -1708,6 +1714,7 @@ async function htLoad(){
   }
   htFilter();
   loadTodaySummary();
+  _hideHarvestOverlay();
 }
 
 async function loadTodaySummary(){
