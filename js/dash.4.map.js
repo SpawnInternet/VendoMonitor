@@ -3617,7 +3617,10 @@ async function autoCheckTgSession() {
       }
     }
   } catch(e) {
-    // Railway unreachable — show subtle warning only if bot was previously ok
+    // Railway unreachable / 503 / CORS — server-side issue, not dashboard.
+    // The browser still logs the network error to console (unavoidable), but we handle it gracefully here.
+    const pill = document.getElementById('tg-status-pill');
+    if (pill) { pill.textContent = '● Status unknown'; pill.style.background='#f3f4f6'; pill.style.color='#6b7280'; pill.title='Telegram status server (Railway) unreachable — bot may still be running'; }
   } finally {
     _tgAutoChecking = false;
   }
