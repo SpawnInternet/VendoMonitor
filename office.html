@@ -1300,8 +1300,8 @@ async function loadRecon(collector){
     });
     // Option B: Counted + Expenses + Bugi should = Spawn Share
     const totalAccountedFor=totalCounted+totalExp+totalBugi;
-    const overallGap=totalCounted>0?totalAccountedFor-totalSpawn:null;
-    const netRemit=totalSpawn-totalExp-totalBugi;
+    const overallGap=totalCounted>0?netRemit-totalSpawn:null;
+    const netRemit=totalCounted-totalExp-totalBugi;
 
     // Update header stats
     document.getElementById('recon-vendos').textContent = harvests.length;
@@ -1465,16 +1465,20 @@ function showReconReceipt(d){
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:20px;width:100%;max-width:360px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
       <!-- Header -->
-      <div style="background:linear-gradient(135deg,#15803d,#16a34a);padding:20px 20px 16px;text-align:center;color:#fff">
+      <div style="background:${d.totalShort>0?'linear-gradient(135deg,#dc2626,#ef4444)':'linear-gradient(135deg,#15803d,#16a34a)'};padding:20px 20px 16px;text-align:center;color:#fff">
         <div style="font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.8;margin-bottom:4px">SPAWN INTERNETAN</div>
         <div style="font-size:18px;font-weight:900">COLLECTION RECEIPT</div>
         <div style="font-size:11px;opacity:.75;margin-top:4px">${now}</div>
       </div>
       <!-- Stamp -->
-      <div style="background:#f0fdf4;border-bottom:2px dashed #86efac;padding:14px;text-align:center">
-        <div style="display:inline-block;border:3px solid #15803d;border-radius:10px;padding:6px 20px">
-          <div style="font-size:20px;font-weight:900;color:#15803d;letter-spacing:.05em">✓ CLEARED</div>
-          <div style="font-size:11px;font-weight:700;color:#16a34a">NO SHORT · FULLY REMITTED</div>
+      <div style="background:${d.totalShort>0?'#fef2f2':'#f0fdf4'};border-bottom:2px dashed ${d.totalShort>0?'#fca5a5':'#86efac'};padding:14px;text-align:center">
+        <div style="display:inline-block;border:3px solid ${d.totalShort>0?'#dc2626':'#15803d'};border-radius:10px;padding:6px 20px">
+          ${d.totalShort>0
+            ? `<div style="font-size:20px;font-weight:900;color:#dc2626;letter-spacing:.05em">⚠ SHORT</div>
+               <div style="font-size:11px;font-weight:700;color:#dc2626">DEFICIT ₱${fmt(d.totalShort)} · NEEDS FOLLOW UP</div>`
+            : `<div style="font-size:20px;font-weight:900;color:#15803d;letter-spacing:.05em">✓ CLEARED</div>
+               <div style="font-size:11px;font-weight:700;color:#16a34a">NO SHORT · FULLY REMITTED</div>`
+          }
         </div>
       </div>
       <!-- Details -->
@@ -1498,6 +1502,14 @@ function showReconReceipt(d){
         ${hasExp?`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
           <span style="color:#ef4444">Expenses</span>
           <span style="font-weight:700;color:#ef4444">−₱${fmt(d.totalExp)}</span>
+        </div>`:''}
+        ${d.totalShort>0?`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#dc2626;font-weight:700">Total Short</span>
+          <span style="font-weight:700;color:#dc2626">−₱${fmt(d.totalShort)}</span>
+        </div>`:''}
+        ${d.totalBugi>0?`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f3f4f6;font-size:13px">
+          <span style="color:#b45309">Bugi (Old Coins)</span>
+          <span style="font-weight:700;color:#b45309">−₱${fmt(d.totalBugi)}</span>
         </div>`:''}
         <div style="display:flex;justify-content:space-between;padding:10px 0 4px;font-size:15px">
           <span style="font-weight:800;color:#1e3cb8">NET REMITTED</span>
