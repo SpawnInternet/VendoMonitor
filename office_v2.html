@@ -452,9 +452,10 @@ async function loadHome(){
     // Load pack items
     const p=await sbFetch(`harvest_pack_items?harvest_date=eq.${currentDate}&saved_by=eq.office&select=harvest_id,pack_type,amount`);
     if(Array.isArray(p)) p.forEach(pk=>{
-      if(!packState[pk.harvest_id]) packState[pk.harvest_id]={mix:0,peso:0,bugi:0,bills:0};
+      if(!packState[pk.harvest_id]) packState[pk.harvest_id]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
       if(pk.pack_type==='mix')   packState[pk.harvest_id].mix  =(packState[pk.harvest_id].mix||0)+Number(pk.amount)/1000;
       if(pk.pack_type==='peso')  packState[pk.harvest_id].peso =(packState[pk.harvest_id].peso||0)+Number(pk.amount)/300;
+      if(pk.pack_type==='bungkig') packState[pk.harvest_id].bungkig=(packState[pk.harvest_id].bungkig||0)+Number(pk.amount);
       if(pk.pack_type==='bugi')  packState[pk.harvest_id].bugi =(packState[pk.harvest_id].bugi||0)+Number(pk.amount);
       if(pk.pack_type==='bills') packState[pk.harvest_id].bills=(packState[pk.harvest_id].bills||0)+Number(pk.amount);
       savedSet.add(pk.harvest_id);
@@ -699,7 +700,7 @@ async function removeExpense(collector,idx){
 
 // ── VENDO BLOCK ──────────────────────────────────────────
 function renderVendo(h){
-  const ps=packState[h.id]||{mix:0,peso:0,bugi:0,bills:0};
+  const ps=packState[h.id]||{mix:0,peso:0,bungkig:0,bugi:0,bills:0};
   const rec=Number(h.spawn_share||0);
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
@@ -751,12 +752,20 @@ function renderVendo(h){
           </div>
         </div>
         <div class="pack-field">
-          <div class="pack-label bugi">Bugi (Remainder)</div>
-          <div class="pack-hint">Loose coins — exact amount</div>
+          <div class="pack-label bugi">Bungkig (Remainder)</div>
+          <div class="pack-hint">Leftover coins &lt; ₱300 or ₱1,000</div>
+          <input class="amt-inp" id="bungkig-${h.id}" type="number" inputmode="decimal"
+            value="${ps.bungkig||''}" placeholder="₱0" min="0"
+            oninput="onAmt(${h.id},'bungkig')">
+          <div class="amt-lbl bugi" id="bungkig-lbl-${h.id}">${ps.bungkig?'₱'+fmt(ps.bungkig):''}</div>
+        </div>
+        <div class="pack-field">
+          <div class="pack-label" style="color:#b45309">Bugi (Old Coins)</div>
+          <div class="pack-hint">Old or worn coins</div>
           <input class="amt-inp" id="bugi-${h.id}" type="number" inputmode="decimal"
             value="${ps.bugi||''}" placeholder="₱0" min="0"
-            oninput="onAmt(${h.id},'bugi')">
-          <div class="amt-lbl bugi" id="bugi-lbl-${h.id}">${ps.bugi?'₱'+fmt(ps.bugi):''}</div>
+            oninput="onAmt(${h.id},'bugi')" style="border-color:#b45309">
+          <div class="amt-lbl" style="color:#b45309" id="bugi-lbl-${h.id}">${ps.bugi?'₱'+fmt(ps.bugi):''}</div>
         </div>
         <div class="pack-field">
           <div class="pack-label bills">Cash / Bills</div>
@@ -791,7 +800,7 @@ function defStripHtml(hid,rec,cnt,isSaved,netTarget){
 
 // ── PACK INTERACTIONS ────────────────────────────────────
 function calcCounted(ps){
-  return ((ps.mix||0)*1000)+((ps.peso||0)*300)+(ps.bugi||0)+(ps.bills||0);
+  return ((ps.mix||0)*1000)+((ps.peso||0)*300)+(ps.bungkig||0)+(ps.bugi||0)+(ps.bills||0);
 }
 
 function suggestPacks(spawnShare){
@@ -888,7 +897,7 @@ function suggestPacksDetailed(spawnShare){
 }
 
 function adjPack(hid,type,delta){
-  if(!packState[hid]) packState[hid]={mix:0,peso:0,bugi:0,bills:0};
+  if(!packState[hid]) packState[hid]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
   packState[hid][type]=Math.max(0,(packState[hid][type]||0)+delta);
   const val=packState[hid][type];
   const mul=type==='mix'?1000:300;
@@ -899,7 +908,7 @@ function adjPack(hid,type,delta){
 }
 
 function onAmt(hid,type){
-  if(!packState[hid]) packState[hid]={mix:0,peso:0,bugi:0,bills:0};
+  if(!packState[hid]) packState[hid]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
   const val=parseFloat(document.getElementById(type+'-'+hid).value)||0;
   packState[hid][type]=val;
   const lbl=document.getElementById(type+'-lbl-'+hid);
@@ -927,7 +936,7 @@ function refreshStrip(hid){
 
 // ── SAVE ─────────────────────────────────────────────────
 async function savePacks(hid){
-  const ps=packState[hid]||{mix:0,peso:0,bugi:0,bills:0};
+  const ps=packState[hid]||{mix:0,peso:0,bungkig:0,bugi:0,bills:0};
   const h=allHarvests.find(x=>x.id===hid);
   if(!h) return;
   const btn=document.getElementById('btnsave-'+hid);
@@ -955,10 +964,11 @@ async function savePacks(hid){
     await sbDelete('harvest_pack_items?harvest_id=eq.'+hid+'&saved_by=eq.office');
     const base={harvest_id:hid,vendo_id:h.vendo_id||null,collector:h.collector,harvest_date:currentDate,saved_by:'office',note:_packNote||null};
     const rows=[];
-    if((ps.mix||0)>0)   rows.push({...base,pack_type:'mix',  amount:ps.mix*1000});
-    if((ps.peso||0)>0)  rows.push({...base,pack_type:'peso', amount:ps.peso*300});
-    if((ps.bugi||0)>0)  rows.push({...base,pack_type:'bugi', amount:ps.bugi});
-    if((ps.bills||0)>0) rows.push({...base,pack_type:'bills',amount:ps.bills});
+    if((ps.mix||0)>0)      rows.push({...base,pack_type:'mix',     amount:ps.mix*1000});
+    if((ps.peso||0)>0)     rows.push({...base,pack_type:'peso',    amount:ps.peso*300});
+    if((ps.bungkig||0)>0)  rows.push({...base,pack_type:'bungkig', amount:ps.bungkig});
+    if((ps.bugi||0)>0)     rows.push({...base,pack_type:'bugi',    amount:ps.bugi});
+    if((ps.bills||0)>0)    rows.push({...base,pack_type:'bills',   amount:ps.bills});
 
     if(rows.length>0){
       const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),15000);
@@ -1096,7 +1106,7 @@ async function loadRecon(collector){
     // Build pack map
     const packMap = {};
     packs.forEach(p => {
-      if(!packMap[p.harvest_id]) packMap[p.harvest_id]={mix:0,peso:0,bugi:0,bills:0};
+      if(!packMap[p.harvest_id]) packMap[p.harvest_id]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
       packMap[p.harvest_id][p.pack_type] = (packMap[p.harvest_id][p.pack_type]||0) + Number(p.amount||0);
     });
 
@@ -1115,8 +1125,8 @@ async function loadRecon(collector){
     else expRow.style.display='none';
 
     // Render vendos
-    const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bugi:'Bugi',bills:'Cash'};
-    const PACK_COLORS = {mix:'#1e3cb8',peso:'#7c3aed',bugi:'#0d9488',bills:'#d97706'};
+    const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bungkig:'Bungkig',bugi:'Bugi',bills:'Cash'};
+    const PACK_COLORS = {mix:'#1e3cb8',peso:'#7c3aed',bungkig:'#0d9488',bugi:'#b45309',bills:'#d97706'};
     document.getElementById('recon-vendo-list').innerHTML = harvests.length
       ? harvests.map(h => {
           const pm = packMap[h.id]||{};
