@@ -879,6 +879,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 var cameraStream = null;
 var capturedPhotoBlob = null;
 
+// ── Offline photo storage (IndexedDB — handles large blobs) ──────
+const _PHOTO_DB='spawn_photos', _PHOTO_STORE='queued';
+function _openPhotoDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(_PHOTO_DB,1);
+    req.onupgradeneeded=e=>{ const db=e.target.result; if(!db.objectStoreNames.contains(_PHOTO_STORE)) db.createObjectStore(_PHOTO_STORE); };
+    req.onsuccess=e=>resolve(e.target.result);
+    req.onerror=e=>reject(e.target.error);
+  });
+}
+async function savePhotoOffline(key, blob){
+  try{ const db=await _openPhotoDB(); return await new Promise((res,rej)=>{ const tx=db.transaction(_PHOTO_STORE,'readwrite'); tx.objectStore(_PHOTO_STORE).put(blob,key); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); }); }
+  catch(e){ console.warn('savePhotoOffline failed:',e.message); return false; }
+}
+async function getPhotoOffline(key){
+  try{ const db=await _openPhotoDB(); return await new Promise((res,rej)=>{ const tx=db.transaction(_PHOTO_STORE,'readonly'); const r=tx.objectStore(_PHOTO_STORE).get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); }
+  catch(e){ console.warn('getPhotoOffline failed:',e.message); return null; }
+}
+async function deletePhotoOffline(key){
+  try{ const db=await _openPhotoDB(); return await new Promise((res)=>{ const tx=db.transaction(_PHOTO_STORE,'readwrite'); tx.objectStore(_PHOTO_STORE).delete(key); tx.oncomplete=()=>res(true); tx.onerror=()=>res(false); }); }
+  catch(e){ return false; }
+}
+
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const VENDO_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/vendo-cache/vendos.json';
 
@@ -2233,10 +2256,18 @@ async function saveVendoDetails(){
           body:JSON.stringify(vendoUpdate)
         });
       } else {
-        // Queue for later sync
-        offlineQueue.push({type:'vendoUpdate',vendoId:currentItem.vendo_id,vendoUpdate,ts:Date.now()});
+        // Queue for later sync — store photo in IndexedDB if captured
+        const _ts=Date.now();
+        let _photoKey=null;
+        if(capturedPhotoBlob){
+          _photoKey='photo_v_'+currentItem.vendo_id+'_'+_ts;
+          const _saved=await savePhotoOffline(_photoKey, capturedPhotoBlob);
+          if(!_saved) _photoKey=null;
+        }
+        const _photoLabel=currentItem.sheet_name||currentItem.tg_name||'vendo';
+        offlineQueue.push({type:'vendoUpdate',vendoId:currentItem.vendo_id,vendoUpdate,photoKey:_photoKey,photoLabel:_photoLabel,ts:_ts});
         localStorage.setItem('hq',JSON.stringify(offlineQueue));
-        toast('⚡ Saved offline — will sync when connected',3000);
+        toast(_photoKey?'⚡ Saved offline (with photo) — will sync when connected':'⚡ Saved offline — will sync when connected',3000);
       }
     }
 
@@ -2477,10 +2508,10 @@ function copyGPS(){
 function captureGPS(){ openCamera(); }
 
 // Upload photo to Supabase Storage, return public URL
-async function uploadPhoto(blob, vendoName){
+async function uploadPhoto(blob, vendoName, explicitVendoId){
   try {
     const ext='jpg';
-    const vendoId=currentItem&&currentItem.vendo_id?currentItem.vendo_id:null;
+    const vendoId=(explicitVendoId!==undefined&&explicitVendoId!==null)?explicitVendoId:(currentItem&&currentItem.vendo_id?currentItem.vendo_id:null);
     const safe=(vendoName||'vendo').replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
     const path=vendoId?`vendo-profiles/vendo_${vendoId}.jpg`:`${todayPHT()}/${safe}_${Date.now()}.${ext}`;
     const res=await fetch(`${SB}/storage/v1/object/harvest-photos/${path}`,{
@@ -2827,9 +2858,17 @@ async function submitHarvest(){
         saved_by:'collector'
       }));
       window._pendingPackItems=[];
-      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,ts:Date.now()});
+      const _ts=Date.now();
+      let _photoKey=null;
+      if(capturedPhotoBlob){
+        _photoKey='photo_'+currentItem.id+'_'+_ts;
+        const _saved=await savePhotoOffline(_photoKey, capturedPhotoBlob);
+        if(!_saved) _photoKey=null;
+      }
+      const _photoLabel=ownerName||currentItem.sheet_name||currentItem.tg_name||'vendo';
+      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,photoKey:_photoKey,photoLabel:_photoLabel,ts:_ts});
       localStorage.setItem('hq',JSON.stringify(offlineQueue));
-      toast('📴 Saved offline — will sync when online',3000);
+      toast(_photoKey?'📴 Saved offline (with photo) — will sync when online':'📴 Saved offline — will sync when online',3000);
     }
 
     // Update in-memory
@@ -3037,6 +3076,22 @@ async function flushQueue(){
   for(const q of offlineQueue){
     try {
       if(q.type==='harvest'){
+        // Upload queued photo first (if any) and inject URL into all records
+        if(q.photoKey){
+          const _blob=await getPhotoOffline(q.photoKey);
+          if(_blob){
+            const _url=await uploadPhoto(_blob, q.photoLabel||'vendo', q.vendoId||null);
+            if(_url){
+              q.itemUpdate.photo_url=_url;
+              q.harvestRecord.photo_url=_url;
+              if(q.vendoUpdate) q.vendoUpdate.photo_url=_url;
+              await deletePhotoOffline(q.photoKey);
+              q.photoKey=null;
+            }
+          } else {
+            q.photoKey=null; // blob gone — proceed without photo
+          }
+        }
         await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate)});
         const _hr=await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(q.harvestRecord)});
         const _hrows=await _hr.json().catch(()=>[]);
@@ -3055,6 +3110,13 @@ async function flushQueue(){
           groupUpdates[q.groupRunId].total_net+=parseFloat(q.harvestRecord.net_collectible||0);
         }
       } else if(q.type==='vendoUpdate'&&q.vendoId){
+        if(q.photoKey){
+          const _blob=await getPhotoOffline(q.photoKey);
+          if(_blob){
+            const _url=await uploadPhoto(_blob, q.photoLabel||'vendo', q.vendoId);
+            if(_url){ q.vendoUpdate.photo_url=_url; await deletePhotoOffline(q.photoKey); q.photoKey=null; }
+          } else { q.photoKey=null; }
+        }
         await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
       } else if(q.type==='skip'&&q.itemId){
         await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
