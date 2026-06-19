@@ -860,6 +860,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="btn btn-gray" onclick="goHome()">← Back to home</button>
 </div>
 
+<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b45309;color:#fff;padding:6px 16px;font-size:12px;font-weight:700;align-items:center;justify-content:center;gap:8px">
+  📴 You are offline — harvests will sync when back online
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1035,6 +1038,9 @@ function todayPHT(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manil
 
 function updateOnline(){
   const ok=navigator.onLine;
+  // Update offline banner
+  const _ob=document.getElementById('offline-banner');
+  if(_ob) _ob.style.display=ok?'none':'flex';
   document.getElementById('sync-dot').className='sync-dot'+(ok?'':' off');
   document.getElementById('sync-label').textContent=ok?'Online':'Offline';
   document.getElementById('offline-banner').className='offline-banner'+(ok?'':' show');
@@ -1042,7 +1048,7 @@ function updateOnline(){
   if(dot){dot.style.background=ok?'#4ade80':'#dc2626';dot.title=ok?'Online':'Offline';}
   const connLbl=document.getElementById('conn-lbl');
   if(connLbl){connLbl.textContent=ok?'Online':'Offline';}
-  if(ok&&offlineQueue.length) flushQueue();
+  if(ok&&offlineQueue.length){ toast('🌐 Back online — syncing '+offlineQueue.length+' pending items…',3000); flushQueue(); }
 }
 window.addEventListener('online',updateOnline);
 window.addEventListener('offline',updateOnline);
@@ -2651,9 +2657,19 @@ async function submitHarvest(){
         currentGroupRun.total_net=(parseFloat(currentGroupRun.total_net)||0)+net;
       }
     } else {
-      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,ts:Date.now()});
+      const _pendingPacks = (window._pendingPackItems||[]).map(p=>({
+        vendo_id:currentItem.vendo_id||null,
+        vendo_code:p.vendo_code||'',
+        collector:selectedCollector||'',
+        harvest_date:harvestRecord.harvest_date,
+        pack_type:p.pack_type,
+        amount:p.amount,
+        saved_by:'collector'
+      }));
+      window._pendingPackItems=[];
+      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,ts:Date.now()});
       localStorage.setItem('hq',JSON.stringify(offlineQueue));
-      toast('⚡ Saved offline',3000);
+      toast('📴 Saved offline — will sync when online',3000);
     }
 
     // Update in-memory
@@ -2862,7 +2878,14 @@ async function flushQueue(){
     try {
       if(q.type==='harvest'){
         await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate)});
-        await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.harvestRecord)});
+        const _hr=await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(q.harvestRecord)});
+        const _hrows=await _hr.json().catch(()=>[]);
+        const _hId=_hrows&&_hrows[0]&&_hrows[0].id;
+        // Sync pack items if any
+        if(_hId && q.packItems && q.packItems.length){
+          const _packs=q.packItems.map(p=>({...p,harvest_id:_hId}));
+          await fetch(`${SB}/rest/v1/harvest_pack_items`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(_packs)}).catch(()=>{});
+        }
         if(q.vendoId) await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
         if(q.groupRunId){
           if(!groupUpdates[q.groupRunId]) groupUpdates[q.groupRunId]={harvested_count:0,skipped_count:0,gps_added:0,contacts_added:0,total_net:0};
@@ -3206,11 +3229,13 @@ async function renderHistory(){
 
 // ── HARVEST RECEIPT ────────────────────────────────────────────────
 function showHarvestReceipt(){
-  const total = parseFloat(document.getElementById('coin-total-inp')?.value) || parseFloat(document.getElementById('coin-total')?.value) || 0;
+  // coin-total-inp = Net (collector already deducted free/saloy)
+  // coin-total (hidden) = Total = Net + Free + Saloy + FreeCoins
+  const net = parseFloat(document.getElementById('coin-total-inp')?.value)||0;
   const free = parseFloat(document.getElementById('coin-free')?.value)||0;
   const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
-  const net = Math.max(0, total - free - saloy - freeCoins);
+  const total = parseFloat(document.getElementById('coin-total')?.value) || (net + free + saloy + freeCoins);
   const spawn = net * 0.75;
   const owner = net * 0.25;
   const vname = document.getElementById('form-vname')?.textContent || currentItem?.sheet_name || '—';
