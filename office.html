@@ -783,7 +783,7 @@ function defStripHtml(hid,rec,cnt,isSaved,netTarget){
     chips+=`<span class="dchip counted">Counted ₱${fmt(cnt)}</span>`;
 
   } else {
-    chips+=`<span class="dchip pending">Not counted yet</span>`;
+    chips+=`<span class="dchip pending">⏳ Pending count</span>`;
   }
   chips+=`<button class="btn-save ${isSaved?'saved':''}" id="btnsave-${hid}" onclick="savePacks(${hid})">${isSaved?'✓ Saved':'Save'}</button>`;
   return chips;
@@ -1125,7 +1125,7 @@ async function loadRecon(collector){
           const gap    = packed > 0 ? packed - spawn : null;
           const hasPacks = packed > 0;
           const cls    = !hasPacks ? 'uncounted' : gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
-          const statusText = !hasPacks ? '⏳ Not counted' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
+          const statusText = !hasPacks ? '⏳ Pending office count' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
           const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
             `<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':PACK_LABELS[k]+' ₱'+fmt(v)}</span>`
           ).join(' · ');
@@ -1139,7 +1139,7 @@ async function loadRecon(collector){
               <span class="rv-time">${t}</span>
             </div>
             <div class="rv-coins">📍 ${h.area||'—'} · Coins ₱${fmt(h.coins_total)}</div>
-            <div class="rv-packs">${packParts||'<span style="color:#9ca3af;font-style:italic">No packs entered in Spawn Count</span>'}</div>
+            <div class="rv-packs">${packParts||'<span style="color:#d97706;font-style:italic">⏳ Pending office count</span>'}</div>
             <div class="rv-bottom">
               <span class="rv-spawn">Spawn ₱${fmt(spawn)}</span>
               <span class="rv-status ${cls}">${statusText}</span>
