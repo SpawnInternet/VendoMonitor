@@ -178,9 +178,10 @@ function harvestSummaryRenderLive(rows, totalPending, overdue) {
 }
 
 function showCollectorBreakdown(name) {
+  console.log('[BREAKDOWN] clicked:', name, '| rows:', (_collectorRows[name]||[]).length, '| popup exists:', !!document.getElementById('col-breakdown-bg'));
   const rows = _collectorRows[name] || [];
   const popup = document.getElementById('col-breakdown-bg');
-  if (!popup) return;
+  if (!popup) { console.warn('[BREAKDOWN] popup element col-breakdown-bg NOT FOUND'); return; }
 
   const COLLECTOR_COLORS = {
     'Gilbert': '#1565c0', 'Tandoy': '#7c3aed', 'Ailyn': '#be185d',
