@@ -979,7 +979,7 @@ function showP(id, btn) {
   if (_navHistory.length > 10) _navHistory.shift();
   gUpdateBackBtn(id);
   hideBread();
-  if(id==="harvest")   loadHarvests();
+  if(id==="harvest")   { loadHarvests(); if(typeof harvestTabLoad==='function') harvestTabLoad(); }
   if(id==="analytics") loadAnalytics();
   if(id==="vendos")     loadVendos();
   if(id==="skipped")    loadSkipped();
