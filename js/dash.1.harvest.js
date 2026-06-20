@@ -1271,9 +1271,10 @@ async function rcRunFresh(from,to,fromISO,toISO,el){
 function rcShowNamesById(harvestId){
   const row=(rcAllRows||[]).find(r=>r.id===harvestId);
   if(!row){toast('Row not found');return;}
-  rcShowNames(row.vendo_name||row.sheet_name||'',row.sheet_name||'',row.tg_name||'',row.area||'');
+  rcShowNames(row.vendo_name||row.sheet_name||'',row.sheet_name||'',row.tg_name||'',row.area||'',row);
 }
-async function rcShowNames(vendoName, sheetName, tgName, area){
+async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
+  window._rcnHarvestRow = harvestRow || null;
   // Create overlay
   let overlay = document.getElementById('rc-names-overlay');
   if(overlay) overlay.remove();
@@ -1329,6 +1330,25 @@ async function rcShowNames(vendoName, sheetName, tgName, area){
         </div>
         <button onclick="rcnSaveNames(${JSON.stringify(vendoName)})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
         <span id="rcn-msg" style="margin-left:10px;font-size:11px;"></span>
+      </div>
+      <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:6px;">🗓 Harvest Window</div>
+        <div style="font-size:11px;color:#92400e;margin-bottom:10px;">Changes reconciliation window — TG income is fetched between window start and harvest date.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:#6b7280;font-weight:500;">Window Start</label>
+            <input type="date" id="rcn-window-start" value="${(harvestRow&&harvestRow.harvest_window_start)||''}"
+              style="width:100%;height:32px;padding:0 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+          </div>
+          <div>
+            <label style="font-size:11px;color:#6b7280;font-weight:500;">Harvest Date</label>
+            <input type="date" id="rcn-harvest-date" value="${(harvestRow&&harvestRow.harvest_date)||''}"
+              style="width:100%;height:32px;padding:0 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+          </div>
+        </div>
+        ${harvestRow?`<div style="font-size:10px;color:#92400e;margin-bottom:8px;">Harvest ID: <b>${harvestRow.id||'—'}</b> · Collector: <b>${harvestRow.collector||'—'}</b></div>`:'<div style="font-size:10px;color:#9ca3af;margin-bottom:8px;">No harvest record linked.</div>'}
+        <button onclick="rcnSaveHarvestWindow()" style="height:32px;padding:0 16px;background:#ea580c;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">🗓 Update Harvest Window</button>
+        <span id="rcn-window-msg" style="margin-left:10px;font-size:11px;"></span>
       </div>
       <div id="rcn-suggestions"></div>
     </div>
@@ -1416,6 +1436,41 @@ async function rcnSaveNames(vendoName){
       setTimeout(()=>rcShowNames(vendoName,newSheet||vendoName,newTg,area),80);
     }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
   }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
+}
+
+async function rcnSaveHarvestWindow(){
+  const row=window._rcnHarvestRow;
+  const msg=document.getElementById('rcn-window-msg');
+  if(!row||!row.id){ if(msg){msg.textContent='No harvest record linked';msg.style.color='#dc2626';} return; }
+  const ws=(document.getElementById('rcn-window-start')?.value||'').trim();
+  const hd=(document.getElementById('rcn-harvest-date')?.value||'').trim();
+  if(!ws&&!hd){ if(msg){msg.textContent='Enter at least one date';msg.style.color='#dc2626';} return; }
+  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const u={};
+  if(ws) u.harvest_window_start=ws;
+  if(hd) u.harvest_date=hd;
+  try{
+    const r=await fetch(`${_SB}/rest/v1/harvests?id=eq.${row.id}`,{method:'PATCH',
+      headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(u)});
+    if(r.ok){
+      // keep vendos.last_harvest_date in sync if harvest_date changed
+      if(hd && row.vendo_id){
+        await fetch(`${_SB}/rest/v1/vendos?id=eq.${row.vendo_id}`,{method:'PATCH',
+          headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+          body:JSON.stringify({last_harvest_date:hd})});
+      }
+      // update local cache row
+      Object.assign(row,u);
+      const cacheRow=(rcAllRows||[]).find(x=>x.id===row.id);
+      if(cacheRow) Object.assign(cacheRow,u);
+      toast('✅ Harvest window updated!');
+      if(msg){msg.textContent='Saved';msg.style.color='#15803d';}
+    }else{
+      const errText=await r.text();
+      if(msg){msg.textContent='Failed: '+errText.slice(0,40);msg.style.color='#dc2626';}
+    }
+  }catch(e){ if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';} }
 }
 
 async function rcnQuickLink(vendoName, tgName){
