@@ -116,7 +116,7 @@ async function htShowVendoProfile(name, area) {
     const enc=encodeURIComponent(name);
     const [vr,hr]=await Promise.all([
       sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
-      sb('harvests','sheet_name=eq.'+enc+'&select=harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
+      sb('harvests','sheet_name=eq.'+enc+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
     vpRenderInfo();
@@ -187,8 +187,8 @@ async function vpRenderRecon(){
       const we=hr.harvest_date;
       let tgInc=0,off=0;
       while(true){
-        const r=await fetch(`${SB_URL}/rest/v1/transactions?vendo=eq.${encodeURIComponent(v.tg_name)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off}`,
-          {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+        const r=await fetch(`${SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(v.tg_name)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off}`,
+          {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
         const td=await r.json();
         if(!Array.isArray(td)||!td.length) break;
         tgInc+=td.reduce((s,t)=>s+Number(t.amount||0),0);
@@ -237,11 +237,15 @@ async function vpRenderNames(){
     const words = sheetName.split(/\s+/).filter(w=>w.length>3);
     const q = words.slice(0,2).join(' ');
     try{
-      const r=await fetch(`${SB_URL}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=10`,
-        {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+      const r=await fetch(`${SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=10`,
+        {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
       suggestions=await r.json();
     }catch(e){}
   }
+
+  // Most recent harvest record for window editing
+  const harvests = window._vpHarvests||[];
+  const lastHarvestData = harvests.length ? harvests[0] : null;
 
   let html = `
   <div style="margin-bottom:16px;">
@@ -281,6 +285,26 @@ async function vpRenderNames(){
         </div>
       </div>
       <button onclick="vpSaveNames()" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
+    </div>
+
+    <!-- Harvest Window editor -->
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:6px;">🗓 Harvest Window</div>
+      <div style="font-size:11px;color:#92400e;margin-bottom:10px;">Changes reconciliation window — TG income is fetched between window start and harvest date.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:11px;color:#6b7280;font-weight:500;">Window Start</label>
+          <input type="date" id="vn-window-start" value="${(lastHarvestData&&lastHarvestData.harvest_window_start)||''}"
+            style="width:100%;height:32px;padding:0 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#6b7280;font-weight:500;">Harvest Date</label>
+          <input type="date" id="vn-harvest-date" value="${(lastHarvestData&&lastHarvestData.harvest_date)||''}"
+            style="width:100%;height:32px;padding:0 8px;border:1px solid #fed7aa;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
+        </div>
+      </div>
+      ${lastHarvestData?`<div style="font-size:10px;color:#92400e;margin-bottom:8px;">Harvest ID: <b>${lastHarvestData.id||'—'}</b> · Collector: <b>${lastHarvestData.collector||'—'}</b></div>`:'<div style="font-size:10px;color:#9ca3af;margin-bottom:8px;">No harvest records found.</div>'}
+      <button onclick="vpSaveHarvestWindow()" style="height:32px;padding:0 16px;background:#ea580c;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">🗓 Update Harvest Window</button>
     </div>`;
 
   // Suggestions for unmatched vendos
@@ -306,8 +330,8 @@ async function vpQuickLink(tgName){
   const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
   const u={tg_name:tgName, tg_match_confirmed:true};
   try{
-    const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
-      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+      headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
       Object.assign(window._vpVendo,u);
@@ -328,8 +352,8 @@ async function vpTgSearch2(q){
   el.style.display='';
   el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">Searching…</div>';
   try{
-    const r=await fetch(`${SB_URL}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
-      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    const r=await fetch(`${SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
+      {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
     _tgSearchResults=await r.json();
     if(!_tgSearchResults.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
     el.innerHTML=_tgSearchResults.map((v,i)=>`<div onclick="vpTgPick(${i})"
@@ -357,8 +381,8 @@ async function vpSaveNames(){
   const u={sheet_name:sheet||null, tg_name:tg||null};
   if(tg) u.tg_match_confirmed=true;
   try{
-    const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
-      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+      headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
       Object.assign(window._vpVendo,u);
@@ -374,13 +398,48 @@ async function vpSaveNames(){
   }catch(e){toast('Error: '+e.message); console.error('vpSaveNames error:',e);}
 }
 
+async function vpSaveHarvestWindow(){
+  const v=window._vpVendo; if(!v)return;
+  const harvests=window._vpHarvests||[];
+  const lastH=harvests.length?harvests[0]:null;
+  if(!lastH||!lastH.id){toast('No harvest record to update');return;}
+  const ws=(document.getElementById('vn-window-start')||{}).value||'';
+  const hd=(document.getElementById('vn-harvest-date')||{}).value||'';
+  if(!ws&&!hd){toast('Enter at least one date to update');return;}
+  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const u={};
+  if(ws) u.harvest_window_start=ws;
+  if(hd){ u.harvest_date=hd; }
+  try{
+    const r=await fetch(SB+'/rest/v1/harvests?id=eq.'+lastH.id,{method:'PATCH',
+      headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(u)});
+    if(r.ok){
+      // Also update vendos.last_harvest_date if harvest_date changed
+      if(hd){
+        await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+          headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+          body:JSON.stringify({last_harvest_date:hd})});
+        Object.assign(window._vpVendo,{last_harvest_date:hd});
+      }
+      // Update local cache
+      Object.assign(lastH,u);
+      toast('✅ Harvest window updated!');
+      vpRenderNames();
+    } else {
+      const errText=await r.text();
+      toast('Update failed: '+errText.slice(0,80));
+    }
+  }catch(e){toast('Error: '+e.message);}
+}
+
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
   const pw=prompt('Admin password:');if(pw!=='101510'){toast('Wrong password');return;}
   const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
-    const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
+    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
     if(r.ok){Object.assign(window._vpVendo,u);window._vpEditMode=false;document.getElementById('vp-edit-btn').textContent='Edit';document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name;vpRenderInfo();toast('Saved!');}
     else toast('Save failed');
   }catch(e){toast('Error: '+e.message);}
@@ -412,7 +471,7 @@ async function vpExecutePullout(){
   const reason=(document.getElementById('vp-po-reason')||{}).value||'';
   if(pw!=='101510'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
   try{
-    const r=await fetch(SB_URL+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
+    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
     if(r.ok){vpCancelPullout();window._vpVendo.status='pulled_out';toast('Vendo pulled out');vpRenderInfo();}
     else{const e=document.getElementById('vp-po-err');if(e)e.textContent='Save failed';}
   }catch(e2){const e=document.getElementById('vp-po-err');if(e)e.textContent='Error: '+e2.message;}
