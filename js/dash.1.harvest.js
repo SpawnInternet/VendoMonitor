@@ -1905,6 +1905,7 @@ function _initProgressMap(gpsRows){
       const collector=row.collector||row.harvest_groups?.collector||'';
       const icon=L.divIcon({className:'',html:`<div style="text-align:center;"><div style="width:14px;height:14px;border-radius:50%;background:${color};border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.4);margin:0 auto;"></div>${collector?`<div style="background:#1e293b;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:5px;white-space:nowrap;margin-top:2px;display:inline-block;">👤 ${collector}</div>`:''}<div style="background:${color};color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:8px;white-space:nowrap;margin-top:2px;display:inline-block;">${name}</div><div style="color:#555;font-size:9px;">${t}</div></div>`,iconAnchor:[7,7]});
       const _m=L.marker([lat,lng],{icon}).addTo(_progressMap).bindPopup(`<b>${name}</b><br>${collector?'👤 '+collector+'<br>':''}${t}`); window._progressMarkers[name]=_m;
+      _m.on('click',function(){ _progressMap.flyTo([lat,lng],18,{animate:true,duration:0.8}); });
       bounds.push([lat,lng]);
     });
     if(bounds.length===1)_progressMap.setView(bounds[0],15);
@@ -1913,8 +1914,16 @@ function _initProgressMap(gpsRows){
 }
 
 function vmZoomToProgress(name){
-  const btn=document.getElementById('hbtn-vmap');
-  if(btn) hvNewTab('vmap',btn);
+  if(!_progressMap||!window._progressMarkers){ toast('Map loading…'); return; }
+  const m=window._progressMarkers[name];
+  if(m){
+    _progressMap.flyTo(m.getLatLng(),18,{animate:true,duration:0.8});
+    m.openPopup();
+    // scroll map into view so user sees the zoom
+    document.getElementById('progress-map')?.scrollIntoView({behavior:'smooth',block:'center'});
+  } else {
+    toast('No GPS pin for '+name);
+  }
 }
 
 // Auto-refresh every 30 seconds when tab is active
