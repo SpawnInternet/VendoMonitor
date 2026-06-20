@@ -115,7 +115,7 @@ async function htShowVendoProfile(name, area) {
   try {
     const enc=encodeURIComponent(name);
     const [vr,hr]=await Promise.all([
-      sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
+      sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
       sb('harvests','sheet_name=eq.'+enc+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
@@ -139,7 +139,20 @@ function vpRenderInfo(){
   const dc=days===null?'#6b7280':days>46?'#dc2626':days>30?'#d97706':'#15803d';
   const tgB=v&&v.tg_name?'<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">matched</span>':'<span style="background:#fef9c3;color:#b45309;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">unmatched</span>';
   const gpsL=v&&v.lat&&v.lng?'&nbsp;<a href="https://www.google.com/maps?q='+v.lat+','+v.lng+'" target="_blank" style="color:#1565c0;font-size:11px;">Maps &#x2197;</a>':'';
-  let h1='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;background:#f8faff;border-radius:8px;padding:14px;">';
+  // Profile photo block
+  const photoUrl = v&&v.photo_url ? v.photo_url : '';
+  const photoBlock = '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:12px;background:#f8faff;border-radius:10px;border:1px solid #e5e7eb;">'
+    + (photoUrl
+        ? '<img id="vp-photo-img" src="'+photoUrl+'" style="width:72px;height:72px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open(\''+photoUrl+'\',\'_blank\')">'
+        : '<div id="vp-photo-img" style="width:72px;height:72px;border-radius:10px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;border:1px solid #e5e7eb;">🏪</div>')
+    + '<div style="flex:1;">'
+    + '<div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:6px;">📷 Vendo Photo</div>'
+    + '<input type="file" id="vp-photo-file" accept="image/*" style="display:none;" onchange="vpUploadPhoto(this)">'
+    + '<button onclick="document.getElementById(\'vp-photo-file\').click()" style="height:30px;padding:0 14px;background:#1565c0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">'+(photoUrl?'Change Photo':'Upload Photo')+'</button>'
+    + (photoUrl?'<button onclick="vpRemovePhoto()" style="height:30px;padding:0 12px;margin-left:6px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Remove</button>':'')
+    + '<span id="vp-photo-msg" style="margin-left:8px;font-size:11px;"></span>'
+    + '</div></div>';
+  let h1=photoBlock+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;background:#f8faff;border-radius:8px;padding:14px;">';
   h1+='<div><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Identity</div>';
   h1+=_vf('Store / Vendo name',v&&v.sheet_name,null,false);
   h1+=edit?_vf('Owner name',v&&v.owner_name,'owner_name',true):'<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">Owner name</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(v&&v.owner_name||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
@@ -430,6 +443,45 @@ async function vpSaveHarvestWindow(){
       const errText=await r.text();
       toast('Update failed: '+errText.slice(0,80));
     }
+  }catch(e){toast('Error: '+e.message);}
+}
+
+async function vpUploadPhoto(input){
+  const v=window._vpVendo; if(!v||!v.id){toast('No vendo loaded');return;}
+  const file=input.files&&input.files[0]; if(!file)return;
+  const msg=document.getElementById('vp-photo-msg');
+  if(msg){msg.textContent='Uploading…';msg.style.color='#6b7280';}
+  try{
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path='vendo-'+v.id+'-'+Date.now()+'.'+ext;
+    // Upload to harvest-photos bucket
+    const up=await fetch(`${_SB}/storage/v1/object/harvest-photos/${path}`,{
+      method:'POST',
+      headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},
+      body:file
+    });
+    if(!up.ok){const t=await up.text();if(msg){msg.textContent='Upload failed';msg.style.color='#dc2626';}console.error('upload',t);return;}
+    const publicUrl=`${_SB}/storage/v1/object/public/harvest-photos/${path}`;
+    // Save URL to vendos
+    const r=await fetch(`${_SB}/rest/v1/vendos?id=eq.${v.id}`,{method:'PATCH',
+      headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify({photo_url:publicUrl})});
+    if(r.ok){
+      window._vpVendo.photo_url=publicUrl;
+      toast('✅ Photo uploaded!');
+      vpRenderInfo();
+    }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
+  }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
+}
+async function vpRemovePhoto(){
+  const v=window._vpVendo; if(!v||!v.id)return;
+  if(!confirm('Remove this vendo photo?'))return;
+  try{
+    const r=await fetch(`${_SB}/rest/v1/vendos?id=eq.${v.id}`,{method:'PATCH',
+      headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify({photo_url:null})});
+    if(r.ok){window._vpVendo.photo_url=null;toast('Photo removed');vpRenderInfo();}
+    else toast('Remove failed');
   }catch(e){toast('Error: '+e.message);}
 }
 
