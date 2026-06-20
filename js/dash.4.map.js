@@ -4387,7 +4387,7 @@ async function fullBackup() {
       `Vendos      : ${vs?.length || 0} active`,
       `Supabase URL: ${SB_URL}`,
       `Dashboard   : spawninternet.github.io/VendoMonitor/dashboard.html`,
-      `Railway     : worker-production-43ce.up.railway.app`,
+      `Railway     : vendomonitor-cloud-production.up.railway.app`,
       ``,
       `FILES IN THIS BACKUP:`,
       `  data/transactions_${dateStr}.csv  — all transactions`,
