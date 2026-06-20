@@ -1934,7 +1934,7 @@ async function loadDashboard() {
     const _apiData = await apiLoad();
     const areas  = (_apiData && _apiData.areas)   || await sb("summary_by_area","order=total_sales.desc",20);
     const trend  = (_apiData && _apiData.trend)   || await sb("trend_7day_mat","order=date.asc",7);
-    const hacked = (_apiData && _apiData.suspicious) || await sb("hacked_summary_mat","order=txn_count.desc",1000);
+    const hacked = (_apiData && _apiData.suspicious) || await sb("hacked_summary","order=txn_count.desc",1000);
     const recent = (_apiData && _apiData.recent)  || await sb("transactions","select=date,time,vendo,area,amount,created_at&order=created_at.desc",30);
     const vendos = (_apiData && _apiData.all_vendos) || await sb("summary_by_vendo","order=sales.desc&select=vendo,sheet_name,area,sales,txn_count,today_sales,last_date",2000);
     console.log("[VENDOS DEBUG]", "apiData:", !!_apiData, "all_vendos len:", _apiData&&_apiData.all_vendos&&_apiData.all_vendos.length, "vendos len:", vendos&&vendos.length);
@@ -2510,7 +2510,7 @@ function hPage(d){ }
 // HACKED — TODO LIST
 // ══════════════════════════════════════════════════════════
 async function loadSuspicious() {
-  const rows=await sb("hacked_summary_mat","order=txn_count.desc",1000);
+  const rows=await sb("hacked_summary","order=txn_count.desc",1000);
   hackedAll=rows;
   const total_txns=rows.reduce((s,h)=>s+parseInt(h.txn_count||0),0);
   const total_amt=rows.reduce((s,h)=>s+parseFloat(h.total_amount||0),0);
