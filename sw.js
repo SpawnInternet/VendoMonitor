@@ -1,5 +1,5 @@
-// sw.js — Spawn Harvest PWA Service Worker v17.0
-const CACHE = 'spawn-harvest-v17.0';
+// sw.js — Spawn Harvest PWA Service Worker v18.0
+const CACHE = 'spawn-harvest-v18.0';
 const APP_HTML = '/VendoMonitor/harvest_v2.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v2.html',
@@ -79,7 +79,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // App assets — network first, cache fallback (ignoreSearch so query-string busts still resolve)
+  // App assets — network first, cache fallback.
+  // For versioned files (?v=) match EXACTLY so a stale cached version is never served;
+  // for everything else, ignoreSearch keeps offline reliability.
+  const isVersioned = url.search.includes('v=');
   e.respondWith(
     fetch(req).then(response => {
       if (response && response.status === 200) {
@@ -88,7 +91,7 @@ self.addEventListener('fetch', e => {
       }
       return response;
     }).catch(() =>
-      caches.match(req, { ignoreSearch: true }).then(hit =>
+      caches.match(req, { ignoreSearch: !isVersioned }).then(hit =>
         hit || caches.match(APP_HTML, { ignoreSearch: true })
       )
     )
