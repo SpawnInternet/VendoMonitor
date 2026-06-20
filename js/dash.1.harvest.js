@@ -1317,13 +1317,13 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
         <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:10px;">Edit Names</div>
         <div style="margin-bottom:8px;">
           <label style="font-size:11px;color:#6b7280;font-weight:500;">Excel / Sheet Name</label>
-          <input id="rcn-sheet" value="${(sheetName||'').replace(/"/g,'&quot;')}" placeholder="Name from Excel file..."
+          <input id="rcn-sheet" value="${(sheetName||'').replace(/"/g,'&quot;')}" placeholder="Name from Excel file..." autocomplete="off"
             style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-top:3px;box-sizing:border-box;">
         </div>
         <div style="margin-bottom:10px;">
           <label style="font-size:11px;color:#6b7280;font-weight:500;">TG Name (for income matching)</label>
           <div style="position:relative;margin-top:3px;">
-            <input id="rcn-tg" value="${(tgName||'').replace(/"/g,'&quot;')}" placeholder="Search TG name..." oninput="rcnTgSearch(this.value)"
+            <input id="rcn-tg" value="${(tgName||'').replace(/"/g,'&quot;')}" placeholder="Search TG name..." oninput="rcnTgSearch(this.value)" autocomplete="off"
               style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">
             <div id="rcn-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:160px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>
           </div>
@@ -1417,26 +1417,34 @@ async function rcnSaveNames(vendoName){
   const sheet=(document.getElementById('rcn-sheet')?.value||'').trim();
   const tg=(document.getElementById('rcn-tg')?.value||'').trim();
   const msg=document.getElementById('rcn-msg');
+  const row=window._rcnHarvestRow;
   try{
-    // Find vendo by vendo_name
-    const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
-    const rows=await r.json();
-    if(!rows.length){if(msg){msg.textContent='Vendo not found';msg.style.color='#dc2626';}return;}
-    const id=rows[0].id;
+    // Prefer the exact vendo_id from the harvest row (avoids wrong-duplicate match);
+    // fall back to name lookup only if vendo_id is missing.
+    let id = row && row.vendo_id ? row.vendo_id : null;
+    if(!id){
+      const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+      const rows=await r.json();
+      if(!rows.length){if(msg){msg.textContent='Vendo not found';msg.style.color='#dc2626';}return;}
+      id=rows[0].id;
+    }
     const u={};
     if(sheet) u.sheet_name=sheet;
-    if(tg) u.tg_name=tg;
+    if(tg){ u.tg_name=tg; u.tg_match_confirmed=true; }
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
     if(r2.ok){
       toast('✅ Names saved!');
       htAllRows=[];
-      const newSheet=(document.getElementById('rcn-sheet')?.value||'').trim();
-      const newTg=(document.getElementById('rcn-tg')?.value||'').trim();
-      document.getElementById('rc-names-overlay')?.remove();
-      setTimeout(()=>rcShowNames(vendoName,newSheet||vendoName,newTg,area),80);
-    }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
+      // update local cache row so reopening shows fresh values
+      if(row){ if(sheet) row.sheet_name=sheet; if(tg) row.tg_name=tg; }
+      if(msg){msg.textContent='Saved';msg.style.color='#15803d';}
+    }else{
+      const errText=await r2.text();
+      if(msg){msg.textContent='Save failed: '+errText.slice(0,40);msg.style.color='#dc2626';}
+    }
   }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
 }
+
 
 async function rcnSaveHarvestWindow(){
   const row=window._rcnHarvestRow;
