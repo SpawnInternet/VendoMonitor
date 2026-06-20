@@ -1984,7 +1984,7 @@ function rcptRender(){
       if(gap!=null){ if(gap<0)shortT+=Math.abs(gap); else if(gap>0)surplusT+=gap; }
       const hasP=cnt>0||b>0;
       const stCol=!hasP?'#9ca3af':gap===0?'#0F6E56':gap<0?'#dc2626':'#854F0B';
-      const stTxt=!hasP?'⏳ Pending':gap===0?'✓ Match':gap<0?'Short ₱'+fmt(Math.abs(gap)):'Surplus ₱'+fmt(gap);
+      const stTxt=!hasP?'⏳ Pending':gap===0?'✓ Match':gap<0?'Short '+fmt(Math.abs(gap)):'Surplus '+fmt(gap);
       const code=h.vendo_name?(h.vendo_name.substring(0,4).toUpperCase()):(h.sheet_name?h.sheet_name.substring(0,4).toUpperCase():'—');
       return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:0.5px solid #f1f5f9;">
         <span><b style="color:#1565c0;">${code}</b> · ${(h.vendo_name||h.sheet_name||'—')}</span>
@@ -2004,32 +2004,33 @@ function rcptRender(){
       : 'not yet counted';
     const ov=overallGap===null?{c:'#6b7280',bg:'#f3f4f6',bd:'#e5e7eb',t:'Pending'}
       :overallGap===0?{c:'#0F6E56',bg:'#E1F5EE',bd:'#9FE1CB',t:'✓ Balanced'}
-      :overallGap>0?{c:'#854F0B',bg:'#FAEEDA',bd:'#FAC775',t:'+₱'+fmt(overallGap)+' Surplus'}
-      :{c:'#dc2626',bg:'#fef2f2',bd:'#fca5a5',t:'-₱'+fmt(Math.abs(overallGap))+' Deficit'};
+      :overallGap>0?{c:'#854F0B',bg:'#FAEEDA',bd:'#FAC775',t:'+'+fmt(overallGap)+' Surplus'}
+      :{c:'#dc2626',bg:'#fef2f2',bd:'#fca5a5',t:'-'+fmt(Math.abs(overallGap))+' Deficit'};
     return `<div class="rcpt-card" style="background:#fff;border:0.5px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:10px;">
-      <div onclick="rcptToggle(this)" style="display:flex;align-items:center;gap:12px;cursor:pointer;">
+      <div onclick="rcptOpenModal(this)" style="display:flex;align-items:center;gap:12px;cursor:pointer;">
         <div style="width:40px;height:40px;border-radius:50%;background:${isRecon?'#E6F1FB':'#f1f5f9'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${isRecon?'#1565c0':'#6b7280'};">${initial}</div>
         <div style="flex:1;">
           <div style="font-weight:700;font-size:15px;color:#1e293b;">${col}${statusPill}</div>
           <div style="font-size:12px;color:#6b7280;">${harvests.length} vendos · ${countedBy}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:18px;font-weight:800;color:#1565c0;">₱${fmt(netRemit)}</div>
+          <div style="font-size:18px;font-weight:800;color:#1565c0;">${fmt(netRemit)}</div>
           <div style="font-size:11px;color:#6b7280;">net remit</div>
         </div>
         <span class="rcpt-chev" style="color:#cbd5e1;font-size:18px;">▸</span>
       </div>
+      <div class="rcpt-modal-title" style="display:none;">${col} · ${date} · ${harvests.length} vendos</div>
       <div class="rcpt-detail" style="display:none;margin-top:14px;border-top:0.5px solid #e5e7eb;padding-top:12px;">
         <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Per Vendo</div>
         ${rows||'<div style="color:#9ca3af;font-size:13px;padding:8px 0;">No vendos</div>'}
         <div style="margin-top:12px;background:#E1F5EE;border:1px solid #9FE1CB;border-radius:8px;padding:12px;">
           <div style="font-size:11px;font-weight:700;color:#0F6E56;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Remittance Summary</div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#6b7280;">Total Spawn Share</span><span style="font-weight:700;">₱${fmt(spawn)}</span></div>
-          ${shortT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Total Short</span><span style="color:#dc2626;font-weight:700;">−₱${fmt(shortT)}</span></div>`:''}
-          ${surplusT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#854F0B;">Total Surplus</span><span style="color:#854F0B;font-weight:700;">+₱${fmt(surplusT)}</span></div>`:''}
-          ${bugi>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#b45309;">Bugi (Old Coins)</span><span style="color:#b45309;font-weight:700;">−₱${fmt(bugi)}</span></div>`:''}
-          ${totalExp>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Expenses</span><span style="color:#dc2626;font-weight:700;">−₱${fmt(totalExp)}</span></div>`:''}
-          <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0 0;border-top:0.5px solid #9FE1CB;margin-top:4px;"><span>Net to Remit</span><span style="color:#1565c0;">₱${fmt(netRemit)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#6b7280;">Total Spawn Share</span><span style="font-weight:700;">${fmt(spawn)}</span></div>
+          ${shortT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Total Short</span><span style="color:#dc2626;font-weight:700;">−${fmt(shortT)}</span></div>`:''}
+          ${surplusT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#854F0B;">Total Surplus</span><span style="color:#854F0B;font-weight:700;">+${fmt(surplusT)}</span></div>`:''}
+          ${bugi>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#b45309;">Bugi (Old Coins)</span><span style="color:#b45309;font-weight:700;">−${fmt(bugi)}</span></div>`:''}
+          ${totalExp>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Expenses</span><span style="color:#dc2626;font-weight:700;">−${fmt(totalExp)}</span></div>`:''}
+          <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0 0;border-top:0.5px solid #9FE1CB;margin-top:4px;"><span>Net to Remit</span><span style="color:#1565c0;">${fmt(netRemit)}</span></div>
           <div style="text-align:center;margin-top:10px;padding:8px;border-radius:8px;background:${ov.bg};border:1px solid ${ov.bd};">
             <div style="font-size:16px;font-weight:800;color:${ov.c};">${ov.t}</div>
             <div style="font-size:11px;color:#6b7280;">per-vendo pack count vs spawn share</div>
@@ -2045,17 +2046,29 @@ function rcptRender(){
   const sumEl=document.getElementById('rcpt-summary');
   if(sumEl) sumEl.innerHTML=`
     <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Collectors</div><div style="font-size:22px;font-weight:800;">${cols.length}</div></div>
-    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Total Spawn</div><div style="font-size:22px;font-weight:800;">₱${fmt(daySpawn)}</div></div>
-    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Net to Remit</div><div style="font-size:22px;font-weight:800;color:#1565c0;">₱${fmt(dayNet)}</div></div>
-    <div style="background:${ovc.bg};border-radius:8px;padding:12px;"><div style="font-size:12px;color:${ovc.c};">Overall</div><div style="font-size:22px;font-weight:800;color:${ovc.c};">${dayOverall>0?'+':''}${dayOverall===0?'₱0':(dayOverall<0?'−₱'+fmt(Math.abs(dayOverall)):'₱'+fmt(dayOverall))}</div></div>`;
+    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Total Spawn</div><div style="font-size:22px;font-weight:800;">${fmt(daySpawn)}</div></div>
+    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Net to Remit</div><div style="font-size:22px;font-weight:800;color:#1565c0;">${fmt(dayNet)}</div></div>
+    <div style="background:${ovc.bg};border-radius:8px;padding:12px;"><div style="font-size:12px;color:${ovc.c};">Overall</div><div style="font-size:22px;font-weight:800;color:${ovc.c};">${dayOverall>0?'+':''}${dayOverall===0?'₱0':(dayOverall<0?'−'+fmt(Math.abs(dayOverall)):''+fmt(dayOverall))}</div></div>`;
   const listEl=document.getElementById('rcpt-list');
   if(listEl) listEl.innerHTML=cols.length?cards:'<div style="padding:30px;text-align:center;color:#9ca3af;">No harvests for this date</div>';
 }
-function rcptToggle(hdr){
+function rcptOpenModal(hdr){
   const card=hdr.closest('.rcpt-card');
   const detail=card.querySelector('.rcpt-detail');
-  const chev=card.querySelector('.rcpt-chev');
-  const open=detail.style.display!=='none';
-  detail.style.display=open?'none':'block';
-  if(chev) chev.textContent=open?'▸':'▾';
+  const title=card.querySelector('.rcpt-modal-title');
+  if(!detail) return;
+  // remove any existing modal
+  document.getElementById('rcpt-modal-overlay')?.remove();
+  const ov=document.createElement('div');
+  ov.id='rcpt-modal-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="position:sticky;top:0;background:linear-gradient(135deg,#1565c0,#1e3cb8);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:15px;font-weight:700;">🧾 ${title?title.textContent:'Receipt'}</div>
+      <button onclick="document.getElementById('rcpt-modal-overlay').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:18px;width:30px;height:30px;border-radius:50%;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div style="padding:16px;">${detail.innerHTML}</div>
+  </div>`;
+  document.body.appendChild(ov);
 }
