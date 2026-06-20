@@ -390,6 +390,15 @@ function gpsUploadPhoto(vendoId){
   inp.onchange=async()=>{
     const file=inp.files[0]; if(!file) return;
     const pw=prompt('Admin password:'); if(pw!=='101510'){ toast('Wrong password'); return; }
+    // Try to read GPS from photo EXIF BEFORE compression (compression strips EXIF)
+    try{
+      const gps=await readExifGps(file);
+      if(gps){
+        const inpEl=document.getElementById('gps-edit-coords');
+        if(inpEl){ inpEl.value=gps.lat.toFixed(6)+', '+gps.lng.toFixed(6); inpEl.style.background='#dcfce7'; }
+        toast('📍 GPS found in photo: '+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5));
+      }
+    }catch(e){ /* no EXIF GPS — silent */ }
     toast('Compressing & uploading…');
     try{
       const blob=await compressImage(file,600,0.82);
@@ -405,11 +414,68 @@ function gpsUploadPhoto(vendoId){
         body:JSON.stringify({photo_url:publicUrl})});
       if(v) v.photo_url=publicUrl;
       toast('✅ Photo saved!');
-      gpsOpenEditor(vendoId); // refresh modal
+      // Re-open editor but preserve any GPS we just auto-filled
+      const filled=document.getElementById('gps-edit-coords')?.value||'';
+      gpsOpenEditor(vendoId);
+      if(filled){ const el=document.getElementById('gps-edit-coords'); if(el&&!el.value){ el.value=filled; el.style.background='#dcfce7'; } }
       gpsTraceFilter();
     }catch(e){ toast('Error: '+e.message); }
   };
   inp.click();
+}
+
+// Read GPS coordinates from a JPEG file's EXIF data (no external library)
+function readExifGps(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const view=new DataView(e.target.result);
+        if(view.getUint16(0,false)!==0xFFD8){ return reject('not jpeg'); }
+        let offset=2; const len=view.byteLength;
+        while(offset<len){
+          const marker=view.getUint16(offset,false); offset+=2;
+          if(marker===0xFFE1){ // APP1 (EXIF)
+            const exifStart=offset+2;
+            if(view.getUint32(exifStart,false)!==0x45786966){ return reject('no exif'); }
+            const tiff=exifStart+6;
+            const little=view.getUint16(tiff,false)===0x4949;
+            const firstIFD=view.getUint32(tiff+4,little);
+            // walk IFD0 to find GPS IFD pointer (0x8825)
+            let dir=tiff+firstIFD;
+            const entries=view.getUint16(dir,little); dir+=2;
+            let gpsIFD=0;
+            for(let i=0;i<entries;i++){
+              const entry=dir+i*12;
+              if(view.getUint16(entry,little)===0x8825){ gpsIFD=tiff+view.getUint32(entry+8,little); break; }
+            }
+            if(!gpsIFD){ return reject('no gps ifd'); }
+            // parse GPS IFD
+            const gEntries=view.getUint16(gpsIFD,little); let gdir=gpsIFD+2;
+            let latRef='N',lngRef='E',lat=null,lng=null;
+            const readRationals=(off,count)=>{ const arr=[]; for(let k=0;k<count;k++){ const num=view.getUint32(off+k*8,little); const den=view.getUint32(off+k*8+4,little); arr.push(den?num/den:0); } return arr; };
+            for(let i=0;i<gEntries;i++){
+              const entry=gdir+i*12;
+              const tag=view.getUint16(entry,little);
+              const valOff=tiff+view.getUint32(entry+8,little);
+              if(tag===1){ latRef=String.fromCharCode(view.getUint8(entry+8)); }
+              else if(tag===2){ const d=readRationals(valOff,3); lat=d[0]+d[1]/60+d[2]/3600; }
+              else if(tag===3){ lngRef=String.fromCharCode(view.getUint8(entry+8)); }
+              else if(tag===4){ const d=readRationals(valOff,3); lng=d[0]+d[1]/60+d[2]/3600; }
+            }
+            if(lat==null||lng==null){ return reject('no coords'); }
+            if(latRef==='S') lat=-lat;
+            if(lngRef==='W') lng=-lng;
+            return resolve({lat,lng});
+          } else if((marker&0xFF00)!==0xFF00){ break; }
+          else { offset+=view.getUint16(offset,false); }
+        }
+        reject('no exif found');
+      }catch(err){ reject(err); }
+    };
+    reader.onerror=()=>reject('read error');
+    reader.readAsArrayBuffer(file.slice(0,128*1024)); // EXIF is in first chunk
+  });
 }
 
 // ── INLINED FROM js/api.js ──
