@@ -315,7 +315,7 @@ async function vpRenderNames(){
       const safeTg = JSON.stringify(s.tg_name);
       html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:6px;border:1px solid #fde68a;font-size:12px;">
         <div><div style="font-weight:500;color:#1e293b;">${s.tg_name}</div><div style="font-size:10px;color:#6b7280;">${s.area||''} · VLAN ${s.vlan||'—'}</div></div>
-        <button onclick="vpQuickLink(${safeTg})" style="height:28px;padding:0 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">✅ Link & Save</button>
+        <button onclick="vpQuickLink(${safeTg.replace(/"/g,'&quot;')})" style="height:28px;padding:0 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">✅ Link & Save</button>
       </div>`;
     });
     html += '</div>';
@@ -656,7 +656,7 @@ async function loadTodaySummary(force){
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${colEntries.map(([name,d],i)=>`
-            <div onclick="htShowCollectorPopup(${JSON.stringify(name)})" style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;cursor:pointer;" onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#e0e7ff'">
+            <div onclick="htShowCollectorPopup(${JSON.stringify(name).replace(/"/g,'&quot;')})" style="background:#f8faff;border:1px solid #e0e7ff;border-radius:8px;padding:7px 12px;min-width:130px;cursor:pointer;" onmouseover="this.style.borderColor='#1565c0'" onmouseout="this.style.borderColor='#e0e7ff'">
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
                 ${collectorAvatar(name, 26)}
                 <span style="font-size:12px;font-weight:700;color:#1e293b;">${name}</span>
@@ -1328,7 +1328,7 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
             <div id="rcn-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:160px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>
           </div>
         </div>
-        <button onclick="rcnSaveNames(${JSON.stringify(vendoName)})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
+        <button onclick="rcnSaveNames(${JSON.stringify(vendoName).replace(/"/g,'&quot;')})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
         <span id="rcn-msg" style="margin-left:10px;font-size:11px;"></span>
       </div>
       <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:12px;">
@@ -1372,7 +1372,7 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
               const safeTg = JSON.stringify(s.tg_name);
               sh += `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#fff;border-radius:6px;margin-bottom:6px;border:1px solid #fde68a;">
                 <div><div style="font-weight:500;color:#1e293b;">${s.tg_name}</div><div style="font-size:10px;color:#6b7280;">${s.area||''} · VLAN ${s.vlan||'—'}</div></div>
-                <button onclick="rcnQuickLink(${JSON.stringify(vendoName)},${safeTg})" style="height:28px;padding:0 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">✅ Link & Save</button>
+                <button onclick="rcnQuickLink(${JSON.stringify(vendoName).replace(/"/g,'&quot;')},${safeTg.replace(/"/g,'&quot;')})" style="height:28px;padding:0 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">✅ Link & Save</button>
               </div>`;
             });
             sh += '</div>';
@@ -1812,7 +1812,7 @@ async function loadProgress(){
         const sn = (name).replace(/'/g,"\'");
         html += `<tr style="background:${bg};cursor:pointer;" onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${bg}'" onclick="vmZoomToProgress('${sn}')">
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;white-space:nowrap;">${t}</td>
-          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;cursor:pointer;" onclick="progressFlyTo(${JSON.stringify(sn)})" title="Show on map">${name} <span style="font-size:9px;color:#1565c0;">📍</span></td>
+          <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;font-weight:500;color:#1e293b;cursor:pointer;" onclick="progressFlyTo(${JSON.stringify(sn).replace(/"/g,'&quot;')})" title="Show on map">${name} <span style="font-size:9px;color:#1565c0;">📍</span></td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:11px;">${h.area||'—'}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#1e293b;">₱${Math.round(h.coins_total||0).toLocaleString()}</td>
           <td style="padding:7px 12px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;color:#15803d;">₱${Math.round(h.spawn_share||0).toLocaleString()}</td>
