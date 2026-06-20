@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<!-- Spawn Lineman Tracker · v1.0 · cache-bust 2026-06-20a -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#2D3547">
+<title>Spawn Lineman</title>
+<style>
+  :root{
+    --gold:#F5A623;--teal:#2BA89A;--blue:#3B6FD4;--navy:#2D3547;
+    --red:#D63B3B;--green:#15803d;--muted:#8a93a3;--bg:#0f141b;--card:#1a212c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg);color:#e8edf3;min-height:100vh;display:flex;flex-direction:column}
+  .wrap{flex:1;display:flex;flex-direction:column;padding:20px;max-width:480px;margin:0 auto;width:100%}
+  .logo{font-weight:800;font-size:20px;letter-spacing:.5px;text-align:center;margin:8px 0 24px}
+  .logo span{color:var(--gold)}
+  .card{background:var(--card);border-radius:16px;padding:20px;margin-bottom:16px;border:1px solid #2a3340}
+  label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+  select,input{width:100%;padding:14px;border-radius:12px;border:1.5px solid #2a3340;background:#0f141b;color:#fff;font-size:16px;margin-bottom:14px}
+  .btn{width:100%;padding:16px;border:none;border-radius:14px;font-size:17px;font-weight:800;cursor:pointer;transition:.15s}
+  .btn-start{background:var(--teal);color:#fff}
+  .btn-stop{background:var(--red);color:#fff}
+  .btn:active{transform:scale(.98)}
+  .status{text-align:center;margin:20px 0}
+  .dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .dot.on{background:var(--green);box-shadow:0 0 0 0 rgba(21,128,61,.6);animation:pulse 1.6s infinite}
+  .dot.off{background:var(--muted)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(21,128,61,.6)}70%{box-shadow:0 0 0 12px rgba(21,128,61,0)}100%{box-shadow:0 0 0 0 rgba(21,128,61,0)}}
+  .big{font-size:15px;font-weight:700}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  .stat{background:#0f141b;border-radius:12px;padding:14px;text-align:center}
+  .stat .v{font-size:22px;font-weight:800;color:var(--gold)}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+  .queue{font-size:13px;text-align:center;margin-top:14px;color:var(--muted)}
+  .queue.has{color:var(--gold);font-weight:700}
+  .hide{display:none}
+  .coords{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;font-family:monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="logo">SPAWN <span>LINEMAN</span></div>
+
+  <!-- SETUP -->
+  <div id="setup" class="card">
+    <label>Your Name</label>
+    <select id="tech-select"><option value="">Loading…</option></select>
+    <div id="new-name-wrap" class="hide">
+      <label>New lineman name</label>
+      <input id="new-name" placeholder="Full name" autocomplete="off">
+      <select id="new-area">
+        <option value="">Select area</option>
+        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
+        <option>POLANCO</option><option>ROXAS</option><option>SINAMAN</option>
+        <option>MINAOG</option><option>MIX AREAS</option>
+      </select>
+    </div>
+    <button class="btn btn-start" id="begin-btn">Continue</button>
+  </div>
+
+  <!-- TRACKING -->
+  <div id="tracking" class="card hide">
+    <div class="status">
+      <div class="big"><span class="dot off" id="dot"></span><span id="state">Stopped</span></div>
+    </div>
+    <button class="btn btn-start" id="toggle-btn">Start Tracking</button>
+    <div class="grid">
+      <div class="stat"><div class="v" id="sent-n">0</div><div class="l">Sent</div></div>
+      <div class="stat"><div class="v" id="acc">–</div><div class="l">Accuracy m</div></div>
+    </div>
+    <div class="queue" id="queue">All synced</div>
+    <div class="coords" id="coords"></div>
+  </div>
+</div>
+
+<script>
+const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+const PING_MS = 15000;            // ping every 15s
+const QKEY = 'spawn_gps_queue';   // offline queue
+
+let tech = localStorage.getItem('spawn_lineman') || '';
+let watchId = null, timer = null, lastFix = null, sentCount = 0;
+
+const $ = id => document.getElementById(id);
+
+// ---------- setup ----------
+async function loadTechs(){
+  try{
+    const r = await fetch(`${SB}/rest/v1/technicians?select=name,area&active=eq.true&order=name.asc`,{headers:HDR});
+    const rows = await r.json();
+    const sel = $('tech-select');
+    sel.innerHTML = '<option value="">— Select your name —</option>' +
+      rows.map(t=>`<option ${t.name===tech?'selected':''}>${t.name}</option>`).join('') +
+      '<option value="__new__">➕ Add new lineman…</option>';
+  }catch(e){
+    $('tech-select').innerHTML = '<option value="">⚠ offline — type name below</option><option value="__new__">➕ Add new lineman…</option>';
+  }
+}
+$('tech-select').addEventListener('change',e=>{
+  $('new-name-wrap').classList.toggle('hide', e.target.value!=='__new__');
+});
+$('begin-btn').addEventListener('click', async ()=>{
+  const sel = $('tech-select').value;
+  if(sel==='__new__'){
+    const nm = $('new-name').value.trim(), ar = $('new-area').value;
+    if(!nm){ alert('Enter a name'); return; }
+    try{
+      await fetch(`${SB}/rest/v1/technicians`,{method:'POST',headers:{...HDR,Prefer:'return=minimal'},
+        body:JSON.stringify({name:nm,area:ar||null,active:true})});
+    }catch(e){/* offline: still let them track, will register later */}
+    tech = nm;
+  } else if(sel){
+    tech = sel;
+  } else { alert('Pick or add your name'); return; }
+  localStorage.setItem('spawn_lineman', tech);
+  $('setup').classList.add('hide');
+  $('tracking').classList.remove('hide');
+});
+
+// ---------- offline queue ----------
+function getQ(){ try{return JSON.parse(localStorage.getItem(QKEY)||'[]')}catch{return[]} }
+function setQ(q){ localStorage.setItem(QKEY, JSON.stringify(q)); renderQ(); }
+function renderQ(){
+  const n = getQ().length, el = $('queue');
+  if(n>0){ el.textContent = `⚡ ${n} ping${n>1?'s':''} waiting to sync`; el.className='queue has'; }
+  else { el.textContent = '✅ All synced'; el.className='queue'; }
+}
+
+async function flushQ(){
+  let q = getQ();
+  if(!q.length) return;
+  try{
+    const r = await fetch(`${SB}/rest/v1/lineman_gps`,{method:'POST',headers:{...HDR,Prefer:'return=minimal'},
+      body:JSON.stringify(q)});
+    if(r.ok){ sentCount += q.length; $('sent-n').textContent=sentCount; setQ([]); }
+  }catch(e){/* still offline */}
+}
+
+// ---------- tracking ----------
+function onFix(pos){
+  const {latitude,longitude,accuracy} = pos.coords;
+  lastFix = {technician:tech, lat:latitude, lng:longitude, accuracy_m:Math.round(accuracy), pinged_at:new Date().toISOString()};
+  $('acc').textContent = Math.round(accuracy);
+  $('coords').textContent = latitude.toFixed(5)+', '+longitude.toFixed(5);
+}
+async function pushPing(){
+  if(!lastFix) return;
+  const q = getQ(); q.push({...lastFix, pinged_at:new Date().toISOString()}); setQ(q);
+  await flushQ();
+}
+function start(){
+  if(!navigator.geolocation){ alert('GPS not supported on this device'); return; }
+  watchId = navigator.geolocation.watchPosition(onFix, err=>{
+    $('state').textContent = err.code===1?'Location blocked':'GPS error';
+  }, {enableHighAccuracy:true, maximumAge:5000, timeout:20000});
+  timer = setInterval(pushPing, PING_MS);
+  $('dot').className='dot on'; $('state').textContent='Tracking';
+  $('toggle-btn').textContent='Stop Tracking'; $('toggle-btn').className='btn btn-stop';
+}
+function stop(){
+  if(watchId!=null) navigator.geolocation.clearWatch(watchId);
+  clearInterval(timer); watchId=null; timer=null; lastFix=null;
+  $('dot').className='dot off'; $('state').textContent='Stopped';
+  $('toggle-btn').textContent='Start Tracking'; $('toggle-btn').className='btn btn-start';
+}
+$('toggle-btn').addEventListener('click', ()=> watchId? stop() : start());
+
+window.addEventListener('online', flushQ);
+setInterval(flushQ, 30000); // retry queue every 30s
+
+// init
+renderQ();
+loadTechs();
+if(tech){ /* prefill but still require Continue */ }
+</script>
+</body>
+</html>
