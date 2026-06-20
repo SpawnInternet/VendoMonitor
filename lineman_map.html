@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- Spawn Dispatcher Map · v1.0 · cache-bust 2026-06-20a -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spawn · Lineman Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  :root{--gold:#F5A623;--teal:#2BA89A;--navy:#2D3547;--muted:#8a93a3;--green:#15803d;--red:#D63B3B}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f141b;color:#e8edf3}
+  #map{position:absolute;inset:0}
+  .panel{position:absolute;top:12px;left:12px;z-index:1000;background:rgba(26,33,44,.95);
+    border:1px solid #2a3340;border-radius:14px;padding:14px 16px;max-width:280px;backdrop-filter:blur(6px)}
+  .panel h1{margin:0 0 4px;font-size:16px;font-weight:800}
+  .panel h1 span{color:var(--gold)}
+  .meta{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .lm{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #2a3340;font-size:13px;cursor:pointer}
+  .lm:hover{color:var(--gold)}
+  .lmdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .lmname{font-weight:700;flex:1}
+  .lmtime{font-size:11px;color:var(--muted)}
+  .empty{font-size:13px;color:var(--muted);padding:8px 0}
+  .live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:6px;animation:bl 1.4s infinite}
+  @keyframes bl{50%{opacity:.3}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h1>SPAWN <span>LINEMEN</span><span class="live"></span></h1>
+  <div class="meta" id="meta">Loading…</div>
+  <div id="list"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY};
+const COLORS=['#F5A623','#2BA89A','#3B6FD4','#7B4FA6','#D4458A','#D63B3B','#15803d','#e0851a'];
+
+const map = L.map('map',{zoomControl:true}).setView([8.52,123.30], 9); // Zamboanga del Norte
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(map);
+
+const markers = {}; // technician -> marker
+let firstFit = true;
+
+function ago(ts){
+  const s = (Date.now()-new Date(ts))/1000;
+  if(s<60) return Math.round(s)+'s ago';
+  if(s<3600) return Math.round(s/60)+'m ago';
+  if(s<86400) return Math.round(s/3600)+'h ago';
+  return Math.round(s/86400)+'d ago';
+}
+function freshColor(ts){ // green if <5m, amber <30m, red older
+  const m=(Date.now()-new Date(ts))/60000;
+  return m<5?'#15803d':m<30?'#F5A623':'#D63B3B';
+}
+
+async function load(){
+  let rows=[];
+  try{
+    const r = await fetch(`${SB}/rest/v1/lineman_gps_latest?select=technician,lat,lng,accuracy_m,pinged_at&order=pinged_at.desc`,{headers:HDR});
+    rows = await r.json();
+  }catch(e){ document.getElementById('meta').textContent='⚠ Connection error'; return; }
+
+  const list = document.getElementById('list');
+  if(!rows.length){
+    document.getElementById('meta').textContent='No linemen tracking yet';
+    list.innerHTML='<div class="empty">When a lineman opens the tracker and hits Start, they\'ll appear here live.</div>';
+    return;
+  }
+  document.getElementById('meta').textContent = rows.length+' lineman'+(rows.length>1?'en':'')+' tracked';
+
+  const bounds=[];
+  list.innerHTML = rows.map((t,i)=>{
+    const c = freshColor(t.pinged_at);
+    const col = COLORS[i%COLORS.length];
+    bounds.push([t.lat,t.lng]);
+    if(markers[t.technician]){
+      markers[t.technician].setLatLng([t.lat,t.lng]);
+    } else {
+      markers[t.technician]=L.circleMarker([t.lat,t.lng],{radius:9,color:'#fff',weight:2,fillColor:col,fillOpacity:.95})
+        .addTo(map).bindPopup('');
+    }
+    markers[t.technician].setPopupContent(`<b>${t.technician}</b><br>${ago(t.pinged_at)} · ±${t.accuracy_m||'?'}m`);
+    return `<div class="lm" onclick="focusLm('${t.technician.replace(/'/g,"\\'")}')">
+      <span class="lmdot" style="background:${col}"></span>
+      <span class="lmname">${t.technician}</span>
+      <span class="lmtime" style="color:${c}">${ago(t.pinged_at)}</span></div>`;
+  }).join('');
+
+  if(firstFit && bounds.length){ map.fitBounds(bounds,{padding:[60,60],maxZoom:14}); firstFit=false; }
+}
+function focusLm(name){
+  const m=markers[name]; if(m){ map.setView(m.getLatLng(),15); m.openPopup(); }
+}
+load();
+setInterval(load, 10000); // refresh every 10s
+</script>
+</body>
+</html>
