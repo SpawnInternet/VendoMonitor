@@ -23,7 +23,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','settings','perf','progress','names','ledger','gps'].forEach(t=>{
+  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
@@ -38,6 +38,7 @@ function hvNewTab(id, btn){
   if(id==='htable'){ htLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
+  if(id==='receipt'){ rcptInit(); }
   if(id==='settings'){ csLoad(); daLoad(); oaLoad(); }
   if(id==='names'){ if(!_nmRows.length) nmLoad(); else nmRender(); }
   if(id==='progress'){ loadProgress(); }
@@ -1919,3 +1920,133 @@ function vmZoomToProgress(name){
 // Auto-refresh every 30 seconds when tab is active
 setInterval(()=>{ if(hvNewActiveTab==='progress') loadProgress(); }, 30000);
 
+
+// ═══════════════ RECONCILIATION RECEIPT TAB ═══════════════
+function rcptInit(){
+  const d=document.getElementById('rcpt-date');
+  if(d && !d.value){ const n=new Date(); d.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+  rcptLoad();
+}
+const _RCPT_PACK_LABELS={mix:'₱1k',peso:'₱300',bungkig:'Bungkig',bugi:'Bugi',bills:'Cash'};
+const _RCPT_PACK_COLORS={mix:'#3B6FD4',peso:'#7B4FA6',bungkig:'#2BA89A',bugi:'#b45309',bills:'#F5A623'};
+let _rcptData=null;
+async function rcptLoad(){
+  const date=document.getElementById('rcpt-date')?.value;
+  if(!date) return;
+  const listEl=document.getElementById('rcpt-list');
+  if(listEl) listEl.innerHTML='<div style="padding:30px;text-align:center;color:#9ca3af;">Loading…</div>';
+  try{
+    const [harvests,packs,recons,expenses]=await Promise.all([
+      fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,collector,vendo_name,sheet_name,area,coins_total,spawn_share,harvested_at&order=collector.asc,harvested_at.asc&limit=2000`,{headers:_HDR}).then(r=>r.json()),
+      fetch(`${_SB}/rest/v1/harvest_pack_items?harvest_date=eq.${date}&saved_by=eq.office&select=harvest_id,pack_type,amount&limit=5000`,{headers:_HDR}).then(r=>r.json()),
+      fetch(`${_SB}/rest/v1/harvest_reconciliations?recon_date=eq.${date}&select=collector,confirmed_by,confirmed_at,spawn_share,expenses,net_to_remit,vendo_count&limit=200`,{headers:_HDR}).then(r=>r.json()),
+      fetch(`${_SB}/rest/v1/collector_expenses?expense_date=eq.${date}&select=collector,category,description,amount&limit=500`,{headers:_HDR}).then(r=>r.json()).catch(()=>[])
+    ]);
+    // pack map per harvest
+    const packMap={};
+    (packs||[]).forEach(p=>{ if(!packMap[p.harvest_id])packMap[p.harvest_id]={}; packMap[p.harvest_id][p.pack_type]=(packMap[p.harvest_id][p.pack_type]||0)+Number(p.amount||0); });
+    const reconMap={}; (recons||[]).forEach(r=>reconMap[r.collector]=r);
+    // group by collector
+    const byCol={};
+    (harvests||[]).forEach(h=>{ if(!byCol[h.collector])byCol[h.collector]=[]; byCol[h.collector].push(h); });
+    const expByCol={}; (expenses||[]).forEach(e=>{ if(!expByCol[e.collector])expByCol[e.collector]=[]; expByCol[e.collector].push(e); });
+    _rcptData={date,byCol,packMap,reconMap,expByCol};
+    rcptRender();
+  }catch(e){
+    if(listEl) listEl.innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';
+  }
+}
+function rcptRender(){
+  const {byCol,packMap,reconMap,expByCol}=_rcptData;
+  const cols=Object.keys(byCol).sort();
+  let daySpawn=0, dayNet=0, dayShort=0, daySurplus=0;
+  const cards=cols.map(col=>{
+    const harvests=byCol[col];
+    const recon=reconMap[col];
+    const exps=expByCol[col]||[];
+    let counted=0, spawn=0, bugi=0, shortT=0, surplusT=0;
+    const rows=harvests.map(h=>{
+      const pm=packMap[h.id]||{};
+      const b=Number(pm.bugi||0);
+      const cnt=Object.entries(pm).filter(([k])=>k!=='bugi').reduce((s,[,v])=>s+v,0);
+      const sp=parseFloat(h.spawn_share||0);
+      const gap=cnt>0?cnt-sp:null;
+      counted+=cnt; spawn+=sp; bugi+=b;
+      if(gap!=null){ if(gap<0)shortT+=Math.abs(gap); else if(gap>0)surplusT+=gap; }
+      const hasP=cnt>0||b>0;
+      const stCol=!hasP?'#9ca3af':gap===0?'#0F6E56':gap<0?'#dc2626':'#854F0B';
+      const stTxt=!hasP?'⏳ Pending':gap===0?'✓ Match':gap<0?'Short ₱'+fmt(Math.abs(gap)):'Surplus ₱'+fmt(gap);
+      const code=h.vendo_name?(h.vendo_name.substring(0,4).toUpperCase()):(h.sheet_name?h.sheet_name.substring(0,4).toUpperCase():'—');
+      return `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:0.5px solid #f1f5f9;">
+        <span><b style="color:#1565c0;">${code}</b> · ${(h.vendo_name||h.sheet_name||'—')}</span>
+        <span style="color:${stCol};font-weight:600;">${stTxt}</span></div>`;
+    }).join('');
+    const totalExp=exps.reduce((s,e)=>s+Number(e.amount||0),0);
+    const netRemit=recon?parseFloat(recon.net_to_remit||0):(spawn-totalExp-bugi);
+    const overallGap=counted>0?surplusT-shortT:null;
+    daySpawn+=spawn; dayNet+=netRemit; dayShort+=shortT; daySurplus+=surplusT;
+    const initial=col.charAt(0).toUpperCase();
+    const isRecon=!!recon;
+    const statusPill=isRecon
+      ? `<span style="font-size:11px;background:#E1F5EE;color:#0F6E56;padding:2px 8px;border-radius:6px;margin-left:6px;">✓ Reconciled ${recon.confirmed_at?new Date(recon.confirmed_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}):''}</span>`
+      : `<span style="font-size:11px;background:#f1f5f9;color:#6b7280;padding:2px 8px;border-radius:6px;margin-left:6px;">⏳ Pending</span>`;
+    const countedBy=isRecon
+      ? `👤 Counted by <b style="color:#1e293b;">${recon.confirmed_by||'—'}</b>`
+      : 'not yet counted';
+    const ov=overallGap===null?{c:'#6b7280',bg:'#f3f4f6',bd:'#e5e7eb',t:'Pending'}
+      :overallGap===0?{c:'#0F6E56',bg:'#E1F5EE',bd:'#9FE1CB',t:'✓ Balanced'}
+      :overallGap>0?{c:'#854F0B',bg:'#FAEEDA',bd:'#FAC775',t:'+₱'+fmt(overallGap)+' Surplus'}
+      :{c:'#dc2626',bg:'#fef2f2',bd:'#fca5a5',t:'-₱'+fmt(Math.abs(overallGap))+' Deficit'};
+    return `<div class="rcpt-card" style="background:#fff;border:0.5px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin-bottom:10px;">
+      <div onclick="rcptToggle(this)" style="display:flex;align-items:center;gap:12px;cursor:pointer;">
+        <div style="width:40px;height:40px;border-radius:50%;background:${isRecon?'#E6F1FB':'#f1f5f9'};display:flex;align-items:center;justify-content:center;font-weight:700;color:${isRecon?'#1565c0':'#6b7280'};">${initial}</div>
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:15px;color:#1e293b;">${col}${statusPill}</div>
+          <div style="font-size:12px;color:#6b7280;">${harvests.length} vendos · ${countedBy}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:18px;font-weight:800;color:#1565c0;">₱${fmt(netRemit)}</div>
+          <div style="font-size:11px;color:#6b7280;">net remit</div>
+        </div>
+        <span class="rcpt-chev" style="color:#cbd5e1;font-size:18px;">▸</span>
+      </div>
+      <div class="rcpt-detail" style="display:none;margin-top:14px;border-top:0.5px solid #e5e7eb;padding-top:12px;">
+        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Per Vendo</div>
+        ${rows||'<div style="color:#9ca3af;font-size:13px;padding:8px 0;">No vendos</div>'}
+        <div style="margin-top:12px;background:#E1F5EE;border:1px solid #9FE1CB;border-radius:8px;padding:12px;">
+          <div style="font-size:11px;font-weight:700;color:#0F6E56;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📋 Remittance Summary</div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#6b7280;">Total Spawn Share</span><span style="font-weight:700;">₱${fmt(spawn)}</span></div>
+          ${shortT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Total Short</span><span style="color:#dc2626;font-weight:700;">−₱${fmt(shortT)}</span></div>`:''}
+          ${surplusT>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#854F0B;">Total Surplus</span><span style="color:#854F0B;font-weight:700;">+₱${fmt(surplusT)}</span></div>`:''}
+          ${bugi>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#b45309;">Bugi (Old Coins)</span><span style="color:#b45309;font-weight:700;">−₱${fmt(bugi)}</span></div>`:''}
+          ${totalExp>0?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:#dc2626;">Expenses</span><span style="color:#dc2626;font-weight:700;">−₱${fmt(totalExp)}</span></div>`:''}
+          <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0 0;border-top:0.5px solid #9FE1CB;margin-top:4px;"><span>Net to Remit</span><span style="color:#1565c0;">₱${fmt(netRemit)}</span></div>
+          <div style="text-align:center;margin-top:10px;padding:8px;border-radius:8px;background:${ov.bg};border:1px solid ${ov.bd};">
+            <div style="font-size:16px;font-weight:800;color:${ov.c};">${ov.t}</div>
+            <div style="font-size:11px;color:#6b7280;">per-vendo pack count vs spawn share</div>
+          </div>
+          ${isRecon?`<div style="text-align:center;margin-top:8px;font-size:11px;color:#6b7280;">👤 Counted &amp; confirmed by <b style="color:#1e293b;">${recon.confirmed_by||'—'}</b>${recon.confirmed_at?' · '+new Date(recon.confirmed_at).toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</div>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  // summary stats
+  const dayOverall=daySurplus-dayShort;
+  const ovc=dayOverall===0?{c:'#0F6E56',bg:'#E1F5EE'}:dayOverall>0?{c:'#854F0B',bg:'#FAEEDA'}:{c:'#dc2626',bg:'#fef2f2'};
+  const sumEl=document.getElementById('rcpt-summary');
+  if(sumEl) sumEl.innerHTML=`
+    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Collectors</div><div style="font-size:22px;font-weight:800;">${cols.length}</div></div>
+    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Total Spawn</div><div style="font-size:22px;font-weight:800;">₱${fmt(daySpawn)}</div></div>
+    <div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:12px;color:#6b7280;">Net to Remit</div><div style="font-size:22px;font-weight:800;color:#1565c0;">₱${fmt(dayNet)}</div></div>
+    <div style="background:${ovc.bg};border-radius:8px;padding:12px;"><div style="font-size:12px;color:${ovc.c};">Overall</div><div style="font-size:22px;font-weight:800;color:${ovc.c};">${dayOverall>0?'+':''}${dayOverall===0?'₱0':(dayOverall<0?'−₱'+fmt(Math.abs(dayOverall)):'₱'+fmt(dayOverall))}</div></div>`;
+  const listEl=document.getElementById('rcpt-list');
+  if(listEl) listEl.innerHTML=cols.length?cards:'<div style="padding:30px;text-align:center;color:#9ca3af;">No harvests for this date</div>';
+}
+function rcptToggle(hdr){
+  const card=hdr.closest('.rcpt-card');
+  const detail=card.querySelector('.rcpt-detail');
+  const chev=card.querySelector('.rcpt-chev');
+  const open=detail.style.display!=='none';
+  detail.style.display=open?'none':'block';
+  if(chev) chev.textContent=open?'▸':'▾';
+}
