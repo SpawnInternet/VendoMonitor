@@ -144,7 +144,7 @@ function vpRenderInfo(){
   const photoUrl = v&&v.photo_url ? v.photo_url : '';
   const photoBlock = '<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:12px;background:#f8faff;border-radius:10px;border:1px solid #e5e7eb;">'
     + (photoUrl
-        ? '<img id="vp-photo-img" src="'+photoUrl+'" style="width:72px;height:72px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid #e5e7eb;cursor:pointer;" onclick="window.open(\''+photoUrl+'\',\'_blank\')">'
+        ? '<img id="vp-photo-img" src="'+photoUrl+'" style="width:72px;height:72px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid #e5e7eb;cursor:zoom-in;" onclick="vpPhotoZoom(\''+photoUrl+'\')">'
         : '<div id="vp-photo-img" style="width:72px;height:72px;border-radius:10px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;border:1px solid #e5e7eb;">🏪</div>')
     + '<div style="flex:1;">'
     + '<div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:6px;">📷 Vendo Photo</div>'
@@ -445,6 +445,51 @@ async function vpSaveHarvestWindow(){
       toast('Update failed: '+errText.slice(0,80));
     }
   }catch(e){toast('Error: '+e.message);}
+}
+
+function vpPhotoZoom(url){
+  document.getElementById('vp-photo-zoom-overlay')?.remove();
+  const ov=document.createElement('div');
+  ov.id='vp-photo-zoom-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:11000;display:flex;align-items:center;justify-content:center;touch-action:none;overflow:hidden;';
+  ov.innerHTML=`
+    <button onclick="document.getElementById('vp-photo-zoom-overlay').remove()" style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:22px;width:40px;height:40px;border-radius:50%;cursor:pointer;line-height:1;z-index:2;">✕</button>
+    <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);color:#fff;font-size:12px;opacity:.7;z-index:2;">Scroll / pinch to zoom · drag to pan · double-tap to reset</div>
+    <img id="vp-zoom-img" src="${url}" style="max-width:92vw;max-height:88vh;object-fit:contain;transform:scale(1) translate(0px,0px);transition:transform .05s;cursor:grab;user-select:none;-webkit-user-drag:none;">`;
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+  const img=document.getElementById('vp-zoom-img');
+  let scale=1, tx=0, ty=0, dragging=false, sx=0, sy=0, lastTap=0, pinchDist=0;
+  const apply=()=>{ img.style.transform=`scale(${scale}) translate(${tx}px,${ty}px)`; img.style.cursor=scale>1?'grab':'zoom-in'; };
+  // wheel zoom
+  ov.addEventListener('wheel',e=>{ e.preventDefault(); scale=Math.min(6,Math.max(1, scale + (e.deltaY<0?0.25:-0.25))); if(scale===1){tx=0;ty=0;} apply(); },{passive:false});
+  // drag to pan
+  img.addEventListener('mousedown',e=>{ if(scale<=1)return; dragging=true; sx=e.clientX-tx*scale; sy=e.clientY-ty*scale; img.style.cursor='grabbing'; e.preventDefault(); });
+  window.addEventListener('mousemove',e=>{ if(!dragging)return; tx=(e.clientX-sx)/scale; ty=(e.clientY-sy)/scale; apply(); });
+  window.addEventListener('mouseup',()=>{ dragging=false; if(img)img.style.cursor=scale>1?'grab':'zoom-in'; });
+  // double-click / double-tap reset or zoom
+  img.addEventListener('dblclick',()=>{ scale=scale>1?1:2.5; tx=0;ty=0; apply(); });
+  // touch: pinch zoom + drag
+  img.addEventListener('touchstart',e=>{
+    if(e.touches.length===2){ pinchDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+    else if(e.touches.length===1){
+      const now=Date.now();
+      if(now-lastTap<300){ scale=scale>1?1:2.5; tx=0;ty=0; apply(); }
+      lastTap=now;
+      if(scale>1){ dragging=true; sx=e.touches[0].clientX-tx*scale; sy=e.touches[0].clientY-ty*scale; }
+    }
+  },{passive:false});
+  img.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    if(e.touches.length===2){
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      if(pinchDist){ scale=Math.min(6,Math.max(1, scale*(d/pinchDist))); if(scale===1){tx=0;ty=0;} apply(); }
+      pinchDist=d;
+    } else if(e.touches.length===1 && dragging){
+      tx=(e.touches[0].clientX-sx)/scale; ty=(e.touches[0].clientY-sy)/scale; apply();
+    }
+  },{passive:false});
+  img.addEventListener('touchend',e=>{ if(e.touches.length===0){ dragging=false; pinchDist=0; } });
 }
 
 async function vpUploadPhoto(input){
