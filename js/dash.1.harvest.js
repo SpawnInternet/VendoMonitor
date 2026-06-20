@@ -2011,7 +2011,7 @@ async function rcptLoad(){
   }
 }
 function rcptRender(){
-  const {byCol,packMap,reconMap,expByCol}=_rcptData;
+  const {date,byCol,packMap,reconMap,expByCol}=_rcptData;
   const cols=Object.keys(byCol).sort();
   let daySpawn=0, dayNet=0, dayShort=0, daySurplus=0;
   const cards=cols.map(col=>{
