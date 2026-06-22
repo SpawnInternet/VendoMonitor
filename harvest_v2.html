@@ -1254,7 +1254,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.5';
+const APP_VERSION = 'v10.6';
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
@@ -2375,12 +2375,19 @@ async function saveVendoDetails(){
 
     // Save to vendos table — queue if offline
     if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
+      let _patchOk=false;
       if(navigator.onLine){
-        await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
-          method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
-          body:JSON.stringify(vendoUpdate)
-        });
-      } else {
+        try{
+          const _r=await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+            method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
+            body:JSON.stringify(vendoUpdate)
+          });
+          _patchOk=_r.ok;
+          if(!_r.ok) console.warn('vendos PATCH failed:', _r.status, await _r.text().catch(()=>''));
+        }catch(_e){ _patchOk=false; console.warn('vendos PATCH error:', _e.message); }
+      }
+      // If online write failed (or we're offline), queue it so photo_url is never orphaned
+      if(!navigator.onLine || !_patchOk){
         // Queue for later sync — store photo in IndexedDB if captured
         const _ts=Date.now();
         let _photoKey=null;
