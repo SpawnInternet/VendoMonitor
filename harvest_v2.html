@@ -1838,8 +1838,21 @@ async function startGroup(groupId){
       }
     }
 
+    const _todayStr = new Date().toISOString().split('T')[0];
     currentItems = allItems.map(item=>{
       const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
+      // Preserve items already harvested TODAY (e.g. via dashboard admin or another device)
+      const _harvestedToday = item.status==='harvested' && item.harvested_at && String(item.harvested_at).split('T')[0]===_todayStr;
+      if(_harvestedToday){
+        return {
+          ...item, status:'harvested',
+          last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+          vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
+          address: item.address || (cached && cached.address) || '',
+          owner_name: item.owner_name || (cached && cached.owner_name) || '',
+          contact_number: item.contact_number || (cached && cached.contact_number) || ''
+        };
+      }
       return {
         ...item, status:'pending',
         last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
@@ -1857,13 +1870,16 @@ async function startGroup(groupId){
       localStorage.setItem(CACHE_TS_KEY, Date.now().toString());
     }
 
-    // Reset DB stats (background, don't await)
+    // Reset DB stats (background, don't await) — but PRESERVE items already harvested today
+    const _harvestedTodayCount = currentItems.filter(i=>i.status==='harvested').length;
     if(navigator.onLine){
-      fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:0,skipped_count:0,total_net:0,started_at:new Date().toISOString()})});
-      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
+      const _todayT = new Date().toISOString().split('T')[0];
+      fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:_harvestedTodayCount,skipped_count:0,started_at:new Date().toISOString()})});
+      // Only reset items NOT harvested today (older harvested rows revert to pending; today's stay)
+      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}&or=(status.neq.harvested,harvested_at.lt.${_todayT}T00:00:00)`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
     }
 
-    currentGroupRun = {...g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+    currentGroupRun = {...g, harvested_count:_harvestedTodayCount, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
     // Save collector to harvest_groups
     if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
     activeTab='pending';
