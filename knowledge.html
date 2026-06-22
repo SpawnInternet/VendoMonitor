@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!-- cache-bust: 20260622-v1 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spawn AI — Knowledge Base</title>
+<style>
+  :root{
+    --ink:#10261f; --paper:#f6f4ec; --card:#ffffff;
+    --line:#d9d4c4; --muted:#6f6a5c;
+    --spawn:#0a7d5a; --spawn-dark:#075e44; --spawn-soft:#e3f3ec;
+    --warn:#b4541f; --danger:#a32d2d;
+    --shadow:0 1px 2px rgba(16,38,31,.06),0 6px 20px rgba(16,38,31,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--paper);color:var(--ink);font-size:15px;line-height:1.5}
+  header{background:var(--spawn-dark);color:#fff;padding:14px 18px;display:flex;
+    align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:10}
+  header h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px;display:flex;align-items:center;gap:9px}
+  header .dot{width:9px;height:9px;border-radius:50%;background:#7fe3b6;box-shadow:0 0 0 3px rgba(127,227,182,.25)}
+  header small{opacity:.8;font-weight:500}
+  .wrap{max-width:1040px;margin:0 auto;padding:18px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+  .bar input[type=search]{flex:1;min-width:200px}
+  input,select,textarea{font:inherit;color:var(--ink);background:var(--card);
+    border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%}
+  textarea{resize:vertical;min-height:64px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.4px;margin:0 0 4px}
+  .btn{border:none;border-radius:9px;padding:10px 16px;font-weight:600;cursor:pointer;
+    background:var(--spawn);color:#fff;white-space:nowrap}
+  .btn:hover{background:var(--spawn-dark)}
+  .btn.ghost{background:transparent;color:var(--spawn-dark);border:1px solid var(--line)}
+  .btn.ghost:hover{background:var(--spawn-soft)}
+  .btn.sm{padding:6px 11px;font-size:13px;border-radius:7px}
+  .btn.danger{background:transparent;color:var(--danger);border:1px solid #e9c9c9}
+  .btn.danger:hover{background:#fbedec}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;
+    background:var(--spawn-soft);color:var(--spawn-dark);letter-spacing:.3px;text-transform:uppercase}
+  .grid{display:grid;gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:14px 16px;box-shadow:var(--shadow)}
+  .kb-card{display:flex;flex-direction:column;gap:8px}
+  .kb-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .kb-head strong{font-size:15.5px}
+  .kb-q{color:var(--muted);font-size:13.5px;font-style:italic}
+  .kb-a{font-size:14.5px}
+  .kb-foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px}
+  .kb-foot .keys{font-size:12px;color:var(--muted);flex:1;min-width:120px}
+  .off{opacity:.5}
+  .off .pill{background:#eee;color:#888}
+  .count{color:var(--muted);font-size:13px}
+  .empty{text-align:center;color:var(--muted);padding:50px 20px}
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(16,38,31,.42);display:none;
+    align-items:flex-start;justify-content:center;padding:24px 14px;z-index:50;overflow:auto}
+  .scrim.on{display:flex}
+  .modal{background:var(--card);border-radius:16px;max-width:560px;width:100%;
+    padding:20px;box-shadow:0 20px 60px rgba(16,38,31,.3)}
+  .modal h2{margin:0 0 14px;font-size:18px}
+  .field{margin-bottom:13px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
+  /* login */
+  .login{max-width:340px;margin:14vh auto;text-align:center}
+  .login .card{padding:26px}
+  .login h1{font-size:20px;margin:0 0 4px;color:var(--spawn-dark)}
+  .login p{color:var(--muted);margin:0 0 18px;font-size:13.5px}
+  .login input{margin-bottom:11px;text-align:center}
+  .err{color:var(--danger);font-size:13px;min-height:18px;margin-top:6px}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:11px 18px;border-radius:10px;
+    font-size:14px;box-shadow:var(--shadow);opacity:0;transition:opacity .2s;z-index:99;pointer-events:none}
+  .toast.on{opacity:1}
+  @media(max-width:560px){.row2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" class="login">
+  <div class="card">
+    <h1>Spawn AI Brain</h1>
+    <p>Knowledge base editor</p>
+    <input id="u" placeholder="Username" autocomplete="username">
+    <input id="p" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" style="width:100%" onclick="doLogin()">Enter</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <header>
+    <h1><span class="dot"></span> Spawn AI Brain <small>knowledge base</small></h1>
+    <button class="btn ghost sm" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign out</button>
+  </header>
+
+  <div class="wrap">
+    <div class="bar">
+      <input type="search" id="search" placeholder="Search topics, answers, keywords…" oninput="render()">
+      <select id="catFilter" style="width:auto" onchange="render()">
+        <option value="">All categories</option>
+      </select>
+      <button class="btn" onclick="openNew()">+ Add entry</button>
+    </div>
+    <div class="count" id="count"></div>
+    <div class="grid" id="list" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="scrim" id="scrim">
+  <div class="modal">
+    <h2 id="modalTitle">Add entry</h2>
+    <input type="hidden" id="f_id">
+    <div class="row2">
+      <div class="field">
+        <label>Category</label>
+        <input id="f_category" list="catList" placeholder="vendo_repair">
+        <datalist id="catList"></datalist>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <input id="f_priority" type="number" value="0" title="Higher shows first in the bot brain">
+      </div>
+    </div>
+    <div class="field">
+      <label>Topic (short label)</label>
+      <input id="f_topic" placeholder="Coin stuck">
+    </div>
+    <div class="field">
+      <label>Customer phrasing / trigger (optional)</label>
+      <input id="f_question" placeholder="Na-stuck ang coin sa machine">
+    </div>
+    <div class="field">
+      <label>Answer — what the bot should know / say</label>
+      <textarea id="f_answer" placeholder="Do NOT force it. Lightly tap the side of the machine…"></textarea>
+    </div>
+    <div class="field">
+      <label>Keywords (comma-separated, optional)</label>
+      <input id="f_keywords" placeholder="coin stuck, na-stuck, sangit">
+    </div>
+    <div class="field" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="f_active" checked style="width:auto">
+      <label style="margin:0;text-transform:none;font-size:14px;color:var(--ink)">Active (bot uses this entry)</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn danger sm" id="delBtn" style="margin-right:auto;display:none" onclick="del()">Delete</button>
+      <button class="btn ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="save()">Save</button>
+    </div>
+    <div class="err" id="modalErr"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwNDI0MzYsImV4cCI6MjA1ODYxODQzNn0.jLOKxStPP8S1wRlXBiHY4RO9JFBFMsLPqGKEgGdxjqs";
+const H = {
+  "apikey": SB_KEY,
+  "Authorization": "Bearer " + SB_KEY,
+  "Content-Type": "application/json"
+};
+const TBL = SB_URL + "/rest/v1/knowledge_base";
+
+let DATA = [];
+
+/* ---------- auth (matches dashboard login) ---------- */
+function doLogin(){
+  const u=document.getElementById('u').value.trim();
+  const p=document.getElementById('p').value;
+  if(u==="spawn" && p==="SpawnNet@2026!"){
+    sessionStorage.setItem('kb_auth','1');
+    showApp();
+  }else{
+    document.getElementById('loginErr').textContent="Wrong username or password.";
+  }
+}
+function logout(){ sessionStorage.removeItem('kb_auth'); location.reload(); }
+function showApp(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  load();
+}
+
+/* ---------- data ---------- */
+async function load(){
+  try{
+    const r = await fetch(TBL + "?select=*&order=category.asc,priority.desc", {headers:H});
+    DATA = await r.json();
+    if(!Array.isArray(DATA)) DATA=[];
+    buildCatFilters();
+    render();
+  }catch(e){
+    document.getElementById('list').innerHTML =
+      '<div class="empty">Could not load knowledge base. Check connection and try again.</div>';
+  }
+}
+
+function buildCatFilters(){
+  const cats=[...new Set(DATA.map(d=>d.category))].sort();
+  const sel=document.getElementById('catFilter');
+  const dl=document.getElementById('catList');
+  sel.innerHTML='<option value="">All categories</option>'+
+    cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+}
+
+function render(){
+  const q=document.getElementById('search').value.toLowerCase().trim();
+  const cat=document.getElementById('catFilter').value;
+  let rows=DATA.slice();
+  if(cat) rows=rows.filter(r=>r.category===cat);
+  if(q) rows=rows.filter(r=>(
+    (r.topic||'')+' '+(r.question||'')+' '+(r.answer||'')+' '+(r.keywords||'')+' '+(r.category||'')
+  ).toLowerCase().includes(q));
+
+  document.getElementById('count').textContent =
+    `${rows.length} ${rows.length===1?'entry':'entries'}` + (cat?` in ${cat}`:'') + ` · ${DATA.length} total`;
+
+  const list=document.getElementById('list');
+  if(!rows.length){
+    list.innerHTML='<div class="empty">No matching entries. Add one with “+ Add entry”.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(r=>`
+    <div class="card kb-card ${r.active?'':'off'}">
+      <div class="kb-head">
+        <span class="pill">${esc(r.category)}</span>
+        <strong>${esc(r.topic)}</strong>
+        ${r.active?'':'<span class="pill" style="background:#eee;color:#999">OFF</span>'}
+      </div>
+      ${r.question?`<div class="kb-q">“${esc(r.question)}”</div>`:''}
+      <div class="kb-a">${esc(r.answer)}</div>
+      <div class="kb-foot">
+        <span class="keys">${r.keywords?'🔑 '+esc(r.keywords):''}</span>
+        <button class="btn ghost sm" onclick='edit(${JSON.stringify(r.id)})'>Edit</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ---------- modal ---------- */
+function openNew(){
+  setForm({id:'',category:'',topic:'',question:'',answer:'',keywords:'',priority:0,active:true});
+  document.getElementById('modalTitle').textContent='Add entry';
+  document.getElementById('delBtn').style.display='none';
+  show();
+}
+function edit(id){
+  const r=DATA.find(x=>x.id===id);
+  if(!r) return;
+  setForm(r);
+  document.getElementById('modalTitle').textContent='Edit entry';
+  document.getElementById('delBtn').style.display='inline-block';
+  show();
+}
+function setForm(r){
+  f_id.value=r.id; f_category.value=r.category||''; f_topic.value=r.topic||'';
+  f_question.value=r.question||''; f_answer.value=r.answer||'';
+  f_keywords.value=r.keywords||''; f_priority.value=r.priority??0;
+  f_active.checked=r.active!==false;
+  document.getElementById('modalErr').textContent='';
+}
+function show(){ document.getElementById('scrim').classList.add('on'); }
+function closeModal(){ document.getElementById('scrim').classList.remove('on'); }
+
+async function save(){
+  const body={
+    category:f_category.value.trim().toLowerCase(),
+    topic:f_topic.value.trim(),
+    question:f_question.value.trim()||null,
+    answer:f_answer.value.trim(),
+    keywords:f_keywords.value.trim()||null,
+    priority:parseInt(f_priority.value||'0',10),
+    active:f_active.checked,
+    updated_by:'dashboard',
+    updated_at:new Date().toISOString()
+  };
+  if(!body.category||!body.topic||!body.answer){
+    document.getElementById('modalErr').textContent='Category, topic, and answer are required.';
+    return;
+  }
+  const id=f_id.value;
+  try{
+    let r;
+    if(id){
+      r=await fetch(TBL+"?id=eq."+encodeURIComponent(id),
+        {method:'PATCH',headers:{...H,Prefer:'return=minimal'},body:JSON.stringify(body)});
+    }else{
+      r=await fetch(TBL,{method:'POST',headers:{...H,Prefer:'return=minimal'},body:JSON.stringify(body)});
+    }
+    if(!r.ok) throw new Error(await r.text());
+    closeModal(); toast(id?'Saved':'Entry added'); load();
+  }catch(e){
+    document.getElementById('modalErr').textContent='Save failed: '+e.message;
+  }
+}
+
+async function del(){
+  const id=f_id.value;
+  if(!id) return;
+  if(!confirm('Delete this entry? The bot will stop using it.')) return;
+  try{
+    const r=await fetch(TBL+"?id=eq."+encodeURIComponent(id),{method:'DELETE',headers:H});
+    if(!r.ok) throw new Error(await r.text());
+    closeModal(); toast('Deleted'); load();
+  }catch(e){
+    document.getElementById('modalErr').textContent='Delete failed: '+e.message;
+  }
+}
+
+/* ---------- helpers ---------- */
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"']/g,c=>(
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+let toastT;
+function toast(m){
+  const t=document.getElementById('toast');
+  t.textContent=m; t.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),1800);
+}
+document.getElementById('scrim').addEventListener('click',e=>{if(e.target.id==='scrim')closeModal();});
+document.getElementById('p').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+
+/* boot */
+if(sessionStorage.getItem('kb_auth')==='1') showApp();
+</script>
+</body>
+</html>
