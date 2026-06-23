@@ -21,9 +21,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .topbar .logo span{display:block;font-size:9px;font-weight:500;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1.5px;}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
 .search-wrap{position:relative;}
-.search-wrap input{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
+.search-wrap input{position:relative;z-index:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
 .search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
-.search-wrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.5);font-size:13px;}
+.search-wrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.5);font-size:13px;pointer-events:none;}
 .btn{padding:8px 15px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
 .btn-primary{background:var(--blue);color:#fff;}.btn-primary:hover{background:#27599a;}
 .btn-ghost{background:rgba(255,255,255,0.1);color:#fff;}.btn-ghost:hover{background:rgba(255,255,255,0.18);}
@@ -79,6 +79,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .act-dispatch{background:#f5f3ff;color:var(--purple);}.act-dispatch:hover{background:#ede9fe;}
 .act-done{background:#f0fdf4;color:#15803d;}.act-done:hover{background:#dcfce7;}
 .act-back{background:var(--bg);color:var(--muted);flex:0 0 38px;}.act-back:hover{background:#e2e8f0;color:var(--text);}
+.act-reopen{background:#eef4fb;color:var(--blue);}.act-reopen:hover{background:#dbe8f6;}
 .assigned-tag{font-size:10px;font-weight:700;color:var(--purple);background:#f5f3ff;padding:3px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:4px;}
 .empty-col{text-align:center;color:var(--muted);font-size:12px;padding:30px 10px;line-height:1.6;}
 .empty-col .ei{font-size:26px;display:block;margin-bottom:6px;opacity:.4;}
@@ -317,7 +318,7 @@ function cardHtml(j){
   if(status==='open')actions=`<button class="act act-approve" onclick="quick(event,'${j.id}','approved')">&#10003; Approve</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='approved')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','open')">&#8592;</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='dispatched'||status==='in_progress')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','approved')">&#8592;</button><button class="act act-done" onclick="quick(event,'${j.id}','resolved')">&#10003; Mark done</button>`;
-  else actions=`<button class="act act-back" onclick="quick(event,'${j.id}','dispatched')">&#8592; Reopen</button>`;
+  else actions=`<button class="act act-back" onclick="quick(event,'${j.id}','dispatched')">&#8592; Back</button><button class="act act-reopen" onclick="quick(event,'${j.id}','open')">&#8635; Reopen</button>`;
   return `<div class="card t-${type}">
     <div class="card-clickable" onclick="openDetail('${j.id}')">
       <div class="card-top"><span class="tpill tp-${type}">${TYPE_LABEL[type]||type}</span>${prio}</div>
@@ -339,10 +340,17 @@ async function quick(ev,id,status){
   const j=allJobs.find(x=>x.id===id);
   const now=new Date().toISOString();
   const patch={status,updated_at:now};
-  // back-fill earlier stage timestamps if skipped, so no stage is left blank
-  if(status==='approved'){patch.approved_at=(j&&j.approved_at)||now;}
-  if(status==='dispatched'){patch.approved_at=(j&&j.approved_at)||now;patch.dispatched_at=(j&&j.dispatched_at)||now;}
-  if(status==='resolved'){patch.approved_at=(j&&j.approved_at)||now;patch.dispatched_at=(j&&j.dispatched_at)||now;patch.completed_at=now;}
+  // Rank of each status in the pipeline
+  const rank={open:0,approved:1,dispatched:2,in_progress:2,resolved:3,done:3};
+  const target=rank[status]??0;
+  // Forward moves: back-fill earlier stages so none are left blank.
+  if(target>=1)patch.approved_at=(j&&j.approved_at)||now;
+  if(target>=2)patch.dispatched_at=(j&&j.dispatched_at)||now;
+  if(target>=3)patch.completed_at=now;
+  // Backward moves: clear timestamps of stages now AHEAD of the target.
+  if(target<3)patch.completed_at=null;
+  if(target<2)patch.dispatched_at=null;
+  if(target<1)patch.approved_at=null;
   try{await sbPatch(`job_orders?id=eq.${id}`,patch);if(j)Object.assign(j,patch);render();toast('Moved to '+status);}
   catch(e){toast('Update failed');console.error(e);}
 }
@@ -373,14 +381,17 @@ async function openDetail(id){
   document.getElementById('replyInput').value='';
   // right info panel
   const fmt=d=>d?new Date(d).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'}):'—';
+  const rankNow={open:0,approved:1,dispatched:2,in_progress:2,resolved:3,done:3}[j.status||'open']||0;
+  // stageFmt: shows the date, or "Skipped" if the job already moved past this stage with no date
+  const stageFmt=(d,stageRank)=>d?fmt(d):(rankNow>stageRank?'<span style="color:var(--muted);font-style:italic">Skipped</span>':'—');
   document.getElementById('dBody').innerHTML=`
     <div class="irow"><span class="il">Contact</span><span class="iv">${j.contact?`<a href="tel:${esc(j.contact)}">${esc(j.contact)}</a>`:'—'}</span></div>
     <div class="irow"><span class="il">Location</span><span class="iv">${esc(j.address||'—')}</span></div>
     <div class="irow"><span class="il">Area</span><span class="iv">${esc(j.area||'—')}</span></div>
     <div class="irow"><span class="il">Issue</span><span class="iv">${esc(j.issue||'—')}</span></div>
     <div class="irow"><span class="il">Received</span><span class="iv">${fmt(j.created_at)}</span></div>
-    <div class="irow"><span class="il">Approved</span><span class="iv">${fmt(j.approved_at)}</span></div>
-    <div class="irow"><span class="il">Dispatched</span><span class="iv">${fmt(j.dispatched_at)}</span></div>
+    <div class="irow"><span class="il">Approved</span><span class="iv">${stageFmt(j.approved_at,1)}</span></div>
+    <div class="irow"><span class="il">Dispatched</span><span class="iv">${stageFmt(j.dispatched_at,2)}</span></div>
     <div class="irow"><span class="il">Completed</span><span class="iv">${fmt(j.completed_at)}</span></div>
     <div class="m-section"><h4>Assign lineman</h4><input class="field" id="dAssign" value="${esc(j.assigned_to||j.technician||'')}" placeholder="Lineman name (e.g. Jericho)"></div>
     <div class="m-section"><h4>Internal note</h4><textarea class="field" id="dNote" placeholder="Notes for the team...">${esc(j.notes||'')}</textarea></div>`;
@@ -457,10 +468,14 @@ async function saveDetail(){
   if(currentJob._pendingStatus&&currentJob._pendingStatus!==currentJob.status){
     patch.status=currentJob._pendingStatus;
     const now=new Date().toISOString();
-    // back-fill earlier stage timestamps if they were skipped
-    if(patch.status==='approved'){patch.approved_at=currentJob.approved_at||now;}
-    if(patch.status==='dispatched'){patch.approved_at=currentJob.approved_at||now;patch.dispatched_at=currentJob.dispatched_at||now;}
-    if(patch.status==='resolved'){patch.approved_at=currentJob.approved_at||now;patch.dispatched_at=currentJob.dispatched_at||now;patch.completed_at=now;}
+    const rank={open:0,approved:1,dispatched:2,in_progress:2,resolved:3,done:3};
+    const target=rank[patch.status]??0;
+    if(target>=1)patch.approved_at=currentJob.approved_at||now;
+    if(target>=2)patch.dispatched_at=currentJob.dispatched_at||now;
+    if(target>=3)patch.completed_at=now;
+    if(target<3)patch.completed_at=null;
+    if(target<2)patch.dispatched_at=null;
+    if(target<1)patch.approved_at=null;
   }
   try{await sbPatch(`job_orders?id=eq.${currentJob.id}`,patch);Object.assign(currentJob,patch);delete currentJob._pendingStatus;render();closeDetail();toast('Saved');}
   catch(e){toast('Save failed');console.error(e);}
