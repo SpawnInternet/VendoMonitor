@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPAWN Jobs — Command Center</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+:root{
+  --navy:#1a2744;--blue:#2563eb;--cyan:#06b6d4;--green:#10b981;
+  --yellow:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--orange:#f97316;
+  --bg:#f0f4f8;--white:#fff;--border:#e2e8f0;--text:#1e293b;--muted:#94a3b8;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.topbar{background:var(--navy);padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:40;}
+.topbar .logo{font-size:15px;font-weight:800;color:#fff;line-height:1.2;}
+.topbar .logo span{display:block;font-size:9px;font-weight:500;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1.5px;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.search-wrap{position:relative;}
+.search-wrap input{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
+.search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
+.search-wrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,0.5);font-size:13px;}
+.btn{padding:8px 15px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;}
+.btn-primary{background:var(--blue);color:#fff;}.btn-primary:hover{background:#1d4ed8;}
+.btn-ghost{background:rgba(255,255,255,0.1);color:#fff;}.btn-ghost:hover{background:rgba(255,255,255,0.18);}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}.btn-outline:hover{border-color:var(--blue);color:var(--blue);}
+.filters{background:var(--white);padding:11px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.fchip{padding:6px 13px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid var(--border);border-radius:20px;background:var(--white);transition:all .15s;white-space:nowrap;}
+.fchip:hover{border-color:var(--blue);color:var(--blue);}
+.fchip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.fsep{width:1px;height:22px;background:var(--border);margin:0 4px;}
+.flabel{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;}
+.board{padding:20px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start;}
+.col{background:#e9eef5;border-radius:14px;display:flex;flex-direction:column;min-height:200px;max-height:calc(100vh - 200px);}
+.col-head{padding:14px 16px 10px;display:flex;align-items:center;gap:9px;position:sticky;top:0;}
+.col-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.col-title{font-size:13px;font-weight:800;color:var(--navy);letter-spacing:.2px;}
+.col-count{margin-left:auto;background:var(--white);color:var(--navy);font-size:11px;font-weight:800;padding:2px 9px;border-radius:10px;min-width:22px;text-align:center;}
+.col.received .col-dot{background:var(--blue);}
+.col.approved .col-dot{background:var(--yellow);}
+.col.dispatched .col-dot{background:var(--purple);}
+.col.done .col-dot{background:var(--green);}
+.col-body{padding:4px 12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;flex:1;}
+.col-body::-webkit-scrollbar{width:6px;}.col-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
+.card{background:var(--white);border-radius:12px;padding:14px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden;border:1px solid transparent;}
+.card:hover{box-shadow:0 6px 22px rgba(26,39,68,.12);transform:translateY(-2px);border-color:var(--blue);}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;}
+.card.t-vendo_repair::before{background:var(--blue);}
+.card.t-subscriber_repair::before{background:var(--cyan);}
+.card.t-vendo_installation::before{background:var(--yellow);}
+.card.t-subscriber_installation::before{background:var(--green);}
+.card.t-complaint::before{background:var(--red);}
+.card.t-unrecognized::before{background:var(--purple);}
+.card-top{display:flex;align-items:center;gap:7px;margin-bottom:9px;}
+.tpill{font-size:9px;font-weight:800;padding:3px 8px;border-radius:8px;text-transform:uppercase;letter-spacing:.4px;}
+.tp-vendo_repair{background:#eff6ff;color:var(--blue);}
+.tp-subscriber_repair{background:#ecfeff;color:#0891b2;}
+.tp-vendo_installation{background:#fffbeb;color:#b45309;}
+.tp-subscriber_installation{background:#f0fdf4;color:#15803d;}
+.tp-complaint{background:#fef2f2;color:var(--red);}
+.tp-unrecognized{background:#f5f3ff;color:var(--purple);}
+.prio-flag{margin-left:auto;font-size:11px;}
+.card-name{font-size:14px;font-weight:700;color:var(--navy);margin-bottom:3px;line-height:1.25;}
+.card-issue{font-size:12px;color:#64748b;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:11px;}
+.card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:11px;}
+.meta-chip{font-size:10px;font-weight:600;color:#64748b;background:var(--bg);padding:3px 8px;border-radius:7px;display:inline-flex;align-items:center;gap:3px;}
+.src-badge{font-size:9px;font-weight:800;padding:2px 7px;border-radius:7px;text-transform:uppercase;letter-spacing:.4px;}
+.src-facebook{background:#e8f0fe;color:#1a73e8;}
+.src-mikrotik{background:#fff3e0;color:#e65100;}
+.src-office{background:#e8f5e9;color:#2e7d32;}
+.card-actions{display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--border);}
+.act{flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;}
+.act-approve{background:#fffbeb;color:#b45309;}.act-approve:hover{background:#fef3c7;}
+.act-dispatch{background:#f5f3ff;color:var(--purple);}.act-dispatch:hover{background:#ede9fe;}
+.act-done{background:#f0fdf4;color:#15803d;}.act-done:hover{background:#dcfce7;}
+.act-back{background:var(--bg);color:var(--muted);flex:0 0 38px;}.act-back:hover{background:#e2e8f0;color:var(--text);}
+.assigned-tag{font-size:10px;font-weight:700;color:var(--purple);background:#f5f3ff;padding:3px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:4px;}
+.empty-col{text-align:center;color:var(--muted);font-size:12px;padding:30px 10px;line-height:1.6;}
+.empty-col .ei{font-size:26px;display:block;margin-bottom:6px;opacity:.4;}
+/* modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:200;align-items:center;justify-content:center;padding:20px;}
+.overlay.show{display:flex;}
+.modal{background:var(--white);border-radius:16px;width:100%;max-width:620px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+.m-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;}
+.m-icon{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;background:var(--bg);}
+.m-head h2{font-size:16px;font-weight:800;color:var(--navy);}
+.m-head .m-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+.m-close{margin-left:auto;width:32px;height:32px;border-radius:8px;border:none;background:var(--bg);cursor:pointer;font-size:16px;color:var(--muted);}
+.m-close:hover{background:#e2e8f0;}
+.m-body{padding:20px 22px;overflow-y:auto;}
+.irow{display:flex;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px;}
+.irow .il{color:var(--muted);width:120px;flex-shrink:0;font-weight:600;}
+.irow .iv{color:var(--text);font-weight:500;flex:1;word-break:break-word;}
+.iv a{color:var(--blue);text-decoration:none;}
+.m-section{margin-top:18px;}
+.m-section h4{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:9px;}
+.field{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;color:var(--text);outline:none;background:var(--white);}
+.field:focus{border-color:var(--blue);}
+textarea.field{resize:vertical;min-height:64px;}
+.m-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:9px;}
+.stage-bar{display:flex;gap:6px;margin-top:4px;}
+.stage{flex:1;text-align:center;font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;background:var(--bg);color:var(--muted);cursor:pointer;transition:all .15s;}
+.stage.on{color:#fff;}
+.stage.on.s-received{background:var(--blue);}
+.stage.on.s-approved{background:var(--yellow);}
+.stage.on.s-dispatched{background:var(--purple);}
+.stage.on.s-done{background:var(--green);}
+.cfg-note{font-size:12px;color:var(--muted);background:var(--bg);padding:10px 12px;border-radius:9px;margin-bottom:14px;line-height:1.5;}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:300;opacity:0;transition:opacity .25s;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,.25);}
+.toast.show{opacity:1;}
+@media(max-width:1100px){.board{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:640px){.board{grid-template-columns:1fr;}.search-wrap input{width:140px;}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">SPAWN Jobs<span>Command Center</span></div>
+  <div class="topbar-right">
+    <div class="search-wrap"><span class="si">&#128269;</span><input id="search" placeholder="Search name, issue, contact..." oninput="render()"></div>
+    <button class="btn btn-ghost" onclick="loadJobs()">&#8635; Refresh</button>
+    <button class="btn btn-ghost" onclick="openMap()">&#128205; Lineman Map</button>
+    <button class="btn btn-ghost" onclick="showConfig()">&#9881;</button>
+  </div>
+</div>
+
+<div class="filters" id="filters"></div>
+
+<div class="board" id="board"></div>
+
+<!-- Detail modal -->
+<div class="overlay" id="detail" onclick="if(event.target===this)closeDetail()">
+  <div class="modal">
+    <div class="m-head">
+      <div class="m-icon" id="dIcon">&#128221;</div>
+      <div>
+        <h2 id="dName">—</h2>
+        <div class="m-sub" id="dSub">—</div>
+        <div class="stage-bar" id="dStages"></div>
+      </div>
+      <button class="m-close" onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="m-body" id="dBody"></div>
+    <div class="m-foot">
+      <button class="btn btn-outline" style="flex:1" onclick="closeDetail()">Close</button>
+      <button class="btn btn-primary" style="flex:1" onclick="saveDetail()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Config modal -->
+<div class="overlay" id="config" onclick="if(event.target===this)closeConfig()">
+  <div class="modal" style="max-width:460px">
+    <div class="m-head"><div class="m-icon">&#9881;</div><div><h2>Settings</h2><div class="m-sub">Stored on this device only</div></div><button class="m-close" onclick="closeConfig()">&times;</button></div>
+    <div class="m-body">
+      <div class="cfg-note">Paste your Supabase <b>anon</b> key to load job orders. It stays in this browser and is never shared.</div>
+      <div class="m-section" style="margin-top:0"><h4>Supabase Key</h4><textarea class="field" id="cfgKey" placeholder="eyJ..."></textarea></div>
+      <div class="m-section"><h4>Facebook Page Token (optional — to reply to customers)</h4><textarea class="field" id="cfgFb" placeholder="EAA..."></textarea></div>
+    </div>
+    <div class="m-foot"><button class="btn btn-outline" style="flex:1" onclick="closeConfig()">Cancel</button><button class="btn btn-primary" style="flex:1" onclick="saveConfig()">Save</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const supaUrl='https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEYS={key:'spawn_supa_key',fb:'spawn_fb_token'};
+let supaKey=localStorage.getItem(KEYS.key)||'';
+let fbToken=localStorage.getItem(KEYS.fb)||'';
+let allJobs=[],currentJob=null;
+let filter={status:'all',area:'all',source:'all'};
+
+// status -> pipeline stage
+const STAGE={open:'received',approved:'approved',dispatched:'dispatched',in_progress:'dispatched',resolved:'done',done:'done'};
+const COLS=[
+  {key:'received',title:'Received',statuses:['open']},
+  {key:'approved',title:'Approved',statuses:['approved']},
+  {key:'dispatched',title:'Dispatched',statuses:['dispatched','in_progress']},
+  {key:'done',title:'Done',statuses:['resolved','done']},
+];
+const TYPE_ICON={vendo_repair:'&#128295;',subscriber_repair:'&#128246;',vendo_installation:'&#127970;',subscriber_installation:'&#127968;',complaint:'&#9888;&#65039;',unrecognized:'&#10067;'};
+const TYPE_LABEL={vendo_repair:'Vendo Repair',subscriber_repair:'Subscriber Repair',vendo_installation:'Vendo Install',subscriber_installation:'Subscriber Install',complaint:'Complaint',unrecognized:'Unsorted'};
+
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+async function sbGet(p){const r=await fetch(`${supaUrl}/rest/v1/${p}`,{headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`}});if(!r.ok)throw new Error(await r.text());return r.json();}
+async function sbPatch(p,d){const r=await fetch(`${supaUrl}/rest/v1/${p}`,{method:'PATCH',headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(d)});if(!r.ok)throw new Error(await r.text());return r.json();}
+
+function showConfig(){document.getElementById('cfgKey').value=supaKey;document.getElementById('cfgFb').value=fbToken;document.getElementById('config').classList.add('show');}
+function closeConfig(){document.getElementById('config').classList.remove('show');}
+function saveConfig(){supaKey=document.getElementById('cfgKey').value.trim();fbToken=document.getElementById('cfgFb').value.trim();localStorage.setItem(KEYS.key,supaKey);localStorage.setItem(KEYS.fb,fbToken);closeConfig();loadJobs();}
+function openMap(){window.open('lineman_map.html','_blank');}
+
+async function loadJobs(){
+  if(!supaKey){showConfig();return;}
+  try{
+    allJobs=await sbGet('job_orders?select=*&order=created_at.desc');
+    buildFilters();render();
+    toast(`Loaded ${allJobs.length} job orders`);
+  }catch(e){toast('Load failed — check your key');console.error(e);}
+}
+
+function buildFilters(){
+  const areas=[...new Set(allJobs.map(j=>j.area).filter(Boolean))].sort();
+  const sources=[...new Set(allJobs.map(j=>j.source).filter(Boolean))].sort();
+  let h='<span class="flabel">Area</span>';
+  h+=`<div class="fchip ${filter.area==='all'?'active':''}" onclick="setF('area','all')">All</div>`;
+  areas.forEach(a=>h+=`<div class="fchip ${filter.area===a?'active':''}" onclick="setF('area','${esc(a)}')">${esc(a)}</div>`);
+  h+='<div class="fsep"></div><span class="flabel">Source</span>';
+  h+=`<div class="fchip ${filter.source==='all'?'active':''}" onclick="setF('source','all')">All</div>`;
+  sources.forEach(s=>h+=`<div class="fchip ${filter.source===s?'active':''}" onclick="setF('source','${esc(s)}')">${esc(s)}</div>`);
+  document.getElementById('filters').innerHTML=h;
+}
+function setF(k,v){filter[k]=v;buildFilters();render();}
+
+function matchFilter(j){
+  if(filter.area!=='all'&&j.area!==filter.area)return false;
+  if(filter.source!=='all'&&j.source!==filter.source)return false;
+  const q=document.getElementById('search').value.trim().toLowerCase();
+  if(q){const blob=`${j.customer||''} ${j.fb_name||''} ${j.issue||''} ${j.contact||''} ${j.address||''}`.toLowerCase();if(!blob.includes(q))return false;}
+  return true;
+}
+
+function render(){
+  const board=document.getElementById('board');
+  const visible=allJobs.filter(matchFilter);
+  board.innerHTML=COLS.map(col=>{
+    const jobs=visible.filter(j=>col.statuses.includes(j.status||'open'));
+    const cards=jobs.map(cardHtml).join('')||`<div class="empty-col"><span class="ei">&#128235;</span>Nothing here</div>`;
+    return `<div class="col ${col.key}">
+      <div class="col-head"><span class="col-dot"></span><span class="col-title">${col.title}</span><span class="col-count">${jobs.length}</span></div>
+      <div class="col-body">${cards}</div>
+    </div>`;
+  }).join('');
+}
+
+function cardHtml(j){
+  const type=j.type||'unrecognized';
+  const name=j.customer||j.fb_name||'Unknown';
+  const prio=(j.priority==='high')?'<span class="prio-flag" title="High priority">&#128308;</span>':'';
+  const src=j.source||'office';
+  const assigned=j.assigned_to||j.technician;
+  const status=j.status||'open';
+  let actions='';
+  if(status==='open')actions=`<button class="act act-approve" onclick="quick(event,'${j.id}','approved')">&#10003; Approve</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
+  else if(status==='approved')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','open')">&#8592;</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
+  else if(status==='dispatched'||status==='in_progress')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','approved')">&#8592;</button><button class="act act-done" onclick="quick(event,'${j.id}','resolved')">&#10003; Mark done</button>`;
+  else actions=`<button class="act act-back" onclick="quick(event,'${j.id}','dispatched')">&#8592; Reopen</button>`;
+  return `<div class="card t-${type}" onclick="openDetail('${j.id}')">
+    <div class="card-top"><span class="tpill tp-${type}">${TYPE_LABEL[type]||type}</span>${prio}</div>
+    <div class="card-name">${esc(name)}</div>
+    <div class="card-issue">${esc(j.issue||'No description')}</div>
+    <div class="card-meta">
+      <span class="src-badge src-${src}">${esc(src)}</span>
+      ${j.area?`<span class="meta-chip">&#128205; ${esc(j.area)}</span>`:''}
+      ${j.contact?`<span class="meta-chip">&#128222; ${esc(j.contact)}</span>`:''}
+      ${assigned?`<span class="assigned-tag">&#128104;&#8205;&#128295; ${esc(assigned)}</span>`:''}
+    </div>
+    <div class="card-actions">${actions}</div>
+  </div>`;
+}
+
+async function quick(ev,id,status){
+  ev.stopPropagation();
+  const patch={status,updated_at:new Date().toISOString()};
+  if(status==='approved')patch.approved_at=new Date().toISOString();
+  if(status==='dispatched')patch.dispatched_at=new Date().toISOString();
+  if(status==='resolved')patch.completed_at=new Date().toISOString();
+  try{await sbPatch(`job_orders?id=eq.${id}`,patch);const j=allJobs.find(x=>x.id===id);if(j)Object.assign(j,patch);render();toast('Moved to '+status);}
+  catch(e){toast('Update failed');console.error(e);}
+}
+
+function openDetail(id){
+  const j=allJobs.find(x=>x.id===id);if(!j)return;currentJob=j;
+  const type=j.type||'unrecognized';
+  document.getElementById('dIcon').innerHTML=TYPE_ICON[type]||'&#128221;';
+  document.getElementById('dName').textContent=j.customer||j.fb_name||'Unknown';
+  document.getElementById('dSub').innerHTML=`${TYPE_LABEL[type]||type} &middot; <span class="src-badge src-${j.source||'office'}">${esc(j.source||'office')}</span>`;
+  const stage=STAGE[j.status||'open']||'received';
+  document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${stage===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
+  const fmt=d=>d?new Date(d).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'}):'—';
+  document.getElementById('dBody').innerHTML=`
+    <div class="irow"><span class="il">Contact</span><span class="iv">${j.contact?`<a href="tel:${esc(j.contact)}">${esc(j.contact)}</a>`:'—'}</span></div>
+    <div class="irow"><span class="il">Location</span><span class="iv">${esc(j.address||'—')}</span></div>
+    <div class="irow"><span class="il">Area</span><span class="iv">${esc(j.area||'—')}</span></div>
+    <div class="irow"><span class="il">Issue</span><span class="iv">${esc(j.issue||'—')}</span></div>
+    <div class="irow"><span class="il">Received</span><span class="iv">${fmt(j.created_at)}</span></div>
+    <div class="irow"><span class="il">Approved</span><span class="iv">${fmt(j.approved_at)}</span></div>
+    <div class="irow"><span class="il">Dispatched</span><span class="iv">${fmt(j.dispatched_at)}</span></div>
+    <div class="irow"><span class="il">Completed</span><span class="iv">${fmt(j.completed_at)}</span></div>
+    <div class="m-section"><h4>Assign lineman</h4><input class="field" id="dAssign" value="${esc(j.assigned_to||j.technician||'')}" placeholder="Lineman name (e.g. Jericho)"></div>
+    <div class="m-section"><h4>Internal note</h4><textarea class="field" id="dNote" placeholder="Notes for the team...">${esc(j.notes||'')}</textarea></div>`;
+  document.getElementById('detail').classList.add('show');
+}
+function closeDetail(){document.getElementById('detail').classList.remove('show');currentJob=null;}
+function setStage(key){
+  if(!currentJob)return;
+  const map={received:'open',approved:'approved',dispatched:'dispatched',done:'resolved'};
+  currentJob._pendingStatus=map[key];
+  const stage=key;
+  document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${stage===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
+}
+async function saveDetail(){
+  if(!currentJob)return;
+  const assign=document.getElementById('dAssign').value.trim();
+  const note=document.getElementById('dNote').value;
+  const patch={assigned_to:assign||null,notes:note,updated_at:new Date().toISOString()};
+  if(currentJob._pendingStatus&&currentJob._pendingStatus!==currentJob.status){
+    patch.status=currentJob._pendingStatus;
+    if(patch.status==='approved')patch.approved_at=new Date().toISOString();
+    if(patch.status==='dispatched')patch.dispatched_at=new Date().toISOString();
+    if(patch.status==='resolved')patch.completed_at=new Date().toISOString();
+  }
+  try{await sbPatch(`job_orders?id=eq.${currentJob.id}`,patch);Object.assign(currentJob,patch);delete currentJob._pendingStatus;render();closeDetail();toast('Saved');}
+  catch(e){toast('Save failed');console.error(e);}
+}
+
+// boot
+if(!supaKey)showConfig();else loadJobs();
+</script>
+</body>
+</html>
