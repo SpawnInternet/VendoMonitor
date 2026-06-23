@@ -46,9 +46,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .col.done .col-dot{background:var(--green);}
 .col-body{padding:4px 12px 14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;flex:1;}
 .col-body::-webkit-scrollbar{width:6px;}.col-body::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
-.card{background:var(--white);border-radius:12px;padding:14px;cursor:pointer;transition:all .18s;position:relative;overflow:hidden;border:1px solid transparent;}
+.card{background:var(--white);border-radius:12px;padding:14px;transition:all .18s;position:relative;overflow:visible;border:1px solid transparent;flex-shrink:0;}
 .card:hover{box-shadow:0 6px 22px rgba(26,39,68,.12);transform:translateY(-2px);border-color:var(--blue);}
-.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:12px 0 0 12px;}
 .card.t-vendo_repair::before{background:var(--blue);}
 .card.t-subscriber_repair::before{background:var(--cyan);}
 .card.t-vendo_installation::before{background:var(--gold);}
@@ -72,7 +72,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .src-facebook{background:#e8f0fe;color:#1a73e8;}
 .src-mikrotik{background:#fff3e0;color:#e65100;}
 .src-office{background:#e8f5e9;color:#2e7d32;}
-.card-actions{display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--border);}
+.card-clickable{cursor:pointer;}
+.card-actions{display:flex;gap:6px;padding-top:10px;margin-top:11px;border-top:1px solid var(--border);}
 .act{flex:1;padding:7px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:inherit;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:4px;}
 .act-approve{background:#fdf6e3;color:#9a6f08;}.act-approve:hover{background:#fbedc9;}
 .act-dispatch{background:#f5f3ff;color:var(--purple);}.act-dispatch:hover{background:#ede9fe;}
@@ -155,7 +156,7 @@ textarea.field{resize:vertical;min-height:64px;}
   <div class="topbar-right">
     <div class="search-wrap"><span class="si">&#128269;</span><input id="search" placeholder="Search name, issue, contact..." oninput="render()"></div>
     <button class="btn btn-ghost" onclick="loadJobs()">&#8635; Refresh</button>
-    <button class="btn btn-ghost" onclick="openMap()">&#128205; Lineman Map</button>
+    <button class="btn btn-ghost" onclick="openMap()">&#128205; Lineman Map &#8599;</button>
     <button class="btn btn-ghost" onclick="showConfig()">&#9881;</button>
   </div>
 </div>
@@ -206,7 +207,7 @@ textarea.field{resize:vertical;min-height:64px;}
     <div class="m-head"><div class="m-icon">&#9881;</div><div><h2>Settings</h2><div class="m-sub">Stored on this device only</div></div><button class="m-close" onclick="closeConfig()">&times;</button></div>
     <div class="m-body">
       <div class="cfg-note">The Supabase key is already set. You only need to add your Facebook Page Token below if you want to reply to customers from here.</div>
-      <div class="m-section" style="margin-top:0"><h4>Supabase Key</h4><textarea class="field" id="cfgKey" placeholder="eyJ..."></textarea></div>
+      <div class="m-section" style="margin-top:0"><h4>Supabase Key</h4><div style="position:relative;"><input class="field" id="cfgKey" type="password" placeholder="eyJ..." style="padding-right:60px;"><button type="button" onclick="toggleKey()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--bg);border:none;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;">Show</button></div></div>
       <div class="m-section"><h4>Facebook Page Token (optional — to reply to customers)</h4><textarea class="field" id="cfgFb" placeholder="EAA..."></textarea></div>
     </div>
     <div class="m-foot"><button class="btn btn-outline" style="flex:1" onclick="closeConfig()">Cancel</button><button class="btn btn-primary" style="flex:1" onclick="saveConfig()">Save</button></div>
@@ -260,13 +261,14 @@ function showConfig(){document.getElementById('cfgKey').value=supaKey;document.g
 function closeConfig(){document.getElementById('config').classList.remove('show');}
 function saveConfig(){supaKey=document.getElementById('cfgKey').value.trim();fbToken=document.getElementById('cfgFb').value.trim();localStorage.setItem(KEYS.key,supaKey);localStorage.setItem(KEYS.fb,fbToken);closeConfig();loadJobs();}
 function openMap(){window.open('lineman_map.html','_blank');}
+function toggleKey(){const f=document.getElementById('cfgKey');const b=event.target;if(f.type==='password'){f.type='text';b.textContent='Hide';}else{f.type='password';b.textContent='Show';}}
 
 async function loadJobs(){
   if(!supaKey){showConfig();return;}
   try{
     allJobs=await sbGet('job_orders?select=*&order=created_at.desc');
     buildFilters();render();
-    toast(`Loaded ${allJobs.length} job orders`);
+    toast(`Refreshed — ${allJobs.length} job orders loaded`);
   }catch(e){toast('Load failed — check your key');console.error(e);}
 }
 
@@ -316,15 +318,17 @@ function cardHtml(j){
   else if(status==='approved')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','open')">&#8592;</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='dispatched'||status==='in_progress')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','approved')">&#8592;</button><button class="act act-done" onclick="quick(event,'${j.id}','resolved')">&#10003; Mark done</button>`;
   else actions=`<button class="act act-back" onclick="quick(event,'${j.id}','dispatched')">&#8592; Reopen</button>`;
-  return `<div class="card t-${type}" onclick="openDetail('${j.id}')">
-    <div class="card-top"><span class="tpill tp-${type}">${TYPE_LABEL[type]||type}</span>${prio}</div>
-    <div class="card-name">${esc(name)}</div>
-    <div class="card-issue">${esc(j.issue||'No description')}</div>
-    <div class="card-meta">
-      <span class="src-badge src-${src}">${esc(src)}</span>
-      ${j.area?`<span class="meta-chip">&#128205; ${esc(j.area)}</span>`:''}
-      ${j.contact?`<span class="meta-chip">&#128222; ${esc(j.contact)}</span>`:''}
-      ${assigned?`<span class="assigned-tag">&#128104;&#8205;&#128295; ${esc(assigned)}</span>`:''}
+  return `<div class="card t-${type}">
+    <div class="card-clickable" onclick="openDetail('${j.id}')">
+      <div class="card-top"><span class="tpill tp-${type}">${TYPE_LABEL[type]||type}</span>${prio}</div>
+      <div class="card-name">${esc(name)}</div>
+      <div class="card-issue">${esc(j.issue||'No description')}</div>
+      <div class="card-meta">
+        <span class="src-badge src-${src}">${esc(src)}</span>
+        ${j.area?`<span class="meta-chip">&#128205; ${esc(j.area)}</span>`:''}
+        ${j.contact?`<span class="meta-chip">&#128222; ${esc(j.contact)}</span>`:''}
+        ${assigned?`<span class="assigned-tag">&#128104;&#8205;&#128295; ${esc(assigned)}</span>`:''}
+      </div>
     </div>
     <div class="card-actions">${actions}</div>
   </div>`;
@@ -332,11 +336,14 @@ function cardHtml(j){
 
 async function quick(ev,id,status){
   ev.stopPropagation();
-  const patch={status,updated_at:new Date().toISOString()};
-  if(status==='approved')patch.approved_at=new Date().toISOString();
-  if(status==='dispatched')patch.dispatched_at=new Date().toISOString();
-  if(status==='resolved')patch.completed_at=new Date().toISOString();
-  try{await sbPatch(`job_orders?id=eq.${id}`,patch);const j=allJobs.find(x=>x.id===id);if(j)Object.assign(j,patch);render();toast('Moved to '+status);}
+  const j=allJobs.find(x=>x.id===id);
+  const now=new Date().toISOString();
+  const patch={status,updated_at:now};
+  // back-fill earlier stage timestamps if skipped, so no stage is left blank
+  if(status==='approved'){patch.approved_at=(j&&j.approved_at)||now;}
+  if(status==='dispatched'){patch.approved_at=(j&&j.approved_at)||now;patch.dispatched_at=(j&&j.dispatched_at)||now;}
+  if(status==='resolved'){patch.approved_at=(j&&j.approved_at)||now;patch.dispatched_at=(j&&j.dispatched_at)||now;patch.completed_at=now;}
+  try{await sbPatch(`job_orders?id=eq.${id}`,patch);if(j)Object.assign(j,patch);render();toast('Moved to '+status);}
   catch(e){toast('Update failed');console.error(e);}
 }
 
@@ -419,8 +426,28 @@ function setStage(key){
   if(!currentJob)return;
   const map={received:'open',approved:'approved',dispatched:'dispatched',done:'resolved'};
   currentJob._pendingStatus=map[key];
-  const stage=key;
-  document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${stage===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
+  document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${key===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
+  // BUG#3 + #4: preview timestamps live, and back-fill earlier stages if skipped
+  const nowFmt=new Date().toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'});
+  const order=['received','approved','dispatched','done'];
+  const idx=order.indexOf(key);
+  const fld={approved:'Approved',dispatched:'Dispatched',done:'Completed'};
+  // any stage up to and including the selected one that has no date yet -> show "now (pending save)"
+  document.querySelectorAll('#dBody .irow').forEach(row=>{
+    const label=row.querySelector('.il')?.textContent;
+    const val=row.querySelector('.iv');
+    if(!label||!val)return;
+    Object.entries(fld).forEach(([stg,lab])=>{
+      const stgIdx=order.indexOf(stg);
+      if(label===lab){
+        if(stgIdx<=idx && (val.textContent==='—'||val.dataset.pending==='1')){
+          val.textContent=nowFmt+' (pending save)';val.dataset.pending='1';
+        }else if(stgIdx>idx && val.dataset.pending==='1'){
+          val.textContent='—';val.dataset.pending='0';
+        }
+      }
+    });
+  });
 }
 async function saveDetail(){
   if(!currentJob)return;
@@ -429,9 +456,11 @@ async function saveDetail(){
   const patch={assigned_to:assign||null,notes:note,updated_at:new Date().toISOString()};
   if(currentJob._pendingStatus&&currentJob._pendingStatus!==currentJob.status){
     patch.status=currentJob._pendingStatus;
-    if(patch.status==='approved')patch.approved_at=new Date().toISOString();
-    if(patch.status==='dispatched')patch.dispatched_at=new Date().toISOString();
-    if(patch.status==='resolved')patch.completed_at=new Date().toISOString();
+    const now=new Date().toISOString();
+    // back-fill earlier stage timestamps if they were skipped
+    if(patch.status==='approved'){patch.approved_at=currentJob.approved_at||now;}
+    if(patch.status==='dispatched'){patch.approved_at=currentJob.approved_at||now;patch.dispatched_at=currentJob.dispatched_at||now;}
+    if(patch.status==='resolved'){patch.approved_at=currentJob.approved_at||now;patch.dispatched_at=currentJob.dispatched_at||now;patch.completed_at=now;}
   }
   try{await sbPatch(`job_orders?id=eq.${currentJob.id}`,patch);Object.assign(currentJob,patch);delete currentJob._pendingStatus;render();closeDetail();toast('Saved');}
   catch(e){toast('Save failed');console.error(e);}
