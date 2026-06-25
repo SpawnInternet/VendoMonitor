@@ -371,10 +371,40 @@ async function notAJob(ev,id){
   }catch(e){toast('Failed — check key');console.error(e);}
 }
 
+async function checkMikrotikOnline(j){
+  // Returns {key, online, last_seen, found} for a job tied to a vlan/pppoe.
+  const vlan=j.vlan, ppp=j.pppoe_username;
+  if(!vlan && !ppp) return {found:false}; // nothing to verify (FB/office job)
+  const key=vlan||ppp;
+  try{
+    const rows=await sbGet(`mikrotik_status?match_key=eq.${encodeURIComponent(key)}&select=online,last_seen,updated_at&limit=1`);
+    if(!rows||!rows.length) return {found:false,key};
+    return {found:true,key,online:!!rows[0].online,last_seen:rows[0].last_seen,updated_at:rows[0].updated_at};
+  }catch(e){console.error(e);return {found:false,key,error:true};}
+}
+
 async function quick(ev,id,status){
   ev.stopPropagation();
   const j=allJobs.find(x=>x.id===id);
   const now=new Date().toISOString();
+
+  // ── VERIFY GATE: block "Mark done" if MikroTik says still offline ──
+  if(status==='resolved' && j && (j.vlan||j.pppoe_username)){
+    const st=await checkMikrotikOnline(j);
+    if(st.found && !st.online){
+      const when=st.updated_at?new Date(st.updated_at).toLocaleTimeString():'';
+      toast('Still OFFLINE on MikroTik — cannot close yet'+(when?` (as of ${when})`:''));
+      if(confirm('MikroTik still shows this machine OFFLINE'+(st.last_seen?` (last seen ${st.last_seen})`:'')+'.\n\nReconnect the machine, wait ~2 min, then press OK to re-check. Cancel to leave the job open.')){
+        const re=await checkMikrotikOnline(j);
+        if(!(re.found && re.online)){ toast('Still offline — job stays open'); return; }
+      } else { return; }
+    } else if(!st.found && st.key){
+      // No status row yet (poller hasn't seen this machine). Warn but allow,
+      // so a missing poll row doesn't trap the lineman.
+      if(!confirm('No live MikroTik status found for this machine yet. Close anyway?')) return;
+    }
+  }
+
   const patch={status,updated_at:now};
   // Rank of each status in the pipeline
   const rank={open:0,approved:1,dispatched:2,in_progress:2,resolved:3,done:3};
