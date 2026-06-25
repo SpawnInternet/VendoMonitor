@@ -34,12 +34,13 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .fchip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
 .fsep{width:1px;height:22px;background:var(--border);margin:0 4px;}
 .flabel{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-right:2px;}
-.board{padding:20px 24px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start;}
+.board{padding:20px 24px;display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:start;}
 .col{background:#e9eef5;border-radius:14px;display:flex;flex-direction:column;min-height:200px;max-height:calc(100vh - 200px);}
 .col-head{padding:14px 16px 10px;display:flex;align-items:center;gap:9px;position:sticky;top:0;}
 .col-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
 .col-title{font-size:13px;font-weight:800;color:var(--navy);letter-spacing:.2px;}
 .col-count{margin-left:auto;background:var(--white);color:var(--navy);font-size:11px;font-weight:800;padding:2px 9px;border-radius:10px;min-width:22px;text-align:center;}
+.col.review .col-dot{background:var(--magenta);}
 .col.received .col-dot{background:var(--blue);}
 .col.approved .col-dot{background:var(--gold);}
 .col.dispatched .col-dot{background:var(--purple);}
@@ -242,9 +243,10 @@ let allJobs=[],currentJob=null;
 let filter={status:'all',area:'all',source:'all'};
 
 // status -> pipeline stage
-const STAGE={open:'received',approved:'approved',dispatched:'dispatched',in_progress:'dispatched',resolved:'done',done:'done'};
+const STAGE={pending_review:'review',open:'received',new:'received',approved:'approved',dispatched:'dispatched',in_progress:'dispatched',resolved:'done',done:'done'};
 const COLS=[
-  {key:'received',title:'Received',statuses:['open']},
+  {key:'review',title:'Pending Review',statuses:['pending_review']},
+  {key:'received',title:'Received',statuses:['open','new']},
   {key:'approved',title:'Approved',statuses:['approved']},
   {key:'dispatched',title:'Dispatched',statuses:['dispatched','in_progress']},
   {key:'done',title:'Done',statuses:['resolved','done']},
@@ -315,7 +317,8 @@ function cardHtml(j){
   const assigned=j.assigned_to||j.technician;
   const status=j.status||'open';
   let actions='';
-  if(status==='open')actions=`<button class="act act-approve" onclick="quick(event,'${j.id}','approved')">&#10003; Approve</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
+  if(status==='pending_review')actions=`<button class="act act-approve" onclick="makeJob(event,'${j.id}')">&#10003; Make job</button><button class="act act-back" onclick="notAJob(event,'${j.id}')">&#10005; Not a job</button>`;
+  else if(status==='open'||status==='new')actions=`<button class="act act-approve" onclick="quick(event,'${j.id}','approved')">&#10003; Approve</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='approved')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','open')">&#8592;</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='dispatched'||status==='in_progress')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','approved')">&#8592;</button><button class="act act-done" onclick="quick(event,'${j.id}','resolved')">&#10003; Mark done</button>`;
   else actions=`<button class="act act-back" onclick="quick(event,'${j.id}','dispatched')">&#8592; Back</button><button class="act act-reopen" onclick="quick(event,'${j.id}','open')">&#8635; Reopen</button>`;
@@ -333,6 +336,39 @@ function cardHtml(j){
     </div>
     <div class="card-actions">${actions}</div>
   </div>`;
+}
+
+async function makeJob(ev,id){
+  ev.stopPropagation();
+  const now=new Date().toISOString();
+  try{
+    await sbPatch(`job_orders?id=eq.${id}`,{status:'open',updated_at:now});
+    const j=allJobs.find(x=>x.id===id); if(j)j.status='open';
+    render(); toast('Moved to Received');
+  }catch(e){toast('Failed — check key');console.error(e);}
+}
+
+async function notAJob(ev,id){
+  ev.stopPropagation();
+  const j=allJobs.find(x=>x.id===id);
+  if(!j)return;
+  if(!confirm('Mark as not a job? This machine will be suppressed and won\u2019t appear in future MikroTik scans.'))return;
+  const now=new Date().toISOString();
+  try{
+    // Add to suppress list (key on vlan for vendos, pppoe_username for subscribers)
+    const supRow={
+      vlan:j.vlan||null,
+      ppp_name:j.pppoe_username||null,
+      reason:'marked not-a-job from board',
+      suppressed_by:'board',
+      suppressed_at:now
+    };
+    await fetch(`${supaUrl}/rest/v1/mikrotik_suppress`,{method:'POST',headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(supRow)});
+    // Mark this job order dismissed so it leaves the board
+    await sbPatch(`job_orders?id=eq.${id}`,{status:'resolved',notes:(j.notes||'')+' | dismissed: not a job',updated_at:now});
+    allJobs=allJobs.filter(x=>x.id!==id);
+    render(); toast('Suppressed — won\u2019t show again');
+  }catch(e){toast('Failed — check key');console.error(e);}
 }
 
 async function quick(ev,id,status){
