@@ -376,8 +376,10 @@ async function checkMikrotikOnline(j){
   const vlan=j.vlan, ppp=j.pppoe_username;
   if(!vlan && !ppp) return {found:false}; // nothing to verify (FB/office job)
   const key=vlan||ppp;
+  // Match by the real column (vlan for vendos, ppp_name for subscribers).
+  const filter = vlan ? `vlan=eq.${encodeURIComponent(vlan)}` : `ppp_name=eq.${encodeURIComponent(ppp)}`;
   try{
-    const rows=await sbGet(`mikrotik_status?match_key=eq.${encodeURIComponent(key)}&select=online,last_seen,updated_at&limit=1`);
+    const rows=await sbGet(`mikrotik_status?${filter}&select=online,last_seen,updated_at&order=online.desc&limit=1`);
     if(!rows||!rows.length) return {found:false,key};
     return {found:true,key,online:!!rows[0].online,last_seen:rows[0].last_seen,updated_at:rows[0].updated_at};
   }catch(e){console.error(e);return {found:false,key,error:true};}
