@@ -1636,7 +1636,7 @@ function rcFilter(){
     :f==='warn'
     ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🟡 Surplus</span>'
     :f==='nodata'
-    ?'<span style="background:#f3f4f6;color:#6b7280;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">no TG</span>'
+    ?'<span style="background:#e8eef7;color:#3b5b8c;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔗 needs match</span>'
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
@@ -1737,7 +1737,7 @@ function rcFilter(){
           </tr></thead>
           <tbody>
           ${rd.rows.map(h=>{
-            const rowBg=h.flag==='alert'?'background:#fef2f2;':h.flag==='warn'?'background:#fefce8;':'';
+            const rowBg=h.flag==='alert'?'background:#fef2f2;':h.flag==='warn'?'background:#fefce8;':h.flag==='nodata'?'background:#f3f6fb;':'';
             const tgStr=h.tg_income!=null?fmtP(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>';
             const noTgBadge=!h.tg_name?'<span style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 4px;border-radius:3px;margin-left:4px;">no TG</span>':'';
             return `<tr style="${rowBg}">
