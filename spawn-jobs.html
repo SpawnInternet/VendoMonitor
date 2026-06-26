@@ -1200,7 +1200,11 @@ function openNetDetail(idx){
       <span class="nd-v">${esc(r.tg_name||'(not linked)')}</span>
       ${r.tg_name?`<button class="nd-unlink" onclick="unlinkField('tg_name')">Unlink</button>`:`<button class="nd-link" onclick="showLinkSearch()">+ Link</button>`}
     </div>`:''}
-    <div class="nd-row"><span class="nd-l">Server</span><span class="nd-v">${esc(r.server||'—')}</span></div>
+    <div class="nd-row">
+      <span class="nd-l">Server</span>
+      <span class="nd-v">${esc(r.server||'(auto-detect)')}</span>
+      ${r.kind==='vendo'?`<button class="nd-link" onclick="showServerSearch()">🔍 Match</button>`:''}
+    </div>
     <div class="nd-row"><span class="nd-l">${r.kind==='vendo'?'VLAN':'PPPoE'}</span><span class="nd-v">${r.key!=null?`<span class="net-vlan">${esc(String(r.key))}</span>`:'—'}</span></div>
     <div class="nd-row"><span class="nd-l">IP Address</span><span class="nd-v">${esc(r.ip||'—')}</span></div>
     ${r.kind==='vendo'&&r.users!=null&&r.online?`<div class="nd-row"><span class="nd-l">Connected Users</span><span class="nd-v">👥 ${r.users} device(s)</span></div>`:''}
@@ -1271,6 +1275,68 @@ async function linkTgName(tgName){
   }catch(e){toast('Failed: '+e.message);console.error(e);}
 }
 
+// ── Server / VLAN matching (search live MikroTik entries) ──
+function showServerSearch(){
+  if(!_ndCurrent||_ndCurrent.kind!=='vendo')return;
+  if(!checkNetPwd())return;
+  const area=document.getElementById('ndLinkArea');
+  area.innerHTML=`<div class="nd-section">
+    <h4>🔍 Search live machines on the server (by VLAN or server)</h4>
+    <input class="nd-search-input" id="ndSrvSearch" placeholder="Type VLAN number or server name..." oninput="searchServerEntries(this.value)">
+    <div class="nd-results" id="ndSrvResults"></div>
+    ${_ndCurrent.server&&_ndCurrent.server!=='—'?`<button class="nd-unlink" style="margin-top:8px" onclick="unlinkServer()">Unlink current server match</button>`:''}
+  </div>`;
+  document.getElementById('ndSrvSearch').focus();
+}
+
+let _srvSearchTimer=null;
+function searchServerEntries(q){
+  clearTimeout(_srvSearchTimer);
+  if(!q||q.length<1){document.getElementById('ndSrvResults').innerHTML='';return;}
+  _srvSearchTimer=setTimeout(async()=>{
+    try{
+      // Search live vendo status rows by vlan OR server_name
+      const byVlan=`mikrotik_status?kind=eq.vendo&vlan=eq.${encodeURIComponent(q)}&select=vlan,server_name,online,ip,user_count&limit=10`;
+      const bySrv=`mikrotik_status?kind=eq.vendo&server_name=ilike.*${encodeURIComponent(q)}*&select=vlan,server_name,online,ip,user_count&order=vlan&limit=20`;
+      const [a,b]=await Promise.all([sbGet(byVlan).catch(()=>[]),sbGet(bySrv).catch(()=>[])]);
+      // merge unique by vlan+server
+      const seen={},rows=[];
+      [...a,...b].forEach(x=>{const k=x.vlan+'|'+x.server_name;if(!seen[k]){seen[k]=1;rows.push(x);}});
+      const res=document.getElementById('ndSrvResults');
+      if(!rows.length){res.innerHTML='<div class="nd-result" style="color:var(--muted)">No live machines found</div>';return;}
+      res.innerHTML=rows.map(x=>`<div class="nd-result" onclick="linkServer(${JSON.stringify(String(x.vlan))},${JSON.stringify(x.server_name||'')})">
+        <strong>VLAN ${esc(String(x.vlan))}</strong> · ${esc(x.server_name||'?')}<br>
+        <span style="font-size:10px;color:var(--muted)">${x.online?'🟢 online':'🔴 offline'} · ${esc(x.ip||'')} · 👥 ${x.user_count||0}</span>
+      </div>`).join('');
+    }catch(e){console.error(e);}
+  },300);
+}
+
+async function linkServer(vlan,serverName){
+  if(!_ndCurrent)return;
+  if(!confirm(`Match this vendo to VLAN ${vlan} on "${serverName}"?\n\nThis sets the vendo's VLAN and server.`))return;
+  try{
+    await sbPatch(`vendos?id=eq.${_ndCurrent.id}`,{vlan:parseInt(vlan)||vlan,server_name:serverName,updated_at:new Date().toISOString()});
+    _ndCurrent.vlan=vlan;_ndCurrent.key=vlan;_ndCurrent.server=serverName;
+    toast('Server + VLAN linked — refresh to see live status');
+    // reload network data so live status re-matches
+    _netData=null;
+    closeNetDetail();
+    loadNetwork();
+  }catch(e){toast('Failed: '+e.message);console.error(e);}
+}
+
+async function unlinkServer(){
+  if(!_ndCurrent)return;
+  if(!confirm('Unlink the server + VLAN from this vendo?\n\nThis clears the match so the poller can auto-detect it again.'))return;
+  try{
+    await sbPatch(`vendos?id=eq.${_ndCurrent.id}`,{server_name:null,updated_at:new Date().toISOString()});
+    _ndCurrent.server='—';
+    toast('Server unlinked — poller will auto-detect next cycle');
+    openNetDetail(_netShownRows.indexOf(_ndCurrent));
+  }catch(e){toast('Failed: '+e.message);console.error(e);}
+}
+
 // boot
 if(!supaKey)showConfig();else loadJobs();
 checkHeartbeat();
@@ -1278,6 +1344,7 @@ setInterval(checkHeartbeat,60000); // re-check every minute
 </script>
 </body>
 </html>
+
 
 
 
