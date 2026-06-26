@@ -20,6 +20,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .topbar .logo{font-size:15px;font-weight:800;color:#fff;line-height:1.2;}
 .topbar .logo span{display:block;font-size:9px;font-weight:500;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:1.5px;}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.hb-pill{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;color:#fff;cursor:default;}
+.hb-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.hb-dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.3);animation:hbpulse 2s infinite;}
+.hb-dot.slow{background:var(--gold);box-shadow:0 0 0 3px rgba(245,188,21,.3);}
+.hb-dot.down{background:var(--red);box-shadow:0 0 0 3px rgba(200,52,74,.3);}
+@keyframes hbpulse{0%,100%{opacity:1}50%{opacity:.4}}
 .search-wrap{position:relative;}
 .search-wrap input{position:relative;z-index:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
 .search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
@@ -203,6 +209,7 @@ textarea.field{resize:vertical;min-height:64px;}
 <div class="topbar">
   <div style="display:flex;align-items:center;gap:11px;"><img src="spawn-globe.png" alt="SPAWN" style="width:36px;height:36px;object-fit:contain;flex-shrink:0;filter:drop-shadow(0 2px 6px rgba(0,0,0,.4));"><div class="logo">SPAWN Jobs<span>Command Center</span></div></div>
   <div class="topbar-right">
+    <div class="hb-pill" id="hbPill" title="MikroTik poller status"><span class="hb-dot" id="hbDot"></span><span id="hbText">Poller…</span></div>
     <div class="search-wrap"><span class="si">&#128269;</span><input id="search" placeholder="Search name, issue, contact..." oninput="render()"></div>
     <button class="btn btn-ghost" onclick="loadJobs()">&#8635; Refresh</button>
     <button class="btn btn-ghost" onclick="openMap()">&#128205; Lineman Map &#8599;</button>
@@ -822,8 +829,31 @@ async function saveDetail(){
   catch(e){toast('Save failed');console.error(e);}
 }
 
+// ── Poller heartbeat indicator ──
+async function checkHeartbeat(){
+  const dot=document.getElementById('hbDot'),txt=document.getElementById('hbText'),pill=document.getElementById('hbPill');
+  if(!dot||!supaKey)return;
+  try{
+    const rows=await sbGet('system_heartbeat?service_name=eq.mikrotik_status_poller&select=last_beat,status,detail,cycle_count&limit=1');
+    if(!rows||!rows[0]){dot.className='hb-dot down';txt.textContent='No poller';pill.title='Poller never reported in';return;}
+    const hb=rows[0];
+    const ageMs=Date.now()-new Date(hb.last_beat).getTime();
+    const ageMin=Math.floor(ageMs/60000);
+    let cls,label;
+    if(hb.status==='never_started'){cls='down';label='Not started';}
+    else if(ageMin<4){cls='live';label='Poller live';}
+    else if(ageMin<10){cls='slow';label=`Poller slow (${ageMin}m)`;}
+    else {cls='down';label=`Poller down (${ageMin}m)`;}
+    dot.className='hb-dot '+cls;
+    txt.textContent=label;
+    pill.title=`${hb.detail||''}\nLast beat: ${new Date(hb.last_beat).toLocaleString('en-PH')}\nCycle: ${hb.cycle_count||0}`;
+  }catch(e){dot.className='hb-dot down';txt.textContent='Poller ?';console.warn('hb',e);}
+}
+
 // boot
 if(!supaKey)showConfig();else loadJobs();
+checkHeartbeat();
+setInterval(checkHeartbeat,60000); // re-check every minute
 </script>
 </body>
 </html>
