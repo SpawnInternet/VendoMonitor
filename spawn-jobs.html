@@ -326,39 +326,75 @@ async function loadJobs(){
 async function enrichPendingReview(){
   const pending=allJobs.filter(j=>j.status==='pending_review');
   if(!pending.length)return;
+
+  // Separate vendo jobs (have vlan) vs subscriber jobs (have pppoe_username, no vlan)
   const vlans=[...new Set(pending.map(j=>j.vlan).filter(Boolean))];
   const ppps=[...new Set(pending.map(j=>j.pppoe_username).filter(Boolean))];
+
+  // ── MikroTik status for both ──
   let mkMap={};
   if(vlans.length){
     try{
-      const mkRows=await sbGet(`mikrotik_status?vlan=in.(${vlans.join(',')})&select=vlan,online,last_seen,ip,updated_at`);
-      mkRows.forEach(r=>{if(!mkMap[r.vlan])mkMap[r.vlan]={...r,found:true};});
+      const rows=await sbGet(`mikrotik_status?vlan=in.(${vlans.join(',')})&select=vlan,online,last_seen,ip,updated_at`);
+      rows.forEach(r=>{if(!mkMap['v:'+r.vlan])mkMap['v:'+r.vlan]={...r,found:true};});
     }catch(e){}
   }
   if(ppps.length){
     try{
-      const mkRows=await sbGet(`mikrotik_status?ppp_name=in.(${ppps.join(',')})&select=ppp_name,online,last_seen,ip,updated_at`);
-      mkRows.forEach(r=>{if(!mkMap['ppp:'+r.ppp_name])mkMap['ppp:'+r.ppp_name]={...r,found:true};});
+      const rows=await sbGet(`mikrotik_status?ppp_name=in.(${ppps.map(p=>`"${p}"`).join(',')})&select=ppp_name,online,last_seen,ip,updated_at`);
+      rows.forEach(r=>{if(!mkMap['p:'+r.ppp_name])mkMap['p:'+r.ppp_name]={...r,found:true};});
     }catch(e){}
   }
+
+  // ── Vendo details (for vendo jobs) ──
   let vendoMap={};
   if(vlans.length){
     try{
-      const vRows=await sbGet(`vendos?vlan=in.(${vlans.join(',')})&select=vlan,sheet_name,owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast`);
-      vRows.forEach(r=>{if(!vendoMap[r.vlan]||(!vendoMap[r.vlan].owner_name&&r.owner_name))vendoMap[r.vlan]=r;});
+      const rows=await sbGet(`vendos?vlan=in.(${vlans.join(',')})&select=vlan,sheet_name,owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast`);
+      rows.forEach(r=>{if(!vendoMap[r.vlan]||(!vendoMap[r.vlan].owner_name&&r.owner_name))vendoMap[r.vlan]=r;});
     }catch(e){}
   }
+
+  // ── Subscriber details (for subscriber jobs) ──
+  let subMap={};
+  if(ppps.length){
+    try{
+      const rows=await sbGet(`subscribers?pppoe_username=in.(${ppps.map(p=>`"${p}"`).join(',')})&select=pppoe_username,name,phone,address,area,monthly_amount,plan_type,status,notes,pppoe_server,vlan,offline_since,last_seen_online`);
+      rows.forEach(r=>{subMap[r.pppoe_username]=r;});
+    }catch(e){}
+  }
+
+  // ── Job history: vendo jobs by vlan, subscriber jobs by pppoe_username ──
   let histMap={};
   if(vlans.length){
     try{
-      const hRows=await sbGet(`job_orders?vlan=in.(${vlans.join(',')})&select=vlan,status,issue,created_at&order=created_at.desc&limit=300`);
-      hRows.forEach(r=>{if(!histMap[r.vlan])histMap[r.vlan]=[];if(histMap[r.vlan].length<5)histMap[r.vlan].push(r);});
+      const rows=await sbGet(`job_orders?vlan=in.(${vlans.join(',')})&select=vlan,pppoe_username,status,issue,created_at&order=created_at.desc&limit=300`);
+      rows.forEach(r=>{const k='v:'+r.vlan;if(!histMap[k])histMap[k]=[];if(histMap[k].length<5)histMap[k].push(r);});
     }catch(e){}
   }
+  if(ppps.length){
+    try{
+      const rows=await sbGet(`job_orders?pppoe_username=in.(${ppps.map(p=>`"${p}"`).join(',')})&select=vlan,pppoe_username,status,issue,created_at&order=created_at.desc&limit=300`);
+      rows.forEach(r=>{const k='p:'+r.pppoe_username;if(!histMap[k])histMap[k]=[];if(histMap[k].length<5)histMap[k].push(r);});
+    }catch(e){}
+  }
+
+  // ── Attach enriched data to each pending job ──
   pending.forEach(j=>{
-    j._mk=j.vlan?mkMap[j.vlan]:(j.pppoe_username?mkMap['ppp:'+j.pppoe_username]:null)||{found:false};
-    j._vendo=j.vlan?vendoMap[j.vlan]||{}:{};
-    j._hist=(j.vlan?histMap[j.vlan]||[]:[]).filter(h=>h.created_at!==j.created_at);
+    const isSubscriber=j.type==='subscriber_repair'||j.type==='subscriber_installation';
+    if(isSubscriber&&j.pppoe_username){
+      j._mk=mkMap['p:'+j.pppoe_username]||{found:false};
+      j._sub=subMap[j.pppoe_username]||null;
+      j._vendo=null;
+      j._hist=(histMap['p:'+j.pppoe_username]||[]).filter(h=>h.created_at!==j.created_at);
+    } else if(j.vlan){
+      j._mk=mkMap['v:'+j.vlan]||{found:false};
+      j._vendo=vendoMap[j.vlan]||null;
+      j._sub=null;
+      j._hist=(histMap['v:'+j.vlan]||[]).filter(h=>h.created_at!==j.created_at);
+    } else {
+      j._mk={found:false};j._vendo=null;j._sub=null;j._hist=[];
+    }
   });
   render();
 }
@@ -406,37 +442,66 @@ function cardHtml(j){
   const status=j.status||'open';
   let actions='';
   if(status==='pending_review'){
-    // Parse contact/address from customer field if not set
+    // ── Determine if this is a subscriber or vendo job ──
     const rawCust=j.customer||'';
-    const parsedContact=j.contact||(rawCust.match(/0[0-9]{9,10}/)||[])[0]||'';
-    const vd=j._vendo||{};
-    const ownerName=vd.owner_name||(rawCust.replace(/vlan\d+\s*[—-]\s*/,'').split('\n')[0].trim())||'';
-    const contactNum=vd.contact_number||parsedContact||j.contact||'';
-    const addr=vd.address||j.address||'';
-    const lastHarvest=vd.last_harvest_date?('Last harvest: '+new Date(vd.last_harvest_date).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})):'No harvest record';
+    const isSubJob=j.type==='subscriber_repair'||j.type==='subscriber_installation';
     const mk=j._mk||{};
     const isOffline=mk.online===false;
     const dotClass=mk.found?(isOffline?'offline':'online'):'unknown';
     const statusLabel=mk.found?(isOffline?`🔴 Offline — ${mk.last_seen||'?'}`:'🟢 Online'):'⚪ No MikroTik data';
     const histHtml=(j._hist||[]).slice(0,3).map(h=>`<div class="mk-hist-item"><span>${new Date(h.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}: ${esc((h.issue||'').substring(0,40))}</span><span class="mk-hist-badge ${h.status}">${h.status}</span></div>`).join('');
-    const adminNote=vd.admin_notes?`<div class="pr-note">📝 ${esc(vd.admin_notes)}</div>`:'';
+
+    let displayName='',contactNum='',addr='',extraInfoRows='',adminNote='';
+
+    if(isSubJob&&j._sub){
+      // ── SUBSCRIBER: pull from subscribers table ──
+      const s=j._sub;
+      displayName=s.name||j.customer||'';
+      contactNum=s.phone||j.contact||'';
+      addr=s.address||j.address||'';
+      const plan=s.plan_type||'';
+      const monthly=s.monthly_amount?`₱${s.monthly_amount}/mo`:'';
+      const pppServer=s.pppoe_server||'';
+      const subStatus=s.status||'';
+      extraInfoRows=`
+        ${displayName?`<div class="pr-row"><span class="pr-label">👤 Subscriber</span><span class="pr-val">${esc(displayName)}</span></div>`:''}
+        ${contactNum?`<div class="pr-row"><span class="pr-label">📞 Contact</span><span class="pr-val">${esc(contactNum)}</span></div>`:''}
+        ${addr?`<div class="pr-row"><span class="pr-label">📍 Location</span><span class="pr-val">${esc(addr)}</span></div>`:''}
+        ${plan||monthly?`<div class="pr-row"><span class="pr-label">📦 Plan</span><span class="pr-val">${esc(plan)} ${monthly}</span></div>`:''}
+        ${subStatus?`<div class="pr-row"><span class="pr-label">⚡ Status</span><span class="pr-val">${esc(subStatus)}</span></div>`:''}`;
+      if(s.notes)adminNote=`<div class="pr-note">📝 ${esc(s.notes)}</div>`;
+    } else {
+      // ── VENDO: pull from vendos table ──
+      const vd=j._vendo||{};
+      const parsedContact=j.contact||(rawCust.match(/0[0-9]{9,10}/)||[])[0]||'';
+      displayName=vd.owner_name||(rawCust.replace(/vlan\d+\s*[—-]\s*/,'').split('\n')[0].trim())||'';
+      contactNum=vd.contact_number||parsedContact||j.contact||'';
+      addr=vd.address||j.address||'';
+      const lastHarvest=vd.last_harvest_date?('Last harvest: '+new Date(vd.last_harvest_date).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})):'No harvest record';
+      extraInfoRows=`
+        ${displayName?`<div class="pr-row"><span class="pr-label">👤 Owner</span><span class="pr-val">${esc(displayName)}</span></div>`:''}
+        ${contactNum?`<div class="pr-row"><span class="pr-label">📞 Contact</span><span class="pr-val">${esc(contactNum)}</span></div>`:''}
+        ${addr?`<div class="pr-row"><span class="pr-label">📍 Location</span><span class="pr-val">${esc(addr)}</span></div>`:''}
+        <div class="pr-row"><span class="pr-label">💰 Harvest</span><span class="pr-val">${lastHarvest}</span></div>`;
+      if(vd.admin_notes)adminNote=`<div class="pr-note">📝 ${esc(vd.admin_notes)}</div>`;
+    }
+
     const mkPanel=j.vlan||j.pppoe_username?`
       <div class="mk-panel">
-        <div class="mk-panel-head"><div class="mk-status-dot ${dotClass}"></div>MikroTik Status</div>
+        <div class="mk-panel-head"><div class="mk-status-dot ${dotClass}"></div>${isSubJob?'PPPoE / MikroTik Status':'MikroTik Status'}</div>
         <div class="mk-rows">
           <div class="mk-row"><span class="mk-label">Status</span><span class="mk-val ${isOffline?'red':mk.found?'green':'muted'}">${statusLabel}</span></div>
           ${j.pppoe_username?`<div class="mk-row"><span class="mk-label">📡 PPPoE User</span><span class="mk-val">${esc(j.pppoe_username)}</span></div>`:''}
           ${j.vlan?`<div class="mk-row"><span class="mk-label">VLAN</span><span class="mk-val">${esc(j.vlan)}</span></div>`:''}
           ${mk.ip||j.mikrotik_ip?`<div class="mk-row"><span class="mk-label">IP Address</span><span class="mk-val">${esc(mk.ip||j.mikrotik_ip)}</span></div>`:''}
+          ${j._sub?.pppoe_server?`<div class="mk-row"><span class="mk-label">PPPoE Server</span><span class="mk-val">${esc(j._sub.pppoe_server)}</span></div>`:''}
         </div>
         ${histHtml?`<div class="mk-history"><div class="mk-history-title">📋 Previous Jobs</div>${histHtml}</div>`:''}
       </div>`:'';
+
     const prDetails=`
       <div class="pr-details">
-        ${ownerName?`<div class="pr-row"><span class="pr-label">👤 Owner</span><span class="pr-val">${esc(ownerName)}</span></div>`:''}
-        ${contactNum?`<div class="pr-row"><span class="pr-label">📞 Contact</span><span class="pr-val">${esc(contactNum)}</span></div>`:''}
-        ${addr?`<div class="pr-row"><span class="pr-label">📍 Location</span><span class="pr-val">${esc(addr)}</span></div>`:''}
-        <div class="pr-row"><span class="pr-label">💰 Harvest</span><span class="pr-val">${lastHarvest}</span></div>
+        ${extraInfoRows}
         ${adminNote}
         ${mkPanel}
       </div>`;
@@ -483,41 +548,46 @@ async function makeJob(ev,id){
   btn.disabled=true;btn.textContent='AI writing...';
   const now=new Date().toISOString();
   try{
-    // Fetch vendo details for AI context
-    let vendoInfo={};
-    if(j.vlan){
-      try{
-        const vrows=await sbGet(`vendos?vlan=eq.${encodeURIComponent(j.vlan)}&select=sheet_name,owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast&limit=1`);
-        if(vrows&&vrows[0])vendoInfo=vrows[0];
-      }catch(e){}
-      try{
-        const mrows=await sbGet(`mikrotik_status?vlan=eq.${encodeURIComponent(j.vlan)}&select=online,last_seen,ip&limit=1`);
-        if(mrows&&mrows[0])vendoInfo.mikrotik=mrows[0];
-      }catch(e){}
+    // Use already-enriched data if available, otherwise fetch
+    const isSubJob=j.type==='subscriber_repair'||j.type==='subscriber_installation';
+    let info={};
+    if(isSubJob&&j._sub){
+      const s=j._sub;
+      info={name:s.name,contact:s.phone,address:s.address,plan:s.plan_type,monthly:s.monthly_amount,notes:s.notes,pppoeServer:s.pppoe_server};
+    } else if(j._vendo){
+      const v=j._vendo;
+      info={name:v.owner_name,contact:v.contact_number,address:v.address,lastHarvest:v.last_harvest_date,notes:v.admin_notes};
     }
-    // Ask AI to write the job description
-    const prompt=`You are a field operations assistant for SPAWN Internet, a piso WiFi vendo machine business in Zamboanga del Norte, Philippines.
+    if(!info.name){
+      if(isSubJob&&j.pppoe_username){
+        try{const r=await sbGet('subscribers?pppoe_username=eq.'+encodeURIComponent(j.pppoe_username)+'&select=name,phone,address,plan_type,monthly_amount,notes,pppoe_server&limit=1');if(r&&r[0]){const s=r[0];info={name:s.name,contact:s.phone,address:s.address,plan:s.plan_type,monthly:s.monthly_amount,notes:s.notes,pppoeServer:s.pppoe_server};}}catch(e){}
+      } else if(j.vlan){
+        try{const r=await sbGet('vendos?vlan=eq.'+encodeURIComponent(j.vlan)+'&select=owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast&limit=1');if(r&&r[0]){const v=r[0];info={name:v.owner_name,contact:v.contact_number,address:v.address,lastHarvest:v.last_harvest_date,notes:v.admin_notes};}}catch(e){}
+      }
+    }
+    const mkAI=j._mk||{};
+    const typeNote=isSubJob?'(HOME SUBSCRIBER — monthly plan, NOT a vendo machine)':'(VENDO MACHINE — coin-operated piso WiFi)';
+    const planLine=isSubJob?('Plan: '+(info.plan||'—')+(info.monthly?' ₱'+info.monthly+'/mo':'')+' | PPPoE Server: '+(info.pppoeServer||'—')):'Last harvest: '+(info.lastHarvest||'—');
+    const prompt='You are a field operations assistant for SPAWN Internet, a piso WiFi business in Zamboanga del Norte, Philippines.
 
-Write a clear, concise job order description for a lineman dispatch. Use plain Filipino/Bisaya-English mix that field techs understand.
+Write a clear concise job order for a lineman dispatch. Use Filipino/Bisaya-English mix field techs understand.
 
 Job data:
-- Type: ${j.type||'vendo_repair'}
-- Area: ${j.area||'—'}
-- Customer/Subscriber: ${j.customer||j.fb_name||'—'}
-- VLAN: ${j.vlan||'(subscriber — no VLAN)'}
-- PPPoE Username: ${j.pppoe_username||'—'} ${j.type==='subscriber_repair'?'← PRIMARY IDENTIFIER for subscriber':''}
-- Issue: ${j.issue||'—'}
-- MikroTik notes: ${j.notes||'—'}
-- IP: ${vendoInfo.mikrotik?.ip||j.mikrotik_ip||'—'}
-- Online status: ${vendoInfo.mikrotik?.online===false?'OFFLINE':'unknown'}
-- Last seen: ${vendoInfo.mikrotik?.last_seen||'—'}
-- Owner: ${vendoInfo.owner_name||'—'}
-- Contact: ${vendoInfo.contact_number||j.contact||'—'}
-- Address: ${vendoInfo.address||j.address||'—'}
-- Last harvest: ${vendoInfo.last_harvest_date||'—'}
-- Admin notes: ${vendoInfo.admin_notes||'—'}
+- Type: '+(j.type||'—')+' '+typeNote+'
+- Area: '+(j.area||'—')+'
+- '+(isSubJob?'Subscriber':'Owner')+': '+(info.name||j.customer||j.fb_name||'—')+'
+- Contact: '+(info.contact||j.contact||'—')+'
+- Address: '+(info.address||j.address||'—')+'
+- PPPoE Username: '+(j.pppoe_username||'—')+'
+- VLAN: '+(j.vlan||'—')+'
+- IP Address: '+(mkAI.ip||j.mikrotik_ip||'—')+'
+- Online status: '+(mkAI.found?(mkAI.online?'ONLINE':'OFFLINE'):'unknown')+'
+- Offline duration: '+(mkAI.last_seen||'—')+'
+- Issue: '+(j.issue||'—')+'
+- Notes: '+(j.notes||info.notes||'—')+'
+- '+planLine+'
 
-Write a job description in 2-3 sentences max. Include: what to do, where to go, who to contact. Be specific and actionable. Do not include headers or bullet points.`;
+Write 2-3 sentences. Include: what to do, where to go, who to contact. Be specific and actionable. No headers or bullet points.';
 
     let aiDesc=j.issue||'Needs site visit';
     try{
@@ -528,9 +598,9 @@ Write a job description in 2-3 sentences max. Include: what to do, where to go, 
     }catch(e){console.warn('AI desc failed, using fallback',e);}
 
     const patch={status:'open',updated_at:now,issue:aiDesc};
-    if(vendoInfo.owner_name&&!j.customer?.includes('vlan'))patch.customer=vendoInfo.owner_name;
-    if(vendoInfo.contact_number&&!j.contact)patch.contact=vendoInfo.contact_number;
-    if(vendoInfo.address&&!j.address)patch.address=vendoInfo.address;
+    if(info.name&&!j.customer?.includes('vlan'))patch.customer=info.name;
+    if(info.contact&&!j.contact)patch.contact=info.contact;
+    if(info.address&&!j.address)patch.address=info.address;
     await sbPatch(`job_orders?id=eq.${id}`,patch);
     Object.assign(j,patch);
     render(); toast('✓ Job created — AI wrote the description');
