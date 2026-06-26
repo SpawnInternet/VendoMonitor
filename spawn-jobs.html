@@ -850,6 +850,14 @@ function fmtTime(iso){if(!iso)return '';return new Date(iso).toLocaleTimeString(
 function fmtDay(iso){if(!iso)return '';const d=new Date(iso);const t=new Date();const diff=(t.setHours(0,0,0,0)-d.setHours(0,0,0,0))/864e5;if(diff<1)return 'Today';if(diff<2)return 'Yesterday';return new Date(iso).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});}
 
 // Friendly "offline for X" from an ISO offline_since timestamp
+function fmtBytes(b){
+  if(b==null)return null;
+  b=Number(b);if(isNaN(b))return null;
+  if(b<1024)return b+' B';
+  const u=['KB','MB','GB','TB'];let i=-1;
+  do{b/=1024;i++;}while(b>=1024&&i<u.length-1);
+  return b.toFixed(b<10?1:0)+' '+u[i];
+}
 function offlineDuration(iso){
   if(!iso)return null;
   const ms=Date.now()-new Date(iso).getTime();
@@ -1019,7 +1027,7 @@ async function loadNetwork(){
     const [vendos,subs,statusRows]=await Promise.all([
       sbAll('vendos?status=eq.active&select=id,vlan,sheet_name,tg_name,owner_name,area,address,contact_number'),
       sbAll('subscribers?status=eq.active&select=id,pppoe_username,name,area,address,phone,offline_since'),
-      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at,server_name,user_count')
+      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at,server_name,user_count,rx_bytes,tx_bytes,router_comment')
     ]);
     // Build lookup maps from live status
     const vStatus={},pStatus={};
@@ -1035,7 +1043,8 @@ async function loadNetwork(){
         area:v.area||'—',vlan:v.vlan,key:v.vlan,address:v.address,contact:v.contact_number,
         hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
         offline_since:st?st.offline_since:null,ip:st?st.ip:null,
-        server:st?(st.server_name||'—'):'—',users:st?(st.user_count||0):null};
+        server:st?(st.server_name||'—'):'—',users:st?(st.user_count||0):null,
+        rxb:st?st.rx_bytes:null,txb:st?st.tx_bytes:null,router_comment:st?st.router_comment:null};
     });
     const srows=subs.map(s=>{
       const st=s.pppoe_username?pStatus[s.pppoe_username]:null;
@@ -1208,6 +1217,8 @@ function openNetDetail(idx){
     <div class="nd-row"><span class="nd-l">${r.kind==='vendo'?'VLAN':'PPPoE'}</span><span class="nd-v">${r.key!=null?`<span class="net-vlan">${esc(String(r.key))}</span>`:'—'}</span></div>
     <div class="nd-row"><span class="nd-l">IP Address</span><span class="nd-v">${esc(r.ip||'—')}</span></div>
     ${r.kind==='vendo'&&r.users!=null&&r.online?`<div class="nd-row"><span class="nd-l">Connected Users</span><span class="nd-v">👥 ${r.users} device(s)</span></div>`:''}
+    ${r.kind==='vendo'&&(r.rxb!=null||r.txb!=null)?`<div class="nd-row"><span class="nd-l">Data Used</span><span class="nd-v">⬇ ${fmtBytes(r.rxb)||'—'} &nbsp; ⬆ ${fmtBytes(r.txb)||'—'}${(Number(r.rxb||0)+Number(r.txb||0))<100000?' <span style="color:var(--red);font-weight:700">⚠️ very low</span>':''}</span></div>`:''}
+    ${r.kind==='vendo'&&r.router_comment?`<div class="nd-row"><span class="nd-l">Router Name</span><span class="nd-v">${esc(r.router_comment)}</span></div>`:''}
     <div class="nd-row"><span class="nd-l">Contact</span><span class="nd-v">${r.contact?`<a href="tel:${esc(r.contact)}" style="color:var(--blue)">${esc(r.contact)}</a>`:'—'}</span></div>
     <div class="nd-row"><span class="nd-l">Address</span><span class="nd-v">${esc(r.address||'—')}</span></div>
     <div id="ndLinkArea"></div>`;
@@ -1344,6 +1355,7 @@ setInterval(checkHeartbeat,60000); // re-check every minute
 </script>
 </body>
 </html>
+
 
 
 
