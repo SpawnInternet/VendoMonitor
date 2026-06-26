@@ -77,6 +77,39 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .net-table-meta{padding:10px 14px;font-size:12px;color:var(--muted);background:#f8fafc;border-top:1px solid var(--border);}
 .net-loadmore{display:block;width:100%;padding:11px;background:var(--bg);border:none;border-top:1px solid var(--border);font-family:inherit;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;}
 .net-loadmore:hover{background:#e8eef5;}
+.net-vlan{display:inline-block;background:var(--navy);color:var(--gold);font-weight:800;font-size:12px;padding:2px 10px;border-radius:7px;font-family:monospace;letter-spacing:.5px;}
+.net-users{display:inline-block;background:#eff6ff;color:var(--blue);font-weight:700;font-size:11px;padding:2px 9px;border-radius:7px;}
+
+/* Net detail modal */
+.nd-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:250;align-items:center;justify-content:center;padding:20px;}
+.nd-overlay.show{display:flex;}
+.nd-modal{background:var(--white);border-radius:16px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.nd-head{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;}
+.nd-head .nd-ic{width:44px;height:44px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.nd-head h2{font-size:16px;font-weight:800;color:var(--navy);}
+.nd-head .nd-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.nd-close{margin-left:auto;width:30px;height:30px;border-radius:8px;border:none;background:var(--bg);cursor:pointer;font-size:16px;color:var(--muted);}
+.nd-body{padding:18px 22px;overflow-y:auto;}
+.nd-row{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:13px;gap:10px;}
+.nd-row .nd-l{color:var(--muted);width:120px;flex-shrink:0;font-weight:700;font-size:12px;}
+.nd-row .nd-v{color:var(--navy);font-weight:600;flex:1;word-break:break-word;}
+.nd-unlink{background:#fef2f2;color:var(--red);border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.nd-unlink:hover{background:#fee2e2;}
+.nd-link{background:#eff6ff;color:var(--blue);border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.nd-link:hover{background:#dbeafe;}
+.nd-section{margin-top:16px;}
+.nd-section h4{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px;}
+.nd-search-input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;outline:none;}
+.nd-search-input:focus{border-color:var(--blue);}
+.nd-results{max-height:180px;overflow-y:auto;margin-top:8px;border:1px solid var(--border);border-radius:9px;}
+.nd-result{padding:9px 12px;font-size:12px;border-bottom:1px solid #f1f5f9;cursor:pointer;}
+.nd-result:hover{background:#f8fafc;}
+.nd-result:last-child{border-bottom:none;}
+.nd-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:9px;}
+.nd-status-big{display:flex;align-items:center;gap:8px;padding:12px;border-radius:10px;margin-bottom:14px;font-weight:700;font-size:14px;}
+.nd-status-big.on{background:#f0fdf4;color:#15803d;}
+.nd-status-big.off{background:#fef2f2;color:var(--red);}
+.nd-status-big.unk{background:#f1f5f9;color:var(--muted);}
 .search-wrap{position:relative;}
 .search-wrap input{position:relative;z-index:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
 .search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
@@ -282,6 +315,21 @@ textarea.field{resize:vertical;min-height:64px;}
 
 <div id="view-network" style="display:none">
   <div id="networkContent"><div style="padding:40px;text-align:center;color:var(--muted)">Loading network status…</div></div>
+</div>
+
+<!-- Network detail modal -->
+<div class="nd-overlay" id="ndOverlay" onclick="if(event.target===this)closeNetDetail()">
+  <div class="nd-modal">
+    <div class="nd-head">
+      <div class="nd-ic" id="ndIc">📡</div>
+      <div><h2 id="ndName">—</h2><div class="nd-sub" id="ndSub">—</div></div>
+      <button class="nd-close" onclick="closeNetDetail()">&times;</button>
+    </div>
+    <div class="nd-body" id="ndBody"></div>
+    <div class="nd-foot">
+      <button class="btn btn-outline" style="flex:1" onclick="closeNetDetail()">Close</button>
+    </div>
+  </div>
 </div>
 
 <!-- Detail modal -->
@@ -931,6 +979,9 @@ async function checkHeartbeat(){
 //  NETWORK STATUS DASHBOARD
 // ════════════════════════════════════════════════════════
 let _netData=null;            // {vendos:[], subs:[]}
+let _netShownRows=[];          // currently displayed rows
+let _netPwdOk=false;           // unlock state for unlink/relink
+const NET_PWD='101510';
 let _netFilter='all';         // all | online | offline | nodata
 let _netKind='all';           // all | vendo | sub
 let _netArea='all';
@@ -966,9 +1017,9 @@ async function loadNetwork(){
   try{
     // Fetch all active vendos + subscribers + the live status map
     const [vendos,subs,statusRows]=await Promise.all([
-      sbAll('vendos?status=eq.active&select=id,vlan,sheet_name,owner_name,area,address,contact_number'),
+      sbAll('vendos?status=eq.active&select=id,vlan,sheet_name,tg_name,owner_name,area,address,contact_number'),
       sbAll('subscribers?status=eq.active&select=id,pppoe_username,name,area,address,phone,offline_since'),
-      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at,server_name')
+      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at,server_name,user_count')
     ]);
     // Build lookup maps from live status
     const vStatus={},pStatus={};
@@ -980,18 +1031,20 @@ async function loadNetwork(){
     const vrows=vendos.map(v=>{
       const st=v.vlan!=null?vStatus[String(v.vlan)]:null;
       return {kind:'vendo',id:v.id,name:v.sheet_name||v.owner_name||('VLAN '+v.vlan),
+        sheet_name:v.sheet_name,tg_name:v.tg_name,
         area:v.area||'—',vlan:v.vlan,key:v.vlan,address:v.address,contact:v.contact_number,
         hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
         offline_since:st?st.offline_since:null,ip:st?st.ip:null,
-        server:st?(st.server_name||'—'):'—'};
+        server:st?(st.server_name||'—'):'—',users:st?(st.user_count||0):null};
     });
     const srows=subs.map(s=>{
       const st=s.pppoe_username?pStatus[s.pppoe_username]:null;
       return {kind:'sub',id:s.id,name:s.name||s.pppoe_username||'Subscriber',
+        sheet_name:s.name,tg_name:null,
         area:s.area||'—',vlan:null,key:s.pppoe_username,address:s.address,contact:s.phone,
         hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
         offline_since:st?st.offline_since:s.offline_since,ip:st?st.ip:null,
-        server:st?(st.server_name||'—'):'—'};
+        server:st?(st.server_name||'—'):'—',users:null};
     });
     _netData={vendos:vrows,subs:srows,all:[...vrows,...srows]};
     renderNetwork();
@@ -1030,6 +1083,7 @@ function renderNetwork(){
   if(_netSearch){const q=_netSearch.toLowerCase();rows=rows.filter(r=>`${r.name||''} ${r.area||''} ${r.key||''} ${r.address||''} ${r.contact||''}`.toLowerCase().includes(q));}
   const totalFiltered=rows.length;
   const shown=rows.slice(0,_netShown);
+  _netShownRows=shown; // for detail panel lookup
 
   const dur=r=>{const x=offlineDuration(r.offline_since)||r.last_seen;return x||'';};
   const statusBadge=r=>{
@@ -1096,14 +1150,15 @@ function renderNetwork(){
 
     <div class="net-table-wrap">
       <table class="net-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Area</th><th>Server</th><th>VLAN/PPPoE</th><th>Status</th><th>IP</th></tr></thead>
+        <thead><tr><th>Name</th><th>Type</th><th>Area</th><th>Server</th><th>VLAN/PPPoE</th><th>Users</th><th>Status</th><th>IP</th></tr></thead>
         <tbody>
-          ${shown.map(r=>`<tr>
-            <td><strong>${esc(r.name)}</strong>${r.contact?`<br><span style="font-size:11px;color:var(--muted)">📞 ${esc(r.contact)}</span>`:''}</td>
+          ${shown.map((r,i)=>`<tr>
+            <td><a href="#" onclick="openNetDetail(${i});return false;" style="color:var(--blue);font-weight:700;text-decoration:none">${esc(r.name)}</a>${r.contact?`<br><span style="font-size:11px;color:var(--muted)">📞 ${esc(r.contact)}</span>`:''}</td>
             <td><span class="net-kind ${r.kind==='vendo'?'vendo':'sub'}">${r.kind==='vendo'?'Vendo':'Sub'}</span></td>
             <td>${esc(r.area)}</td>
             <td style="font-size:11px">${esc(r.server||'—')}</td>
-            <td>${esc(r.key!=null?String(r.key):'—')}</td>
+            <td>${r.key!=null?`<span class="net-vlan">${esc(String(r.key))}</span>`:'—'}</td>
+            <td style="text-align:center">${r.users!=null&&r.online?`<span class="net-users">👥 ${r.users}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
             <td>${statusBadge(r)}</td>
             <td style="font-size:11px;color:var(--muted)">${esc(r.ip||'—')}</td>
           </tr>`).join('')}
@@ -1115,6 +1170,107 @@ function renderNetwork(){
   </div>`;
 }
 
+// ── Network detail panel (click a name) ──
+let _ndCurrent=null;
+function openNetDetail(idx){
+  const r=_netShownRows[idx];
+  if(!r)return;
+  _ndCurrent=r;
+  document.getElementById('ndIc').textContent=r.kind==='vendo'?'🏪':'🏠';
+  document.getElementById('ndName').textContent=r.name||'—';
+  document.getElementById('ndSub').textContent=(r.kind==='vendo'?'Vendo':'Subscriber')+' · '+(r.area||'—');
+
+  const st=netStatusOf(r);
+  const dur=offlineDuration(r.offline_since)||r.last_seen||'';
+  const statusBig=st==='online'
+    ?`<div class="nd-status-big on">🟢 Online${r.users!=null?' · 👥 '+r.users+' users connected':''}</div>`
+    :st==='offline'
+    ?`<div class="nd-status-big off">🔴 Offline${dur?' · '+dur:''}</div>`
+    :`<div class="nd-status-big unk">⚪ No live data from any server</div>`;
+
+  document.getElementById('ndBody').innerHTML=`
+    ${statusBig}
+    <div class="nd-row">
+      <span class="nd-l">Sheet Name</span>
+      <span class="nd-v">${esc(r.sheet_name||'—')}</span>
+      ${r.kind==='vendo'&&r.sheet_name?`<button class="nd-unlink" onclick="unlinkField('sheet_name')">Unlink</button>`:''}
+    </div>
+    ${r.kind==='vendo'?`<div class="nd-row">
+      <span class="nd-l">Telegram Name</span>
+      <span class="nd-v">${esc(r.tg_name||'(not linked)')}</span>
+      ${r.tg_name?`<button class="nd-unlink" onclick="unlinkField('tg_name')">Unlink</button>`:`<button class="nd-link" onclick="showLinkSearch()">+ Link</button>`}
+    </div>`:''}
+    <div class="nd-row"><span class="nd-l">Server</span><span class="nd-v">${esc(r.server||'—')}</span></div>
+    <div class="nd-row"><span class="nd-l">${r.kind==='vendo'?'VLAN':'PPPoE'}</span><span class="nd-v">${r.key!=null?`<span class="net-vlan">${esc(String(r.key))}</span>`:'—'}</span></div>
+    <div class="nd-row"><span class="nd-l">IP Address</span><span class="nd-v">${esc(r.ip||'—')}</span></div>
+    ${r.kind==='vendo'&&r.users!=null&&r.online?`<div class="nd-row"><span class="nd-l">Connected Users</span><span class="nd-v">👥 ${r.users} device(s)</span></div>`:''}
+    <div class="nd-row"><span class="nd-l">Contact</span><span class="nd-v">${r.contact?`<a href="tel:${esc(r.contact)}" style="color:var(--blue)">${esc(r.contact)}</a>`:'—'}</span></div>
+    <div class="nd-row"><span class="nd-l">Address</span><span class="nd-v">${esc(r.address||'—')}</span></div>
+    <div id="ndLinkArea"></div>`;
+  document.getElementById('ndOverlay').classList.add('show');
+}
+function closeNetDetail(){document.getElementById('ndOverlay').classList.remove('show');_ndCurrent=null;}
+
+function checkNetPwd(){
+  if(_netPwdOk)return true;
+  const p=prompt('Enter password to change matching:');
+  if(p===NET_PWD){_netPwdOk=true;return true;}
+  if(p!==null)toast('Wrong password');
+  return false;
+}
+
+async function unlinkField(field){
+  if(!_ndCurrent||_ndCurrent.kind!=='vendo')return;
+  if(!checkNetPwd())return;
+  const label=field==='tg_name'?'Telegram name':'Sheet name';
+  if(!confirm(`Unlink the ${label} from this vendo?`))return;
+  try{
+    await sbPatch(`vendos?id=eq.${_ndCurrent.id}`,{[field]:null,updated_at:new Date().toISOString()});
+    _ndCurrent[field]=null;
+    if(field==='sheet_name')_ndCurrent.sheet_name=null;
+    toast(`${label} unlinked`);
+    // refresh underlying data
+    openNetDetail(_netShownRows.indexOf(_ndCurrent));
+  }catch(e){toast('Failed: '+e.message);console.error(e);}
+}
+
+async function showLinkSearch(){
+  if(!_ndCurrent||_ndCurrent.kind!=='vendo')return;
+  if(!checkNetPwd())return;
+  const area=document.getElementById('ndLinkArea');
+  area.innerHTML=`<div class="nd-section">
+    <h4>🔍 Search Telegram name to link</h4>
+    <input class="nd-search-input" id="ndTgSearch" placeholder="Type to search Telegram names..." oninput="searchTgNames(this.value)">
+    <div class="nd-results" id="ndTgResults"></div>
+  </div>`;
+  document.getElementById('ndTgSearch').focus();
+}
+
+let _tgSearchTimer=null;
+function searchTgNames(q){
+  clearTimeout(_tgSearchTimer);
+  if(!q||q.length<2){document.getElementById('ndTgResults').innerHTML='';return;}
+  _tgSearchTimer=setTimeout(async()=>{
+    try{
+      const rows=await sbGet(`vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=id,tg_name,sheet_name,vlan&limit=20`);
+      const res=document.getElementById('ndTgResults');
+      if(!rows.length){res.innerHTML='<div class="nd-result" style="color:var(--muted)">No matches found</div>';return;}
+      res.innerHTML=rows.map(x=>`<div class="nd-result" onclick="linkTgName(${JSON.stringify(x.tg_name||'').replace(/"/g,'&quot;')})">${esc(x.tg_name||'')}<br><span style="font-size:10px;color:var(--muted)">currently: ${esc(x.sheet_name||'?')} (VLAN ${x.vlan||'?'})</span></div>`).join('');
+    }catch(e){console.error(e);}
+  },300);
+}
+
+async function linkTgName(tgName){
+  if(!_ndCurrent||!tgName)return;
+  if(!confirm(`Link Telegram name "${tgName}" to this vendo?`))return;
+  try{
+    await sbPatch(`vendos?id=eq.${_ndCurrent.id}`,{tg_name:tgName,updated_at:new Date().toISOString()});
+    _ndCurrent.tg_name=tgName;
+    toast('Telegram name linked');
+    openNetDetail(_netShownRows.indexOf(_ndCurrent));
+  }catch(e){toast('Failed: '+e.message);console.error(e);}
+}
+
 // boot
 if(!supaKey)showConfig();else loadJobs();
 checkHeartbeat();
@@ -1122,6 +1278,7 @@ setInterval(checkHeartbeat,60000); // re-check every minute
 </script>
 </body>
 </html>
+
 
 
 
