@@ -911,14 +911,14 @@ async function checkHeartbeat(){
   const dot=document.getElementById('hbDot'),txt=document.getElementById('hbText'),pill=document.getElementById('hbPill');
   if(!dot||!supaKey)return;
   try{
-    const rows=await sbGet('system_heartbeat?service_name=eq.mikrotik_status_poller&select=last_beat,status,detail,cycle_count&limit=1');
+    const rows=await sbGet('system_heartbeat?service_name=eq.mikrotik_status_poller&select=last_beat,status,detail,cycle_count,server_name&limit=1');
     if(!rows||!rows[0]){dot.className='hb-dot down';txt.textContent='No poller';pill.title='Poller never reported in';return;}
     const hb=rows[0];
     const ageMs=Date.now()-new Date(hb.last_beat).getTime();
     const ageMin=Math.floor(ageMs/60000);
     let cls,label;
     if(hb.status==='never_started'){cls='down';label='Not started';}
-    else if(ageMin<4){cls='live';label='Poller live';}
+    else if(ageMin<4){cls='live';label=(hb.server_name||'Poller')+' live';}
     else if(ageMin<10){cls='slow';label=`Poller slow (${ageMin}m)`;}
     else {cls='down';label=`Poller down (${ageMin}m)`;}
     dot.className='hb-dot '+cls;
@@ -968,7 +968,7 @@ async function loadNetwork(){
     const [vendos,subs,statusRows]=await Promise.all([
       sbAll('vendos?status=eq.active&select=id,vlan,sheet_name,owner_name,area,address,contact_number'),
       sbAll('subscribers?status=eq.active&select=id,pppoe_username,name,area,address,phone,offline_since'),
-      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at')
+      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at,server_name')
     ]);
     // Build lookup maps from live status
     const vStatus={},pStatus={};
@@ -982,14 +982,16 @@ async function loadNetwork(){
       return {kind:'vendo',id:v.id,name:v.sheet_name||v.owner_name||('VLAN '+v.vlan),
         area:v.area||'—',vlan:v.vlan,key:v.vlan,address:v.address,contact:v.contact_number,
         hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
-        offline_since:st?st.offline_since:null,ip:st?st.ip:null};
+        offline_since:st?st.offline_since:null,ip:st?st.ip:null,
+        server:st?(st.server_name||'—'):'—'};
     });
     const srows=subs.map(s=>{
       const st=s.pppoe_username?pStatus[s.pppoe_username]:null;
       return {kind:'sub',id:s.id,name:s.name||s.pppoe_username||'Subscriber',
         area:s.area||'—',vlan:null,key:s.pppoe_username,address:s.address,contact:s.phone,
         hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
-        offline_since:st?st.offline_since:s.offline_since,ip:st?st.ip:null};
+        offline_since:st?st.offline_since:s.offline_since,ip:st?st.ip:null,
+        server:st?(st.server_name||'—'):'—'};
     });
     _netData={vendos:vrows,subs:srows,all:[...vrows,...srows]};
     renderNetwork();
@@ -1094,12 +1096,13 @@ function renderNetwork(){
 
     <div class="net-table-wrap">
       <table class="net-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Area</th><th>VLAN/PPPoE</th><th>Status</th><th>IP</th></tr></thead>
+        <thead><tr><th>Name</th><th>Type</th><th>Area</th><th>Server</th><th>VLAN/PPPoE</th><th>Status</th><th>IP</th></tr></thead>
         <tbody>
           ${shown.map(r=>`<tr>
             <td><strong>${esc(r.name)}</strong>${r.contact?`<br><span style="font-size:11px;color:var(--muted)">📞 ${esc(r.contact)}</span>`:''}</td>
             <td><span class="net-kind ${r.kind==='vendo'?'vendo':'sub'}">${r.kind==='vendo'?'Vendo':'Sub'}</span></td>
             <td>${esc(r.area)}</td>
+            <td style="font-size:11px">${esc(r.server||'—')}</td>
             <td>${esc(r.key!=null?String(r.key):'—')}</td>
             <td>${statusBadge(r)}</td>
             <td style="font-size:11px;color:var(--muted)">${esc(r.ip||'—')}</td>
