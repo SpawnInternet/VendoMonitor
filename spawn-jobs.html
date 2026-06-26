@@ -427,14 +427,17 @@ async function openDetail(id){
   const j=allJobs.find(x=>x.id===id);if(!j)return;currentJob=j;
   const type=j.type||'unrecognized';const src=j.source||'office';
   document.getElementById('dIcon').innerHTML=TYPE_ICON[type]||'&#128221;';
-  document.getElementById('dName').textContent=j.customer||j.fb_name||'Unknown';
-  document.getElementById('dSub').innerHTML=`${TYPE_LABEL[type]||type} &middot; <span class="src-badge src-${src}">${esc(src)}</span>`;
+  const displayName=j.fb_name||j.customer||'Unknown';
+  const jobName=j.customer&&j.fb_name&&j.customer!==j.fb_name?j.customer:null;
+  document.getElementById('dName').textContent=displayName;
+  document.getElementById('dSub').innerHTML=`${TYPE_LABEL[type]||type} &middot; <span class="src-badge src-${src}">${esc(src)}</span>${jobName?` &middot; <span style="color:var(--muted)">Job name: ${esc(jobName)}</span>`:''}`;
+
   const stage=STAGE[j.status||'open']||'received';
   document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${stage===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
   // chat header
   const srcIcon=src==='mikrotik'?'&#128225;':(src==='office'?'&#127970;':'&#128172;');
   document.getElementById('chatAva').innerHTML=srcIcon;
-  document.getElementById('chatName').textContent=j.customer||j.fb_name||'Unknown';
+  document.getElementById('chatName').textContent=displayName;
   document.getElementById('chatSub').textContent=`${esc(src)} · ${j.area||'—'} · ${j.contact||'no contact'}`;
   // load conversation
   document.getElementById('chatArea').innerHTML='<div class="chat-empty"><div class="ei">&#8987;</div>Loading...</div>';
@@ -492,9 +495,19 @@ async function sendReply(){
   try{
     const r=await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${fbToken}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({recipient:{id:currentJob.sender_id},message:{text}})});
     const d=await r.json();if(d.error)throw new Error(d.error.message);
+    // Save reply to fb_conversations so it persists on reload
+    const now=new Date().toISOString();
+    const newMsg={role:'assistant',content:text,created_at:now};
+    try{
+      const rows=await sbGet(`fb_conversations?sender_id=eq.${currentJob.sender_id}&select=id,messages`);
+      if(rows&&rows[0]){
+        const msgs=[...(rows[0].messages||[]),newMsg];
+        await fetch(`${supaUrl}/rest/v1/fb_conversations?sender_id=eq.${currentJob.sender_id}`,{method:'PATCH',headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({messages:msgs})});
+      }
+    }catch(e){console.warn('Could not save reply to DB:',e);}
     const ca=document.getElementById('chatArea');
     const div=document.createElement('div');div.className='msg-row agent';
-    div.innerHTML=`<div class="msg-avatar">\uD83D\uDC64</div><div class="msg-col"><div class="msg-sender">You</div><div class="msg-bubble">${esc(text)}</div><div class="msg-time">${fmtTime(new Date().toISOString())}</div></div>`;
+    div.innerHTML=`<div class="msg-avatar">\uD83E\uDD16</div><div class="msg-col"><div class="msg-sender">You (office)</div><div class="msg-bubble">${esc(text)}</div><div class="msg-time">${fmtTime(now)}</div></div>`;
     ca.appendChild(div);ca.scrollTop=ca.scrollHeight;
     input.value='';input.style.height='auto';toast('Sent to customer');
   }catch(e){toast('Failed: '+e.message);}
@@ -554,3 +567,4 @@ if(!supaKey)showConfig();else loadJobs();
 </script>
 </body>
 </html>
+
