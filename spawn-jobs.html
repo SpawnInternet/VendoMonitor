@@ -26,6 +26,57 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .hb-dot.slow{background:var(--gold);box-shadow:0 0 0 3px rgba(245,188,21,.3);}
 .hb-dot.down{background:var(--red);box-shadow:0 0 0 3px rgba(200,52,74,.3);}
 @keyframes hbpulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── View tabs (Jobs / Network) ── */
+.view-tabs{background:var(--white);padding:0 24px;display:flex;gap:4px;border-bottom:1px solid var(--border);}
+.vtab{background:none;border:none;border-bottom:3px solid transparent;padding:13px 18px;font-family:inherit;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;}
+.vtab:hover{color:var(--navy);}
+.vtab.active{color:var(--navy);border-bottom-color:var(--blue);}
+
+/* ── Network dashboard ── */
+.net-wrap{padding:20px 24px;}
+.net-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px;}
+.net-card{background:var(--white);border-radius:14px;padding:18px;border:1px solid var(--border);position:relative;overflow:hidden;}
+.net-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;}
+.net-card.vendos::before{background:var(--blue);}
+.net-card.subs::before{background:var(--cyan);}
+.net-card.jobs::before{background:var(--magenta);}
+.net-card.coverage::before{background:var(--gold);}
+.net-card-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px;}
+.net-card-big{font-size:30px;font-weight:800;color:var(--navy);line-height:1;margin-bottom:8px;}
+.net-card-break{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;font-weight:600;}
+.net-stat{display:flex;align-items:center;gap:4px;}
+.net-stat .dot{width:8px;height:8px;border-radius:50%;}
+.net-stat .dot.on{background:#22c55e;}
+.net-stat .dot.off{background:var(--red);}
+.net-stat .dot.unk{background:var(--muted);}
+
+.net-section-title{font-size:13px;font-weight:800;color:var(--navy);margin:24px 0 12px;display:flex;align-items:center;gap:8px;}
+.net-controls{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+.net-search{flex:1;min-width:200px;position:relative;}
+.net-search input{width:100%;padding:9px 14px 9px 34px;border:1px solid var(--border);border-radius:9px;font-family:inherit;font-size:13px;outline:none;}
+.net-search input:focus{border-color:var(--blue);}
+.net-search .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
+.net-fchip{padding:7px 13px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border:1px solid var(--border);border-radius:20px;background:var(--white);transition:all .15s;white-space:nowrap;}
+.net-fchip:hover{border-color:var(--blue);color:var(--blue);}
+.net-fchip.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+.net-table-wrap{background:var(--white);border-radius:12px;border:1px solid var(--border);overflow:hidden;}
+.net-table{width:100%;border-collapse:collapse;font-size:13px;}
+.net-table th{text-align:left;padding:11px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);background:#f8fafc;border-bottom:1px solid var(--border);position:sticky;top:0;}
+.net-table td{padding:10px 14px;border-bottom:1px solid #f1f5f9;}
+.net-table tr:last-child td{border-bottom:none;}
+.net-table tr:hover td{background:#f8fafc;}
+.net-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;}
+.net-badge.on{background:#f0fdf4;color:#15803d;}
+.net-badge.off{background:#fef2f2;color:var(--red);}
+.net-badge.unk{background:#f1f5f9;color:var(--muted);}
+.net-kind{font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;text-transform:uppercase;}
+.net-kind.vendo{background:#eff6ff;color:var(--blue);}
+.net-kind.sub{background:#ecfeff;color:#0891b2;}
+.net-table-meta{padding:10px 14px;font-size:12px;color:var(--muted);background:#f8fafc;border-top:1px solid var(--border);}
+.net-loadmore{display:block;width:100%;padding:11px;background:var(--bg);border:none;border-top:1px solid var(--border);font-family:inherit;font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;}
+.net-loadmore:hover{background:#e8eef5;}
 .search-wrap{position:relative;}
 .search-wrap input{position:relative;z-index:1;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 14px 8px 34px;font-family:inherit;font-size:13px;color:#fff;outline:none;width:220px;}
 .search-wrap input::placeholder{color:rgba(255,255,255,0.5);}
@@ -218,9 +269,20 @@ textarea.field{resize:vertical;min-height:64px;}
 </div>
 <div class="rainbow-strip"></div>
 
+<div class="view-tabs">
+  <button class="vtab active" id="vtab-jobs" onclick="switchView('jobs')">&#128203; Jobs Board</button>
+  <button class="vtab" id="vtab-network" onclick="switchView('network')">&#128225; Network Status</button>
+</div>
+
+<div id="view-jobs">
 <div class="filters" id="filters"></div>
 
 <div class="board" id="board"></div>
+</div>
+
+<div id="view-network" style="display:none">
+  <div id="networkContent"><div style="padding:40px;text-align:center;color:var(--muted)">Loading network status…</div></div>
+</div>
 
 <!-- Detail modal -->
 <div class="overlay" id="detail" onclick="if(event.target===this)closeDetail()">
@@ -865,6 +927,191 @@ async function checkHeartbeat(){
   }catch(e){dot.className='hb-dot down';txt.textContent='Poller ?';console.warn('hb',e);}
 }
 
+// ════════════════════════════════════════════════════════
+//  NETWORK STATUS DASHBOARD
+// ════════════════════════════════════════════════════════
+let _netData=null;            // {vendos:[], subs:[]}
+let _netFilter='all';         // all | online | offline | nodata
+let _netKind='all';           // all | vendo | sub
+let _netArea='all';
+let _netSearch='';
+let _netShown=100;            // pagination
+
+function switchView(v){
+  document.getElementById('view-jobs').style.display=(v==='jobs')?'':'none';
+  document.getElementById('view-network').style.display=(v==='network')?'':'none';
+  document.getElementById('vtab-jobs').classList.toggle('active',v==='jobs');
+  document.getElementById('vtab-network').classList.toggle('active',v==='network');
+  if(v==='network'&&!_netData)loadNetwork();
+}
+
+// Paginated fetch helper (Supabase caps at 1000 rows/request)
+async function sbAll(pathBase){
+  let all=[],from=0,page=1000;
+  while(true){
+    const r=await fetch(`${supaUrl}/rest/v1/${pathBase}`,{headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,Range:`${from}-${from+page-1}`}});
+    if(!r.ok)throw new Error(await r.text());
+    const batch=await r.json();
+    all=all.concat(batch);
+    if(batch.length<page)break;
+    from+=page;
+    if(from>20000)break; // safety cap
+  }
+  return all;
+}
+
+async function loadNetwork(){
+  const el=document.getElementById('networkContent');
+  el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)">Loading network status…</div>';
+  try{
+    // Fetch all active vendos + subscribers + the live status map
+    const [vendos,subs,statusRows]=await Promise.all([
+      sbAll('vendos?status=eq.active&select=id,vlan,sheet_name,owner_name,area,address,contact_number'),
+      sbAll('subscribers?status=eq.active&select=id,pppoe_username,name,area,address,phone,offline_since'),
+      sbAll('mikrotik_status?select=kind,vlan,ppp_name,online,last_seen,offline_since,ip,updated_at')
+    ]);
+    // Build lookup maps from live status
+    const vStatus={},pStatus={};
+    statusRows.forEach(s=>{
+      if(s.kind==='vendo'&&s.vlan!=null)vStatus[String(s.vlan)]=s;
+      if(s.kind==='ppp'&&s.ppp_name)pStatus[s.ppp_name]=s;
+    });
+    // Merge
+    const vrows=vendos.map(v=>{
+      const st=v.vlan!=null?vStatus[String(v.vlan)]:null;
+      return {kind:'vendo',id:v.id,name:v.sheet_name||v.owner_name||('VLAN '+v.vlan),
+        area:v.area||'—',vlan:v.vlan,key:v.vlan,address:v.address,contact:v.contact_number,
+        hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
+        offline_since:st?st.offline_since:null,ip:st?st.ip:null};
+    });
+    const srows=subs.map(s=>{
+      const st=s.pppoe_username?pStatus[s.pppoe_username]:null;
+      return {kind:'sub',id:s.id,name:s.name||s.pppoe_username||'Subscriber',
+        area:s.area||'—',vlan:null,key:s.pppoe_username,address:s.address,contact:s.phone,
+        hasStatus:!!st,online:st?st.online:null,last_seen:st?st.last_seen:null,
+        offline_since:st?st.offline_since:s.offline_since,ip:st?st.ip:null};
+    });
+    _netData={vendos:vrows,subs:srows,all:[...vrows,...srows]};
+    renderNetwork();
+  }catch(e){
+    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--red)">Failed to load: '+esc(e.message)+'</div>';
+    console.error(e);
+  }
+}
+
+function netStatusOf(r){
+  if(!r.hasStatus)return 'nodata';
+  return r.online?'online':'offline';
+}
+
+function renderNetwork(){
+  if(!_netData)return;
+  const d=_netData;
+  // ── Summary counts ──
+  const cnt=(arr)=>({total:arr.length,
+    on:arr.filter(r=>r.online===true).length,
+    off:arr.filter(r=>r.hasStatus&&r.online===false).length,
+    no:arr.filter(r=>!r.hasStatus).length});
+  const v=cnt(d.vendos),s=cnt(d.subs);
+  const vCov=v.total?Math.round((v.total-v.no)/v.total*100):0;
+  const sCov=s.total?Math.round((s.total-s.no)/s.total*100):0;
+
+  // ── Area chips ──
+  const areas=[...new Set(d.all.map(r=>r.area).filter(a=>a&&a!=='—'))].sort();
+
+  // ── Filtered rows for table ──
+  let rows=d.all;
+  if(_netKind==='vendo')rows=d.vendos;
+  else if(_netKind==='sub')rows=d.subs;
+  if(_netArea!=='all')rows=rows.filter(r=>r.area===_netArea);
+  if(_netFilter!=='all')rows=rows.filter(r=>netStatusOf(r)===_netFilter);
+  if(_netSearch){const q=_netSearch.toLowerCase();rows=rows.filter(r=>`${r.name||''} ${r.area||''} ${r.key||''} ${r.address||''} ${r.contact||''}`.toLowerCase().includes(q));}
+  const totalFiltered=rows.length;
+  const shown=rows.slice(0,_netShown);
+
+  const dur=r=>{const x=offlineDuration(r.offline_since)||r.last_seen;return x||'';};
+  const statusBadge=r=>{
+    const st=netStatusOf(r);
+    if(st==='online')return '<span class="net-badge on">🟢 Online</span>';
+    if(st==='offline')return `<span class="net-badge off">🔴 Offline${dur(r)?' · '+dur(r):''}</span>`;
+    return '<span class="net-badge unk">⚪ No live data</span>';
+  };
+
+  document.getElementById('networkContent').innerHTML=`
+  <div class="net-wrap">
+    <div class="net-summary">
+      <div class="net-card vendos">
+        <div class="net-card-label">Vendos (active)</div>
+        <div class="net-card-big">${v.total.toLocaleString()}</div>
+        <div class="net-card-break">
+          <span class="net-stat"><span class="dot on"></span>${v.on} online</span>
+          <span class="net-stat"><span class="dot off"></span>${v.off} offline</span>
+          <span class="net-stat"><span class="dot unk"></span>${v.no} no data</span>
+        </div>
+      </div>
+      <div class="net-card subs">
+        <div class="net-card-label">Subscribers (active)</div>
+        <div class="net-card-big">${s.total.toLocaleString()}</div>
+        <div class="net-card-break">
+          <span class="net-stat"><span class="dot on"></span>${s.on} online</span>
+          <span class="net-stat"><span class="dot off"></span>${s.off} offline</span>
+          <span class="net-stat"><span class="dot unk"></span>${s.no} no data</span>
+        </div>
+      </div>
+      <div class="net-card coverage">
+        <div class="net-card-label">Live Coverage</div>
+        <div class="net-card-big">${vCov}%</div>
+        <div class="net-card-break">
+          <span class="net-stat">Vendos ${vCov}% · Subs ${sCov}%</span>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4">Only the polled server reports live. Other servers show "no data" until polled.</div>
+      </div>
+      <div class="net-card jobs">
+        <div class="net-card-label">Open Jobs</div>
+        <div class="net-card-big">${allJobs.filter(j=>!['resolved','done'].includes(j.status)).length}</div>
+        <div class="net-card-break"><span class="net-stat">${allJobs.filter(j=>j.status==='pending_review').length} pending review</span></div>
+      </div>
+    </div>
+
+    <div class="net-section-title">📡 All Vendos &amp; Subscribers</div>
+    <div class="net-controls">
+      <div class="net-search"><span class="si">🔍</span><input id="netSearchInput" placeholder="Search name, area, VLAN, PPPoE, address..." value="${esc(_netSearch)}" oninput="_netSearch=this.value;_netShown=100;renderNetwork();document.getElementById('netSearchInput').focus();"></div>
+    </div>
+    <div class="net-controls">
+      <span class="net-fchip ${_netKind==='all'?'active':''}" onclick="_netKind='all';_netShown=100;renderNetwork()">All types</span>
+      <span class="net-fchip ${_netKind==='vendo'?'active':''}" onclick="_netKind='vendo';_netShown=100;renderNetwork()">Vendos</span>
+      <span class="net-fchip ${_netKind==='sub'?'active':''}" onclick="_netKind='sub';_netShown=100;renderNetwork()">Subscribers</span>
+      <span style="width:1px;height:22px;background:var(--border)"></span>
+      <span class="net-fchip ${_netFilter==='all'?'active':''}" onclick="_netFilter='all';_netShown=100;renderNetwork()">All status</span>
+      <span class="net-fchip ${_netFilter==='online'?'active':''}" onclick="_netFilter='online';_netShown=100;renderNetwork()">🟢 Online</span>
+      <span class="net-fchip ${_netFilter==='offline'?'active':''}" onclick="_netFilter='offline';_netShown=100;renderNetwork()">🔴 Offline</span>
+      <span class="net-fchip ${_netFilter==='nodata'?'active':''}" onclick="_netFilter='nodata';_netShown=100;renderNetwork()">⚪ No data</span>
+    </div>
+    <div class="net-controls">
+      <span class="net-fchip ${_netArea==='all'?'active':''}" onclick="_netArea='all';_netShown=100;renderNetwork()">All areas</span>
+      ${areas.map(a=>`<span class="net-fchip ${_netArea===a?'active':''}" onclick="_netArea='${esc(a)}';_netShown=100;renderNetwork()">${esc(a)}</span>`).join('')}
+    </div>
+
+    <div class="net-table-wrap">
+      <table class="net-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Area</th><th>VLAN/PPPoE</th><th>Status</th><th>IP</th></tr></thead>
+        <tbody>
+          ${shown.map(r=>`<tr>
+            <td><strong>${esc(r.name)}</strong>${r.contact?`<br><span style="font-size:11px;color:var(--muted)">📞 ${esc(r.contact)}</span>`:''}</td>
+            <td><span class="net-kind ${r.kind==='vendo'?'vendo':'sub'}">${r.kind==='vendo'?'Vendo':'Sub'}</span></td>
+            <td>${esc(r.area)}</td>
+            <td>${esc(r.key!=null?String(r.key):'—')}</td>
+            <td>${statusBadge(r)}</td>
+            <td style="font-size:11px;color:var(--muted)">${esc(r.ip||'—')}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      <div class="net-table-meta">Showing ${shown.length} of ${totalFiltered.toLocaleString()} ${_netKind==='all'?'machines':_netKind+'s'}${_netFilter!=='all'?' · '+_netFilter:''}${_netArea!=='all'?' · '+_netArea:''}</div>
+      ${shown.length<totalFiltered?`<button class="net-loadmore" onclick="_netShown+=200;renderNetwork()">Load 200 more ↓</button>`:''}
+    </div>
+  </div>`;
+}
+
 // boot
 if(!supaKey)showConfig();else loadJobs();
 checkHeartbeat();
@@ -872,5 +1119,6 @@ setInterval(checkHeartbeat,60000); // re-check every minute
 </script>
 </body>
 </html>
+
 
 
