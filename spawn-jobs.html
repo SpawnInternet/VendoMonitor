@@ -150,6 +150,53 @@ textarea.field{resize:vertical;min-height:64px;}
 .toast.show{opacity:1;}
 @media(max-width:1100px){.board{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:640px){.board{grid-template-columns:1fr;}.search-wrap input{width:140px;}}
+
+/* ── MikroTik Info Panel (Pending Review cards) ── */
+.mk-panel{margin-top:10px;background:#fafbfc;border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:12px;}
+.mk-panel-head{display:flex;align-items:center;gap:7px;padding:8px 12px;background:var(--white);border-bottom:1px solid var(--border);font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.mk-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.mk-status-dot.online{background:#22c55e;box-shadow:0 0 0 2px #dcfce7;}
+.mk-status-dot.offline{background:var(--red);box-shadow:0 0 0 2px #fee2e2;}
+.mk-status-dot.unknown{background:var(--muted);}
+.mk-rows{padding:8px 12px;display:flex;flex-direction:column;gap:5px;}
+.mk-row{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.mk-label{color:var(--muted);font-size:11px;font-weight:600;flex-shrink:0;}
+.mk-val{color:var(--navy);font-size:11px;font-weight:700;text-align:right;word-break:break-all;}
+.mk-val.red{color:var(--red);}
+.mk-val.green{color:#15803d;}
+.mk-val.muted{color:var(--muted);font-weight:500;}
+.mk-history{padding:6px 12px 10px;border-top:1px solid #f1f5f9;}
+.mk-history-title{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;}
+.mk-hist-item{font-size:10px;color:#64748b;padding:3px 0;border-bottom:1px dotted #f1f5f9;display:flex;justify-content:space-between;}
+.mk-hist-item:last-child{border-bottom:none;}
+.mk-hist-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:5px;}
+.mk-hist-badge.resolved{background:#f0fdf4;color:#15803d;}
+.mk-hist-badge.open{background:#eff6ff;color:var(--blue);}
+.mk-hist-badge.pending{background:#fdf4ff;color:var(--purple);}
+
+/* AI Diagnosis panel */
+.ai-panel{margin-top:8px;border-radius:10px;overflow:hidden;border:1px solid #e0d5f7;}
+.ai-panel-head{background:#f5f3ff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.ai-panel-title{font-size:11px;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:5px;}
+.ai-diagnose-btn{font-size:10px;font-weight:700;background:var(--purple);color:#fff;border:none;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:inherit;transition:all .15s;}
+.ai-diagnose-btn:hover{background:#4a2a84;}
+.ai-diagnose-btn:disabled{background:var(--muted);cursor:not-allowed;}
+.ai-result{padding:10px 12px;font-size:12px;line-height:1.6;color:var(--text);background:var(--white);}
+.ai-result.loading{color:var(--muted);font-style:italic;}
+.ai-section{margin-bottom:8px;}
+.ai-section-title{font-size:10px;font-weight:800;color:var(--purple);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.ai-verdict{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;margin-bottom:6px;}
+.ai-verdict.real{background:#fef2f2;color:var(--red);}
+.ai-verdict.noise{background:#f0fdf4;color:#15803d;}
+.ai-verdict.unclear{background:#fdf6e3;color:#9a6f08;}
+
+/* Pending review card expanded details */
+.pr-details{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;}
+.pr-row{display:flex;justify-content:space-between;gap:6px;font-size:11px;}
+.pr-label{color:var(--muted);font-weight:600;flex-shrink:0;}
+.pr-val{color:var(--navy);font-weight:700;text-align:right;word-break:break-word;}
+.pr-note{font-size:11px;color:#64748b;background:#fffbeb;border-radius:6px;padding:5px 8px;border-left:2px solid var(--gold);line-height:1.4;}
+
 </style>
 </head>
 <body>
@@ -272,7 +319,48 @@ async function loadJobs(){
     allJobs=await sbGet('job_orders?select=*&order=created_at.desc');
     buildFilters();render();
     toast(`Refreshed — ${allJobs.length} job orders loaded`);
+    enrichPendingReview();
   }catch(e){toast('Load failed — check your key');console.error(e);}
+}
+
+async function enrichPendingReview(){
+  const pending=allJobs.filter(j=>j.status==='pending_review');
+  if(!pending.length)return;
+  const vlans=[...new Set(pending.map(j=>j.vlan).filter(Boolean))];
+  const ppps=[...new Set(pending.map(j=>j.pppoe_username).filter(Boolean))];
+  let mkMap={};
+  if(vlans.length){
+    try{
+      const mkRows=await sbGet(`mikrotik_status?vlan=in.(${vlans.join(',')})&select=vlan,online,last_seen,ip,updated_at`);
+      mkRows.forEach(r=>{if(!mkMap[r.vlan])mkMap[r.vlan]={...r,found:true};});
+    }catch(e){}
+  }
+  if(ppps.length){
+    try{
+      const mkRows=await sbGet(`mikrotik_status?ppp_name=in.(${ppps.join(',')})&select=ppp_name,online,last_seen,ip,updated_at`);
+      mkRows.forEach(r=>{if(!mkMap['ppp:'+r.ppp_name])mkMap['ppp:'+r.ppp_name]={...r,found:true};});
+    }catch(e){}
+  }
+  let vendoMap={};
+  if(vlans.length){
+    try{
+      const vRows=await sbGet(`vendos?vlan=in.(${vlans.join(',')})&select=vlan,sheet_name,owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast`);
+      vRows.forEach(r=>{if(!vendoMap[r.vlan]||(!vendoMap[r.vlan].owner_name&&r.owner_name))vendoMap[r.vlan]=r;});
+    }catch(e){}
+  }
+  let histMap={};
+  if(vlans.length){
+    try{
+      const hRows=await sbGet(`job_orders?vlan=in.(${vlans.join(',')})&select=vlan,status,issue,created_at&order=created_at.desc&limit=300`);
+      hRows.forEach(r=>{if(!histMap[r.vlan])histMap[r.vlan]=[];if(histMap[r.vlan].length<5)histMap[r.vlan].push(r);});
+    }catch(e){}
+  }
+  pending.forEach(j=>{
+    j._mk=j.vlan?mkMap[j.vlan]:(j.pppoe_username?mkMap['ppp:'+j.pppoe_username]:null)||{found:false};
+    j._vendo=j.vlan?vendoMap[j.vlan]||{}:{};
+    j._hist=(j.vlan?histMap[j.vlan]||[]:[]).filter(h=>h.created_at!==j.created_at);
+  });
+  render();
 }
 
 function buildFilters(){
@@ -317,7 +405,57 @@ function cardHtml(j){
   const assigned=j.assigned_to||j.technician;
   const status=j.status||'open';
   let actions='';
-  if(status==='pending_review')actions=`<button class="act act-approve" onclick="makeJob(event,'${j.id}')">&#10003; Make job</button><button class="act act-back" onclick="notAJob(event,'${j.id}')">&#10005; Not a job</button>`;
+  if(status==='pending_review'){
+    // Parse contact/address from customer field if not set
+    const rawCust=j.customer||'';
+    const parsedContact=j.contact||(rawCust.match(/0[0-9]{9,10}/)||[])[0]||'';
+    const vd=j._vendo||{};
+    const ownerName=vd.owner_name||(rawCust.replace(/vlan\d+\s*[—-]\s*/,'').split('\n')[0].trim())||'';
+    const contactNum=vd.contact_number||parsedContact||j.contact||'';
+    const addr=vd.address||j.address||'';
+    const lastHarvest=vd.last_harvest_date?('Last harvest: '+new Date(vd.last_harvest_date).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})):'No harvest record';
+    const mk=j._mk||{};
+    const isOffline=mk.online===false;
+    const dotClass=mk.found?(isOffline?'offline':'online'):'unknown';
+    const statusLabel=mk.found?(isOffline?`🔴 Offline — ${mk.last_seen||'?'}`:'🟢 Online'):'⚪ No MikroTik data';
+    const histHtml=(j._hist||[]).slice(0,3).map(h=>`<div class="mk-hist-item"><span>${new Date(h.created_at).toLocaleDateString('en-PH',{month:'short',day:'numeric'})}: ${esc((h.issue||'').substring(0,40))}</span><span class="mk-hist-badge ${h.status}">${h.status}</span></div>`).join('');
+    const adminNote=vd.admin_notes?`<div class="pr-note">📝 ${esc(vd.admin_notes)}</div>`:'';
+    const mkPanel=j.vlan||j.pppoe_username?`
+      <div class="mk-panel">
+        <div class="mk-panel-head"><div class="mk-status-dot ${dotClass}"></div>MikroTik Status</div>
+        <div class="mk-rows">
+          <div class="mk-row"><span class="mk-label">Status</span><span class="mk-val ${isOffline?'red':mk.found?'green':'muted'}">${statusLabel}</span></div>
+          ${j.vlan?`<div class="mk-row"><span class="mk-label">VLAN</span><span class="mk-val">${esc(j.vlan)}</span></div>`:''}
+          ${mk.ip||j.mikrotik_ip?`<div class="mk-row"><span class="mk-label">IP</span><span class="mk-val">${esc(mk.ip||j.mikrotik_ip)}</span></div>`:''}
+          ${j.pppoe_username?`<div class="mk-row"><span class="mk-label">PPPoE</span><span class="mk-val">${esc(j.pppoe_username)}</span></div>`:''}
+        </div>
+        ${histHtml?`<div class="mk-history"><div class="mk-history-title">📋 Previous Jobs</div>${histHtml}</div>`:''}
+      </div>`:'';
+    const prDetails=`
+      <div class="pr-details">
+        ${ownerName?`<div class="pr-row"><span class="pr-label">👤 Owner</span><span class="pr-val">${esc(ownerName)}</span></div>`:''}
+        ${contactNum?`<div class="pr-row"><span class="pr-label">📞 Contact</span><span class="pr-val">${esc(contactNum)}</span></div>`:''}
+        ${addr?`<div class="pr-row"><span class="pr-label">📍 Location</span><span class="pr-val">${esc(addr)}</span></div>`:''}
+        <div class="pr-row"><span class="pr-label">💰 Harvest</span><span class="pr-val">${lastHarvest}</span></div>
+        ${adminNote}
+        ${mkPanel}
+      </div>`;
+    const extraHtml=prDetails;
+    actions=`<button class="act act-approve" onclick="makeJob(event,'${j.id}')">&#10003; Make job</button><button class="act act-back" onclick="notAJob(event,'${j.id}')">&#10005; Not a job</button>`;
+    return `<div class="card t-${type}">
+      <div class="card-clickable" onclick="openDetail('${j.id}')">
+        <div class="card-top"><span class="tpill tp-${type}">${TYPE_LABEL[type]||type}</span>${prio}</div>
+        <div class="card-name">${esc(name)}</div>
+        <div class="card-issue">${esc(j.issue||'No description')}</div>
+        <div class="card-meta">
+          <span class="src-badge src-${src}">${esc(src)}</span>
+          ${j.area?`<span class="meta-chip">&#128205; ${esc(j.area)}</span>`:''}
+        </div>
+        ${extraHtml}
+      </div>
+      <div class="card-actions">${actions}</div>
+    </div>`;
+  }
   else if(status==='open'||status==='new')actions=`<button class="act act-approve" onclick="quick(event,'${j.id}','approved')">&#10003; Approve</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='approved')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','open')">&#8592;</button><button class="act act-dispatch" onclick="quick(event,'${j.id}','dispatched')">&#10148; Dispatch</button>`;
   else if(status==='dispatched'||status==='in_progress')actions=`<button class="act act-back" onclick="quick(event,'${j.id}','approved')">&#8592;</button><button class="act act-done" onclick="quick(event,'${j.id}','resolved')">&#10003; Mark done</button>`;
@@ -340,12 +478,64 @@ function cardHtml(j){
 
 async function makeJob(ev,id){
   ev.stopPropagation();
+  const j=allJobs.find(x=>x.id===id);if(!j)return;
+  const btn=ev.currentTarget;
+  btn.disabled=true;btn.textContent='AI writing...';
   const now=new Date().toISOString();
   try{
-    await sbPatch(`job_orders?id=eq.${id}`,{status:'open',updated_at:now});
-    const j=allJobs.find(x=>x.id===id); if(j)j.status='open';
-    render(); toast('Moved to Received');
-  }catch(e){toast('Failed — check key');console.error(e);}
+    // Fetch vendo details for AI context
+    let vendoInfo={};
+    if(j.vlan){
+      try{
+        const vrows=await sbGet(`vendos?vlan=eq.${encodeURIComponent(j.vlan)}&select=sheet_name,owner_name,contact_number,address,last_harvest_date,admin_notes&order=owner_name.desc.nullslast&limit=1`);
+        if(vrows&&vrows[0])vendoInfo=vrows[0];
+      }catch(e){}
+      try{
+        const mrows=await sbGet(`mikrotik_status?vlan=eq.${encodeURIComponent(j.vlan)}&select=online,last_seen,ip&limit=1`);
+        if(mrows&&mrows[0])vendoInfo.mikrotik=mrows[0];
+      }catch(e){}
+    }
+    // Ask AI to write the job description
+    const prompt=`You are a field operations assistant for SPAWN Internet, a piso WiFi vendo machine business in Zamboanga del Norte, Philippines.
+
+Write a clear, concise job order description for a lineman dispatch. Use plain Filipino/Bisaya-English mix that field techs understand.
+
+Job data:
+- Type: ${j.type||'vendo_repair'}
+- Area: ${j.area||'—'}
+- Customer/Vendo: ${j.customer||j.fb_name||'—'}
+- VLAN: ${j.vlan||'—'}
+- PPPoE: ${j.pppoe_username||'—'}
+- Issue: ${j.issue||'—'}
+- MikroTik notes: ${j.notes||'—'}
+- IP: ${vendoInfo.mikrotik?.ip||j.mikrotik_ip||'—'}
+- Online status: ${vendoInfo.mikrotik?.online===false?'OFFLINE':'unknown'}
+- Last seen: ${vendoInfo.mikrotik?.last_seen||'—'}
+- Owner: ${vendoInfo.owner_name||'—'}
+- Contact: ${vendoInfo.contact_number||j.contact||'—'}
+- Address: ${vendoInfo.address||j.address||'—'}
+- Last harvest: ${vendoInfo.last_harvest_date||'—'}
+- Admin notes: ${vendoInfo.admin_notes||'—'}
+
+Write a job description in 2-3 sentences max. Include: what to do, where to go, who to contact. Be specific and actionable. Do not include headers or bullet points.`;
+
+    let aiDesc=j.issue||'Needs site visit';
+    try{
+      const aiResp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:200,messages:[{role:'user',content:prompt}]})});
+      const aiData=await aiResp.json();
+      const txt=aiData.content?.find(x=>x.type==='text')?.text||'';
+      if(txt)aiDesc=txt.trim();
+    }catch(e){console.warn('AI desc failed, using fallback',e);}
+
+    const patch={status:'open',updated_at:now,issue:aiDesc};
+    if(vendoInfo.owner_name&&!j.customer?.includes('vlan'))patch.customer=vendoInfo.owner_name;
+    if(vendoInfo.contact_number&&!j.contact)patch.contact=vendoInfo.contact_number;
+    if(vendoInfo.address&&!j.address)patch.address=vendoInfo.address;
+    await sbPatch(`job_orders?id=eq.${id}`,patch);
+    Object.assign(j,patch);
+    render(); toast('✓ Job created — AI wrote the description');
+  }catch(e){toast('Failed — '+e.message);console.error(e);}
+  finally{if(btn){btn.disabled=false;btn.textContent='✓ Make job';}}
 }
 
 async function notAJob(ev,id){
@@ -567,4 +757,5 @@ if(!supaKey)showConfig();else loadJobs();
 </script>
 </body>
 </html>
+
 
