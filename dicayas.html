@@ -854,10 +854,11 @@ async function unlinkField(vid, field){
   if(!ok) return;
   try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{[field]:null});
+  window._curTab='names'; // stay on names tab so picker auto-opens
   render(); openM(window._curMk);
-  toast("Unlinked — now pick a replacement");
-  // auto-open the search picker so you can relink right away (no extra click)
-  setTimeout(()=>{ if(window._curTab==='names') linkField(vid, field); }, 150);
+  toast("Unlinked — pick a replacement");
+  // auto-open the search picker for the SAME field (sheet or tg) you just unlinked
+  setTimeout(()=>{ linkField(vid, field); }, 250);
 }
 let _pickCtx=null; // {vid, field}
 function linkField(vid, field){
