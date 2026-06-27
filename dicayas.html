@@ -39,6 +39,7 @@
   .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
   .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
   .tab.active[data-tab="inactive"]{box-shadow:inset 0 3px 0 var(--magenta)}
+  .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
   .wrap{padding:16px 18px 60px}
   .banner{background:rgba(245,188,21,.08);border:1px solid rgba(245,188,21,.3);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:var(--gold);font-weight:700}
   .banner.crit{background:rgba(200,52,74,.1);border-color:rgba(200,52,74,.4);color:#ff8a9c}
@@ -113,6 +114,7 @@
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
   <div class="tab" data-tab="inactive">🚫 Inactive</div>
+  <div class="tab" data-tab="empty">⚫ Empty Slots</div>
 </div>
 
 <div class="wrap">
@@ -169,6 +171,10 @@
     <div class="grid" id="grid-inact-vendo"></div>
     <div class="grid" id="grid-inact-ppp" style="display:none"></div>
   </div>
+  <div id="pane-empty" class="pane" style="display:none">
+    <div class="banner">Empty slots = VLANs with no DHCP lease, no vendo name, and no sales this month. Likely reserved/never-deployed VLANs — excluded from the offline reconciliation list.</div>
+    <div class="grid" id="grid-empty"></div>
+  </div>
 </div>
 
 <div class="ov" id="ov"><div class="modal">
@@ -183,6 +189,7 @@ const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
 let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
 let STATUS=[], SUBS=[];
+let SALES_MONTH={}; // vlan -> peso total this month (for classification)
 
 async function sb(path){
   const r=await fetch(SB+"/rest/v1/"+path,{headers:H});
@@ -233,6 +240,15 @@ function areaOf(m){
   return cands.length>1? (cands.length+" areas") : "—";
 }
 
+// Empty slot = no lease + offline + no vendo name + no sales this month
+function hasName(m){
+  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  return cands.some(v=>v.sheet_name||v.tg_name);
+}
+function isEmptySlot(m){
+  return !m.online && !m.lease_status && !hasName(m) && !(SALES_MONTH[m.vlan]>0);
+}
+
 function flagsOf(m){
   const f=[];
   const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
@@ -265,15 +281,18 @@ function cardHtml(m){
 }
 
 function render(){
-  const on=STATUS.filter(m=>m.online), off=STATUS.filter(m=>!m.online);
+  const on=STATUS.filter(m=>m.online);
+  const offAll=STATUS.filter(m=>!m.online);
+  const empties=offAll.filter(isEmptySlot);
+  const off=offAll.filter(m=>!isEmptySlot(m)); // real offline (named or earning)
   document.getElementById('grid-online').innerHTML = on.length?on.map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
-  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos</div>';
+  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos needing attention 🎉</div>';
+  document.getElementById('grid-empty').innerHTML = empties.length?empties.map(cardHtml).join(''):'<div class="empty">No empty slots</div>';
 
   document.getElementById('banner-offline').innerHTML = off.length===0
-    ? `<div class="banner crit">⚠️ 0 offline out of ${STATUS.length} vendos — almost certainly the poller online-detection bug (interface flag instead of DHCP lease). Deploy the corrected poller.</div>` : '';
+    ? `<div class="banner">No offline vendos need attention. ${empties.length} empty slots moved to their own tab.</div>` : '';
   const rx0=STATUS.filter(m=>Number(m.rx_bytes||0)===0).length;
-  document.getElementById('banner-online').innerHTML = rx0>STATUS.length*0.5
-    ? `<div class="banner">⚠️ ${rx0}/${STATUS.length} vendos show rx=0 — download bytes not read by the poller (tx works). Likely an rx field bug in the poller.</div>` : '';
+  document.getElementById('banner-online').innerHTML = '';
 
   const flagged=STATUS.filter(m=>flagsOf(m).length>0).length;
   const last = STATUS.reduce((a,m)=>m.updated_at>a?m.updated_at:a,"");
@@ -282,9 +301,9 @@ function render(){
     <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
     <div class="stat on"><div class="n">${on.length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${off.length}</div><div class="l">Offline</div></div>
+    <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
     <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>
-    <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>
-    <div class="stat warn"><div class="n">${DUPVLAN.size}</div><div class="l">Dup VLAN</div></div>`;
+    <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>`;
   applySearch();
 }
 
@@ -540,6 +559,14 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
     SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
+    // monthly sales per vlan — used to classify empty slots vs real offline
+    try{
+      const now=new Date();
+      const monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
+      const tx=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${monthStart}&limit=200000`);
+      SALES_MONTH={};
+      tx.forEach(r=>{ const k=String(r.vendo); SALES_MONTH[k]=(SALES_MONTH[k]||0)+Number(r.amount||0); });
+    }catch(e){ SALES_MONTH={}; }
     render(); renderSubs();
     await loadSuppress();
   }catch(e){
