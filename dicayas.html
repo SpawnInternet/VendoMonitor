@@ -106,6 +106,7 @@
   .pickitem:hover{background:var(--panel2)}
   .pickitem .area{font-size:11px;color:var(--dim);font-weight:600;margin-left:6px}
   .pickitem mark{background:#fff3cf;color:#8a6500;padding:0 1px;border-radius:2px}
+  .pickitem .brgy{font-size:11px;color:var(--blue);font-weight:600;margin-top:3px}
   .pickcustom{border-top:1px solid var(--border);padding-top:12px}
   .candbox{border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:8px;background:var(--panel2)}
   .candhead{font-size:12px;font-weight:800;color:var(--blue);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -709,6 +710,7 @@ function renderModal(m, cands){
           <span class="v">${esc(d.area)||'<i style="color:var(--dim)">(none)</i>'}</span>
           <button class="lnk link" onclick='changeArea(${vid})'>Change</button>
         </div>
+        ${d.address?`<div class="row" style="padding:4px 0"><span class="k">📍 Address</span><span class="v" style="font-size:13px;text-align:right">${esc(d.address)}</span></div>`:''}
         <div class="linkrow">
           <span class="k">VLAN</span>
           <span class="v">${esc(d.vlan)||'<i style="color:var(--dim)">(none)</i>'}${String(d.vlan)!==String(m.vlan)?` <span class="vlanmismatch" title="Record VLAN differs from server VLAN ${esc(m.vlan)}">≠ server ${esc(m.vlan)}</span>`:' <span class="vlanok">✓ matches server</span>'}</span>
@@ -740,6 +742,7 @@ function changeGroup(vid){
   document.getElementById('grpList').innerHTML = GROUPS.map(g=>`
     <div class="pickitem" onclick='pickGroup(${g.id})'>
       ${esc(g.group_label)} <span class="area">${esc(g.area||'')}${g.id===cur?' · current':''}</span>
+      ${g.barangays?`<div class="brgy">📍 ${esc(g.barangays)}</div>`:''}
     </div>`).join('');
   document.getElementById('grpOv').classList.add('show');
 }
@@ -1413,7 +1416,7 @@ async function boot(){
     // PostgREST caps at 1000 rows/request — page through ALL vendos
     VENDOS=[];
     for(let off=0; off<10000; off+=1000){
-      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at&order=id&limit=1000&offset=${off}`);
+      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address&order=id&limit=1000&offset=${off}`);
       if(!page || !page.length) break;
       VENDOS=VENDOS.concat(page);
       if(page.length<1000) break;
@@ -1428,7 +1431,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
     SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
-    try{ GROUPS=await sb("harvest_groups?select=id,area,group_label,collector,status&status=eq.active&order=area,group_label") || []; }catch(e){ GROUPS=[]; }
+    try{ GROUPS=await sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label") || []; }catch(e){ GROUPS=[]; }
     await loadActiveHarvest();
     renderHarvestBanner();
     // monthly sales per vlan — used to classify empty slots vs real offline
