@@ -631,6 +631,7 @@ function linkField(vid, field){
   _pickCtx={vid, field};
   const label = field==='tg_name' ? 'Telegram name' : 'Sheet name';
   document.getElementById('pickTitle').textContent = 'Link '+label;
+  document.getElementById('pickSearch').placeholder = field==='tg_name' ? 'Search TG names…' : 'Search sheet names…';
   document.getElementById('pickSearch').value='';
   document.getElementById('pickCustom').value='';
   renderPickList('');
@@ -642,25 +643,21 @@ document.getElementById('pickOv').addEventListener('click',e=>{if(e.target.id===
 
 function renderPickList(q){
   if(!_pickCtx)return;
+  const field=_pickCtx.field; // 'sheet_name' or 'tg_name'
   q=(q||'').toLowerCase().trim();
-  // search ALL name fields so a name shows up no matter where it's stored;
-  // the picked value links to the field you're editing.
-  const fields=['sheet_name','tg_name','owner_name','excel_name'];
-  const seen=new Map(); // name -> {area, src}
+  // search ONLY the field being edited: Sheet picker = sheet names, TG picker = tg names
+  const seen=new Map(); // name -> area
   VENDOS.forEach(v=>{
-    fields.forEach(f=>{
-      const nm=v[f];
-      if(!nm) return;
-      if(q && !nm.toLowerCase().includes(q)) return;
-      if(!seen.has(nm)) seen.set(nm, {area:v.area||'', src:f});
-    });
+    const nm=v[field];
+    if(!nm) return;
+    if(q && !nm.toLowerCase().includes(q)) return;
+    if(!seen.has(nm)) seen.set(nm, v.area||'');
   });
-  let items=[...seen.entries()].slice(0,80);
-  const srcLabel={sheet_name:'sheet',tg_name:'TG',owner_name:'owner',excel_name:'excel'};
+  let items=[...seen.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(0,80);
   const hl=(s)=>{ if(!q)return esc(s); const i=s.toLowerCase().indexOf(q); if(i<0)return esc(s);
     return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length)); };
   document.getElementById('pickList').innerHTML = items.length
-    ? items.map(([nm,info])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}<span class="area">${info.area?esc(info.area)+' · ':''}${srcLabel[info.src]}</span></div>`).join('')
+    ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
     : '<div class="empty" style="padding:24px">No matches — type a new name below</div>';
 }
 async function pickName(name){
