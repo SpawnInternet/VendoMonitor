@@ -123,6 +123,9 @@
   .hbanner .grp{background:#fff;border:1px solid #f0cd6e;border-radius:5px;padding:1px 8px;font-size:11px}
   .activeharvest{background:#fff4d6;color:#7a5c00;border:1px solid #f0cd6e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .pendtag{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
+  .cachebtn{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 11px;font-weight:700;font-size:12px;color:var(--blue);cursor:pointer;font-family:inherit}
+  .cachebtn:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
+  .cachebtn:disabled{opacity:.5;cursor:default}
   .pendingbar{background:#fdecef;border:1px solid #f3b4bd;border-radius:8px;padding:7px 11px;margin-top:8px;font-size:12px;font-weight:700;color:#a31c2e}
   .candbox.pending{opacity:.7;border-color:#f3b4bd}
   .dupename.resolved{background:#e6f7ee;color:#1f7d4d;border-color:#a9e0c2}
@@ -149,6 +152,7 @@
   <div class="htop">
     <img src="spawn-globe.png" alt="SPAWN" onerror="this.style.display='none'">
     <h1>Spawn · <span class="sub">Dicayas Server</span> Monitor</h1>
+    <button id="refreshCacheBtn" class="cachebtn" onclick="refreshDashboardCache()" title="Rebuild the dashboard cache so name/area/group changes show there now">🔄 Sync dashboard</button>
     <span class="pill" id="lastUpd">loading…</span>
   </div>
   <div class="summary" id="summary"></div>
@@ -1228,6 +1232,28 @@ async function setServer(vid){
   refreshVendoLocal(vid,{server_name:val});
   render(); openM(window._curMk);
   toast("Server set");
+}
+
+async function refreshDashboardCache(){
+  const btn=document.getElementById('refreshCacheBtn');
+  const ok=await askPassword('Rebuild the dashboard cache now? This makes your name/area changes show on the dashboard immediately.');
+  if(!ok) return;
+  if(btn){ btn.disabled=true; btn.textContent='🔄 Syncing…'; }
+  const fns=['write-vendos-cache','write-dashboard-cache'];
+  let done=0, errs=[];
+  for(const fn of fns){
+    try{
+      const r=await fetch(`${SB}/functions/v1/${fn}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-cache-secret':'spawn-cache-2026','Authorization':'Bearer '+KEY,'apikey':KEY},
+        body:'{}'
+      });
+      if(r.ok) done++; else errs.push(fn+' '+r.status);
+    }catch(e){ errs.push(fn+' '+e.message); }
+  }
+  if(btn){ btn.disabled=false; btn.textContent='🔄 Sync dashboard'; }
+  if(done) toast(`Dashboard cache rebuilt (${done}/${fns.length}). Changes will show on next dashboard load.`);
+  else toast('Cache refresh failed: '+errs.join(', '));
 }
 
 async function renderDeleted(){
