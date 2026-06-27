@@ -60,6 +60,7 @@
   .flags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
   .flag{font-size:11px;background:#fff7e0;color:#8a6500;border:1px solid #f0d488;border-radius:5px;padding:1px 6px;font-weight:700}
   .flag.dup{background:#fdecef;color:#a31c2e;border-color:#f3b4bd}
+  .flag.noise{background:#f3eafe;color:#6b3fa0;border-color:#d4bdf0}
   .leasenote{margin-top:6px;font-size:12px;font-weight:700;color:#8a6500;background:#fff7e0;border:1px solid #f0d488;border-radius:6px;padding:3px 8px}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
   .dot.g{background:var(--grn)} .dot.r{background:var(--offred)}
@@ -172,6 +173,7 @@
         <option value="nocomment">No router name</option>
         <option value="dupvlan">Duplicate VLAN</option>
         <option value="hasnote">📝 Has field note</option>
+        <option value="noise">⚡ Maybe noise (low traffic)</option>
         <option value="nolease">⚫ No lease (never connected)</option>
         <option value="online">Online</option>
         <option value="offline">Offline</option>
@@ -285,6 +287,7 @@ function flagsOf(m){
   if(m.online && (m.user_count||0)===0 && (rx+tx)<100000) f.push({t:"online but idle",c:""});
   if(!m.router_comment) f.push({t:"no name",c:""});
   if(DUPVLAN.has(m.vlan)) f.push({t:"dup VLAN",c:"dup"});
+  if(m.maybe_noise) f.push({t:"⚡ maybe noise",c:"noise"});
   if(agoHrs(m.updated_at)>2) f.push({t:"stale",c:""});
   return f;
 }
@@ -372,6 +375,7 @@ function applySearch(){
     if(f==="nocomment"&&m.router_comment)return false;
     if(f==="dupvlan"&&!DUPVLAN.has(m.vlan))return false;
     if(f==="hasnote"&&!m.lease_note)return false;
+    if(f==="noise"&&!m.maybe_noise)return false;
     if(f==="nolease"&&m.lease_status)return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
@@ -444,7 +448,8 @@ function openM(mk){
     <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
     <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
     <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no DHCP lease'}</span></div>
-    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':'live traffic (static IP)'}</span></div>`:''}
+    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':'live traffic (static IP)'}${m.maybe_noise?' ⚡':''}</span></div>`:''}
+    ${m.online_via==='traffic'?`<div class="row"><span class="k">Traffic in 4s</span><span class="v ${m.maybe_noise?'mismatch':''}">${fmtBytes(m.traffic_delta)}${m.maybe_noise?' — ⚡ maybe network noise, verify real vendo':''}</span></div>`:''}
     ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}`;
   if(cands.length<=1){
     const vid=v.id;
