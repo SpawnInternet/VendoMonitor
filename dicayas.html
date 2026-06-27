@@ -237,6 +237,12 @@
   <div class="mb" id="mBody"></div>
 </div></div>
 
+<div class="ov" id="hvOv"><div class="modal" style="max-width:440px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2 id="hvTitle">Harvest history</h2><button class="x" onclick="closeHv()">×</button></div>
+  <div class="mb" id="hvBody"></div>
+</div></div>
+
 <div class="ov" id="dupeOv"><div class="modal" style="max-width:520px">
   <div class="rainbow-strip"></div>
   <div class="mh"><h2 id="dupeTitle">Duplicate name</h2><button class="x" onclick="closeDupe()">×</button></div>
@@ -584,7 +590,7 @@ function renderModal(m, cands){
       const hasMoney = hi && (hi.harvests>0 || hi.coins>0);
       const loading = !(vid in HARVEST_INFO);
       html+=`<div class="candbox">
-        <div class="candhead">${esc(d.area)||'?'} ${hasMoney?'<span class="moneybadge">💰 HAS HARVESTS</span>':loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
+        <div class="candhead">${esc(d.area)||'?'} ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap for harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
           <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.sheet_name)},"sheet_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
@@ -705,7 +711,7 @@ function renderDupes(){
     html+=`<div class="candbox">
       <div class="candhead">
         ${d.vlan?'VLAN '+esc(d.vlan):'no VLAN'} · ${esc(d.area)||'?'}
-        ${hasMoney?'<span class="moneybadge">💰 '+hi.harvests+' harvest(s)</span>':'<span class="emptybadge">no harvests</span>'}
+        ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap to see harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:'<span class="emptybadge">no harvests</span>'}
       </div>
       <div class="row" style="padding:4px 0"><span class="k">Sheet</span><span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
       <div class="row" style="padding:4px 0"><span class="k">TG</span><span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
@@ -720,6 +726,28 @@ function renderDupes(){
 }
 function closeDupe(){ document.getElementById('dupeOv').classList.remove('show'); _dupeName=null; _dupeField=null; }
 document.getElementById('dupeOv').addEventListener('click',e=>{if(e.target.id==='dupeOv')closeDupe()});
+
+async function showHarvests(vid){
+  document.getElementById('hvBody').innerHTML='<div class="empty">Loading harvests…</div>';
+  document.getElementById('hvOv').classList.add('show');
+  try{
+    const rows=await sb(`harvests?select=harvest_date,harvested_at,collector,coins_total,net_collectible,spawn_share&vendo_id=eq.${vid}&order=harvested_at.desc`);
+    if(!rows || !rows.length){ document.getElementById('hvBody').innerHTML='<div class="empty">No harvests found</div>'; return; }
+    let html='';
+    rows.forEach(h=>{
+      const d = h.harvest_date || (h.harvested_at?String(h.harvested_at).slice(0,10):'—');
+      html+=`<div class="candbox">
+        <div class="candhead">${esc(d)} · ${esc(h.collector)||'?'}</div>
+        <div class="row" style="padding:5px 0"><span class="k">Total coins</span><span class="v">₱${Number(h.coins_total||0).toLocaleString()}</span></div>
+        <div class="row" style="padding:5px 0"><span class="k">Net collectible</span><span class="v">₱${Number(h.net_collectible||0).toLocaleString()}</span></div>
+        <div class="row" style="padding:5px 0;border:none"><span class="k">Spawn share</span><span class="v gold">₱${Number(h.spawn_share||0).toLocaleString()}</span></div>
+      </div>`;
+    });
+    document.getElementById('hvBody').innerHTML=html;
+  }catch(e){ document.getElementById('hvBody').innerHTML='<div class="empty">Failed: '+esc(e.message)+'</div>'; }
+}
+function closeHv(){ document.getElementById('hvOv').classList.remove('show'); }
+document.getElementById('hvOv').addEventListener('click',e=>{if(e.target.id==='hvOv')closeHv()});
 
 async function dupeUnlink(vid){
   const ok=await askPassword(`Unlink "${_dupeName}" from this record?`);
