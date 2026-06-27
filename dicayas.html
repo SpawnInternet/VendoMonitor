@@ -57,6 +57,7 @@
   .flags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
   .flag{font-size:11px;background:rgba(245,188,21,.12);color:var(--gold);border:1px solid rgba(245,188,21,.3);border-radius:5px;padding:1px 6px;font-weight:700}
   .flag.dup{background:rgba(200,52,74,.13);color:#ff8a9c;border-color:rgba(200,52,74,.35)}
+  .leasenote{margin-top:6px;font-size:12px;font-weight:700;color:var(--gold);background:rgba(245,188,21,.1);border:1px solid rgba(245,188,21,.25);border-radius:6px;padding:3px 8px}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
   .dot.g{background:var(--grn);box-shadow:0 0 6px var(--grn)} .dot.r{background:var(--offred)}
   .ov{display:none;position:fixed;inset:0;background:rgba(7,12,18,.78);z-index:50;align-items:center;justify-content:center;padding:16px}
@@ -141,6 +142,8 @@
         <option value="nodata">rx=0 / no data</option>
         <option value="nocomment">No router name</option>
         <option value="dupvlan">Duplicate VLAN</option>
+        <option value="hasnote">📝 Has field note</option>
+        <option value="nolease">⚫ No lease (never connected)</option>
         <option value="online">Online</option>
         <option value="offline">Offline</option>
       </select>
@@ -245,6 +248,8 @@ function flagsOf(m){
 function cardHtml(m){
   const on=m.online, fl=flagsOf(m);
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
+  const note=m.lease_note;
+  const noLease=!m.lease_status; // VLAN exists but machine never got a lease
   return `<div class="card ${on?'onl':'offl'}" onclick='openM(${JSON.stringify(m.match_key)})'>
     <span class="vlan">${esc(m.vlan)}</span>
     <div class="vn">${esc(nameOf(m))}</div>
@@ -253,7 +258,8 @@ function cardHtml(m){
       <span>👥 ${m.user_count??0}</span>
       <span>⬇${fmtBytes(rx)} ⬆${fmtBytes(tx)}</span>
     </div>
-    <div class="meta"><span>📍 ${esc(areaOf(m))}</span></div>
+    <div class="meta"><span>📍 ${esc(areaOf(m))}</span>${noLease&&!on?'<span style="color:#7a8aa0">⚫ no lease</span>':''}</div>
+    ${note?`<div class="leasenote">📝 ${esc(note)}</div>`:''}
     ${fl.length?`<div class="flags">${fl.map(x=>`<span class="flag ${x.c}">⚠️ ${x.t}</span>`).join('')}</div>`:''}
   </div>`;
 }
@@ -295,6 +301,8 @@ function applySearch(){
     if(f==="nodata"&&Number(m.rx_bytes||0)!==0)return false;
     if(f==="nocomment"&&m.router_comment)return false;
     if(f==="dupvlan"&&!DUPVLAN.has(m.vlan))return false;
+    if(f==="hasnote"&&!m.lease_note)return false;
+    if(f==="nolease"&&m.lease_status)return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
     return true;
@@ -363,7 +371,9 @@ function openM(mk){
     <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
     <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
     <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
-    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>`;
+    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
+    <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no lease (machine never connected)'}</span></div>
+    ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}`;
   if(cands.length<=1){
     html+=`<div class="sec">Vendo record (vendos table)</div>
     <div class="row"><span class="k">Sheet name</span><span class="v">${esc(v.sheet_name)||'—'}</span></div>
