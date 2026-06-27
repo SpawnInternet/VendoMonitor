@@ -76,6 +76,7 @@
 <div class="tabs">
   <div class="tab active" data-tab="online">🟢 Online</div>
   <div class="tab" data-tab="offline">🔴 Offline</div>
+  <div class="tab" data-tab="subs">👤 Subscribers</div>
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
 </div>
@@ -83,6 +84,20 @@
 <div class="wrap">
   <div id="pane-online" class="pane"><div class="grid" id="grid-online"></div></div>
   <div id="pane-offline" class="pane" style="display:none"><div class="grid" id="grid-offline"></div></div>
+  <div id="pane-subs" class="pane" style="display:none">
+    <div class="controls">
+      <input id="subq" placeholder="Search subscriber name / IP…">
+      <select id="subflt">
+        <option value="all">All subscribers</option>
+        <option value="online">Online only</option>
+        <option value="offline">Offline only</option>
+      </select>
+    </div>
+    <div class="sec" style="margin-top:0">🔴 Offline subscribers</div>
+    <div class="grid" id="grid-subs-off"></div>
+    <div class="sec">🟢 Online subscribers</div>
+    <div class="grid" id="grid-subs-on"></div>
+  </div>
   <div id="pane-search" class="pane" style="display:none">
     <div class="controls">
       <input id="q" placeholder="Search name, VLAN, IP, area…">
@@ -185,7 +200,45 @@ function cardHtml(m){
   </div>`;
 }
 
-let STATUS=[];
+let STATUS=[], SUBS=[];
+
+// subscriber card
+function subCard(m){
+  const on=m.online;
+  return `<div class="card ${on?'onl':'offl'}" onclick='openSub(${JSON.stringify(m.match_key)})'>
+    <div class="vn">${esc(m.ppp_name)||'(no name)'}</div>
+    <div class="meta">
+      <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
+      ${m.ip?`<span>${esc(m.ip)}</span>`:''}
+    </div>
+  </div>`;
+}
+function renderSubs(){
+  const q=(document.getElementById('subq').value||"").toLowerCase();
+  const f=document.getElementById('subflt').value;
+  let list=SUBS.filter(m=>{
+    if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
+    if(f==="online"&&!m.online)return false;
+    if(f==="offline"&&m.online)return false;
+    return true;
+  });
+  const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
+  document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None offline</div>';
+  document.getElementById('grid-subs-on').innerHTML = on.length?on.map(subCard).join(''):'<div class="empty">None online</div>';
+}
+function openSub(mk){
+  const m=SUBS.find(x=>x.match_key===mk); if(!m)return;
+  document.getElementById('mTitle').textContent=m.ppp_name||'(no name)';
+  document.getElementById('mBody').innerHTML=`
+    <div class="row"><span class="k">Type</span><span class="v">PPPoE Subscriber</span></div>
+    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
+    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
+    <div class="row"><span class="k">PPP name</span><span class="v">${esc(m.ppp_name)}</span></div>
+    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
+    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
+    <div class="row"><span class="k">Match key</span><span class="v">${esc(m.match_key)}</span></div>`;
+  document.getElementById('ov').classList.add('show');
+}
 function render(){
   const on=STATUS.filter(m=>m.online), off=STATUS.filter(m=>!m.online);
   document.getElementById('grid-online').innerHTML = on.length?on.map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
@@ -198,6 +251,7 @@ function render(){
     <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
     <div class="stat on"><div class="n">${on.length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${off.length}</div><div class="l">Offline</div></div>
+    <div class="stat"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>
     <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>
     <div class="stat warn"><div class="n">${DUPVLAN.size}</div><div class="l">Dup VLAN</div></div>`;
   applySearch();
@@ -317,9 +371,12 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.pane').forEach(p=>p.style.display='none');
   document.getElementById('pane-'+t.dataset.tab).style.display='block';
   if(t.dataset.tab==='compare') loadCompare();
+  if(t.dataset.tab==='subs') renderSubs();
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
+document.getElementById('subq').oninput=renderSubs;
+document.getElementById('subflt').onchange=renderSubs;
 document.getElementById('cmpPeriod').onchange=loadCompare;
 document.getElementById('cmpQ').oninput=()=>loadCompare();
 
@@ -337,7 +394,9 @@ async function boot(){
       if(!BYVLAN[k]) BYVLAN[k]=v; // first match for display
     });
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
+    SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
     render();
+    renderSubs();
   }catch(e){
     document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+e.message+'</div>');
   }
