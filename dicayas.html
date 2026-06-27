@@ -237,6 +237,12 @@
   <div class="mb" id="mBody"></div>
 </div></div>
 
+<div class="ov" id="dupeOv"><div class="modal" style="max-width:520px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2 id="dupeTitle">Duplicate name</h2><button class="x" onclick="closeDupe()">×</button></div>
+  <div class="mb" id="dupeBody"></div>
+</div></div>
+
 <div class="ov" id="grpOv"><div class="modal" style="max-width:420px">
   <div class="rainbow-strip"></div>
   <div class="mh"><h2>Change harvest group</h2><button class="x" onclick="closeGrp()">×</button></div>
@@ -581,14 +587,14 @@ function renderModal(m, cands){
         <div class="candhead">${esc(d.area)||'?'} ${hasMoney?'<span class="moneybadge">💰 HAS HARVESTS</span>':loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
-          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" title="This sheet name is on ${nameDupeInfo(d.sheet_name,'sheet_name')} records">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
+          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.sheet_name)},"sheet_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
           ${d.sheet_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`}
         </div>
         <div class="linkrow">
           <span class="k">TG</span>
-          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.tg_name,'tg_name')?` <span class="dupename" title="This TG name is on ${nameDupeInfo(d.tg_name,'tg_name')} records">⚠️×${nameDupeInfo(d.tg_name,'tg_name')}</span>`:''}</span>
+          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.tg_name,'tg_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.tg_name)},"tg_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.tg_name,'tg_name')}</span>`:''}</span>
           ${d.tg_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
@@ -675,6 +681,70 @@ async function deleteVendo(vid){
   render(); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
   toast(`Deleted "${nm}"`);
 }
+
+// ---- DUPLICATE NAME BREAKDOWN ----
+let _dupeName=null, _dupeField=null;
+async function showDupes(name, field){
+  _dupeName=name; _dupeField=field;
+  const recs=VENDOS.filter(v=>v[field]===name);
+  document.getElementById('dupeTitle').textContent=`"${name}" — ${recs.length} records`;
+  document.getElementById('dupeBody').innerHTML='<div class="empty">Loading harvest info…</div>';
+  document.getElementById('dupeOv').classList.add('show');
+  await loadHarvestInfo(recs.map(r=>r.id));
+  renderDupes();
+}
+function renderDupes(){
+  const recs=VENDOS.filter(v=>v[_dupeField]===_dupeName);
+  if(!recs.length){ closeDupe(); return; }
+  const fieldLabel=_dupeField==='tg_name'?'TG name':'Sheet name';
+  let html=`<p style="color:var(--dim);font-size:13px;font-weight:600;margin-bottom:12px">
+    These records share the ${fieldLabel} "<b>${esc(_dupeName)}</b>". Keep the real one (usually the one with 💰 harvests), unlink the name from the wrong ones, then delete the empty duplicates.</p>`;
+  recs.forEach(d=>{
+    const hi=HARVEST_INFO[d.id];
+    const hasMoney = hi && (hi.harvests>0 || hi.coins>0);
+    html+=`<div class="candbox">
+      <div class="candhead">
+        ${d.vlan?'VLAN '+esc(d.vlan):'no VLAN'} · ${esc(d.area)||'?'}
+        ${hasMoney?'<span class="moneybadge">💰 '+hi.harvests+' harvest(s)</span>':'<span class="emptybadge">no harvests</span>'}
+      </div>
+      <div class="row" style="padding:4px 0"><span class="k">Sheet</span><span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
+      <div class="row" style="padding:4px 0"><span class="k">TG</span><span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
+      <div class="row" style="padding:4px 0;border:none"><span class="k">Group</span><span class="v">${hi&&hi.group_label?esc(hi.group_label):'<i style="color:var(--dim)">(none)</i>'}</span></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="lnk unlink" onclick='dupeUnlink(${d.id})'>Unlink ${_dupeField==='tg_name'?'TG':'sheet'}</button>
+        <button class="lnk ${hasMoney?'':'unlink'}" ${hasMoney?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick='dupeDelete(${d.id})'>🗑 Delete record</button>
+      </div>
+    </div>`;
+  });
+  document.getElementById('dupeBody').innerHTML=html;
+}
+function closeDupe(){ document.getElementById('dupeOv').classList.remove('show'); _dupeName=null; _dupeField=null; }
+document.getElementById('dupeOv').addEventListener('click',e=>{if(e.target.id==='dupeOv')closeDupe()});
+
+async function dupeUnlink(vid){
+  const ok=await askPassword(`Unlink "${_dupeName}" from this record?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{[_dupeField]:null}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{[_dupeField]:null});
+  render(); renderDupes();
+  toast("Unlinked");
+}
+async function dupeDelete(vid){
+  const hi=HARVEST_INFO[vid];
+  if(hi && (hi.harvests>0 || hi.coins>0)){ toast("Blocked — has harvest money."); return; }
+  const ok=await askPassword(`Delete this duplicate record permanently?`);
+  if(!ok) return;
+  try{
+    await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+  }catch(e){ toast("Failed: "+e.message); return; }
+  VENDOS=VENDOS.filter(x=>x.id!==vid);
+  refreshVendoLocal(-1,{});
+  render(); renderDupes();
+  toast("Deleted record");
+}
+
 function buildNavList(mk){
   // determine which vendos are visible in the active tab, in sorted order
   const active=document.querySelector('.tab.active')?.dataset.tab||'online';
