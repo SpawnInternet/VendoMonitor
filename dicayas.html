@@ -47,6 +47,8 @@
   input,select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);padding:9px 12px;border-radius:9px;font-size:14px;font-family:inherit;font-weight:600}
   input{flex:1;min-width:180px}
   input:focus,select:focus{outline:none;border-color:var(--gold)}
+  .sortbtn{background:var(--panel2);border:1px solid var(--border);color:var(--navy);padding:9px 14px;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .sortbtn:hover{border-color:var(--blue)}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:10px}
   .card{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:11px 13px;cursor:pointer;transition:.12s;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(33,48,64,.06)}
   .card:hover{border-color:var(--blue);transform:translateY(-1px);box-shadow:0 4px 12px rgba(33,48,64,.1)}
@@ -118,8 +120,26 @@
 </div>
 
 <div class="wrap">
-  <div id="pane-online" class="pane"><div id="banner-online"></div><div class="grid" id="grid-online"></div></div>
-  <div id="pane-offline" class="pane" style="display:none"><div id="banner-offline"></div><div class="grid" id="grid-offline"></div></div>
+  <div id="pane-online" class="pane">
+    <div class="controls">
+      <input id="onq" placeholder="Search name, VLAN, area…">
+      <select id="sortBy">
+        <option value="vlan">Sort: VLAN number</option>
+        <option value="name">Sort: Name A–Z</option>
+        <option value="data">Sort: Data (biggest)</option>
+      </select>
+      <button id="sortDir" class="sortbtn">⬆ Ascending</button>
+    </div>
+    <div id="banner-online"></div>
+    <div class="grid" id="grid-online"></div>
+  </div>
+  <div id="pane-offline" class="pane" style="display:none">
+    <div id="banner-offline"></div>
+    <div class="sec" style="margin-top:0">🔴 Waiting (machine connected but lease dropped — real offline)</div>
+    <div class="grid" id="grid-off-waiting"></div>
+    <div class="sec">⚫ No lease (named vendo, no DHCP lease — check if pulled out or static)</div>
+    <div class="grid" id="grid-off-nolease"></div>
+  </div>
   <div id="pane-subs" class="pane" style="display:none">
     <div id="banner-subs"></div>
     <div class="controls">
@@ -280,18 +300,41 @@ function cardHtml(m){
   </div>`;
 }
 
+let SORT_FIELD='vlan', SORT_ASC=true, ONLINE_Q='';
+
+function sortVendos(arr){
+  const dir=SORT_ASC?1:-1;
+  return arr.slice().sort((a,b)=>{
+    let av,bv;
+    if(SORT_FIELD==='vlan'){ av=parseInt(a.vlan)||0; bv=parseInt(b.vlan)||0; }
+    else if(SORT_FIELD==='name'){ av=nameOf(a).toLowerCase(); bv=nameOf(b).toLowerCase(); return av<bv?-dir:av>bv?dir:0; }
+    else { av=Number(a.rx_bytes||0)+Number(a.tx_bytes||0); bv=Number(b.rx_bytes||0)+Number(b.tx_bytes||0); }
+    return (av-bv)*dir;
+  });
+}
+
 function render(){
-  const on=STATUS.filter(m=>m.online);
+  let on=STATUS.filter(m=>m.online);
   const offAll=STATUS.filter(m=>!m.online);
   const empties=offAll.filter(isEmptySlot);
-  const off=offAll.filter(m=>!isEmptySlot(m)); // real offline (named or earning)
-  document.getElementById('grid-online').innerHTML = on.length?on.map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
-  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos needing attention 🎉</div>';
-  document.getElementById('grid-empty').innerHTML = empties.length?empties.map(cardHtml).join(''):'<div class="empty">No empty slots</div>';
+  const off=offAll.filter(m=>!isEmptySlot(m));
+  // split real offline: waiting (has lease_status) vs no-lease
+  const waiting=off.filter(m=>m.lease_status);       // truly waiting / pulled out
+  const nolease=off.filter(m=>!m.lease_status);      // named, no DHCP lease
 
-  document.getElementById('banner-offline').innerHTML = off.length===0
-    ? `<div class="banner">No offline vendos need attention. ${empties.length} empty slots moved to their own tab.</div>` : '';
-  const rx0=STATUS.filter(m=>Number(m.rx_bytes||0)===0).length;
+  // online search filter
+  if(ONLINE_Q){
+    const q=ONLINE_Q.toLowerCase();
+    on=on.filter(m=>(m.vlan+" "+nameOf(m)+" "+areaOf(m)).toLowerCase().includes(q));
+  }
+
+  document.getElementById('grid-online').innerHTML = on.length?sortVendos(on).map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
+  document.getElementById('grid-off-waiting').innerHTML = waiting.length?sortVendos(waiting).map(cardHtml).join(''):'<div class="empty">None waiting</div>';
+  document.getElementById('grid-off-nolease').innerHTML = nolease.length?sortVendos(nolease).map(cardHtml).join(''):'<div class="empty">None without a lease</div>';
+  document.getElementById('grid-empty').innerHTML = empties.length?sortVendos(empties).map(cardHtml).join(''):'<div class="empty">No empty slots</div>';
+
+  document.getElementById('banner-offline').innerHTML =
+    `<div class="banner">🔴 ${waiting.length} waiting (real offline) · ⚫ ${nolease.length} named with no lease · ${empties.length} empty slots (own tab).</div>`;
   document.getElementById('banner-online').innerHTML = '';
 
   const flagged=STATUS.filter(m=>flagsOf(m).length>0).length;
@@ -299,11 +342,11 @@ function render(){
   document.getElementById('lastUpd').textContent = "updated "+ago(last)+" ago";
   document.getElementById('summary').innerHTML=`
     <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
-    <div class="stat on"><div class="n">${on.length}</div><div class="l">Online</div></div>
-    <div class="stat off"><div class="n">${off.length}</div><div class="l">Offline</div></div>
+    <div class="stat on"><div class="n">${STATUS.filter(m=>m.online).length}</div><div class="l">Online</div></div>
+    <div class="stat off"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
+    <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
-    <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>
-    <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>`;
+    <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
   applySearch();
 }
 
@@ -326,7 +369,7 @@ function applySearch(){
     if(f==="offline"&&m.online)return false;
     return true;
   });
-  document.getElementById('grid-search').innerHTML = list.length?list.map(cardHtml).join(''):'<div class="empty">No matches</div>';
+  document.getElementById('grid-search').innerHTML = list.length?sortVendos(list).map(cardHtml).join(''):'<div class="empty">No matches</div>';
 }
 
 function subCard(m){
@@ -464,6 +507,13 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
+document.getElementById('onq').oninput=(e)=>{ONLINE_Q=e.target.value;render();};
+document.getElementById('sortBy').onchange=(e)=>{SORT_FIELD=e.target.value;render();};
+document.getElementById('sortDir').onclick=(e)=>{
+  SORT_ASC=!SORT_ASC;
+  e.target.textContent = SORT_ASC?'⬆ Ascending':'⬇ Descending';
+  render();
+};
 document.getElementById('subq').oninput=renderSubs;
 document.getElementById('subflt').onchange=renderSubs;
 document.getElementById('cmpPeriod').onchange=loadCompare;
