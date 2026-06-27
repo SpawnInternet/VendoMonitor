@@ -1,75 +1,95 @@
 <!DOCTYPE html>
-<!-- cache-bust: 20260627-v1 -->
+<!-- cache-bust: 20260627-v2-brand -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spawn · Dicayas Server Monitor</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
   :root{
-    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#2a3240;
-    --txt:#e6edf3; --dim:#8b949e; --gold:#f0b429; --grn:#2ea043; --red:#da3633;
-    --amber:#d29922; --blue:#388bfd;
+    --navy:#213040; --brand-navy:#16202c; --deep:#0e161f;
+    --gold:#F5BC15; --green:#28856E; --blue:#316AB0; --purple:#5A3594;
+    --magenta:#B02577; --red:#C8344A; --cyan:#2BA3B8;
+    --rainbow:linear-gradient(90deg,#F5BC15 0%,#28856E 20%,#316AB0 42%,#5A3594 60%,#B02577 80%,#C8344A 100%);
+    --panel:#1b2735; --panel2:#222f40; --border:#2f3e52;
+    --txt:#eaf0f6; --dim:#93a3b6; --grn:#34c77b; --offred:#e2566a; --amber:#f5bc15;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-  header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 18px;position:sticky;top:0;z-index:10}
-  h1{font-size:17px;display:flex;align-items:center;gap:8px}
-  .pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--dim)}
-  .gold{color:var(--gold)}
-  .summary{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:90px}
-  .stat .n{font-size:20px;font-weight:700}
-  .stat .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
-  .stat.on .n{color:var(--grn)} .stat.off .n{color:var(--red)} .stat.warn .n{color:var(--amber)}
-  .tabs{display:flex;gap:4px;padding:10px 18px 0;background:var(--panel);border-bottom:1px solid var(--border);overflow-x:auto}
-  .tab{padding:9px 16px;cursor:pointer;border-radius:8px 8px 0 0;color:var(--dim);white-space:nowrap;font-weight:600;border:1px solid transparent;border-bottom:none}
-  .tab.active{background:var(--bg);color:var(--txt);border-color:var(--border)}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Nunito',-apple-system,Segoe UI,sans-serif;background:var(--deep);color:var(--txt);font-size:14px}
+  .rainbow-strip{height:4px;background:var(--rainbow)}
+  header{background:linear-gradient(180deg,var(--navy),var(--brand-navy));border-bottom:1px solid var(--border);padding:13px 18px;position:sticky;top:0;z-index:10}
+  .htop{display:flex;align-items:center;gap:11px}
+  .htop img{width:34px;height:34px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.5))}
+  h1{font-size:16px;font-weight:900;letter-spacing:.2px}
+  h1 .sub{font-weight:700;color:var(--gold)}
+  .pill{background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:20px;padding:3px 11px;font-size:12px;color:var(--dim);font-weight:600;margin-left:auto}
+  .summary{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px}
+  .stat{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;padding:7px 13px;min-width:84px}
+  .stat .n{font-size:21px;font-weight:900;line-height:1.1}
+  .stat .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+  .stat.on .n{color:var(--grn)} .stat.off .n{color:var(--offred)}
+  .stat.warn .n{color:var(--gold)} .stat.subs .n{color:var(--cyan)}
+  .tabs{display:flex;gap:3px;padding:9px 18px 0;background:var(--brand-navy);border-bottom:1px solid var(--border);overflow-x:auto}
+  .tab{padding:9px 15px;cursor:pointer;border-radius:9px 9px 0 0;color:var(--dim);white-space:nowrap;font-weight:800;font-size:13px;border:1px solid transparent;border-bottom:none}
+  .tab.active{background:var(--deep);color:var(--txt);border-color:var(--border)}
+  .tab.active[data-tab="online"]{box-shadow:inset 0 3px 0 var(--green)}
+  .tab.active[data-tab="offline"]{box-shadow:inset 0 3px 0 var(--red)}
+  .tab.active[data-tab="subs"]{box-shadow:inset 0 3px 0 var(--cyan)}
+  .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
+  .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
   .wrap{padding:16px 18px 60px}
+  .banner{background:rgba(245,188,21,.08);border:1px solid rgba(245,188,21,.3);border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:var(--gold);font-weight:700}
+  .banner.crit{background:rgba(200,52,74,.1);border-color:rgba(200,52,74,.4);color:#ff8a9c}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
-  input,select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);padding:8px 11px;border-radius:8px;font-size:14px}
+  input,select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);padding:9px 12px;border-radius:9px;font-size:14px;font-family:inherit;font-weight:600}
   input{flex:1;min-width:180px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 13px;cursor:pointer;transition:.12s;position:relative}
-  .card:hover{border-color:var(--blue);transform:translateY(-1px)}
-  .card.offl{border-left:3px solid var(--red)}
-  .card.onl{border-left:3px solid var(--grn)}
-  .card .vn{font-weight:700;font-size:14px;margin-bottom:3px;padding-right:50px}
-  .card .vlan{position:absolute;top:11px;right:12px;background:#3a2d05;color:var(--gold);border:1px solid #5c4708;border-radius:5px;padding:1px 7px;font-size:12px;font-weight:700}
-  .card .meta{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}
+  input:focus,select:focus{outline:none;border-color:var(--gold)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:10px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:11px 13px;cursor:pointer;transition:.12s;position:relative;overflow:hidden}
+  .card:hover{border-color:var(--gold);transform:translateY(-1px)}
+  .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+  .card.onl::before{background:var(--green)} .card.offl::before{background:var(--red)}
+  .card .vn{font-weight:800;font-size:14px;margin-bottom:3px;padding-right:52px}
+  .card .vlan{position:absolute;top:11px;right:12px;background:rgba(245,188,21,.13);color:var(--gold);border:1px solid rgba(245,188,21,.35);border-radius:6px;padding:1px 8px;font-size:12px;font-weight:900}
+  .card .meta{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:5px;font-weight:600}
   .flags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
-  .flag{font-size:11px;background:#3a1f05;color:var(--amber);border:1px solid #6b4708;border-radius:5px;padding:1px 6px}
-  .flag.dup{background:#3a0505;color:#ff7b72;border-color:#6b0808}
+  .flag{font-size:11px;background:rgba(245,188,21,.12);color:var(--gold);border:1px solid rgba(245,188,21,.3);border-radius:5px;padding:1px 6px;font-weight:700}
+  .flag.dup{background:rgba(200,52,74,.13);color:#ff8a9c;border-color:rgba(200,52,74,.35)}
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
-  .dot.g{background:var(--grn)} .dot.r{background:var(--red)}
-  /* modal */
-  .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;align-items:center;justify-content:center;padding:16px}
+  .dot.g{background:var(--grn);box-shadow:0 0 6px var(--grn)} .dot.r{background:var(--offred)}
+  .ov{display:none;position:fixed;inset:0;background:rgba(7,12,18,.78);z-index:50;align-items:center;justify-content:center;padding:16px}
   .ov.show{display:flex}
   .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto}
-  .mh{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:sticky;top:0;background:var(--panel)}
-  .mh h2{font-size:16px}
-  .x{cursor:pointer;color:var(--dim);font-size:22px;line-height:1;border:none;background:none}
-  .mb{padding:16px 18px}
+  .modal .rainbow-strip{border-radius:14px 14px 0 0}
+  .mh{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:sticky;top:0;background:var(--panel);z-index:2}
+  .mh h2{font-size:16px;font-weight:900}
+  .x{cursor:pointer;color:var(--dim);font-size:24px;line-height:1;border:none;background:none;font-weight:700}
+  .mb{padding:14px 18px}
   .row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:12px}
   .row:last-child{border:none}
-  .row .k{color:var(--dim)}
-  .row .v{text-align:right;word-break:break-word}
-  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);margin:14px 0 4px;font-weight:700}
-  .empty{text-align:center;color:var(--dim);padding:50px 20px}
-  .loading{text-align:center;padding:50px;color:var(--dim)}
-  .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
-  .badge-on{color:var(--grn);font-weight:700} .badge-off{color:var(--red);font-weight:700}
+  .row .k{color:var(--dim);font-weight:600}
+  .row .v{text-align:right;word-break:break-word;font-weight:700}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);margin:14px 0 4px;font-weight:900}
+  .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
+  .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
+  .badge-on{color:var(--grn);font-weight:900} .badge-off{color:var(--offred);font-weight:900}
+  .mismatch{color:var(--offred);font-weight:900}
   .cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
   .cmp-tbl th,.cmp-tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
-  .cmp-tbl th{color:var(--dim);font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--panel)}
+  .cmp-tbl th{color:var(--dim);font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--panel);font-weight:800}
   .cmp-tbl tr:hover{background:var(--panel2)}
-  .mismatch{color:var(--red);font-weight:700}
+  .gold{color:var(--gold)}
 </style>
 </head>
 <body>
+<div class="rainbow-strip"></div>
 <header>
-  <h1>🖥️ <span>Spawn · <span class="gold">Dicayas Server</span> Monitor</span>
-    <span class="pill" id="lastUpd">loading…</span></h1>
+  <div class="htop">
+    <img src="spawn-globe.png" alt="SPAWN" onerror="this.style.display='none'">
+    <h1>Spawn · <span class="sub">Dicayas Server</span> Monitor</h1>
+    <span class="pill" id="lastUpd">loading…</span>
+  </div>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -82,9 +102,10 @@
 </div>
 
 <div class="wrap">
-  <div id="pane-online" class="pane"><div class="grid" id="grid-online"></div></div>
-  <div id="pane-offline" class="pane" style="display:none"><div class="grid" id="grid-offline"></div></div>
+  <div id="pane-online" class="pane"><div id="banner-online"></div><div class="grid" id="grid-online"></div></div>
+  <div id="pane-offline" class="pane" style="display:none"><div id="banner-offline"></div><div class="grid" id="grid-offline"></div></div>
   <div id="pane-subs" class="pane" style="display:none">
+    <div id="banner-subs"></div>
     <div class="controls">
       <input id="subq" placeholder="Search subscriber name / IP…">
       <select id="subflt">
@@ -121,11 +142,12 @@
       </select>
       <input id="cmpQ" placeholder="Filter by name / VLAN…">
     </div>
-    <div id="cmpBody"><div class="loading">Pick a period…</div></div>
+    <div id="cmpBody"><div class="empty">Loading…</div></div>
   </div>
 </div>
 
 <div class="ov" id="ov"><div class="modal">
+  <div class="rainbow-strip"></div>
   <div class="mh"><h2 id="mTitle"></h2><button class="x" onclick="closeM()">×</button></div>
   <div class="mb" id="mBody"></div>
 </div></div>
@@ -134,7 +156,8 @@
 const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
-let VENDOS=[], BYVLAN={}, DUPVLAN=new Set();
+let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
+let STATUS=[], SUBS=[];
 
 async function sb(path){
   const r=await fetch(SB+"/rest/v1/"+path,{headers:H});
@@ -143,6 +166,7 @@ async function sb(path){
 }
 function fmtBytes(b){
   if(b==null)return "—"; b=Number(b);
+  if(b===0)return "0";
   if(b<1024)return b+" B";
   const u=["KB","MB","GB","TB"]; let i=-1;
   do{b/=1024;i++}while(b>=1024&&i<u.length-1);
@@ -156,36 +180,48 @@ function ago(ts){
   if(s<86400)return Math.round(s/3600)+"h";
   return Math.round(s/86400)+"d";
 }
-function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function agoHrs(ts){ if(!ts)return 1e9; return (Date.now()-new Date(ts).getTime())/3600000; }
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
-// derive a clean display name from router_comment or vendo tables
-function nameOf(m){
-  const v=BYVLAN[m.vlan];
-  if(v && v.sheet_name) return v.sheet_name;
-  if(v && v.tg_name) return v.tg_name;
-  if(m.router_comment){
-    return m.router_comment.split(/[\r\n]/)[0].replace(/^\d+\s*/,'').trim() || ("VLAN "+m.vlan);
-  }
-  return "VLAN "+m.vlan;
+function cleanComment(m){
+  if(!m.router_comment)return "";
+  return m.router_comment.split(/[\r\n]/)[0].replace(/^\d+\s*/,'').replace(/^vlan\s*\d+\s*/i,'').trim();
 }
-function areaOf(m){const v=BYVLAN[m.vlan]; return v? (v.area||"—"):"—";}
+function nameOf(m){
+  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  if(cands.length===1){
+    const v=cands[0];
+    return v.sheet_name||v.tg_name||cleanComment(m)||("VLAN "+m.vlan);
+  }
+  if(cands.length>1 && m.router_comment){
+    const rc=m.router_comment.toLowerCase();
+    for(const v of cands){
+      const nm=(v.sheet_name||v.tg_name||"").toLowerCase();
+      if(nm && rc.includes(nm.split(' ')[0])) return v.sheet_name||v.tg_name;
+    }
+  }
+  return cleanComment(m)||(cands[0]&&(cands[0].sheet_name||cands[0].tg_name))||("VLAN "+m.vlan);
+}
+function areaOf(m){
+  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  if(cands.length===1) return cands[0].area||"—";
+  return cands.length>1? (cands.length+" areas") : "—";
+}
 
-// data-quality flags
 function flagsOf(m){
   const f=[];
   const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
   if(rx===0) f.push({t:"rx=0",c:""});
   if((rx+tx)<100000) f.push({t:"low data",c:""});
-  if(m.online && m.user_count===0 && (rx+tx)<100000) f.push({t:"online but idle",c:""});
+  if(m.online && (m.user_count||0)===0 && (rx+tx)<100000) f.push({t:"online but idle",c:""});
   if(!m.router_comment) f.push({t:"no name",c:""});
   if(DUPVLAN.has(m.vlan)) f.push({t:"dup VLAN",c:"dup"});
-  if(ago(m.updated_at).endsWith("d")||(ago(m.updated_at).endsWith("h")&&parseInt(ago(m.updated_at))>2)) f.push({t:"stale",c:""});
+  if(agoHrs(m.updated_at)>2) f.push({t:"stale",c:""});
   return f;
 }
 
 function cardHtml(m){
-  const on=m.online;
-  const fl=flagsOf(m);
+  const on=m.online, fl=flagsOf(m);
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
   return `<div class="card ${on?'onl':'offl'}" onclick='openM(${JSON.stringify(m.match_key)})'>
     <span class="vlan">${esc(m.vlan)}</span>
@@ -200,49 +236,16 @@ function cardHtml(m){
   </div>`;
 }
 
-let STATUS=[], SUBS=[];
-
-// subscriber card
-function subCard(m){
-  const on=m.online;
-  return `<div class="card ${on?'onl':'offl'}" onclick='openSub(${JSON.stringify(m.match_key)})'>
-    <div class="vn">${esc(m.ppp_name)||'(no name)'}</div>
-    <div class="meta">
-      <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
-      ${m.ip?`<span>${esc(m.ip)}</span>`:''}
-    </div>
-  </div>`;
-}
-function renderSubs(){
-  const q=(document.getElementById('subq').value||"").toLowerCase();
-  const f=document.getElementById('subflt').value;
-  let list=SUBS.filter(m=>{
-    if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
-    if(f==="online"&&!m.online)return false;
-    if(f==="offline"&&m.online)return false;
-    return true;
-  });
-  const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
-  document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None offline</div>';
-  document.getElementById('grid-subs-on').innerHTML = on.length?on.map(subCard).join(''):'<div class="empty">None online</div>';
-}
-function openSub(mk){
-  const m=SUBS.find(x=>x.match_key===mk); if(!m)return;
-  document.getElementById('mTitle').textContent=m.ppp_name||'(no name)';
-  document.getElementById('mBody').innerHTML=`
-    <div class="row"><span class="k">Type</span><span class="v">PPPoE Subscriber</span></div>
-    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
-    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
-    <div class="row"><span class="k">PPP name</span><span class="v">${esc(m.ppp_name)}</span></div>
-    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
-    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <div class="row"><span class="k">Match key</span><span class="v">${esc(m.match_key)}</span></div>`;
-  document.getElementById('ov').classList.add('show');
-}
 function render(){
   const on=STATUS.filter(m=>m.online), off=STATUS.filter(m=>!m.online);
   document.getElementById('grid-online').innerHTML = on.length?on.map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
-  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos 🎉 (if this looks wrong, the poller online-detection bug is back)</div>';
+  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos</div>';
+
+  document.getElementById('banner-offline').innerHTML = off.length===0
+    ? `<div class="banner crit">⚠️ 0 offline out of ${STATUS.length} vendos — almost certainly the poller online-detection bug (interface flag instead of DHCP lease). Deploy the corrected poller.</div>` : '';
+  const rx0=STATUS.filter(m=>Number(m.rx_bytes||0)===0).length;
+  document.getElementById('banner-online').innerHTML = rx0>STATUS.length*0.5
+    ? `<div class="banner">⚠️ ${rx0}/${STATUS.length} vendos show rx=0 — download bytes not read by the poller (tx works). Likely an rx field bug in the poller.</div>` : '';
 
   const flagged=STATUS.filter(m=>flagsOf(m).length>0).length;
   const last = STATUS.reduce((a,m)=>m.updated_at>a?m.updated_at:a,"");
@@ -251,7 +254,7 @@ function render(){
     <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
     <div class="stat on"><div class="n">${on.length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${off.length}</div><div class="l">Offline</div></div>
-    <div class="stat"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>
+    <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>
     <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>
     <div class="stat warn"><div class="n">${DUPVLAN.size}</div><div class="l">Dup VLAN</div></div>`;
   applySearch();
@@ -277,34 +280,78 @@ function applySearch(){
   document.getElementById('grid-search').innerHTML = list.length?list.map(cardHtml).join(''):'<div class="empty">No matches</div>';
 }
 
+function subCard(m){
+  const on=m.online;
+  return `<div class="card ${on?'onl':'offl'}" onclick='openSub(${JSON.stringify(m.match_key)})'>
+    <div class="vn">${esc(m.ppp_name)||'(no name)'}</div>
+    <div class="meta">
+      <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
+      ${m.ip?`<span>${esc(m.ip)}</span>`:''}
+    </div>
+  </div>`;
+}
+function renderSubs(){
+  const q=(document.getElementById('subq').value||"").toLowerCase();
+  const f=document.getElementById('subflt').value;
+  let list=SUBS.filter(m=>{
+    if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
+    if(f==="online"&&!m.online)return false;
+    if(f==="offline"&&m.online)return false;
+    return true;
+  });
+  const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
+  document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None offline</div>';
+  document.getElementById('grid-subs-on').innerHTML = on.length?on.map(subCard).join(''):'<div class="empty">None online</div>';
+
+  const offl=SUBS.filter(m=>!m.online && m.offline_since);
+  const counts={}; offl.forEach(m=>{const k=m.offline_since.slice(0,16);counts[k]=(counts[k]||0)+1;});
+  const big=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
+    ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
+}
+function openSub(mk){
+  const m=SUBS.find(x=>x.match_key===mk); if(!m)return;
+  document.getElementById('mTitle').textContent=m.ppp_name||'(no name)';
+  document.getElementById('mBody').innerHTML=`
+    <div class="row"><span class="k">Type</span><span class="v">PPPoE Subscriber</span></div>
+    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
+    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
+    <div class="row"><span class="k">PPP name</span><span class="v">${esc(m.ppp_name)}</span></div>
+    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
+    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>`;
+  document.getElementById('ov').classList.add('show');
+}
+
 function openM(mk){
   const m=STATUS.find(x=>x.match_key===mk); if(!m)return;
-  const v=BYVLAN[m.vlan]||{};
+  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  const v=cands[0]||{};
   document.getElementById('mTitle').textContent=nameOf(m);
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
-  const dups = DUPVLAN.has(m.vlan)? VENDOS.filter(x=>String(x.vlan)===String(m.vlan)) : [];
   let html=`
     <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
     ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
-    <div class="row"><span class="k">VLAN</span><span class="v gold" style="font-weight:700">${esc(m.vlan)}</span></div>
+    <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(m.vlan)}</span></div>
     <div class="row"><span class="k">Connected users</span><span class="v">👥 ${m.user_count??0}</span></div>
     <div class="sec">Traffic</div>
-    <div class="row"><span class="k">RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}${rx===0?' ⚠️':''}</span></div>
+    <div class="row"><span class="k">RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}${rx===0?' ⚠️ not reading':''}</span></div>
     <div class="row"><span class="k">TX (up)</span><span class="v">${fmtBytes(tx)}</span></div>
     <div class="sec">Network</div>
     <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
     <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
     <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
-    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <div class="sec">Vendo record (vendos table)</div>
+    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>`;
+  if(cands.length<=1){
+    html+=`<div class="sec">Vendo record (vendos table)</div>
     <div class="row"><span class="k">Sheet name</span><span class="v">${esc(v.sheet_name)||'—'}</span></div>
     <div class="row"><span class="k">TG name</span><span class="v">${esc(v.tg_name)||'—'}</span></div>
     <div class="row"><span class="k">Owner</span><span class="v">${esc(v.owner_name)||'—'}</span></div>
     <div class="row"><span class="k">Area</span><span class="v">${esc(v.area)||'—'}</span></div>
     <div class="row"><span class="k">Last harvest</span><span class="v">${esc(v.last_harvest_date)||'—'}</span></div>`;
-  if(dups.length>1){
-    html+=`<div class="sec" style="color:#ff7b72">⚠️ VLAN ${esc(m.vlan)} maps to ${dups.length} vendos</div>`;
-    dups.forEach(d=>{ html+=`<div class="row"><span class="k">${esc(d.area)||'?'}</span><span class="v">${esc(d.sheet_name||d.tg_name)||'(no name)'} · ${esc(d.server_name)||'?'}</span></div>`; });
+  } else {
+    html+=`<div class="sec" style="color:#ff8a9c">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} vendos — name may be wrong</div>`;
+    cands.forEach(d=>{ html+=`<div class="row"><span class="k">${esc(d.area)||'?'}</span><span class="v">${esc(d.sheet_name||d.tg_name)||'(no name)'} · ${esc(d.server_name)||'?'}</span></div>`; });
+    html+=`<div class="row" style="border:none;padding-top:8px"><span class="k" style="color:var(--gold)">→ Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>`;
   }
   html+=`<div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>`;
   document.getElementById('mBody').innerHTML=html;
@@ -313,44 +360,33 @@ function openM(mk){
 function closeM(){document.getElementById('ov').classList.remove('show')}
 document.getElementById('ov').addEventListener('click',e=>{if(e.target.id==='ov')closeM()});
 
-// ---- Compare vs transactions ----
 async function loadCompare(){
   const body=document.getElementById('cmpBody');
-  body.innerHTML='<div class="loading">Loading transactions…</div>';
+  body.innerHTML='<div class="empty">Loading transactions…</div>';
   const period=document.getElementById('cmpPeriod').value;
   const now=new Date();
-  let start;
-  if(period==='today'){ start=new Date(now.getFullYear(),now.getMonth(),now.getDate()); }
-  else { start=new Date(now.getFullYear(),now.getMonth(),1); }
+  let start = period==='today'
+    ? new Date(now.getFullYear(),now.getMonth(),now.getDate())
+    : new Date(now.getFullYear(),now.getMonth(),1);
   const iso=start.toISOString();
-  // sum transactions per vlan for dicayas vendos
-  const vlans=STATUS.map(m=>m.vlan);
   let txByVlan={};
   try{
-    // transactions joined on vendo's vlan via vendos table — query transactions by date, group client-side
-    const rows=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${iso}&limit=100000`);
-    // map vendo→vlan
-    const vendoVlan={};
-    VENDOS.forEach(v=>{ if(v.vlan!=null) vendoVlan[String(v.vlan)]=String(v.vlan); });
-    rows.forEach(r=>{
-      const key=String(r.vendo);
-      txByVlan[key]=(txByVlan[key]||0)+Number(r.amount||0);
-    });
-  }catch(e){ body.innerHTML='<div class="empty">Could not load transactions: '+e.message+'</div>'; return; }
+    const rows=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${iso}&limit=200000`);
+    rows.forEach(r=>{ const k=String(r.vendo); txByVlan[k]=(txByVlan[k]||0)+Number(r.amount||0); });
+  }catch(e){ body.innerHTML='<div class="empty">Could not load transactions: '+esc(e.message)+'</div>'; return; }
   renderCompare(txByVlan);
 }
 function renderCompare(txByVlan){
   const q=(document.getElementById('cmpQ').value||"").toLowerCase();
   let rows=STATUS.map(m=>{
-    const v=BYVLAN[m.vlan]||{};
-    const tx=txByVlan[m.vlan]||txByVlan[String(v.vlan)]||0;
+    const tx=txByVlan[m.vlan]||0;
     return {m,name:nameOf(m),vlan:m.vlan,online:m.online,data:Number(m.rx_bytes||0)+Number(m.tx_bytes||0),sales:tx};
   });
   if(q) rows=rows.filter(r=>(r.name+" "+r.vlan).toLowerCase().includes(q));
   rows.sort((a,b)=>b.sales-a.sales);
   const tot=rows.reduce((a,r)=>a+r.sales,0);
   document.getElementById('cmpBody').innerHTML=`
-    <p style="color:var(--dim);margin-bottom:10px">Total sales (matched VLANs): <span class="gold">₱${tot.toLocaleString()}</span> · rows flag where a vendo shows online but ₱0 sales, or offline but has sales.</p>
+    <p style="color:var(--dim);margin-bottom:10px;font-weight:600">Total sales (matched VLANs): <span class="gold">₱${tot.toLocaleString()}</span> · flags where online but ₱0, or offline but has sales.</p>
     <table class="cmp-tbl"><thead><tr><th>Vendo</th><th>VLAN</th><th>Status</th><th>Data</th><th>Sales ₱</th><th>Flag</th></tr></thead><tbody>
     ${rows.map(r=>{
       let flag='';
@@ -364,7 +400,6 @@ function renderCompare(txByVlan){
     </tbody></table>`;
 }
 
-// ---- tabs ----
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
@@ -380,29 +415,26 @@ document.getElementById('subflt').onchange=renderSubs;
 document.getElementById('cmpPeriod').onchange=loadCompare;
 document.getElementById('cmpQ').oninput=()=>loadCompare();
 
-// ---- boot ----
 async function boot(){
   try{
     VENDOS=await sb("vendos?select=vlan,tg_name,sheet_name,owner_name,area,server_name,last_harvest_date&limit=5000");
-    // build vlan map + detect duplicates
-    const seen={};
+    DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
       if(v.vlan==null)return;
       const k=String(v.vlan);
-      if(seen[k]) DUPVLAN.add(k);
-      seen[k]=(seen[k]||0)+1;
-      if(!BYVLAN[k]) BYVLAN[k]=v; // first match for display
+      (VLAN_CANDIDATES[k]=VLAN_CANDIDATES[k]||[]).push(v);
+      if(!BYVLAN[k]) BYVLAN[k]=v;
     });
+    Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
     SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
-    render();
-    renderSubs();
+    render(); renderSubs();
   }catch(e){
-    document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+e.message+'</div>');
+    document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+esc(e.message)+'</div>');
   }
 }
 boot();
-setInterval(boot,90000); // refresh every 90s
+setInterval(boot,90000);
 </script>
 </body>
 </html>
