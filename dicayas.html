@@ -105,7 +105,13 @@
   .pickitem mark{background:#fff3cf;color:#8a6500;padding:0 1px;border-radius:2px}
   .pickcustom{border-top:1px solid var(--border);padding-top:12px}
   .candbox{border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:8px;background:var(--panel2)}
-  .candhead{font-size:12px;font-weight:800;color:var(--blue);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+  .candhead{font-size:12px;font-weight:800;color:var(--blue);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .mtabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border)}
+  .mtab{padding:8px 14px;cursor:pointer;font-weight:800;font-size:13px;color:var(--dim);border-bottom:3px solid transparent;margin-bottom:-1px}
+  .mtab.active{color:var(--navy);border-bottom-color:var(--blue)}
+  .moneybadge{background:#e6f7ee;color:#1f7d4d;border:1px solid #a9e0c2;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
+  .emptybadge{background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700}
+  .loadbadge{background:var(--panel2);color:var(--dim);border-radius:5px;padding:1px 7px;font-size:10px}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -228,6 +234,19 @@
     <button class="x" onclick="closeM()">×</button>
   </div>
   <div class="mb" id="mBody"></div>
+</div></div>
+
+<div class="ov" id="pwOv"><div class="modal" style="max-width:380px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2 id="pwTitle">Enter password</h2><button class="x" onclick="pwCancel()">×</button></div>
+  <div class="mb">
+    <p id="pwMsg" style="color:var(--dim);font-weight:600;margin-bottom:12px"></p>
+    <input id="pwInput" type="password" inputmode="numeric" placeholder="Password" style="width:100%;margin-bottom:14px" autocomplete="off">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="lnk" style="background:var(--panel2);color:var(--dim);border-color:var(--border)" onclick="pwCancel()">Cancel</button>
+      <button class="lnk link" id="pwOk">Confirm</button>
+    </div>
+  </div>
 </div></div>
 
 <div class="ov" id="pickOv"><div class="modal" style="max-width:460px">
@@ -462,87 +481,172 @@ function openSub(mk){
   document.getElementById('ov').classList.add('show');
 }
 
+async function loadHarvestInfo(vids){
+  // fetch harvest count/coins + group for these vendo ids (cache)
+  const need=vids.filter(id=>id && !(id in HARVEST_INFO));
+  if(!need.length) return;
+  const idList=need.join(',');
+  try{
+    const hv=await sb(`harvests?select=vendo_id,coins_total&vendo_id=in.(${idList})`);
+    const gi=await sb(`harvest_group_items?select=vendo_id,group_run_id&vendo_id=in.(${idList})`);
+    const agg={};
+    need.forEach(id=>agg[id]={harvests:0,coins:0,group_run_id:null});
+    hv.forEach(h=>{ const a=agg[h.vendo_id]; if(a){a.harvests++; a.coins+=Number(h.coins_total||0);} });
+    gi.forEach(g=>{ const a=agg[g.vendo_id]; if(a) a.group_run_id=g.group_run_id; });
+    need.forEach(id=>{
+      const a=agg[id];
+      const grp=GROUPS.find(x=>x.id===a.group_run_id);
+      HARVEST_INFO[id]={...a, group_label:grp?grp.group_label:null, collector:grp?grp.collector:null};
+    });
+  }catch(e){ /* leave uncached */ }
+}
+
 function openM(mk){
   const m=STATUS.find(x=>x.match_key===mk); if(!m)return;
   window._curMk=mk;
-  // build nav list from the currently active tab's visible vendos
   buildNavList(mk);
   const cands=VLAN_CANDIDATES[m.vlan]||[];
-  const v=cands[0]||{};
   document.getElementById('mTitle').textContent=nameOf(m);
+  window._curTab = window._curTab || 'stats';
+  renderModal(m, cands);
+  document.getElementById('ov').classList.add('show');
+  updateNavButtons();
+  // load harvest/group info for candidates, then re-render names tab
+  loadHarvestInfo(cands.map(c=>c.id)).then(()=>{
+    if(document.getElementById('ov').classList.contains('show') && window._curMk===mk)
+      renderModal(m, cands);
+  });
+}
+
+function renderModal(m, cands){
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
-  let html=`
+  const tab=window._curTab;
+  let html=`<div class="mtabs">
+    <div class="mtab ${tab==='stats'?'active':''}" onclick="setModalTab('stats')">📡 MikroTik Stats</div>
+    <div class="mtab ${tab==='names'?'active':''}" onclick="setModalTab('names')">🏷️ Names & Group${cands.length>1?' ('+cands.length+')':''}</div>
+  </div>`;
+
+  if(tab==='stats'){
+    html+=`
     <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
     ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
     <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(m.vlan)}</span></div>
     <div class="row"><span class="k">Connected users</span><span class="v">👥 ${m.user_count??0}</span></div>
+    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':m.online_via==='users'?'customers connected ('+(m.user_count||0)+')':'live traffic (static IP)'}${m.maybe_noise?' ⚡':''}</span></div>`:''}
     <div class="sec">Traffic</div>
-    <div class="row"><span class="k">RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}${rx===0?' ⚠️ not reading':''}</span></div>
+    <div class="row"><span class="k">RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}</span></div>
     <div class="row"><span class="k">TX (up)</span><span class="v">${fmtBytes(tx)}</span></div>
+    ${m.online_via==='traffic'?`<div class="row"><span class="k">Live in 4s</span><span class="v ${m.maybe_noise?'mismatch':''}">${fmtBytes(m.traffic_delta)}${m.maybe_noise?' ⚡ maybe noise':''}</span></div>`:''}
     <div class="sec">Network</div>
     <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
     <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
     <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
     <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
     <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no DHCP lease'}</span></div>
-    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':m.online_via==='users'?'customers connected ('+(m.user_count||0)+')':'live traffic (static IP)'}${m.maybe_noise?' ⚡':''}</span></div>`:''}
-    ${m.online_via==='traffic'?`<div class="row"><span class="k">Traffic in 4s</span><span class="v ${m.maybe_noise?'mismatch':''}">${fmtBytes(m.traffic_delta)}${m.maybe_noise?' — ⚡ maybe network noise, verify real vendo':''}</span></div>`:''}
-    ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}`;
-  if(cands.length<=1){
-    const vid=v.id;
-    html+=`<div class="sec">Vendo record — tap to link / unlink (🔒 ${NET_PWD})</div>
-    <div class="linkrow">
-      <span class="k">Sheet name</span>
-      <span class="v">${esc(v.sheet_name)||'<i style="color:var(--dim)">(not linked)</i>'}</span>
-      ${vid?(v.sheet_name
-        ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
-        : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`):''}
-    </div>
-    <div class="linkrow">
-      <span class="k">TG name</span>
-      <span class="v">${esc(v.tg_name)||'<i style="color:var(--dim)">(not linked)</i>'}</span>
-      ${vid?(v.tg_name
-        ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
-        : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`):''}
-    </div>
-    <div class="linkrow">
-      <span class="k">Server</span>
-      <span class="v">${esc(v.server_name)||'<i style="color:var(--dim)">(not set)</i>'} · VLAN ${esc(m.vlan)}</span>
-      ${vid?`<button class="lnk link" onclick='setServer(${vid})'>Set</button>`:''}
-    </div>
-    <div class="row"><span class="k">Owner</span><span class="v">${esc(v.owner_name)||'—'}</span></div>
-    <div class="row"><span class="k">Area</span><span class="v">${esc(v.area)||'—'}</span></div>
-    <div class="row"><span class="k">Last harvest</span><span class="v">${esc(v.last_harvest_date)||'—'}</span></div>`;
+    ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}
+    <div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>
+    <button class="pullbtn" onclick='pullOut("vendo",${JSON.stringify(String(m.vlan))},${JSON.stringify(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
   } else {
-    html+=`<div class="sec" style="color:#a31c2e">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} vendos — edit each below (🔒 ${NET_PWD})</div>
-    <div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">→ Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>
-    <p style="color:var(--dim);font-size:12px;font-weight:600;margin:4px 0 10px">The one matching the router is the real one. Unlink names on the wrong records.</p>`;
+    // NAMES & GROUP tab
+    html+=`<div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">📡 Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>`;
+    if(cands.length>1){
+      html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} records. The one matching the router is real — unlink names or delete the wrong empty ones.</p>`;
+    } else if(cands.length===0){
+      html+=`<p style="color:var(--dim);font-size:13px;padding:20px 0">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>`;
+    }
     cands.forEach(d=>{
       const vid=d.id;
+      const hi=HARVEST_INFO[vid];
+      const hasMoney = hi && (hi.harvests>0 || hi.coins>0);
+      const loading = !(vid in HARVEST_INFO);
       html+=`<div class="candbox">
-        <div class="candhead">${esc(d.area)||'?'} · ${esc(d.server_name)||'no server'}</div>
+        <div class="candhead">${esc(d.area)||'?'} ${hasMoney?'<span class="moneybadge">💰 HAS HARVESTS</span>':loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
           <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
-          ${vid?(d.sheet_name
+          ${d.sheet_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
-            : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`):''}
+            : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`}
         </div>
-        <div class="linkrow" style="border-bottom:none">
+        <div class="linkrow">
           <span class="k">TG</span>
           <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
-          ${vid?(d.tg_name
+          ${d.tg_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
-            : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`):''}
+            : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
+        </div>
+        <div class="linkrow">
+          <span class="k">Group</span>
+          <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.collector?' · '+esc(hi.collector):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}</span>
+          <button class="lnk link" onclick='changeGroup(${vid})'>Change</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':'safe to delete if duplicate'}</span>
+          <button class="lnk ${hasMoney?'':'unlink'}" ${hasMoney?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick='deleteVendo(${vid})'>🗑 Delete</button>
         </div>
       </div>`;
     });
   }
-  html+=`<div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>`;
-  html+=`<button class="pullbtn" onclick='pullOut("vendo",${JSON.stringify(String(m.vlan))},${JSON.stringify(nameOf(m))})'>🚫 Pull out / mark INACTIVE (poller will skip VLAN ${esc(m.vlan)})</button>`;
   document.getElementById('mBody').innerHTML=html;
-  document.getElementById('ov').classList.add('show');
-  updateNavButtons();
+}
+function setModalTab(t){
+  window._curTab=t;
+  const m=STATUS.find(x=>x.match_key===window._curMk); if(!m)return;
+  renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+}
+
+async function changeGroup(vid){
+  if(!GROUPS.length){ toast("Groups not loaded"); return; }
+  const list=GROUPS.map((g,i)=>`${i+1}. ${g.group_label} (${g.collector})`).join('\n');
+  const pick=prompt(`Move to which group? Enter number:\n\n${list}`);
+  if(!pick) return;
+  const idx=parseInt(pick)-1;
+  if(isNaN(idx)||idx<0||idx>=GROUPS.length){ toast("Invalid choice"); return; }
+  const g=GROUPS[idx];
+  const ok=await askPassword(`Move this vendo to "${g.group_label}"?`);
+  if(!ok) return;
+  try{
+    // update existing group item, or insert if none
+    const existing=await sb(`harvest_group_items?select=id&vendo_id=eq.${vid}`);
+    if(existing && existing.length){
+      const r=await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{
+        method:"PATCH", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify({group_run_id:g.id})
+      });
+      if(!r.ok) throw new Error("HTTP "+r.status);
+    } else {
+      const r=await fetch(SB+`/rest/v1/harvest_group_items`,{
+        method:"POST", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify({vendo_id:vid, group_run_id:g.id})
+      });
+      if(!r.ok) throw new Error("HTTP "+r.status);
+    }
+    delete HARVEST_INFO[vid];
+    await loadHarvestInfo([vid]);
+    const m=STATUS.find(x=>x.match_key===window._curMk);
+    renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+    toast("Moved to "+g.group_label);
+  }catch(e){ toast("Failed: "+e.message); }
+}
+
+async function deleteVendo(vid){
+  const hi=HARVEST_INFO[vid];
+  if(hi && (hi.harvests>0 || hi.coins>0)){ toast("Blocked — this record has harvest money."); return; }
+  const v=VENDOS.find(x=>x.id===vid);
+  const nm=v?(v.sheet_name||v.tg_name||'VLAN '+v.vlan):'this record';
+  const ok=await askPassword(`Delete "${nm}"? This removes the duplicate record permanently.`);
+  if(!ok) return;
+  try{
+    // clean group item first (FK), then vendo
+    await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+  }catch(e){ toast("Failed: "+e.message); return; }
+  VENDOS=VENDOS.filter(x=>x.id!==vid);
+  refreshVendoLocal(-1,{}); // rebuild maps
+  const m=STATUS.find(x=>x.match_key===window._curMk);
+  render(); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+  toast(`Deleted "${nm}"`);
 }
 function buildNavList(mk){
   // determine which vendos are visible in the active tab, in sorted order
@@ -667,6 +771,40 @@ document.getElementById('cmpQ').oninput=()=>loadCompare();
 // ---- PULLOUT / SUPPRESS ----
 let SUPPRESS=[];
 const NET_PWD="101510";
+let GROUPS=[];          // active harvest groups
+let HARVEST_INFO={};    // vendo_id -> {harvests, coins, group_run_id, group_label, collector}
+
+// pretty password modal (returns Promise<bool>)
+let _pwResolve=null;
+function askPassword(message){
+  return new Promise(resolve=>{
+    _pwResolve=resolve;
+    document.getElementById('pwMsg').textContent=message||'Enter password to confirm this action.';
+    document.getElementById('pwInput').value='';
+    document.getElementById('pwOv').classList.add('show');
+    setTimeout(()=>document.getElementById('pwInput').focus(),50);
+  });
+}
+function pwCancel(){ document.getElementById('pwOv').classList.remove('show'); if(_pwResolve){_pwResolve(false);_pwResolve=null;} }
+function pwSubmit(){
+  const val=document.getElementById('pwInput').value;
+  document.getElementById('pwOv').classList.remove('show');
+  const ok = val===NET_PWD;
+  if(_pwResolve){ _pwResolve(ok); _pwResolve=null; }
+  if(!val) return;
+  if(!ok) setTimeout(()=>toast('Wrong password'),100);
+}
+document.getElementById('pwOk').onclick=pwSubmit;
+document.getElementById('pwInput').addEventListener('keydown',e=>{ if(e.key==='Enter')pwSubmit(); });
+document.getElementById('pwOv').addEventListener('click',e=>{if(e.target.id==='pwOv')pwCancel()});
+function toast(msg){
+  let t=document.getElementById('_toast');
+  if(!t){ t=document.createElement('div'); t.id='_toast';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 20px;border-radius:10px;font-weight:700;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(t); }
+  t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .4s';},2200);
+}
 
 async function sbPatch(vid, body){
   const r=await fetch(SB+"/rest/v1/vendos?id=eq."+vid,{
@@ -685,12 +823,12 @@ function refreshVendoLocal(vid, patch){
   Object.entries(VLAN_CANDIDATES).forEach(([k,a])=>{ if(a.length>1)DUPVLAN.add(k); });
 }
 async function unlinkField(vid, field){
-  const pwd=prompt(`Unlink ${field==='tg_name'?'TG name':'Sheet name'}?\nEnter password:`);
-  if(pwd===null) return;
-  if(pwd!==NET_PWD){ alert("Wrong password"); return; }
-  try{ await sbPatch(vid,{[field]:null}); }catch(e){ alert("Failed: "+e.message); return; }
+  const ok=await askPassword(`Unlink the ${field==='tg_name'?'TG name':'Sheet name'} from this record?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{[field]:null});
   render(); openM(window._curMk);
+  toast("Unlinked");
 }
 let _pickCtx=null; // {vid, field}
 function linkField(vid, field){
@@ -729,11 +867,13 @@ function renderPickList(q){
 async function pickName(name){
   if(!_pickCtx) return;
   const {vid,field}=_pickCtx;
-  if(prompt(`Link "${name}"?\nEnter password to confirm:`)!==NET_PWD){ alert("Wrong password"); return; }
-  try{ await sbPatch(vid,{[field]:name}); }catch(e){ alert("Failed: "+e.message); return; }
-  refreshVendoLocal(vid,{[field]:name});
   closePick();
+  const ok=await askPassword(`Link "${name}" as the ${field==='tg_name'?'TG name':'Sheet name'}?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{[field]:name}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{[field]:name});
   render(); openM(window._curMk);
+  toast("Linked: "+name);
 }
 document.getElementById('pickSearch').oninput=(e)=>renderPickList(e.target.value);
 document.getElementById('pickUseCustom').onclick=()=>{
@@ -744,19 +884,19 @@ document.getElementById('pickUseCustom').onclick=()=>{
 async function setServer(vid){
   const val=prompt("Enter server name (e.g. Dicayas Server):","Dicayas Server");
   if(!val) return;
-  if(prompt("Enter password to confirm:")!==NET_PWD){ alert("Wrong password"); return; }
-  try{ await sbPatch(vid,{server_name:val}); }catch(e){ alert("Failed: "+e.message); return; }
+  const ok=await askPassword(`Set server to "${val}"?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{server_name:val}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{server_name:val});
   render(); openM(window._curMk);
+  toast("Server set");
 }
 
 async function pullOut(kind, key, label){
-  // guard: already suppressed?
   const dup = SUPPRESS.find(s => kind==="vendo" ? String(s.vlan)===String(key) : s.ppp_name===key);
-  if(dup){ alert(`"${label}" is already in the Inactive list.`); return; }
-  const pwd=prompt(`Mark "${label}" INACTIVE?\nThe poller will skip it next cycle.\n\nEnter password to confirm:`);
-  if(pwd===null) return;
-  if(pwd!==NET_PWD){ alert("Wrong password."); return; }
+  if(dup){ toast(`"${label}" is already inactive.`); return; }
+  const ok=await askPassword(`Mark "${label}" INACTIVE? The poller will skip it next cycle.`);
+  if(!ok) return;
   const reason=prompt("Reason (optional):","")||null;
   const row = kind==="vendo"
     ? {vlan:String(key), ppp_name:null, reason, suppressed_by:"dicayas-page", suppressed_at:new Date().toISOString()}
@@ -768,29 +908,28 @@ async function pullOut(kind, key, label){
       body:JSON.stringify(row)
     });
     if(!r.ok) throw new Error("HTTP "+r.status);
-  }catch(e){ alert("Failed: "+e.message); return; }
+  }catch(e){ toast("Failed: "+e.message); return; }
   if(kind==="vendo") STATUS=STATUS.filter(x=>String(x.vlan)!==String(key));
   else SUBS=SUBS.filter(x=>x.ppp_name!==key);
   closeM();
   await loadSuppress();
   render(); renderSubs();
-  alert(`"${label}" marked inactive. Poller will skip it next cycle.`);
+  toast(`"${label}" marked inactive.`);
 }
 
 async function restore(kind, key, label){
-  const pwd=prompt(`Restore "${label}" to ACTIVE?\nThe poller will include it again.\n\nEnter password to confirm:`);
-  if(pwd===null) return;
-  if(pwd!==NET_PWD){ alert("Wrong password."); return; }
+  const ok=await askPassword(`Restore "${label}" to ACTIVE? The poller will include it again.`);
+  if(!ok) return;
   const filter = kind==="vendo" ? `vlan=eq.${encodeURIComponent(key)}` : `ppp_name=eq.${encodeURIComponent(key)}`;
   try{
     const r=await fetch(SB+"/rest/v1/mikrotik_suppress?"+filter,{
       method:"DELETE", headers:{...H,"Prefer":"return=minimal"}
     });
     if(!r.ok) throw new Error("HTTP "+r.status);
-  }catch(e){ alert("Failed: "+e.message); return; }
+  }catch(e){ toast("Failed: "+e.message); return; }
   await loadSuppress();
   await boot();
-  alert(`"${label}" restored. It will reappear on the next poll cycle.`);
+  toast(`"${label}" restored.`);
 }
 
 async function loadSuppress(){
@@ -846,6 +985,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
     SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
+    try{ GROUPS=await sb("harvest_groups?select=id,area,group_label,collector,status&status=eq.active&order=area,group_label") || []; }catch(e){ GROUPS=[]; }
     // monthly sales per vlan — used to classify empty slots vs real offline
     try{
       const now=new Date();
