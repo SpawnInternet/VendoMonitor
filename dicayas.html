@@ -663,20 +663,20 @@ async function pickGroup(gid){
 }
 
 async function deleteVendo(vid){
-  const hi=HARVEST_INFO[vid];
-  if(hi && (hi.harvests>0 || hi.coins>0)){ toast("Blocked — this record has harvest money."); return; }
+  const chk=await checkDeletable(vid);
+  if(!chk.ok){ toast("Can't delete — has: "+chk.reasons.join(', ')); return; }
   const v=VENDOS.find(x=>x.id===vid);
   const nm=v?(v.sheet_name||v.tg_name||'VLAN '+v.vlan):'this record';
   const ok=await askPassword(`Delete "${nm}"? This removes the duplicate record permanently.`);
   if(!ok) return;
   try{
-    // clean group item first (FK), then vendo
     await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
     const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    if(r.status===409){ toast("Blocked — record still referenced elsewhere."); return; }
     if(!r.ok) throw new Error("HTTP "+r.status);
   }catch(e){ toast("Failed: "+e.message); return; }
   VENDOS=VENDOS.filter(x=>x.id!==vid);
-  refreshVendoLocal(-1,{}); // rebuild maps
+  refreshVendoLocal(-1,{});
   const m=STATUS.find(x=>x.match_key===window._curMk);
   render(); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
   toast(`Deleted "${nm}"`);
@@ -729,14 +729,31 @@ async function dupeUnlink(vid){
   render(); renderDupes();
   toast("Unlinked");
 }
+async function checkDeletable(vid){
+  // returns {ok:bool, reasons:[...]} — safe only if no money/work references exist
+  const reasons=[];
+  try{
+    const checks=await Promise.all([
+      sb(`harvests?select=id&vendo_id=eq.${vid}&limit=1`),
+      sb(`route_items?select=id&vendo_id=eq.${vid}&limit=1`),
+      sb(`harvest_staging?select=id&vendo_id=eq.${vid}&limit=1`),
+      sb(`job_orders?select=id&vendo_id=eq.${vid}&limit=1`),
+      sb(`collector_packs?select=id&vendo_id=eq.${vid}&limit=1`),
+    ]);
+    const labels=['harvest history','route items','harvest staging','job orders','collector packs'];
+    checks.forEach((c,i)=>{ if(c && c.length) reasons.push(labels[i]); });
+  }catch(e){ reasons.push('check failed: '+e.message); }
+  return {ok:reasons.length===0, reasons};
+}
 async function dupeDelete(vid){
-  const hi=HARVEST_INFO[vid];
-  if(hi && (hi.harvests>0 || hi.coins>0)){ toast("Blocked — has harvest money."); return; }
-  const ok=await askPassword(`Delete this duplicate record permanently?`);
+  const chk=await checkDeletable(vid);
+  if(!chk.ok){ toast("Can't delete — has: "+chk.reasons.join(', ')); return; }
+  const ok=await askPassword(`Delete this empty duplicate record permanently?`);
   if(!ok) return;
   try{
     await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
     const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    if(r.status===409){ toast("Blocked — record still referenced elsewhere."); return; }
     if(!r.ok) throw new Error("HTTP "+r.status);
   }catch(e){ toast("Failed: "+e.message); return; }
   VENDOS=VENDOS.filter(x=>x.id!==vid);
