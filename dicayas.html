@@ -65,8 +65,8 @@
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
   .dot.g{background:var(--grn)} .dot.r{background:var(--offred)}
   .ov{display:none;position:fixed;inset:0;background:rgba(33,48,64,.45);z-index:50;align-items:center;justify-content:center;padding:16px}
-  #hvOv,#pwOv,#pickOv,#grpOv{z-index:70}
-  #pwOv{z-index:80}
+  #hvOv,#pickOv,#grpOv,#delOv{z-index:75}
+  #pwOv{z-index:90}
   .ov.show{display:flex}
   .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(33,48,64,.25)}
   .modal .rainbow-strip{border-radius:14px 14px 0 0}
@@ -237,6 +237,12 @@
     <button class="x" onclick="closeM()">×</button>
   </div>
   <div class="mb" id="mBody"></div>
+</div></div>
+
+<div class="ov" id="delOv"><div class="modal" style="max-width:440px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2>Delete record?</h2><button class="x" onclick="closeDel()">×</button></div>
+  <div class="mb" id="delBody"></div>
 </div></div>
 
 <div class="ov" id="hvOv"><div class="modal" style="max-width:440px">
@@ -614,7 +620,7 @@ function renderModal(m, cands){
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':'safe to delete if duplicate'}</span>
-          <button class="lnk ${hasMoney?'':'unlink'}" ${hasMoney?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick='deleteVendo(${vid})'>🗑 Delete</button>
+          <button class="lnk unlink" onclick='deleteVendo(${vid})'>🗑 Delete</button>
         </div>
       </div>`;
     });
@@ -671,23 +677,80 @@ async function pickGroup(gid){
 }
 
 async function deleteVendo(vid){
-  const chk=await checkDeletable(vid);
-  if(!chk.ok){ toast("Can't delete — has: "+chk.reasons.join(', ')); return; }
+  askDelete(vid, ()=>{ const m=STATUS.find(x=>x.match_key===window._curMk); if(m) renderModal(m, VLAN_CANDIDATES[m.vlan]||[]); });
+}
+
+// ---- SMART DELETE with warning modal ----
+let _delVid=null, _delAfter=null, _delRefs=null;
+async function askDelete(vid, afterFn){
+  _delVid=vid; _delAfter=afterFn;
   const v=VENDOS.find(x=>x.id===vid);
   const nm=v?(v.sheet_name||v.tg_name||'VLAN '+v.vlan):'this record';
-  const ok=await askPassword(`Delete "${nm}"? This removes the duplicate record permanently.`);
+  document.getElementById('delBody').innerHTML='<div class="empty">Checking what references this record…</div>';
+  document.getElementById('delOv').classList.add('show');
+  const chk=await checkDeletable(vid);
+  _delRefs=chk;
+  if(chk.refs._error){ document.getElementById('delBody').innerHTML='<p style="color:#a31c2e">Check failed: '+esc(chk.refs._error)+'</p>'; return; }
+
+  if(chk.hasMoney){
+    // BLOCKED — money exists
+    let lines='';
+    const r=chk.refs;
+    if(r.harvests.money) lines+=`<li>💰 <b>${r.harvests.count} harvest(s) with money</b> — real income data</li>`;
+    if(r.route_items.money) lines+=`<li>💰 <b>route items with money</b></li>`;
+    if(r.collector_packs.money) lines+=`<li>💰 <b>${r.collector_packs.count} collector pack(s)</b></li>`;
+    document.getElementById('delBody').innerHTML=`
+      <p style="font-weight:700;color:#a31c2e;margin-bottom:8px">🔒 Cannot delete "${esc(nm)}"</p>
+      <p style="color:var(--dim);font-size:13px;margin-bottom:8px">This record has real money data attached:</p>
+      <ul style="margin:0 0 14px 18px;font-size:13px;line-height:1.7">${lines}</ul>
+      <p style="color:var(--dim);font-size:13px">Deleting would lose income history. Unlink the name instead to clean it up, and keep the record.</p>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="lnk link" onclick="closeDel()">OK, keep it</button></div>`;
+    return;
+  }
+
+  // SAFE to delete (no money) — but explain what empty references will be cleaned
+  const r=chk.refs;
+  let what='';
+  if(r.route_items.count) what+=`<li>${r.route_items.count} empty route slot(s) <span style="color:var(--dim)">(pending, no money — we haven't used routes anyway)</span></li>`;
+  if(r.harvest_staging.count) what+=`<li>${r.harvest_staging.count} harvest staging row(s) <span style="color:var(--dim)">(empty)</span></li>`;
+  if(r.job_orders.count) what+=`<li>${r.job_orders.count} job order(s)</li>`;
+  if(!what) what='<li style="color:var(--dim)">Nothing else references it — clean delete.</li>';
+  document.getElementById('delBody').innerHTML=`
+    <p style="font-weight:700;margin-bottom:8px">Delete "${esc(nm)}"?</p>
+    <p style="color:var(--dim);font-size:13px;margin-bottom:6px">This is a duplicate with <b>no harvest money</b>. Deleting will also remove these empty references:</p>
+    <ul style="margin:0 0 8px 18px;font-size:13px;line-height:1.7">${what}</ul>
+    <div style="background:#fff8e6;border:1px solid #f0d98a;border-radius:8px;padding:9px 11px;font-size:12px;color:#7a5c00;margin-bottom:14px">
+      ⚠️ Note: this record has route entries but <b>no harvests</b>. Since routes aren't being used, this is safe — but here's exactly what happens: the vendo row and its empty route/staging/group links are permanently removed. Harvest money is never touched.
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="lnk" style="background:var(--panel2);color:var(--dim);border-color:var(--border)" onclick="closeDel()">Cancel</button>
+      <button class="lnk unlink" id="delConfirmBtn">🗑 Delete permanently</button>
+    </div>`;
+  document.getElementById('delConfirmBtn').onclick=doDelete;
+}
+function closeDel(){ document.getElementById('delOv').classList.remove('show'); _delVid=null; _delAfter=null; _delRefs=null; }
+document.getElementById('delOv').addEventListener('click',e=>{if(e.target.id==='delOv')closeDel()});
+
+async function doDelete(){
+  const vid=_delVid, after=_delAfter;
+  document.getElementById('delOv').classList.remove('show');
+  const ok=await askPassword(`Confirm delete of this duplicate record?`);
   if(!ok) return;
   try{
+    // clean empty references in FK order, then the vendo
+    await fetch(SB+`/rest/v1/route_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    await fetch(SB+`/rest/v1/harvest_staging?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
+    await fetch(SB+`/rest/v1/job_orders?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
     await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
     const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    if(r.status===409){ toast("Blocked — record still referenced elsewhere."); return; }
+    if(r.status===409){ toast("Blocked — still referenced (collector packs?). Not deleted."); return; }
     if(!r.ok) throw new Error("HTTP "+r.status);
   }catch(e){ toast("Failed: "+e.message); return; }
   VENDOS=VENDOS.filter(x=>x.id!==vid);
   refreshVendoLocal(-1,{});
-  const m=STATUS.find(x=>x.match_key===window._curMk);
-  render(); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
-  toast(`Deleted "${nm}"`);
+  render();
+  if(after) after();
+  toast("Deleted record");
 }
 
 // ---- DUPLICATE NAME BREAKDOWN ----
@@ -720,7 +783,7 @@ function renderDupes(){
       <div class="row" style="padding:4px 0;border:none"><span class="k">Group</span><span class="v">${hi&&hi.group_label?esc(hi.group_label):'<i style="color:var(--dim)">(none)</i>'}</span></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
         <button class="lnk unlink" onclick='dupeUnlink(${d.id})'>Unlink ${_dupeField==='tg_name'?'TG':'sheet'}</button>
-        <button class="lnk ${hasMoney?'':'unlink'}" ${hasMoney?'disabled style="opacity:.4;cursor:not-allowed"':''} onclick='dupeDelete(${d.id})'>🗑 Delete record</button>
+        <button class="lnk unlink" onclick='dupeDelete(${d.id})'>🗑 Delete record</button>
       </div>
     </div>`;
   });
@@ -760,37 +823,31 @@ async function dupeUnlink(vid){
   toast("Unlinked");
 }
 async function checkDeletable(vid){
-  // returns {ok:bool, reasons:[...]} — safe only if no money/work references exist
-  const reasons=[];
+  // returns detailed reference info per table, flagging which have money
+  const refs={harvests:{count:0,money:false}, route_items:{count:0,money:false},
+              harvest_staging:{count:0,money:false}, job_orders:{count:0,money:false},
+              collector_packs:{count:0,money:false}};
   try{
-    const checks=await Promise.all([
-      sb(`harvests?select=id&vendo_id=eq.${vid}&limit=1`),
-      sb(`route_items?select=id&vendo_id=eq.${vid}&limit=1`),
-      sb(`harvest_staging?select=id&vendo_id=eq.${vid}&limit=1`),
-      sb(`job_orders?select=id&vendo_id=eq.${vid}&limit=1`),
-      sb(`collector_packs?select=id&vendo_id=eq.${vid}&limit=1`),
+    const [hv,ri,hs,jo,cp]=await Promise.all([
+      sb(`harvests?select=coins_total,net_collectible&vendo_id=eq.${vid}`),
+      sb(`route_items?select=total_coins,net_collectible&vendo_id=eq.${vid}`),
+      sb(`harvest_staging?select=id&vendo_id=eq.${vid}`),
+      sb(`job_orders?select=id,status&vendo_id=eq.${vid}`),
+      sb(`collector_packs?select=id&vendo_id=eq.${vid}`),
     ]);
-    const labels=['harvest history','route items','harvest staging','job orders','collector packs'];
-    checks.forEach((c,i)=>{ if(c && c.length) reasons.push(labels[i]); });
-  }catch(e){ reasons.push('check failed: '+e.message); }
-  return {ok:reasons.length===0, reasons};
+    refs.harvests.count=(hv||[]).length;
+    refs.harvests.money=(hv||[]).some(r=>Number(r.coins_total||0)>0||Number(r.net_collectible||0)>0);
+    refs.route_items.count=(ri||[]).length;
+    refs.route_items.money=(ri||[]).some(r=>Number(r.total_coins||0)>0||Number(r.net_collectible||0)>0);
+    refs.harvest_staging.count=(hs||[]).length;
+    refs.job_orders.count=(jo||[]).length;
+    refs.collector_packs.count=(cp||[]).length; refs.collector_packs.money=(cp||[]).length>0;
+  }catch(e){ refs._error=e.message; }
+  const hasMoney = refs.harvests.money || refs.route_items.money || refs.collector_packs.money;
+  const hasAny = refs.harvests.count||refs.route_items.count||refs.harvest_staging.count||refs.job_orders.count||refs.collector_packs.count;
+  return {refs, hasMoney, hasAny:!!hasAny};
 }
-async function dupeDelete(vid){
-  const chk=await checkDeletable(vid);
-  if(!chk.ok){ toast("Can't delete — has: "+chk.reasons.join(', ')); return; }
-  const ok=await askPassword(`Delete this empty duplicate record permanently?`);
-  if(!ok) return;
-  try{
-    await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    if(r.status===409){ toast("Blocked — record still referenced elsewhere."); return; }
-    if(!r.ok) throw new Error("HTTP "+r.status);
-  }catch(e){ toast("Failed: "+e.message); return; }
-  VENDOS=VENDOS.filter(x=>x.id!==vid);
-  refreshVendoLocal(-1,{});
-  render(); renderDupes();
-  toast("Deleted record");
-}
+async function dupeDelete(vid){ askDelete(vid, ()=>renderDupes()); }
 
 function buildNavList(mk){
   // determine which vendos are visible in the active tab, in sorted order
