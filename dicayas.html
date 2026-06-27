@@ -85,6 +85,13 @@
   .cmp-tbl th{color:var(--dim);font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--panel);font-weight:800}
   .cmp-tbl tr:hover{background:var(--panel2)}
   .gold{color:#8a6500}
+  .linkrow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:10px}
+  .linkrow .k{color:var(--dim);font-weight:600;flex-shrink:0}
+  .linkrow .v{flex:1;text-align:right;font-weight:700;color:var(--navy);word-break:break-word}
+  .lnk{flex-shrink:0;font-size:12px;font-weight:800;border-radius:7px;padding:4px 11px;cursor:pointer;font-family:inherit;border:1px solid}
+  .lnk.link{background:#e8f0fb;color:#1d5bb0;border-color:#b8d0ee}
+  .lnk.unlink{background:#fdecef;color:#a31c2e;border-color:#f0a8b4}
+  .lnk:hover{filter:brightness(.96)}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -417,6 +424,7 @@ function openSub(mk){
 
 function openM(mk){
   const m=STATUS.find(x=>x.match_key===mk); if(!m)return;
+  window._curMk=mk;
   const cands=VLAN_CANDIDATES[m.vlan]||[];
   const v=cands[0]||{};
   document.getElementById('mTitle').textContent=nameOf(m);
@@ -437,9 +445,27 @@ function openM(mk){
     <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no lease (machine never connected)'}</span></div>
     ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}`;
   if(cands.length<=1){
-    html+=`<div class="sec">Vendo record (vendos table)</div>
-    <div class="row"><span class="k">Sheet name</span><span class="v">${esc(v.sheet_name)||'—'}</span></div>
-    <div class="row"><span class="k">TG name</span><span class="v">${esc(v.tg_name)||'—'}</span></div>
+    const vid=v.id;
+    html+=`<div class="sec">Vendo record — tap to link / unlink (🔒 ${NET_PWD})</div>
+    <div class="linkrow">
+      <span class="k">Sheet name</span>
+      <span class="v">${esc(v.sheet_name)||'<i style="color:var(--dim)">(not linked)</i>'}</span>
+      ${vid?(v.sheet_name
+        ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
+        : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`):''}
+    </div>
+    <div class="linkrow">
+      <span class="k">TG name</span>
+      <span class="v">${esc(v.tg_name)||'<i style="color:var(--dim)">(not linked)</i>'}</span>
+      ${vid?(v.tg_name
+        ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
+        : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`):''}
+    </div>
+    <div class="linkrow">
+      <span class="k">Server</span>
+      <span class="v">${esc(v.server_name)||'<i style="color:var(--dim)">(not set)</i>'} · VLAN ${esc(m.vlan)}</span>
+      ${vid?`<button class="lnk link" onclick='setServer(${vid})'>Set</button>`:''}
+    </div>
     <div class="row"><span class="k">Owner</span><span class="v">${esc(v.owner_name)||'—'}</span></div>
     <div class="row"><span class="k">Area</span><span class="v">${esc(v.area)||'—'}</span></div>
     <div class="row"><span class="k">Last harvest</span><span class="v">${esc(v.last_harvest_date)||'—'}</span></div>`;
@@ -523,6 +549,47 @@ document.getElementById('cmpQ').oninput=()=>loadCompare();
 let SUPPRESS=[];
 const NET_PWD="101510";
 
+async function sbPatch(vid, body){
+  const r=await fetch(SB+"/rest/v1/vendos?id=eq."+vid,{
+    method:"PATCH",
+    headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+    body:JSON.stringify({...body, updated_at:new Date().toISOString()})
+  });
+  if(!r.ok) throw new Error("HTTP "+r.status);
+}
+function refreshVendoLocal(vid, patch){
+  VENDOS.forEach(v=>{ if(v.id===vid) Object.assign(v,patch); });
+  // rebuild candidate map so popup + cards reflect change
+  VLAN_CANDIDATES={}; BYVLAN={}; DUPVLAN=new Set();
+  VENDOS.forEach(v=>{ if(v.vlan==null)return; const k=String(v.vlan);
+    (VLAN_CANDIDATES[k]=VLAN_CANDIDATES[k]||[]).push(v); if(!BYVLAN[k])BYVLAN[k]=v; });
+  Object.entries(VLAN_CANDIDATES).forEach(([k,a])=>{ if(a.length>1)DUPVLAN.add(k); });
+}
+async function unlinkField(vid, field){
+  const pwd=prompt(`Unlink ${field==='tg_name'?'TG name':'Sheet name'}?\nEnter password:`);
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ alert("Wrong password"); return; }
+  try{ await sbPatch(vid,{[field]:null}); }catch(e){ alert("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{[field]:null});
+  render(); openM(window._curMk);
+}
+async function linkField(vid, field){
+  const val=prompt(`Enter the ${field==='tg_name'?'Telegram name':'Sheet name'} to link:`);
+  if(!val) return;
+  if(prompt("Enter password to confirm:")!==NET_PWD){ alert("Wrong password"); return; }
+  try{ await sbPatch(vid,{[field]:val}); }catch(e){ alert("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{[field]:val});
+  render(); openM(window._curMk);
+}
+async function setServer(vid){
+  const val=prompt("Enter server name (e.g. Dicayas Server):","Dicayas Server");
+  if(!val) return;
+  if(prompt("Enter password to confirm:")!==NET_PWD){ alert("Wrong password"); return; }
+  try{ await sbPatch(vid,{server_name:val}); }catch(e){ alert("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{server_name:val});
+  render(); openM(window._curMk);
+}
+
 async function pullOut(kind, key, label){
   const pwd=prompt(`Mark "${label}" INACTIVE?\nThe poller will skip it next cycle.\n\nEnter password to confirm:`);
   if(pwd===null) return;
@@ -598,7 +665,7 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
-    VENDOS=await sb("vendos?select=vlan,tg_name,sheet_name,owner_name,area,server_name,last_harvest_date&limit=5000");
+    VENDOS=await sb("vendos?select=id,vlan,tg_name,sheet_name,owner_name,area,server_name,last_harvest_date&limit=5000");
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
       if(v.vlan==null)return;
