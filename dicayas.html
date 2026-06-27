@@ -273,7 +273,8 @@ function hasName(m){
   return cands.some(v=>v.sheet_name||v.tg_name);
 }
 function isEmptySlot(m){
-  return !m.online && !m.lease_status && !hasName(m) && !(SALES_MONTH[m.vlan]>0);
+  // empty = offline + no lease + no name + no sales + never showed live traffic
+  return !m.online && !m.lease_status && !hasName(m) && !(SALES_MONTH[m.vlan]>0) && m.online_via!=='traffic';
 }
 
 function flagsOf(m){
@@ -442,7 +443,8 @@ function openM(mk){
     <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
     <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
     <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no lease (machine never connected)'}</span></div>
+    <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no DHCP lease'}</span></div>
+    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':'live traffic (static IP)'}</span></div>`:''}
     ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}`;
   if(cands.length<=1){
     const vid=v.id;
