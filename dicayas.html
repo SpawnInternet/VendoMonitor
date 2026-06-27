@@ -642,21 +642,25 @@ document.getElementById('pickOv').addEventListener('click',e=>{if(e.target.id===
 
 function renderPickList(q){
   if(!_pickCtx)return;
-  const field=_pickCtx.field;
   q=(q||'').toLowerCase().trim();
-  // unique name pool from VENDOS for the chosen field
-  const seen=new Map();
+  // search ALL name fields so a name shows up no matter where it's stored;
+  // the picked value links to the field you're editing.
+  const fields=['sheet_name','tg_name','owner_name','excel_name'];
+  const seen=new Map(); // name -> {area, src}
   VENDOS.forEach(v=>{
-    const nm=v[field];
-    if(!nm) return;
-    if(q && !nm.toLowerCase().includes(q)) return;
-    if(!seen.has(nm)) seen.set(nm, v.area||'');
+    fields.forEach(f=>{
+      const nm=v[f];
+      if(!nm) return;
+      if(q && !nm.toLowerCase().includes(q)) return;
+      if(!seen.has(nm)) seen.set(nm, {area:v.area||'', src:f});
+    });
   });
-  let items=[...seen.entries()].slice(0,60);
+  let items=[...seen.entries()].slice(0,80);
+  const srcLabel={sheet_name:'sheet',tg_name:'TG',owner_name:'owner',excel_name:'excel'};
   const hl=(s)=>{ if(!q)return esc(s); const i=s.toLowerCase().indexOf(q); if(i<0)return esc(s);
     return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length)); };
   document.getElementById('pickList').innerHTML = items.length
-    ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
+    ? items.map(([nm,info])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}<span class="area">${info.area?esc(info.area)+' · ':''}${srcLabel[info.src]}</span></div>`).join('')
     : '<div class="empty" style="padding:24px">No matches — type a new name below</div>';
 }
 async function pickName(name){
@@ -761,7 +765,7 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
-    VENDOS=await sb("vendos?select=id,vlan,tg_name,sheet_name,owner_name,area,server_name,last_harvest_date&limit=5000");
+    VENDOS=await sb("vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date&limit=5000");
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
       if(v.vlan==null)return;
