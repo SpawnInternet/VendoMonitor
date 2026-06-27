@@ -100,6 +100,8 @@
   .pickitem .area{font-size:11px;color:var(--dim);font-weight:600;margin-left:6px}
   .pickitem mark{background:#fff3cf;color:#8a6500;padding:0 1px;border-radius:2px}
   .pickcustom{border-top:1px solid var(--border);padding-top:12px}
+  .candbox{border:1px solid var(--border);border-radius:9px;padding:8px 11px;margin-bottom:8px;background:var(--panel2)}
+  .candhead{font-size:12px;font-weight:800;color:var(--blue);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -501,9 +503,29 @@ function openM(mk){
     <div class="row"><span class="k">Area</span><span class="v">${esc(v.area)||'—'}</span></div>
     <div class="row"><span class="k">Last harvest</span><span class="v">${esc(v.last_harvest_date)||'—'}</span></div>`;
   } else {
-    html+=`<div class="sec" style="color:#a31c2e">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} vendos — name may be wrong</div>`;
-    cands.forEach(d=>{ html+=`<div class="row"><span class="k">${esc(d.area)||'?'}</span><span class="v">${esc(d.sheet_name||d.tg_name)||'(no name)'} · ${esc(d.server_name)||'?'}</span></div>`; });
-    html+=`<div class="row" style="border:none;padding-top:8px"><span class="k" style="color:#8a6500">→ Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>`;
+    html+=`<div class="sec" style="color:#a31c2e">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} vendos — edit each below (🔒 ${NET_PWD})</div>
+    <div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">→ Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>
+    <p style="color:var(--dim);font-size:12px;font-weight:600;margin:4px 0 10px">The one matching the router is the real one. Unlink names on the wrong records.</p>`;
+    cands.forEach(d=>{
+      const vid=d.id;
+      html+=`<div class="candbox">
+        <div class="candhead">${esc(d.area)||'?'} · ${esc(d.server_name)||'no server'}</div>
+        <div class="linkrow">
+          <span class="k">Sheet</span>
+          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          ${vid?(d.sheet_name
+            ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
+            : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`):''}
+        </div>
+        <div class="linkrow" style="border-bottom:none">
+          <span class="k">TG</span>
+          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          ${vid?(d.tg_name
+            ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
+            : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`):''}
+        </div>
+      </div>`;
+    });
   }
   html+=`<div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>`;
   html+=`<button class="pullbtn" onclick='pullOut("vendo",${JSON.stringify(String(m.vlan))},${JSON.stringify(nameOf(m))})'>🚫 Pull out / mark INACTIVE (poller will skip VLAN ${esc(m.vlan)})</button>`;
