@@ -1136,6 +1136,16 @@ function pwSubmit(){
 document.getElementById('pwOk').onclick=pwSubmit;
 document.getElementById('pwInput').addEventListener('keydown',e=>{ if(e.key==='Enter')pwSubmit(); });
 document.getElementById('pwOv').addEventListener('click',e=>{if(e.target.id==='pwOv')pwCancel()});
+function toastAction(msg, fn){
+  let t=document.getElementById('_toast');
+  if(!t){ t=document.createElement('div'); t.id='_toast';
+    t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 20px;border-radius:10px;font-weight:700;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer';
+    document.body.appendChild(t); }
+  t.textContent=msg+' →';
+  t.style.opacity='1';
+  t.onclick=()=>{ t.style.opacity='0'; t.onclick=null; if(fn)fn(); };
+  clearTimeout(t._h); t._h=setTimeout(()=>{t.style.opacity='0';t.onclick=null;t.style.transition='opacity .4s';},4000);
+}
 function toast(msg){
   let t=document.getElementById('_toast');
   if(!t){ t=document.createElement('div'); t.id='_toast';
@@ -1162,15 +1172,15 @@ function refreshVendoLocal(vid, patch){
   Object.entries(VLAN_CANDIDATES).forEach(([k,a])=>{ if(a.length>1)DUPVLAN.add(k); });
 }
 async function unlinkField(vid, field){
-  const ok=await askPassword(`Unlink the ${field==='tg_name'?'TG name':'Sheet name'} from this record?`);
+  const ok=await askPassword(`Unlink the ${field==='tg_name'?'TG name':'Sheet name'} from this record? (This clears a wrongly-placed name. Harvest money is NOT affected.)`);
   if(!ok) return;
   try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{[field]:null});
-  window._curTab='names'; // stay on names tab so picker auto-opens
+  window._curTab='names';
   render(); openM(window._curMk);
-  toast("Unlinked — pick a replacement");
-  // auto-open the search picker for the SAME field (sheet or tg) you just unlinked
-  setTimeout(()=>{ linkField(vid, field); }, 250);
+  if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
+  // offer (do NOT auto-open) a replacement link via toast action
+  toastAction("Unlinked. Tap to link a replacement", ()=>linkField(vid, field));
 }
 let _pickCtx=null; // {vid, field}
 function linkField(vid, field){
