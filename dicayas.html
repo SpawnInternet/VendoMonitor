@@ -114,7 +114,13 @@
   .moneybadge{background:#e6f7ee;color:#1f7d4d;border:1px solid #a9e0c2;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .emptybadge{background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700}
   .loadbadge{background:var(--panel2);color:var(--dim);border-radius:5px;padding:1px 7px;font-size:10px}
-  .dupename{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800;cursor:help}
+  .dupename{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800;cursor:pointer}
+  #harvestBanner:empty{display:none}
+  .hbanner{background:#fff4d6;border:1px solid #f0cd6e;border-radius:10px;padding:9px 14px;margin-top:10px;font-size:13px;font-weight:700;color:#7a5c00;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .hbanner .dot{width:8px;height:8px;border-radius:50%;background:#e8a800;animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .hbanner .grp{background:#fff;border:1px solid #f0cd6e;border-radius:5px;padding:1px 8px;font-size:11px}
+  .activeharvest{background:#fff4d6;color:#7a5c00;border:1px solid #f0cd6e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -137,6 +143,7 @@
     <span class="pill" id="lastUpd">loading…</span>
   </div>
   <div class="summary" id="summary"></div>
+  <div id="harvestBanner"></div>
 </header>
 
 <div class="tabs">
@@ -615,11 +622,11 @@ function renderModal(m, cands){
         </div>
         <div class="linkrow">
           <span class="k">Group</span>
-          <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.area?' · '+esc(hi.area):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}</span>
+          <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.area?' · '+esc(hi.area):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}${hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?' <span class="activeharvest">● HARVESTING NOW</span>':''}</span>
           <button class="lnk link" onclick='changeGroup(${vid})'>Change</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-          <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':'safe to delete if duplicate'}</span>
+          <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
           <button class="lnk unlink" onclick='deleteVendo(${vid})'>🗑 Delete</button>
         </div>
       </div>`;
@@ -974,6 +981,33 @@ let SUPPRESS=[];
 const NET_PWD="101510";
 let GROUPS=[];          // active harvest groups
 let HARVEST_INFO={};    // vendo_id -> {harvests, coins, group_run_id, group_label, collector}
+let ACTIVE_HARVEST={ groupIds:new Set(), collectors:[], groups:[] };
+
+async function loadActiveHarvest(){
+  try{
+    // groups with a harvest tap in the last 3 hours = being collected right now
+    const recent=await sb(`harvests?select=vendo_id,collector,harvested_at&harvested_at=gte.${new Date(Date.now()-3*3600*1000).toISOString()}`);
+    if(!recent || !recent.length){ ACTIVE_HARVEST={groupIds:new Set(),collectors:[],groups:[]}; return; }
+    // map those vendos to their groups
+    const vids=[...new Set(recent.map(r=>r.vendo_id))].filter(Boolean);
+    const gids=new Set(), collectors=new Set();
+    recent.forEach(r=>{ if(r.collector) collectors.add(r.collector); });
+    if(vids.length){
+      const items=await sb(`harvest_group_items?select=vendo_id,group_run_id&vendo_id=in.(${vids.join(',')})`);
+      (items||[]).forEach(i=>{ if(i.group_run_id) gids.add(i.group_run_id); });
+    }
+    const groups=GROUPS.filter(g=>gids.has(g.id));
+    ACTIVE_HARVEST={ groupIds:gids, collectors:[...collectors], groups };
+  }catch(e){ ACTIVE_HARVEST={groupIds:new Set(),collectors:[],groups:[]}; }
+}
+function renderHarvestBanner(){
+  const el=document.getElementById('harvestBanner');
+  if(!el) return;
+  const a=ACTIVE_HARVEST;
+  if(!a.groups || !a.groups.length){ el.innerHTML=''; return; }
+  const grps=a.groups.map(g=>`<span class="grp">${esc(g.group_label)} · ${esc(g.collector)}</span>`).join(' ');
+  el.innerHTML=`<div class="hbanner"><span class="dot"></span>⚠️ Active harvest in progress — avoid deleting or moving vendos in: ${grps}</div>`;
+}
 
 // pretty password modal (returns Promise<bool>)
 let _pwResolve=null;
@@ -1190,6 +1224,8 @@ async function boot(){
     STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
     SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
     try{ GROUPS=await sb("harvest_groups?select=id,area,group_label,collector,status&status=eq.active&order=area,group_label") || []; }catch(e){ GROUPS=[]; }
+    await loadActiveHarvest();
+    renderHarvestBanner();
     // monthly sales per vlan — used to classify empty slots vs real offline
     try{
       const now=new Date();
