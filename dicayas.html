@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<!-- cache-bust: 20260627-v1 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spawn · Dicayas Server Monitor</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#2a3240;
+    --txt:#e6edf3; --dim:#8b949e; --gold:#f0b429; --grn:#2ea043; --red:#da3633;
+    --amber:#d29922; --blue:#388bfd;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 18px;position:sticky;top:0;z-index:10}
+  h1{font-size:17px;display:flex;align-items:center;gap:8px}
+  .pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;color:var(--dim)}
+  .gold{color:var(--gold)}
+  .summary{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:90px}
+  .stat .n{font-size:20px;font-weight:700}
+  .stat .l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+  .stat.on .n{color:var(--grn)} .stat.off .n{color:var(--red)} .stat.warn .n{color:var(--amber)}
+  .tabs{display:flex;gap:4px;padding:10px 18px 0;background:var(--panel);border-bottom:1px solid var(--border);overflow-x:auto}
+  .tab{padding:9px 16px;cursor:pointer;border-radius:8px 8px 0 0;color:var(--dim);white-space:nowrap;font-weight:600;border:1px solid transparent;border-bottom:none}
+  .tab.active{background:var(--bg);color:var(--txt);border-color:var(--border)}
+  .wrap{padding:16px 18px 60px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  input,select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);padding:8px 11px;border-radius:8px;font-size:14px}
+  input{flex:1;min-width:180px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:11px 13px;cursor:pointer;transition:.12s;position:relative}
+  .card:hover{border-color:var(--blue);transform:translateY(-1px)}
+  .card.offl{border-left:3px solid var(--red)}
+  .card.onl{border-left:3px solid var(--grn)}
+  .card .vn{font-weight:700;font-size:14px;margin-bottom:3px;padding-right:50px}
+  .card .vlan{position:absolute;top:11px;right:12px;background:#3a2d05;color:var(--gold);border:1px solid #5c4708;border-radius:5px;padding:1px 7px;font-size:12px;font-weight:700}
+  .card .meta{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:5px}
+  .flags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
+  .flag{font-size:11px;background:#3a1f05;color:var(--amber);border:1px solid #6b4708;border-radius:5px;padding:1px 6px}
+  .flag.dup{background:#3a0505;color:#ff7b72;border-color:#6b0808}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+  .dot.g{background:var(--grn)} .dot.r{background:var(--red)}
+  /* modal */
+  .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;align-items:center;justify-content:center;padding:16px}
+  .ov.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto}
+  .mh{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:sticky;top:0;background:var(--panel)}
+  .mh h2{font-size:16px}
+  .x{cursor:pointer;color:var(--dim);font-size:22px;line-height:1;border:none;background:none}
+  .mb{padding:16px 18px}
+  .row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);gap:12px}
+  .row:last-child{border:none}
+  .row .k{color:var(--dim)}
+  .row .v{text-align:right;word-break:break-word}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);margin:14px 0 4px;font-weight:700}
+  .empty{text-align:center;color:var(--dim);padding:50px 20px}
+  .loading{text-align:center;padding:50px;color:var(--dim)}
+  .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
+  .badge-on{color:var(--grn);font-weight:700} .badge-off{color:var(--red);font-weight:700}
+  .cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
+  .cmp-tbl th,.cmp-tbl td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  .cmp-tbl th{color:var(--dim);font-size:11px;text-transform:uppercase;position:sticky;top:0;background:var(--panel)}
+  .cmp-tbl tr:hover{background:var(--panel2)}
+  .mismatch{color:var(--red);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <h1>🖥️ <span>Spawn · <span class="gold">Dicayas Server</span> Monitor</span>
+    <span class="pill" id="lastUpd">loading…</span></h1>
+  <div class="summary" id="summary"></div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="online">🟢 Online</div>
+  <div class="tab" data-tab="offline">🔴 Offline</div>
+  <div class="tab" data-tab="search">🔍 Search / Filter</div>
+  <div class="tab" data-tab="compare">📊 vs Transactions</div>
+</div>
+
+<div class="wrap">
+  <div id="pane-online" class="pane"><div class="grid" id="grid-online"></div></div>
+  <div id="pane-offline" class="pane" style="display:none"><div class="grid" id="grid-offline"></div></div>
+  <div id="pane-search" class="pane" style="display:none">
+    <div class="controls">
+      <input id="q" placeholder="Search name, VLAN, IP, area…">
+      <select id="flt">
+        <option value="all">All vendos</option>
+        <option value="flagged">⚠️ Flagged only</option>
+        <option value="nodata">rx=0 / no data</option>
+        <option value="nocomment">No router name</option>
+        <option value="dupvlan">Duplicate VLAN</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+    </div>
+    <div class="grid" id="grid-search"></div>
+  </div>
+  <div id="pane-compare" class="pane" style="display:none">
+    <div class="controls">
+      <select id="cmpPeriod">
+        <option value="today">Today</option>
+        <option value="month" selected>This month</option>
+      </select>
+      <input id="cmpQ" placeholder="Filter by name / VLAN…">
+    </div>
+    <div id="cmpBody"><div class="loading">Pick a period…</div></div>
+  </div>
+</div>
+
+<div class="ov" id="ov"><div class="modal">
+  <div class="mh"><h2 id="mTitle"></h2><button class="x" onclick="closeM()">×</button></div>
+  <div class="mb" id="mBody"></div>
+</div></div>
+
+<script>
+const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
+const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
+const H={apikey:KEY,Authorization:"Bearer "+KEY};
+let VENDOS=[], BYVLAN={}, DUPVLAN=new Set();
+
+async function sb(path){
+  const r=await fetch(SB+"/rest/v1/"+path,{headers:H});
+  if(!r.ok) throw new Error(path+" → "+r.status);
+  return r.json();
+}
+function fmtBytes(b){
+  if(b==null)return "—"; b=Number(b);
+  if(b<1024)return b+" B";
+  const u=["KB","MB","GB","TB"]; let i=-1;
+  do{b/=1024;i++}while(b>=1024&&i<u.length-1);
+  return b.toFixed(1)+" "+u[i];
+}
+function ago(ts){
+  if(!ts)return "—";
+  const s=(Date.now()-new Date(ts).getTime())/1000;
+  if(s<60)return Math.round(s)+"s";
+  if(s<3600)return Math.round(s/60)+"m";
+  if(s<86400)return Math.round(s/3600)+"h";
+  return Math.round(s/86400)+"d";
+}
+function esc(s){return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+
+// derive a clean display name from router_comment or vendo tables
+function nameOf(m){
+  const v=BYVLAN[m.vlan];
+  if(v && v.sheet_name) return v.sheet_name;
+  if(v && v.tg_name) return v.tg_name;
+  if(m.router_comment){
+    return m.router_comment.split(/[\r\n]/)[0].replace(/^\d+\s*/,'').trim() || ("VLAN "+m.vlan);
+  }
+  return "VLAN "+m.vlan;
+}
+function areaOf(m){const v=BYVLAN[m.vlan]; return v? (v.area||"—"):"—";}
+
+// data-quality flags
+function flagsOf(m){
+  const f=[];
+  const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
+  if(rx===0) f.push({t:"rx=0",c:""});
+  if((rx+tx)<100000) f.push({t:"low data",c:""});
+  if(m.online && m.user_count===0 && (rx+tx)<100000) f.push({t:"online but idle",c:""});
+  if(!m.router_comment) f.push({t:"no name",c:""});
+  if(DUPVLAN.has(m.vlan)) f.push({t:"dup VLAN",c:"dup"});
+  if(ago(m.updated_at).endsWith("d")||(ago(m.updated_at).endsWith("h")&&parseInt(ago(m.updated_at))>2)) f.push({t:"stale",c:""});
+  return f;
+}
+
+function cardHtml(m){
+  const on=m.online;
+  const fl=flagsOf(m);
+  const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
+  return `<div class="card ${on?'onl':'offl'}" onclick='openM(${JSON.stringify(m.match_key)})'>
+    <span class="vlan">${esc(m.vlan)}</span>
+    <div class="vn">${esc(nameOf(m))}</div>
+    <div class="meta">
+      <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
+      <span>👥 ${m.user_count??0}</span>
+      <span>⬇${fmtBytes(rx)} ⬆${fmtBytes(tx)}</span>
+    </div>
+    <div class="meta"><span>📍 ${esc(areaOf(m))}</span></div>
+    ${fl.length?`<div class="flags">${fl.map(x=>`<span class="flag ${x.c}">⚠️ ${x.t}</span>`).join('')}</div>`:''}
+  </div>`;
+}
+
+let STATUS=[];
+function render(){
+  const on=STATUS.filter(m=>m.online), off=STATUS.filter(m=>!m.online);
+  document.getElementById('grid-online').innerHTML = on.length?on.map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
+  document.getElementById('grid-offline').innerHTML = off.length?off.map(cardHtml).join(''):'<div class="empty">No offline vendos 🎉 (if this looks wrong, the poller online-detection bug is back)</div>';
+
+  const flagged=STATUS.filter(m=>flagsOf(m).length>0).length;
+  const last = STATUS.reduce((a,m)=>m.updated_at>a?m.updated_at:a,"");
+  document.getElementById('lastUpd').textContent = "updated "+ago(last)+" ago";
+  document.getElementById('summary').innerHTML=`
+    <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
+    <div class="stat on"><div class="n">${on.length}</div><div class="l">Online</div></div>
+    <div class="stat off"><div class="n">${off.length}</div><div class="l">Offline</div></div>
+    <div class="stat warn"><div class="n">${flagged}</div><div class="l">Flagged</div></div>
+    <div class="stat warn"><div class="n">${DUPVLAN.size}</div><div class="l">Dup VLAN</div></div>`;
+  applySearch();
+}
+
+function applySearch(){
+  const q=(document.getElementById('q').value||"").toLowerCase();
+  const f=document.getElementById('flt').value;
+  let list=STATUS.filter(m=>{
+    if(q){
+      const hay=(m.vlan+" "+nameOf(m)+" "+(m.ip||"")+" "+areaOf(m)+" "+(m.router_comment||"")).toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    const fl=flagsOf(m);
+    if(f==="flagged"&&!fl.length)return false;
+    if(f==="nodata"&&Number(m.rx_bytes||0)!==0)return false;
+    if(f==="nocomment"&&m.router_comment)return false;
+    if(f==="dupvlan"&&!DUPVLAN.has(m.vlan))return false;
+    if(f==="online"&&!m.online)return false;
+    if(f==="offline"&&m.online)return false;
+    return true;
+  });
+  document.getElementById('grid-search').innerHTML = list.length?list.map(cardHtml).join(''):'<div class="empty">No matches</div>';
+}
+
+function openM(mk){
+  const m=STATUS.find(x=>x.match_key===mk); if(!m)return;
+  const v=BYVLAN[m.vlan]||{};
+  document.getElementById('mTitle').textContent=nameOf(m);
+  const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
+  const dups = DUPVLAN.has(m.vlan)? VENDOS.filter(x=>String(x.vlan)===String(m.vlan)) : [];
+  let html=`
+    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
+    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
+    <div class="row"><span class="k">VLAN</span><span class="v gold" style="font-weight:700">${esc(m.vlan)}</span></div>
+    <div class="row"><span class="k">Connected users</span><span class="v">👥 ${m.user_count??0}</span></div>
+    <div class="sec">Traffic</div>
+    <div class="row"><span class="k">RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}${rx===0?' ⚠️':''}</span></div>
+    <div class="row"><span class="k">TX (up)</span><span class="v">${fmtBytes(tx)}</span></div>
+    <div class="sec">Network</div>
+    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
+    <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
+    <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
+    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
+    <div class="sec">Vendo record (vendos table)</div>
+    <div class="row"><span class="k">Sheet name</span><span class="v">${esc(v.sheet_name)||'—'}</span></div>
+    <div class="row"><span class="k">TG name</span><span class="v">${esc(v.tg_name)||'—'}</span></div>
+    <div class="row"><span class="k">Owner</span><span class="v">${esc(v.owner_name)||'—'}</span></div>
+    <div class="row"><span class="k">Area</span><span class="v">${esc(v.area)||'—'}</span></div>
+    <div class="row"><span class="k">Last harvest</span><span class="v">${esc(v.last_harvest_date)||'—'}</span></div>`;
+  if(dups.length>1){
+    html+=`<div class="sec" style="color:#ff7b72">⚠️ VLAN ${esc(m.vlan)} maps to ${dups.length} vendos</div>`;
+    dups.forEach(d=>{ html+=`<div class="row"><span class="k">${esc(d.area)||'?'}</span><span class="v">${esc(d.sheet_name||d.tg_name)||'(no name)'} · ${esc(d.server_name)||'?'}</span></div>`; });
+  }
+  html+=`<div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>`;
+  document.getElementById('mBody').innerHTML=html;
+  document.getElementById('ov').classList.add('show');
+}
+function closeM(){document.getElementById('ov').classList.remove('show')}
+document.getElementById('ov').addEventListener('click',e=>{if(e.target.id==='ov')closeM()});
+
+// ---- Compare vs transactions ----
+async function loadCompare(){
+  const body=document.getElementById('cmpBody');
+  body.innerHTML='<div class="loading">Loading transactions…</div>';
+  const period=document.getElementById('cmpPeriod').value;
+  const now=new Date();
+  let start;
+  if(period==='today'){ start=new Date(now.getFullYear(),now.getMonth(),now.getDate()); }
+  else { start=new Date(now.getFullYear(),now.getMonth(),1); }
+  const iso=start.toISOString();
+  // sum transactions per vlan for dicayas vendos
+  const vlans=STATUS.map(m=>m.vlan);
+  let txByVlan={};
+  try{
+    // transactions joined on vendo's vlan via vendos table — query transactions by date, group client-side
+    const rows=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${iso}&limit=100000`);
+    // map vendo→vlan
+    const vendoVlan={};
+    VENDOS.forEach(v=>{ if(v.vlan!=null) vendoVlan[String(v.vlan)]=String(v.vlan); });
+    rows.forEach(r=>{
+      const key=String(r.vendo);
+      txByVlan[key]=(txByVlan[key]||0)+Number(r.amount||0);
+    });
+  }catch(e){ body.innerHTML='<div class="empty">Could not load transactions: '+e.message+'</div>'; return; }
+  renderCompare(txByVlan);
+}
+function renderCompare(txByVlan){
+  const q=(document.getElementById('cmpQ').value||"").toLowerCase();
+  let rows=STATUS.map(m=>{
+    const v=BYVLAN[m.vlan]||{};
+    const tx=txByVlan[m.vlan]||txByVlan[String(v.vlan)]||0;
+    return {m,name:nameOf(m),vlan:m.vlan,online:m.online,data:Number(m.rx_bytes||0)+Number(m.tx_bytes||0),sales:tx};
+  });
+  if(q) rows=rows.filter(r=>(r.name+" "+r.vlan).toLowerCase().includes(q));
+  rows.sort((a,b)=>b.sales-a.sales);
+  const tot=rows.reduce((a,r)=>a+r.sales,0);
+  document.getElementById('cmpBody').innerHTML=`
+    <p style="color:var(--dim);margin-bottom:10px">Total sales (matched VLANs): <span class="gold">₱${tot.toLocaleString()}</span> · rows flag where a vendo shows online but ₱0 sales, or offline but has sales.</p>
+    <table class="cmp-tbl"><thead><tr><th>Vendo</th><th>VLAN</th><th>Status</th><th>Data</th><th>Sales ₱</th><th>Flag</th></tr></thead><tbody>
+    ${rows.map(r=>{
+      let flag='';
+      if(r.online && r.sales===0) flag='<span class="mismatch">online · ₱0</span>';
+      else if(!r.online && r.sales>0) flag='<span class="mismatch">offline · has ₱</span>';
+      return `<tr onclick='openM(${JSON.stringify(r.m.match_key)})' style="cursor:pointer">
+        <td>${esc(r.name)}</td><td class="gold">${esc(r.vlan)}</td>
+        <td>${r.online?'<span class="badge-on">●</span>':'<span class="badge-off">●</span>'}</td>
+        <td>${fmtBytes(r.data)}</td><td>₱${r.sales.toLocaleString()}</td><td>${flag}</td></tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+// ---- tabs ----
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelectorAll('.pane').forEach(p=>p.style.display='none');
+  document.getElementById('pane-'+t.dataset.tab).style.display='block';
+  if(t.dataset.tab==='compare') loadCompare();
+});
+document.getElementById('q').oninput=applySearch;
+document.getElementById('flt').onchange=applySearch;
+document.getElementById('cmpPeriod').onchange=loadCompare;
+document.getElementById('cmpQ').oninput=()=>loadCompare();
+
+// ---- boot ----
+async function boot(){
+  try{
+    VENDOS=await sb("vendos?select=vlan,tg_name,sheet_name,owner_name,area,server_name,last_harvest_date&limit=5000");
+    // build vlan map + detect duplicates
+    const seen={};
+    VENDOS.forEach(v=>{
+      if(v.vlan==null)return;
+      const k=String(v.vlan);
+      if(seen[k]) DUPVLAN.add(k);
+      seen[k]=(seen[k]||0)+1;
+      if(!BYVLAN[k]) BYVLAN[k]=v; // first match for display
+    });
+    STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
+    render();
+  }catch(e){
+    document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+e.message+'</div>');
+  }
+}
+boot();
+setInterval(boot,90000); // refresh every 90s
+</script>
+</body>
+</html>
