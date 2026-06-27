@@ -93,6 +93,13 @@
   .lnk.link{background:#e8f0fb;color:#1d5bb0;border-color:#b8d0ee}
   .lnk.unlink{background:#fdecef;color:#a31c2e;border-color:#f0a8b4}
   .lnk:hover{filter:brightness(.96)}
+  .picklist{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:9px;margin-bottom:12px}
+  .pickitem{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-weight:700;color:var(--navy)}
+  .pickitem:last-child{border-bottom:none}
+  .pickitem:hover{background:var(--panel2)}
+  .pickitem .area{font-size:11px;color:var(--dim);font-weight:600;margin-left:6px}
+  .pickitem mark{background:#fff3cf;color:#8a6500;padding:0 1px;border-radius:2px}
+  .pickcustom{border-top:1px solid var(--border);padding-top:12px}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -210,6 +217,22 @@
   <div class="rainbow-strip"></div>
   <div class="mh"><h2 id="mTitle"></h2><button class="x" onclick="closeM()">×</button></div>
   <div class="mb" id="mBody"></div>
+</div></div>
+
+<div class="ov" id="pickOv"><div class="modal" style="max-width:460px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2 id="pickTitle">Link name</h2><button class="x" onclick="closePick()">×</button></div>
+  <div class="mb">
+    <input id="pickSearch" placeholder="Search existing names…" style="width:100%;margin-bottom:6px" autocomplete="off">
+    <div id="pickList" class="picklist"></div>
+    <div class="pickcustom">
+      <span class="k" style="color:var(--dim);font-weight:700">Or type a new name:</span>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input id="pickCustom" placeholder="New name…" style="flex:1" autocomplete="off">
+        <button class="lnk link" id="pickUseCustom">Use</button>
+      </div>
+    </div>
+  </div>
 </div></div>
 
 <script>
@@ -581,14 +604,54 @@ async function unlinkField(vid, field){
   refreshVendoLocal(vid,{[field]:null});
   render(); openM(window._curMk);
 }
-async function linkField(vid, field){
-  const val=prompt(`Enter the ${field==='tg_name'?'Telegram name':'Sheet name'} to link:`);
-  if(!val) return;
-  if(prompt("Enter password to confirm:")!==NET_PWD){ alert("Wrong password"); return; }
-  try{ await sbPatch(vid,{[field]:val}); }catch(e){ alert("Failed: "+e.message); return; }
-  refreshVendoLocal(vid,{[field]:val});
+let _pickCtx=null; // {vid, field}
+function linkField(vid, field){
+  _pickCtx={vid, field};
+  const label = field==='tg_name' ? 'Telegram name' : 'Sheet name';
+  document.getElementById('pickTitle').textContent = 'Link '+label;
+  document.getElementById('pickSearch').value='';
+  document.getElementById('pickCustom').value='';
+  renderPickList('');
+  document.getElementById('pickOv').classList.add('show');
+  setTimeout(()=>document.getElementById('pickSearch').focus(),50);
+}
+function closePick(){ document.getElementById('pickOv').classList.remove('show'); _pickCtx=null; }
+document.getElementById('pickOv').addEventListener('click',e=>{if(e.target.id==='pickOv')closePick()});
+
+function renderPickList(q){
+  if(!_pickCtx)return;
+  const field=_pickCtx.field;
+  q=(q||'').toLowerCase().trim();
+  // unique name pool from VENDOS for the chosen field
+  const seen=new Map();
+  VENDOS.forEach(v=>{
+    const nm=v[field];
+    if(!nm) return;
+    if(q && !nm.toLowerCase().includes(q)) return;
+    if(!seen.has(nm)) seen.set(nm, v.area||'');
+  });
+  let items=[...seen.entries()].slice(0,60);
+  const hl=(s)=>{ if(!q)return esc(s); const i=s.toLowerCase().indexOf(q); if(i<0)return esc(s);
+    return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length)); };
+  document.getElementById('pickList').innerHTML = items.length
+    ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
+    : '<div class="empty" style="padding:24px">No matches — type a new name below</div>';
+}
+async function pickName(name){
+  if(!_pickCtx) return;
+  const {vid,field}=_pickCtx;
+  if(prompt(`Link "${name}"?\nEnter password to confirm:`)!==NET_PWD){ alert("Wrong password"); return; }
+  try{ await sbPatch(vid,{[field]:name}); }catch(e){ alert("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{[field]:name});
+  closePick();
   render(); openM(window._curMk);
 }
+document.getElementById('pickSearch').oninput=(e)=>renderPickList(e.target.value);
+document.getElementById('pickUseCustom').onclick=()=>{
+  const val=document.getElementById('pickCustom').value.trim();
+  if(!val){ alert("Type a name first"); return; }
+  pickName(val);
+};
 async function setServer(vid){
   const val=prompt("Enter server name (e.g. Dicayas Server):","Dicayas Server");
   if(!val) return;
