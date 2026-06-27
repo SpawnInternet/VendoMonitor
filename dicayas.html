@@ -112,6 +112,7 @@
   .moneybadge{background:#e6f7ee;color:#1f7d4d;border:1px solid #a9e0c2;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .emptybadge{background:var(--panel2);color:var(--dim);border:1px solid var(--border);border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700}
   .loadbadge{background:var(--panel2);color:var(--dim);border-radius:5px;padding:1px 7px;font-size:10px}
+  .dupename{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800;cursor:help}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -234,6 +235,15 @@
     <button class="x" onclick="closeM()">×</button>
   </div>
   <div class="mb" id="mBody"></div>
+</div></div>
+
+<div class="ov" id="grpOv"><div class="modal" style="max-width:420px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2>Change harvest group</h2><button class="x" onclick="closeGrp()">×</button></div>
+  <div class="mb">
+    <p style="color:var(--dim);font-weight:600;margin-bottom:10px;font-size:13px">Tap a group to move this vendo. It updates Spawn Harvest everywhere.</p>
+    <div id="grpList" class="picklist"></div>
+  </div>
 </div></div>
 
 <div class="ov" id="pwOv"><div class="modal" style="max-width:380px">
@@ -481,6 +491,14 @@ function openSub(mk){
   document.getElementById('ov').classList.add('show');
 }
 
+// detect if a name appears on multiple vendo records (possible cross-group duplicate)
+function nameDupeInfo(name, field){
+  if(!name) return null;
+  const matches=VENDOS.filter(v=>v[field]===name);
+  if(matches.length<=1) return null;
+  return matches.length; // number of records with this exact name
+}
+
 async function loadHarvestInfo(vids){
   // fetch harvest count/coins + group for these vendo ids (cache)
   const need=vids.filter(id=>id && !(id in HARVEST_INFO));
@@ -563,14 +581,14 @@ function renderModal(m, cands){
         <div class="candhead">${esc(d.area)||'?'} ${hasMoney?'<span class="moneybadge">💰 HAS HARVESTS</span>':loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
-          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" title="This sheet name is on ${nameDupeInfo(d.sheet_name,'sheet_name')} records">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
           ${d.sheet_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`}
         </div>
         <div class="linkrow">
           <span class="k">TG</span>
-          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.tg_name,'tg_name')?` <span class="dupename" title="This TG name is on ${nameDupeInfo(d.tg_name,'tg_name')} records">⚠️×${nameDupeInfo(d.tg_name,'tg_name')}</span>`:''}</span>
           ${d.tg_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
@@ -595,18 +613,27 @@ function setModalTab(t){
   renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
 }
 
-async function changeGroup(vid){
+let _grpVid=null;
+function changeGroup(vid){
   if(!GROUPS.length){ toast("Groups not loaded"); return; }
-  const list=GROUPS.map((g,i)=>`${i+1}. ${g.group_label} (${g.collector})`).join('\n');
-  const pick=prompt(`Move to which group? Enter number:\n\n${list}`);
-  if(!pick) return;
-  const idx=parseInt(pick)-1;
-  if(isNaN(idx)||idx<0||idx>=GROUPS.length){ toast("Invalid choice"); return; }
-  const g=GROUPS[idx];
+  _grpVid=vid;
+  const cur = HARVEST_INFO[vid] && HARVEST_INFO[vid].group_run_id;
+  document.getElementById('grpList').innerHTML = GROUPS.map(g=>`
+    <div class="pickitem" onclick='pickGroup(${g.id})'>
+      ${esc(g.group_label)} <span class="area">${esc(g.collector||'')}${g.id===cur?' · current':''}</span>
+    </div>`).join('');
+  document.getElementById('grpOv').classList.add('show');
+}
+function closeGrp(){ document.getElementById('grpOv').classList.remove('show'); _grpVid=null; }
+document.getElementById('grpOv').addEventListener('click',e=>{if(e.target.id==='grpOv')closeGrp()});
+
+async function pickGroup(gid){
+  const vid=_grpVid; if(!vid) return;
+  const g=GROUPS.find(x=>x.id===gid); if(!g) return;
+  closeGrp();
   const ok=await askPassword(`Move this vendo to "${g.group_label}"?`);
   if(!ok) return;
   try{
-    // update existing group item, or insert if none
     const existing=await sb(`harvest_group_items?select=id&vendo_id=eq.${vid}`);
     if(existing && existing.length){
       const r=await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{
@@ -828,7 +855,9 @@ async function unlinkField(vid, field){
   try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{[field]:null});
   render(); openM(window._curMk);
-  toast("Unlinked");
+  toast("Unlinked — now pick a replacement");
+  // auto-open the search picker so you can relink right away (no extra click)
+  setTimeout(()=>{ if(window._curTab==='names') linkField(vid, field); }, 150);
 }
 let _pickCtx=null; // {vid, field}
 function linkField(vid, field){
