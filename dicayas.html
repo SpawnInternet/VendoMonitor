@@ -122,6 +122,8 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .hbanner .grp{background:#fff;border:1px solid #f0cd6e;border-radius:5px;padding:1px 8px;font-size:11px}
   .activeharvest{background:#fff4d6;color:#7a5c00;border:1px solid #f0cd6e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
+  .vlanok{background:#e6f7ee;color:#1f7d4d;border:1px solid #a9e0c2;border-radius:4px;padding:0 5px;font-size:10px;font-weight:700}
+  .vlanmismatch{background:#fff4d6;color:#7a5c00;border:1px solid #f0cd6e;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800}
   .pendtag{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .cachebtn{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 11px;font-weight:700;font-size:12px;color:var(--blue);cursor:pointer;font-family:inherit}
   .cachebtn:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
@@ -707,6 +709,11 @@ function renderModal(m, cands){
           <span class="v">${esc(d.area)||'<i style="color:var(--dim)">(none)</i>'}</span>
           <button class="lnk link" onclick='changeArea(${vid})'>Change</button>
         </div>
+        <div class="linkrow">
+          <span class="k">VLAN</span>
+          <span class="v">${esc(d.vlan)||'<i style="color:var(--dim)">(none)</i>'}${String(d.vlan)!==String(m.vlan)?` <span class="vlanmismatch" title="Record VLAN differs from server VLAN ${esc(m.vlan)}">≠ server ${esc(m.vlan)}</span>`:' <span class="vlanok">✓ matches server</span>'}</span>
+          ${String(d.vlan)!==String(m.vlan)?`<button class="lnk link" onclick='setVlanToServer(${vid},${JSON.stringify(String(m.vlan))})'>Set ${esc(m.vlan)}</button>`:''}
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
           ${d.pending_delete_at
@@ -1109,6 +1116,16 @@ async function pickArea(area){
   if(m) renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
   if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
   toast("Area changed to "+area);
+}
+async function setVlanToServer(vid, serverVlan){
+  const ok=await askPassword(`Set this record's VLAN to ${serverVlan} (the live server VLAN)? This makes it match the router and reflects everywhere.`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{vlan:serverVlan}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{vlan:serverVlan});
+  render();
+  const m=STATUS.find(x=>x.match_key===window._curMk);
+  if(m) renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+  toast("VLAN set to "+serverVlan);
 }
 
 async function loadActiveHarvest(){
