@@ -66,7 +66,7 @@
   .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
   .dot.g{background:var(--grn)} .dot.r{background:var(--offred)}
   .ov{display:none;position:fixed;inset:0;background:rgba(33,48,64,.45);z-index:50;align-items:center;justify-content:center;padding:16px}
-  #hvOv,#pickOv,#grpOv,#delOv{z-index:75}
+  #hvOv,#pickOv,#grpOv,#delOv,#areaOv{z-index:75}
   #pwOv{z-index:90}
   .ov.show{display:flex}
   .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(33,48,64,.25)}
@@ -125,6 +125,11 @@
   .pendtag{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
   .pendingbar{background:#fdecef;border:1px solid #f3b4bd;border-radius:8px;padding:7px 11px;margin-top:8px;font-size:12px;font-weight:700;color:#a31c2e}
   .candbox.pending{opacity:.7;border-color:#f3b4bd}
+  .dupename.resolved{background:#e6f7ee;color:#1f7d4d;border-color:#a9e0c2}
+  .resolvedbox{background:#e6f7ee;border:1px solid #a9e0c2;border-radius:10px;padding:11px 13px;margin:6px 0 12px}
+  .finalrow{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #c8ecd6;font-size:14px}
+  .finalrow .k{color:#1f7d4d;font-weight:700}
+  .finalrow .v{font-weight:800;color:var(--navy)}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -254,6 +259,15 @@
     <button class="x" onclick="closeM()">×</button>
   </div>
   <div class="mb" id="mBody"></div>
+</div></div>
+
+<div class="ov" id="areaOv"><div class="modal" style="max-width:380px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2>Change area</h2><button class="x" onclick="closeArea()">×</button></div>
+  <div class="mb">
+    <p style="color:var(--dim);font-weight:600;margin-bottom:10px;font-size:13px">Pick the correct area for this record.</p>
+    <div id="areaList" class="picklist"></div>
+  </div>
 </div></div>
 
 <div class="ov" id="delOv"><div class="modal" style="max-width:440px">
@@ -528,12 +542,23 @@ function openSub(mk){
   document.getElementById('ov').classList.add('show');
 }
 
-// detect if a name appears on multiple vendo records (possible cross-group duplicate)
+// detect if a name appears on multiple vendo records; returns {total, surviving, pending}
 function nameDupeInfo(name, field){
   if(!name) return null;
   const matches=VENDOS.filter(v=>v[field]===name);
   if(matches.length<=1) return null;
-  return matches.length; // number of records with this exact name
+  const pending=matches.filter(v=>v.pending_delete_at).length;
+  return {total:matches.length, surviving:matches.length-pending, pending};
+}
+// renders the dupe badge: red ⚠️×N while unresolved, green ✓ when only 1 survives
+function dupeBadge(name, field){
+  const info=nameDupeInfo(name, field);
+  if(!info) return '';
+  const onclick=`onclick='showDupes(${JSON.stringify(name)},"${field}")'`;
+  if(info.surviving<=1){
+    return ` <span class="dupename resolved" ${onclick} title="Resolved — ${info.pending} scheduled for deletion">✓ clean${info.pending?' ('+info.pending+'🕗)':''}</span>`;
+  }
+  return ` <span class="dupename" ${onclick} title="Tap to see all records with this name">⚠️×${info.surviving}${info.pending?' +'+info.pending+'🕗':''}</span>`;
 }
 
 async function loadHarvestInfo(vids){
@@ -604,8 +629,22 @@ function renderModal(m, cands){
   } else {
     // NAMES & GROUP tab
     html+=`<div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">📡 Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>`;
+    // compute cleanup state: surviving = not pending-delete
+    const surviving=cands.filter(c=>!c.pending_delete_at);
+    const pendingCount=cands.length-surviving.length;
     if(cands.length>1){
-      html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ VLAN ${esc(m.vlan)} maps to ${cands.length} records. The one matching the router is real — unlink names or delete the wrong empty ones.</p>`;
+      if(surviving.length===1){
+        // RESOLVED — one clean record remains
+        const keep=surviving[0];
+        html+=`<div class="resolvedbox">
+          <div style="font-weight:800;color:#1f7d4d;margin-bottom:6px">✓ Resolved — 1 record will remain${pendingCount?`, ${pendingCount} scheduled for deletion`:''}</div>
+          <div class="finalrow"><span class="k">Final Sheet</span><span class="v">${esc(keep.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
+          <div class="finalrow"><span class="k">Final TG</span><span class="v">${esc(keep.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
+          <div class="finalrow" style="border:none"><span class="k">Final Area</span><span class="v">${esc(keep.area)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
+        </div>`;
+      } else {
+        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ VLAN ${esc(m.vlan)} maps to ${surviving.length} active records${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one — unlink names or schedule the wrong empty ones for deletion.</p>`;
+      }
     } else if(cands.length===0){
       html+=`<p style="color:var(--dim);font-size:13px;padding:20px 0">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>`;
     }
@@ -618,14 +657,14 @@ function renderModal(m, cands){
         <div class="candhead">${esc(d.area)||'?'} ${d.pending_delete_at?'<span class="pendtag">🕗 DELETING 8PM</span>':''} ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap for harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
-          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.sheet_name)},"sheet_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
+          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.sheet_name,'sheet_name')}</span>
           ${d.sheet_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`}
         </div>
         <div class="linkrow">
           <span class="k">TG</span>
-          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.tg_name,'tg_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.tg_name)},"tg_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.tg_name,'tg_name')}</span>`:''}</span>
+          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.tg_name,'tg_name')}</span>
           ${d.tg_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
@@ -634,6 +673,11 @@ function renderModal(m, cands){
           <span class="k">Group</span>
           <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.area?' · '+esc(hi.area):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}${hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?' <span class="activeharvest">● HARVESTING NOW</span>':''}</span>
           <button class="lnk link" onclick='changeGroup(${vid})'>Change</button>
+        </div>
+        <div class="linkrow">
+          <span class="k">Area</span>
+          <span class="v">${esc(d.area)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          <button class="lnk link" onclick='changeArea(${vid})'>Change</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
@@ -813,7 +857,8 @@ function renderDupes(){
       </div>
       <div class="row" style="padding:4px 0"><span class="k">Sheet</span><span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
       <div class="row" style="padding:4px 0"><span class="k">TG</span><span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
-      <div class="row" style="padding:4px 0;border:none"><span class="k">Group</span><span class="v">${hi&&hi.group_label?esc(hi.group_label):'<i style="color:var(--dim)">(none)</i>'}</span></div>
+      <div class="row" style="padding:4px 0"><span class="k">Group</span><span class="v">${hi&&hi.group_label?esc(hi.group_label):'<i style="color:var(--dim)">(none)</i>'}</span></div>
+      <div class="linkrow" style="padding:4px 0"><span class="k">Area</span><span class="v">${esc(d.area)||'<i style="color:var(--dim)">(none)</i>'}</span><button class="lnk link" onclick='changeArea(${d.id})'>Change</button></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
         <button class="lnk unlink" onclick='dupeUnlink(${d.id})'>Unlink ${_dupeField==='tg_name'?'TG':'sheet'}</button>
         ${d.pending_delete_at
@@ -1012,6 +1057,31 @@ const NET_PWD="101510";
 let GROUPS=[];          // active harvest groups
 let HARVEST_INFO={};    // vendo_id -> {harvests, coins, group_run_id, group_label, collector}
 let ACTIVE_HARVEST={ groupIds:new Set(), collectors:[], groups:[] };
+const AREAS=["DAPITAN","DIPOLOG","MINAOG","MIX AREAS","POLANCO","ROXAS","SINAMAN","SINDANGAN"];
+let _areaVid=null;
+function changeArea(vid){
+  _areaVid=vid;
+  const v=VENDOS.find(x=>x.id===vid);
+  const cur=v?v.area:null;
+  document.getElementById('areaList').innerHTML=AREAS.map(a=>`
+    <div class="pickitem" onclick='pickArea(${JSON.stringify(a)})'>${esc(a)}${a===cur?' <span class="area">current</span>':''}</div>`).join('');
+  document.getElementById('areaOv').classList.add('show');
+}
+function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; }
+document.getElementById('areaOv').addEventListener('click',e=>{if(e.target.id==='areaOv')closeArea()});
+async function pickArea(area){
+  const vid=_areaVid; if(!vid) return;
+  closeArea();
+  const ok=await askPassword(`Change area to "${area}"?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{area}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{area});
+  render();
+  const m=STATUS.find(x=>x.match_key===window._curMk);
+  if(m) renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+  if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
+  toast("Area changed to "+area);
+}
 
 async function loadActiveHarvest(){
   try{
