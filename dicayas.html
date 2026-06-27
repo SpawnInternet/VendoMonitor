@@ -828,7 +828,14 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
-    VENDOS=await sb("vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date&limit=5000");
+    // PostgREST caps at 1000 rows/request — page through ALL vendos
+    VENDOS=[];
+    for(let off=0; off<10000; off+=1000){
+      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date&order=id&limit=1000&offset=${off}`);
+      if(!page || !page.length) break;
+      VENDOS=VENDOS.concat(page);
+      if(page.length<1000) break;
+    }
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
       if(v.vlan==null)return;
