@@ -514,7 +514,7 @@ async function loadHarvestInfo(vids){
     need.forEach(id=>{
       const a=agg[id];
       const grp=GROUPS.find(x=>x.id===a.group_run_id);
-      HARVEST_INFO[id]={...a, group_label:grp?grp.group_label:null, collector:grp?grp.collector:null};
+      HARVEST_INFO[id]={...a, group_label:grp?grp.group_label:null, collector:grp?grp.collector:null, area:grp?grp.area:null};
     });
   }catch(e){ /* leave uncached */ }
 }
@@ -595,7 +595,7 @@ function renderModal(m, cands){
         </div>
         <div class="linkrow">
           <span class="k">Group</span>
-          <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.collector?' · '+esc(hi.collector):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}</span>
+          <span class="v">${hi&&hi.group_label?esc(hi.group_label)+(hi.area?' · '+esc(hi.area):''):loading?'…':'<i style="color:var(--dim)">(none)</i>'}</span>
           <button class="lnk link" onclick='changeGroup(${vid})'>Change</button>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
@@ -620,7 +620,7 @@ function changeGroup(vid){
   const cur = HARVEST_INFO[vid] && HARVEST_INFO[vid].group_run_id;
   document.getElementById('grpList').innerHTML = GROUPS.map(g=>`
     <div class="pickitem" onclick='pickGroup(${g.id})'>
-      ${esc(g.group_label)} <span class="area">${esc(g.collector||'')}${g.id===cur?' · current':''}</span>
+      ${esc(g.group_label)} <span class="area">${esc(g.area||'')}${g.id===cur?' · current':''}</span>
     </div>`).join('');
   document.getElementById('grpOv').classList.add('show');
 }
