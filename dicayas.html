@@ -40,6 +40,7 @@
   .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
   .tab.active[data-tab="inactive"]{box-shadow:inset 0 3px 0 var(--magenta)}
   .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
+  .tab.active[data-tab="deleted"]{box-shadow:inset 0 3px 0 var(--red)}
   .wrap{padding:16px 18px 60px}
   .banner{background:#fff7e0;border:1px solid #f3d98a;border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:#8a6500;font-weight:700}
   .banner.crit{background:#fdecef;border-color:#f3b4bd;color:#a31c2e}
@@ -121,6 +122,9 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   .hbanner .grp{background:#fff;border:1px solid #f0cd6e;border-radius:5px;padding:1px 8px;font-size:11px}
   .activeharvest{background:#fff4d6;color:#7a5c00;border:1px solid #f0cd6e;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
+  .pendtag{background:#fdecef;color:#a31c2e;border:1px solid #f3b4bd;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800}
+  .pendingbar{background:#fdecef;border:1px solid #f3b4bd;border-radius:8px;padding:7px 11px;margin-top:8px;font-size:12px;font-weight:700;color:#a31c2e}
+  .candbox.pending{opacity:.7;border-color:#f3b4bd}
   .subtabs{display:flex;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
@@ -154,6 +158,7 @@
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
   <div class="tab" data-tab="inactive">🚫 Inactive</div>
   <div class="tab" data-tab="empty">⚫ Empty Slots</div>
+  <div class="tab" data-tab="deleted">🗑 Deleted History</div>
 </div>
 
 <div class="wrap">
@@ -232,6 +237,11 @@
   <div id="pane-empty" class="pane" style="display:none">
     <div class="banner">Empty slots = VLANs with no DHCP lease, no vendo name, and no sales this month. Likely reserved/never-deployed VLANs — excluded from the offline reconciliation list.</div>
     <div class="grid" id="grid-empty"></div>
+  </div>
+  <div id="pane-deleted" class="pane" style="display:none">
+    <div class="banner">Records scheduled for deletion (purged automatically at 8PM) and already-deleted history. Pending ones can still be cancelled.</div>
+    <div id="deleted-pending"></div>
+    <div id="deleted-log"></div>
   </div>
 </div>
 
@@ -605,7 +615,7 @@ function renderModal(m, cands){
       const hasMoney = hi && (hi.harvests>0 || hi.coins>0);
       const loading = !(vid in HARVEST_INFO);
       html+=`<div class="candbox">
-        <div class="candhead">${esc(d.area)||'?'} ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap for harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
+        <div class="candhead">${esc(d.area)||'?'} ${d.pending_delete_at?'<span class="pendtag">🕗 DELETING 8PM</span>':''} ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap for harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
           <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${nameDupeInfo(d.sheet_name,'sheet_name')?` <span class="dupename" onclick='showDupes(${JSON.stringify(d.sheet_name)},"sheet_name")' title="Tap to see all records with this name">⚠️×${nameDupeInfo(d.sheet_name,'sheet_name')}</span>`:''}</span>
@@ -627,8 +637,11 @@ function renderModal(m, cands){
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
-          <button class="lnk unlink" onclick='deleteVendo(${vid})'>🗑 Delete</button>
+          ${d.pending_delete_at
+            ? `<button class="lnk link" onclick='cancelPendingDelete(${vid})'>↩ Cancel deletion</button>`
+            : `<button class="lnk unlink" onclick='deleteVendo(${vid})'>🗑 Delete</button>`}
         </div>
+        ${d.pending_delete_at?`<div class="pendingbar">🕗 Scheduled for deletion at 8PM tonight · tap Cancel to keep</div>`:''}
       </div>`;
     });
   }
@@ -723,41 +736,53 @@ async function askDelete(vid, afterFn){
   if(r.job_orders.count) what+=`<li>${r.job_orders.count} job order(s)</li>`;
   if(!what) what='<li style="color:var(--dim)">Nothing else references it — clean delete.</li>';
   document.getElementById('delBody').innerHTML=`
-    <p style="font-weight:700;margin-bottom:8px">Delete "${esc(nm)}"?</p>
-    <p style="color:var(--dim);font-size:13px;margin-bottom:6px">This is a duplicate with <b>no harvest money</b>. Deleting will also remove these empty references:</p>
+    <p style="font-weight:700;margin-bottom:8px">Schedule "${esc(nm)}" for deletion?</p>
+    <p style="color:var(--dim);font-size:13px;margin-bottom:6px">This is a duplicate with <b>no harvest money</b>. It will be marked for deletion and <b>permanently removed at 8PM tonight</b> by the server (even if your PC is off). You can cancel anytime before 8PM.</p>
+    <p style="color:var(--dim);font-size:13px;margin-bottom:6px">These empty references will also be removed at purge time:</p>
     <ul style="margin:0 0 8px 18px;font-size:13px;line-height:1.7">${what}</ul>
     <div style="background:#fff8e6;border:1px solid #f0d98a;border-radius:8px;padding:9px 11px;font-size:12px;color:#7a5c00;margin-bottom:14px">
-      ⚠️ Note: this record has route entries but <b>no harvests</b>. Since routes aren't being used, this is safe — but here's exactly what happens: the vendo row and its empty route/staging/group links are permanently removed. Harvest money is never touched.
+      ⚠️ Note: this record has route entries but <b>no harvests</b>. Routes aren't being used, so this is safe. At 8PM the server re-checks money one more time — if a harvest appeared, it auto-cancels and keeps the record.
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="lnk" style="background:var(--panel2);color:var(--dim);border-color:var(--border)" onclick="closeDel()">Cancel</button>
-      <button class="lnk unlink" id="delConfirmBtn">🗑 Delete permanently</button>
+      <button class="lnk unlink" id="delConfirmBtn">🕗 Schedule for 8PM deletion</button>
     </div>`;
   document.getElementById('delConfirmBtn').onclick=doDelete;
 }
 function closeDel(){ document.getElementById('delOv').classList.remove('show'); _delVid=null; _delAfter=null; _delRefs=null; }
 document.getElementById('delOv').addEventListener('click',e=>{if(e.target.id==='delOv')closeDel()});
 
+function next8PM(){
+  // 8PM Philippines = 12:00 UTC. Next occurrence (today if before, else tomorrow).
+  const now=new Date();
+  const t=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),12,0,0));
+  if(t.getTime()<=now.getTime()) t.setUTCDate(t.getUTCDate()+1);
+  return t.toISOString();
+}
 async function doDelete(){
   const vid=_delVid, after=_delAfter;
   document.getElementById('delOv').classList.remove('show');
-  const ok=await askPassword(`Confirm delete of this duplicate record?`);
+  const ok=await askPassword(`Schedule this record for 8PM deletion?`);
   if(!ok) return;
+  const when=next8PM();
   try{
-    // clean empty references in FK order, then the vendo
-    await fetch(SB+`/rest/v1/route_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    await fetch(SB+`/rest/v1/harvest_staging?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    await fetch(SB+`/rest/v1/job_orders?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    await fetch(SB+`/rest/v1/harvest_group_items?vendo_id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    const r=await fetch(SB+`/rest/v1/vendos?id=eq.${vid}`,{method:"DELETE",headers:{...H,"Prefer":"return=minimal"}});
-    if(r.status===409){ toast("Blocked — still referenced (collector packs?). Not deleted."); return; }
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    await sbPatch(vid,{pending_delete_at:when, pending_delete_by:'dicayas-page'});
   }catch(e){ toast("Failed: "+e.message); return; }
-  VENDOS=VENDOS.filter(x=>x.id!==vid);
-  refreshVendoLocal(-1,{});
+  refreshVendoLocal(vid,{pending_delete_at:when});
   render();
   if(after) after();
-  toast("Deleted record");
+  toast("Scheduled for 8PM deletion — cancel anytime before then");
+}
+async function cancelPendingDelete(vid){
+  const ok=await askPassword(`Cancel the scheduled deletion for this record?`);
+  if(!ok) return;
+  try{ await sbPatch(vid,{pending_delete_at:null, pending_delete_by:null}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{pending_delete_at:null});
+  render();
+  const m=STATUS.find(x=>x.match_key===window._curMk);
+  if(m) renderModal(m, VLAN_CANDIDATES[m.vlan]||[]);
+  if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
+  toast("Deletion cancelled — record kept");
 }
 
 // ---- DUPLICATE NAME BREAKDOWN ----
@@ -783,6 +808,7 @@ function renderDupes(){
     html+=`<div class="candbox">
       <div class="candhead">
         ${d.vlan?'VLAN '+esc(d.vlan):'no VLAN'} · ${esc(d.area)||'?'}
+        ${d.pending_delete_at?'<span class="pendtag">🕗 DELETING 8PM</span>':''}
         ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap to see harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:'<span class="emptybadge">no harvests</span>'}
       </div>
       <div class="row" style="padding:4px 0"><span class="k">Sheet</span><span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
@@ -790,8 +816,11 @@ function renderDupes(){
       <div class="row" style="padding:4px 0;border:none"><span class="k">Group</span><span class="v">${hi&&hi.group_label?esc(hi.group_label):'<i style="color:var(--dim)">(none)</i>'}</span></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
         <button class="lnk unlink" onclick='dupeUnlink(${d.id})'>Unlink ${_dupeField==='tg_name'?'TG':'sheet'}</button>
-        <button class="lnk unlink" onclick='dupeDelete(${d.id})'>🗑 Delete record</button>
+        ${d.pending_delete_at
+          ? `<button class="lnk link" onclick='cancelPendingDelete(${d.id})'>↩ Cancel deletion</button>`
+          : `<button class="lnk unlink" onclick='dupeDelete(${d.id})'>🗑 Delete record</button>`}
       </div>
+      ${d.pending_delete_at?`<div class="pendingbar">🕗 Scheduled for deletion at 8PM tonight</div>`:''}
     </div>`;
   });
   document.getElementById('dupeBody').innerHTML=html;
@@ -961,6 +990,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if(t.dataset.tab==='compare') loadCompare();
   if(t.dataset.tab==='subs') renderSubs();
   if(t.dataset.tab==='inactive') loadSuppress();
+  if(t.dataset.tab==='deleted') renderDeleted();
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
@@ -1130,6 +1160,34 @@ async function setServer(vid){
   toast("Server set");
 }
 
+async function renderDeleted(){
+  // pending (still in vendos with a flag) + purged (log table)
+  const pendDiv=document.getElementById('deleted-pending');
+  const logDiv=document.getElementById('deleted-log');
+  const pending=VENDOS.filter(v=>v.pending_delete_at);
+  pendDiv.innerHTML = `<div class="sec" style="margin-top:4px">🕗 Pending deletion (${pending.length})</div>` + (pending.length
+    ? `<div class="grid">`+pending.map(v=>`
+        <div class="card" style="border-left:4px solid var(--red)">
+          <div class="cardtop"><b>${esc(v.sheet_name||v.tg_name||'VLAN '+v.vlan)}</b><span class="vlan">${esc(v.vlan)||'—'}</span></div>
+          <div class="pendingbar">🕗 Deletes at 8PM · ${esc(v.area)||'?'}</div>
+          <button class="lnk link" style="margin-top:8px" onclick='cancelPendingDelete(${v.id})'>↩ Cancel deletion</button>
+        </div>`).join('')+`</div>`
+    : `<div class="empty">No records pending deletion.</div>`);
+
+  logDiv.innerHTML=`<div class="sec">🗑 Already deleted</div><div class="empty">Loading…</div>`;
+  try{
+    const rows=await sb(`deleted_vendos_log?select=*&order=deleted_at.desc&limit=200`);
+    if(!rows || !rows.length){ logDiv.innerHTML=`<div class="sec">🗑 Already deleted</div><div class="empty">Nothing deleted yet.</div>`; return; }
+    logDiv.innerHTML=`<div class="sec">🗑 Already deleted (${rows.length})</div>`+
+      `<div class="grid">`+rows.map(r=>`
+        <div class="card" style="opacity:.85">
+          <div class="cardtop"><b>${esc(r.sheet_name||r.tg_name||'VLAN '+r.vlan)}</b><span class="vlan">${esc(r.vlan)||'—'}</span></div>
+          <div style="font-size:12px;color:var(--dim);margin-top:4px">${esc(r.area)||'?'} · deleted ${ago(r.deleted_at)} ago</div>
+          ${r.tg_name&&r.sheet_name?`<div style="font-size:11px;color:var(--dim)">sheet: ${esc(r.sheet_name)} · tg: ${esc(r.tg_name)}</div>`:''}
+        </div>`).join('')+`</div>`;
+  }catch(e){ logDiv.innerHTML=`<div class="sec">🗑 Already deleted</div><div class="empty">Failed: ${esc(e.message)}</div>`; }
+}
+
 async function pullOut(kind, key, label){
   const dup = SUPPRESS.find(s => kind==="vendo" ? String(s.vlan)===String(key) : s.ppp_name===key);
   if(dup){ toast(`"${label}" is already inactive.`); return; }
@@ -1208,7 +1266,7 @@ async function boot(){
     // PostgREST caps at 1000 rows/request — page through ALL vendos
     VENDOS=[];
     for(let off=0; off<10000; off+=1000){
-      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date&order=id&limit=1000&offset=${off}`);
+      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at&order=id&limit=1000&offset=${off}`);
       if(!page || !page.length) break;
       VENDOS=VENDOS.concat(page);
       if(page.length<1000) break;
