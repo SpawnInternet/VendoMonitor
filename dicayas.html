@@ -55,6 +55,9 @@
   .card:hover{border-color:var(--blue);transform:translateY(-1px);box-shadow:0 4px 12px rgba(33,48,64,.1)}
   .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
   .card.onl::before{background:var(--green)} .card.offl::before{background:var(--red)}
+  .card.clean{background:linear-gradient(180deg,#f1fbf7 0%,#fff 60%);border-color:#b6e3d3}
+  .card.clean::before{width:4px;background:var(--green)}
+  .card .cleanbadge{position:absolute;bottom:10px;right:12px;background:#d7f5e9;color:#1c6b54;font-size:10px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:.2px}
   .card .vn{font-weight:800;font-size:14px;margin-bottom:3px;padding-right:52px;color:var(--navy)}
   .card .vlan{position:absolute;top:11px;right:12px;background:#fff3cf;color:#8a6500;border:1px solid #f0d488;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:900}
   .card .meta{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:5px;font-weight:600}
@@ -84,6 +87,11 @@
   .row .k{color:var(--dim);font-weight:600}
   .row .v{text-align:right;word-break:break-word;font-weight:700;color:var(--navy)}
   .sec{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);margin:14px 0 4px;font-weight:900}
+  .btn{border:none;border-radius:9px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;transition:.12s}
+  .btn.gold{background:var(--gold);color:var(--navy)} .btn.gold:hover{filter:brightness(1.05)}
+  .btn.ghost{background:#eef1f5;color:var(--navy)} .btn.ghost:hover{background:#e3e8ee}
+  .rl{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:8px 0 0;text-transform:uppercase;letter-spacing:.04em}
+  .rl input{width:100%;margin-top:3px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-weight:600;color:var(--navy)}
   .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
   .badge-on{color:var(--grn);font-weight:900} .badge-off{color:var(--offred);font-weight:900}
@@ -167,6 +175,7 @@
   <div class="tab" data-tab="offline">🔴 Offline</div>
   <div class="tab" data-tab="subs">👤 Subscribers</div>
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
+  <div class="tab" data-tab="deleted">🗑 Trash</div>
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
   <div class="tab" data-tab="inactive">🚫 Inactive</div>
   <div class="tab" data-tab="empty">⚫ Empty Slots</div>
@@ -253,6 +262,7 @@
   <div id="pane-deleted" class="pane" style="display:none">
     <div class="banner">Records scheduled for deletion (purged automatically at 8PM) and already-deleted history. Pending ones can still be cancelled.</div>
     <div id="deleted-pending"></div>
+    <div id="deleted-archive"></div>
     <div id="deleted-log"></div>
   </div>
 </div>
@@ -317,6 +327,12 @@
   </div>
 </div></div>
 
+<div class="ov" id="restoreOv"><div class="modal" style="max-width:440px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2>↩ Restore record</h2><button class="x" onclick="closeRestore()">×</button></div>
+  <div class="mb" id="restoreBody"></div>
+</div></div>
+
 <div class="ov" id="pickOv"><div class="modal" style="max-width:460px">
   <div class="rainbow-strip"></div>
   <div class="mh"><h2 id="pickTitle">Link name</h2><button class="x" onclick="closePick()">×</button></div>
@@ -345,6 +361,27 @@ async function sb(path){
   const r=await fetch(SB+"/rest/v1/"+path,{headers:H});
   if(!r.ok) throw new Error(path+" → "+r.status);
   return r.json();
+}
+async function sbRpc(fn, args){
+  const r=await fetch(SB+"/rest/v1/rpc/"+fn,{
+    method:"POST",
+    headers:{...H,"Content-Type":"application/json"},
+    body:JSON.stringify(args||{})
+  });
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error((j&&j.message)||("HTTP "+r.status));
+  return j;
+}
+// A VLAN is "cleanly linked" when exactly ONE vendo row carries it AND that row
+// has a real (non-numeric) human name. Drives the green marker on cards.
+function isCleanLink(m){
+  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  if(cands.length!==1) return false;
+  const v=cands[0];
+  const nm=(v.sheet_name||v.tg_name||"").trim();
+  if(!nm) return false;
+  if(/^[0-9]+$/.test(nm)) return false; // a bare number is not a real name
+  return true;
 }
 function fmtBytes(b){
   if(b==null)return "—"; b=Number(b);
@@ -440,7 +477,9 @@ function cardHtml(m){
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
   const note=m.lease_note;
   const noLease=!m.lease_status; // VLAN exists but machine never got a lease
-  return `<div class="card ${on?'onl':'offl'}" onclick='openM(${JSON.stringify(m.match_key)})'>
+  const clean=isCleanLink(m);
+  return `<div class="card ${on?'onl':'offl'}${clean?' clean':''}" onclick='openM(${JSON.stringify(m.match_key)})'>
+    ${clean?'<span class="cleanbadge" title="Cleanly linked — one record, real name">✓ linked</span>':''}
     <span class="vlan">${esc(m.vlan)}</span>
     <div class="vn">${esc(nameOf(m))}</div>
     <div class="meta">
@@ -720,7 +759,7 @@ function renderModal(m, cands){
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
           ${d.pending_delete_at
             ? `<button class="lnk link" onclick='cancelPendingDelete(${vid})'>↩ Cancel deletion</button>`
-            : `<button class="lnk unlink" onclick='deleteVendo(${vid})'>🗑 Delete</button>`}
+            : `<button class="lnk unlink" onclick='archiveDelete(${vid})'>🗑 Delete (restorable)</button>`}
         </div>
         ${d.pending_delete_at?`<div class="pendingbar">🕗 Scheduled for deletion at 8PM tonight · tap Cancel to keep</div>`:''}
       </div>`;
@@ -1073,7 +1112,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if(t.dataset.tab==='compare') loadCompare();
   if(t.dataset.tab==='subs') renderSubs();
   if(t.dataset.tab==='inactive') loadSuppress();
-  if(t.dataset.tab==='deleted') renderDeleted();
+  if(t.dataset.tab==='deleted'){ renderDeleted(); renderArchive(); }
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
@@ -1168,10 +1207,15 @@ function askPassword(message){
     setTimeout(()=>document.getElementById('pwInput').focus(),50);
   });
 }
-function pwCancel(){ document.getElementById('pwOv').classList.remove('show'); if(_pwResolve){_pwResolve(false);_pwResolve=null;} }
+function pwCancel(){ document.getElementById('pwOv').classList.remove('show'); if(window._pwValMode){window._pwValMode=false; if(_pwValResolve){_pwValResolve(null);_pwValResolve=null;} return;} if(_pwResolve){_pwResolve(false);_pwResolve=null;} }
 function pwSubmit(){
   const val=document.getElementById('pwInput').value;
   document.getElementById('pwOv').classList.remove('show');
+  if(window._pwValMode){
+    window._pwValMode=false;
+    if(_pwValResolve){ _pwValResolve(val||null); _pwValResolve=null; }
+    return;
+  }
   const ok = val===NET_PWD;
   if(_pwResolve){ _pwResolve(ok); _pwResolve=null; }
   if(!val) return;
@@ -1225,6 +1269,118 @@ async function unlinkField(vid, field){
   if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
   // offer (do NOT auto-open) a replacement link via toast action
   toastAction("Unlinked. Tap to link a replacement", ()=>linkField(vid, field));
+}
+
+// ===== RESTORABLE SOFT-DELETE (archives to vendo_trash) =====
+let TRASH=[];
+// Returns the typed password string (or null if cancelled). RPC verifies it server-side.
+function askPasswordValue(message){
+  return new Promise(resolve=>{
+    _pwValResolve=resolve;
+    document.getElementById('pwMsg').textContent=message||'Enter password.';
+    document.getElementById('pwInput').value='';
+    document.getElementById('pwOv').classList.add('show');
+    window._pwValMode=true;
+    setTimeout(()=>document.getElementById('pwInput').focus(),50);
+  });
+}
+let _pwValResolve=null;
+async function reloadVendos(){
+  const fresh=[];
+  for(let off=0; off<10000; off+=1000){
+    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address&order=id&limit=1000&offset=${off}`);
+    if(!page||!page.length) break;
+    fresh.push(...page);
+    if(page.length<1000) break;
+  }
+  VENDOS=fresh; refreshVendoLocal(-1,{});
+}
+async function archiveDelete(vid){
+  const v=VENDOS.find(x=>x.id===vid);
+  const nm=v?(v.sheet_name||v.tg_name||('VLAN '+v.vlan)):'this record';
+  const reason=prompt(`Delete "${nm}"?\nIt will be archived and can be restored later.\n\nOptional reason:`,'');
+  if(reason===null) return; // cancelled
+  const pwd=await askPasswordValue("Enter password to delete (restorable).");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('soft_delete_vendo',{p_vendo_id:vid,p_pwd:pwd,p_by:'dicayas',p_reason:reason||null}); }
+  catch(e){ toast("Failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Cannot delete')); return; }
+  // remove locally + rebuild maps
+  VENDOS=VENDOS.filter(x=>x.id!==vid);
+  refreshVendoLocal(-1,{});
+  toast("🗑 Archived. Restore anytime from the Trash tab.");
+  try{ document.getElementById('ov').classList.remove('show'); }catch(_){}
+  render();
+}
+async function loadTrash(){
+  try{ TRASH=await sb("vendo_trash?select=*&restored=eq.false&order=deleted_at.desc"); }
+  catch(e){ TRASH=[]; }
+}
+async function renderArchive(){
+  await loadTrash();
+  const box=document.getElementById('deleted-archive');
+  if(!box) return;
+  box.innerHTML = `<div class="sec" style="margin-top:14px">♻️ Restorable archive (${TRASH.length})</div>` +
+    (TRASH.length ? `<div class="grid">`+TRASH.map(t=>{
+      const r=t.row_json||{};
+      const nm=r.sheet_name||r.tg_name||('VLAN '+t.vlan);
+      return `<div class="card" style="border-left:4px solid var(--purple)">
+        <div class="vn">${esc(nm)}</div>
+        <div class="meta"><span class="vlan" style="position:static">VLAN ${esc(t.vlan)}</span>
+          <span>${esc((r.area)||'—')}</span></div>
+        <div class="meta" style="color:var(--dim)">deleted ${ago(t.deleted_at)} ago${t.deleted_by?' · '+esc(t.deleted_by):''}</div>
+        ${t.delete_reason?`<div class="leasenote">📝 ${esc(t.delete_reason)}</div>`:''}
+        <div style="margin-top:8px"><button class="lnk link" onclick="openRestore(${t.trash_id})">↩ Review & Restore</button></div>
+      </div>`;
+    }).join('')+`</div>` : `<div class="empty">Archive is empty</div>`);
+}
+// Restore preview: summarize where it links, let user edit, then restore
+async function openRestore(trashId){
+  let p;
+  try{ p=await sbRpc('restore_preview',{p_trash_id:trashId}); }
+  catch(e){ toast("Preview failed: "+e.message); return; }
+  if(!p.ok){ toast(p.error||'No preview'); return; }
+  const r=p.archived_row||{};
+  const dup = p.existing_rows_on_vlan>0;
+  const body=`
+    <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(p.vlan)}</span></div>
+    <div class="row"><span class="k">Router says</span><span class="v">${esc(p.router_says||'—')}</span></div>
+    <div class="row"><span class="k">Server</span><span class="v">${esc(p.server_name||'—')}</span></div>
+    <div class="row"><span class="k">Other rows on this VLAN</span><span class="v ${dup?'badge-off':'badge-on'}">${p.existing_rows_on_vlan}${dup?' ⚠ will be a duplicate':' ✓ clean slot'}</span></div>
+    <div class="sec" style="margin-top:10px">Edit before restoring</div>
+    <label class="rl">Sheet name<input id="rsSheet" value="${esc(r.sheet_name||'')}"></label>
+    <label class="rl">TG name<input id="rsTg" value="${esc(r.tg_name||'')}"></label>
+    <label class="rl">Area<input id="rsArea" value="${esc(r.area||'')}"></label>
+    <label class="rl">Address<input id="rsAddr" value="${esc(r.address||'')}"></label>
+    <label class="rl">VLAN<input id="rsVlan" value="${esc(p.vlan)}"></label>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+      <button class="btn ghost" onclick="closeRestore()">Cancel</button>
+      <button class="btn gold" onclick="doRestore(${trashId})">↩ Restore now</button>
+    </div>`;
+  document.getElementById('restoreBody').innerHTML=body;
+  document.getElementById('restoreOv').classList.add('show');
+}
+function closeRestore(){ document.getElementById('restoreOv').classList.remove('show'); }
+async function doRestore(trashId){
+  const edits={
+    sheet_name:document.getElementById('rsSheet').value.trim()||null,
+    tg_name:document.getElementById('rsTg').value.trim()||null,
+    area:document.getElementById('rsArea').value.trim()||null,
+    address:document.getElementById('rsAddr').value.trim()||null,
+    vlan:document.getElementById('rsVlan').value.trim()||null
+  };
+  const pwd=await askPasswordValue("Enter password to restore.");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('restore_vendo',{p_trash_id:trashId,p_pwd:pwd,p_by:'dicayas',p_edits:edits}); }
+  catch(e){ toast("Restore failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Restore failed')); return; }
+  closeRestore();
+  toast("✅ Restored as vendo #"+res.new_vendo_id);
+  // reload vendos from server to pick up the new row
+  if(typeof reloadVendos==='function'){ await reloadVendos(); } 
+  renderArchive(); render();
 }
 let _pickCtx=null; // {vid, field}
 function linkField(vid, field){
