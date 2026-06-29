@@ -464,9 +464,11 @@ function _lev(a,b){
 }
 function _fuzzyEq(a,b){
   if(a===b) return true;
-  if(a.length<4||b.length<4) return false;        // short words must match exactly
+  if(a.length<5||b.length<5) return false;            // short words must match exactly
   const d=_lev(a,b);
-  return d<=1 || (d===2 && Math.max(a.length,b.length)>=7);
+  // distance 1 = simple typo/spelling (denzel/denzil). distance 2 only for long words (>=8)
+  // so genuinely different names like michel vs milcher (both <8) do NOT match.
+  return d<=1 || (d===2 && Math.min(a.length,b.length)>=8);
 }
 // Score how strongly a record name matches the router comment (fuzzy meaningful-token overlap)
 function nameMatchScore(rcToks, name){
