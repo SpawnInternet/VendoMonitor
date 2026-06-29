@@ -1445,12 +1445,23 @@ async function tgSearch(q){
   let rows=[];
   try{ rows=await sbRpc('search_tg_names',{p_q:q||'', p_limit:30}); }
   catch(e){ box.innerHTML='<div class="empty">Search failed</div>'; return; }
-  if(!rows.length){ box.innerHTML='<div class="empty" style="padding:8px">No Telegram names found</div>'; return; }
-  box.innerHTML=rows.map(r=>`
-    <div class="tgrow" onclick='pickTg(${JSON.stringify(r.tg_name)})'>
-      <span class="tgnm">${esc(r.tg_name)}</span>
-      <span class="tgmeta">${r.msgs} msgs - ${r.last_seen||'-'}${r.linked?` - <span style="color:#a31c2e">linked${r.linked_vlan?' VLAN '+r.linked_vlan:''}</span>`:' - <span style="color:#1c6b54">free</span>'}</span>
-    </div>`).join('');
+  let html='';
+  if(rows.length){
+    html=rows.map(r=>`
+      <div class="tgrow" onclick='pickTg(${JSON.stringify(r.tg_name)})'>
+        <span class="tgnm">${esc(r.tg_name)}</span>
+        <span class="tgmeta">${r.msgs} msgs - ${r.last_seen||'-'}${r.linked?` - <span style="color:#a31c2e">linked${r.linked_vlan?' VLAN '+r.linked_vlan:''}</span>`:' - <span style="color:#1c6b54">free</span>'}</span>
+      </div>`).join('');
+  }
+  // Always offer to use the typed text directly (router comment may not be a TG-income name).
+  const typed=(q||'').trim();
+  if(typed){
+    html+=`<div class="tgrow" style="background:#fff8e8" onclick='pickTg(${JSON.stringify(typed)})'>
+      <span class="tgnm">➕ Use "${esc(typed)}" as the name</span>
+      <span class="tgmeta">no Telegram income match — use this text directly</span>
+    </div>`;
+  }
+  box.innerHTML = html || '<div class="empty" style="padding:8px">Type a name above</div>';
 }
 async function pickTg(tg){
   _linkCtx.pickedTg=tg;
@@ -1461,7 +1472,18 @@ async function pickTg(tg){
   _linkCtx.existing=ex;
   const act=document.getElementById('linkAction');
   const orphan=ex.find(v=>v.vlan==null);
+
+  // Also surface records already on THIS VLAN (the common source of accidental dups).
+  const onThisVlan=(VLAN_CANDIDATES[String(_linkCtx.vlan)]||[]).filter(v=>v.sheet_name||v.tg_name);
+
   let html='';
+  if(onThisVlan.length){
+    html+=`<div class="sec" style="margin-top:12px;color:#a31c2e">Already on VLAN ${esc(_linkCtx.vlan)} — check before creating a duplicate</div>`;
+    html+=onThisVlan.map(v=>`<div class="candbox" style="padding:8px 10px;border-left:3px solid #e0a800">
+        <b>${esc(v.sheet_name||v.tg_name)}</b> · ${esc(v.area||'-')}
+        <button class="lnk link" style="float:right" onclick='doAttach(${v.id})'>Use this instead</button>
+      </div>`).join('');
+  }
   if(ex.length){
     html+=`<div class="sec" style="margin-top:12px">Existing record(s) with this TG name</div>`;
     html+=ex.map(v=>`<div class="candbox" style="padding:8px 10px"><b>${esc(v.sheet_name||v.tg_name)}</b> - ${esc(v.area||'-')} - ${v.vlan==null?'<span style="color:#a31c2e">no VLAN</span>':'VLAN '+v.vlan}</div>`).join('');
