@@ -400,15 +400,22 @@ async function sbRpc(fn, args){
 }
 // A VLAN is "cleanly linked" when exactly ONE vendo row carries it AND that row
 // has a real (non-numeric) human name. Drives the green marker on cards.
+// THE row that actually belongs to THIS router's VLAN.
+// VLAN numbers repeat across areas, so we pick by router comment, not VLAN alone.
+function serverMatch(m){
+  const cands=popupCandidates(m); // already router-comment matched + named
+  if(cands.length===1) return cands[0];
+  // prefer a locked one if several match
+  const locked=cands.find(v=>v.name_confirmed===true);
+  return locked||cands[0]||null;
+}
 function isCleanLink(m){
-  const cands=VLAN_CANDIDATES[m.vlan]||[];
-  if(cands.length!==1) return false;
-  const v=cands[0];
-  // Only mark green when YOU have locked/finalized the record.
+  const v=serverMatch(m);
+  if(!v) return false;
+  // Green only when YOU locked the row that matches this router VLAN.
   if(v.name_confirmed!==true) return false;
   const nm=(v.sheet_name||v.tg_name||"").trim();
-  if(!nm) return false;
-  return true;
+  return !!nm;
 }
 function fmtBytes(b){
   if(b==null)return "—"; b=Number(b);
@@ -455,27 +462,17 @@ function cleanComment(m){
   return m.router_comment.split(/[\r\n]/)[0].replace(/^\d+\s*/,'').replace(/^vlan\s*\d+\s*/i,'').trim();
 }
 function nameOf(m){
+  const v=serverMatch(m);
+  if(v) return v.sheet_name||v.tg_name||("VLAN "+m.vlan+" — (unnamed)");
   const cands=VLAN_CANDIDATES[m.vlan]||[];
-  if(cands.length===1){
-    const v=cands[0];
-    // Only use a REAL linked name. Do NOT borrow the router comment as if it were a name.
-    return v.sheet_name||v.tg_name||("VLAN "+m.vlan+" — (unnamed)");
-  }
-  if(cands.length>1 && m.router_comment){
-    const rc=m.router_comment.toLowerCase();
-    for(const v of cands){
-      const nm=(v.sheet_name||v.tg_name||"").toLowerCase();
-      if(nm && rc.includes(nm.split(' ')[0])) return v.sheet_name||v.tg_name;
-    }
-  }
-  // multi-candidate but none clearly matches: show a real name if any row has one, else VLAN
-  const named=cands.find(v=>v.sheet_name||v.tg_name);
+  const named=cands.find(x=>x.sheet_name||x.tg_name);
   return (named&&(named.sheet_name||named.tg_name))||("VLAN "+m.vlan+" — (unnamed)");
 }
 function areaOf(m){
+  const v=serverMatch(m);
+  if(v) return v.area||"—";
   const cands=VLAN_CANDIDATES[m.vlan]||[];
-  if(cands.length===1) return cands[0].area||"—";
-  return cands.length>1? (cands.length+" areas") : "—";
+  return cands.length>1? (cands.length+" areas") : (cands[0]&&cands[0].area)||"—";
 }
 
 // Empty slot = no lease + offline + no vendo name + no sales this month
@@ -496,7 +493,9 @@ function flagsOf(m){
   if((rx+tx)<100000) f.push({t:"low data",c:""});
   if(m.online && (m.user_count||0)===0 && (rx+tx)<100000) f.push({t:"online but idle",c:""});
   if(!m.router_comment) f.push({t:"no name",c:""});
-  if(DUPVLAN.has(m.vlan)) f.push({t:"dup VLAN",c:"dup"});
+  // "dup VLAN" only when the router comment genuinely matches 2+ named rows on this VLAN
+  // (VLAN numbers repeating across different areas is normal, not a dup).
+  if(popupCandidates(m).filter(v=>v.sheet_name||v.tg_name).length>1) f.push({t:"dup VLAN",c:"dup"});
   if(m.maybe_noise) f.push({t:"⚡ maybe noise",c:"noise"});
   if(agoHrs(m.updated_at)>2) f.push({t:"stale",c:""});
   return f;
@@ -585,7 +584,7 @@ function applySearch(){
     if(f==="flagged"&&!fl.length)return false;
     if(f==="nodata"&&Number(m.rx_bytes||0)!==0)return false;
     if(f==="nocomment"&&m.router_comment)return false;
-    if(f==="dupvlan"&&!DUPVLAN.has(m.vlan))return false;
+    if(f==="dupvlan"&&popupCandidates(m).filter(v=>v.sheet_name||v.tg_name).length<=1)return false;
     if(f==="hasnote"&&!m.lease_note)return false;
     if(f==="noise"&&!m.maybe_noise)return false;
     if(f==="nolease"&&m.lease_status)return false;
@@ -1068,7 +1067,7 @@ function buildNavList(mk){
       if(f==="flagged"&&!fl.length)return false;
       if(f==="nodata"&&Number(m.rx_bytes||0)!==0)return false;
       if(f==="nocomment"&&m.router_comment)return false;
-      if(f==="dupvlan"&&!DUPVLAN.has(m.vlan))return false;
+      if(f==="dupvlan"&&popupCandidates(m).filter(v=>v.sheet_name||v.tg_name).length<=1)return false;
       if(f==="hasnote"&&!m.lease_note)return false;
       if(f==="noise"&&!m.maybe_noise)return false;
       if(f==="nolease"&&m.lease_status)return false;
