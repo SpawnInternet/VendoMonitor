@@ -443,16 +443,36 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 const RC_STOP=new Set(['dicayas','dipolog','dapitan','sindangan','polanco','roxas','minaog','sinaman',
   'purok','porok','prk','upper','lower','city','piso','wifi','pisowifi','vendo','jail','billiard',
   'unahan','atbang','luyo','dool','tapad','silingan','highway','street','st','brgy','barangay',
-  'sitio','blk','block','poblacion','near','duol','area','vlan','spawn']);
+  'sitio','blk','block','poblacion','near','duol','area','vlan','spawn','gym','beside','hall',
+  'cawa','cawa2x','school','store','tindahan','bahay','house','front','back','side','road','crossing']);
 function rcTokens(s){
   return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/)
     .filter(w=>w.length>=3 && !RC_STOP.has(w));
 }
-// Score how strongly a record name matches the router comment (count of shared MEANINGFUL tokens)
+// Edit distance for tolerant token matching (handles spelling diffs like denzel/denzil)
+function _lev(a,b){
+  const m=a.length,n=b.length; if(!m)return n; if(!n)return m;
+  let prev=Array.from({length:n+1},(_,j)=>j), cur=new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    [prev,cur]=[cur,prev];
+  }
+  return prev[n];
+}
+function _fuzzyEq(a,b){
+  if(a===b) return true;
+  if(a.length<4||b.length<4) return false;        // short words must match exactly
+  const d=_lev(a,b);
+  return d<=1 || (d===2 && Math.max(a.length,b.length)>=7);
+}
+// Score how strongly a record name matches the router comment (fuzzy meaningful-token overlap)
 function nameMatchScore(rcToks, name){
   if(!name) return 0;
-  const nToks=new Set(rcTokens(name));
-  let hits=0; rcToks.forEach(t=>{ if(nToks.has(t)) hits++; });
+  const nToks=rcTokens(name);
+  let hits=0; rcToks.forEach(t=>{ if(nToks.some(n=>_fuzzyEq(t,n))) hits++; });
   return hits;
 }
 
