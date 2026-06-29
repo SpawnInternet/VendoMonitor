@@ -345,6 +345,20 @@
   <div class="mb" id="restoreBody"></div>
 </div></div>
 
+<div class="ov" id="promptOv"><div class="modal" style="max-width:400px">
+  <div class="rainbow-strip"></div>
+  <div class="mh"><h2 id="promptTitle"></h2><button class="x" onclick="promptResolve(null)">×</button></div>
+  <div class="mb">
+    <p id="promptMsg" style="color:var(--navy);font-weight:600;font-size:13px;margin-bottom:12px;line-height:1.5"></p>
+    <input id="promptInput" placeholder="" autocomplete="off"
+      style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn ghost" onclick="promptResolve(null)" id="promptCancel">Cancel</button>
+      <button class="btn gold" onclick="promptResolve(document.getElementById('promptInput').value)" id="promptOk">OK</button>
+    </div>
+  </div>
+</div></div>
+
 <div class="ov" id="pickOv"><div class="modal" style="max-width:460px">
   <div class="rainbow-strip"></div>
   <div class="mh"><h2 id="pickTitle">Link name</h2><button class="x" onclick="closePick()">×</button></div>
@@ -444,7 +458,8 @@ function nameOf(m){
   const cands=VLAN_CANDIDATES[m.vlan]||[];
   if(cands.length===1){
     const v=cands[0];
-    return v.sheet_name||v.tg_name||cleanComment(m)||("VLAN "+m.vlan);
+    // Only use a REAL linked name. Do NOT borrow the router comment as if it were a name.
+    return v.sheet_name||v.tg_name||("VLAN "+m.vlan+" — (unnamed)");
   }
   if(cands.length>1 && m.router_comment){
     const rc=m.router_comment.toLowerCase();
@@ -453,7 +468,9 @@ function nameOf(m){
       if(nm && rc.includes(nm.split(' ')[0])) return v.sheet_name||v.tg_name;
     }
   }
-  return cleanComment(m)||(cands[0]&&(cands[0].sheet_name||cands[0].tg_name))||("VLAN "+m.vlan);
+  // multi-candidate but none clearly matches: show a real name if any row has one, else VLAN
+  const named=cands.find(v=>v.sheet_name||v.tg_name);
+  return (named&&(named.sheet_name||named.tg_name))||("VLAN "+m.vlan+" — (unnamed)");
 }
 function areaOf(m){
   const cands=VLAN_CANDIDATES[m.vlan]||[];
@@ -1309,7 +1326,34 @@ function askPasswordValue(message){
   });
 }
 let _pwValResolve=null;
-// ===== CREATE & LINK a vendo to an unlinked VLAN (e.g. "sheever" VLAN 10) =====
+// ===== Pretty in-app prompt (replaces native prompt/confirm/alert) =====
+let _promptResolve=null;
+function prettyPrompt(opts){
+  opts=opts||{};
+  return new Promise(resolve=>{
+    _promptResolve=resolve;
+    document.getElementById('promptTitle').textContent=opts.title||'';
+    document.getElementById('promptMsg').textContent=opts.message||'';
+    const inp=document.getElementById('promptInput');
+    inp.value=opts.value||'';
+    inp.placeholder=opts.placeholder||'';
+    inp.style.display=opts.noInput?'none':'block';
+    document.getElementById('promptOk').textContent=opts.okText||'OK';
+    document.getElementById('promptCancel').textContent=opts.cancelText||'Cancel';
+    document.getElementById('promptOv').classList.add('show');
+    setTimeout(()=>{ if(!opts.noInput) inp.focus(); },50);
+    inp.onkeydown=(e)=>{ if(e.key==='Enter') promptResolve(inp.value); };
+  });
+}
+function promptResolve(val){
+  document.getElementById('promptOv').classList.remove('show');
+  if(_promptResolve){ _promptResolve(val); _promptResolve=null; }
+}
+// Pretty confirm: returns true/false
+function prettyConfirm(opts){
+  return prettyPrompt({...opts, noInput:true}).then(v=>v!==null);
+}
+
 let _linkCtx=null; // {vlan, server, pickedTg, existing:[]}
 function createLink(vlan, suggestName, server){
   _linkCtx={vlan:String(vlan), server:server||'Dicayas Server', pickedTg:null, existing:[]};
@@ -1437,7 +1481,10 @@ async function unlockVendo(vid){
 async function archiveDelete(vid){
   const v=VENDOS.find(x=>x.id===vid);
   const nm=v?(v.sheet_name||v.tg_name||('VLAN '+v.vlan)):'this record';
-  const reason=prompt(`Delete "${nm}"?\nIt will be archived and can be restored later.\n\nOptional reason:`,'');
+  const reason=await prettyPrompt({
+    title:'🗑 Delete "'+nm+'"?',
+    message:'It will be archived and can be restored later. Add an optional reason:',
+    placeholder:'Reason (optional)', okText:'Delete'});
   if(reason===null) return; // cancelled
   const pwd=await askPasswordValue("Enter password to delete (restorable).");
   if(pwd===null) return;
@@ -1569,11 +1616,12 @@ async function pickName(name){
 document.getElementById('pickSearch').oninput=(e)=>renderPickList(e.target.value);
 document.getElementById('pickUseCustom').onclick=()=>{
   const val=document.getElementById('pickCustom').value.trim();
-  if(!val){ alert("Type a name first"); return; }
+  if(!val){ toast("Type a name first"); return; }
   pickName(val);
 };
 async function setServer(vid){
-  const val=prompt("Enter server name (e.g. Dicayas Server):","Dicayas Server");
+  const val=await prettyPrompt({title:'Set server',message:'Enter server name:',
+    value:'Dicayas Server', placeholder:'e.g. Dicayas Server', okText:'Set'});
   if(!val) return;
   const ok=await askPassword(`Set server to "${val}"?`);
   if(!ok) return;
@@ -1638,7 +1686,8 @@ async function pullOut(kind, key, label){
   if(dup){ toast(`"${label}" is already inactive.`); return; }
   const ok=await askPassword(`Mark "${label}" INACTIVE? The poller will skip it next cycle.`);
   if(!ok) return;
-  const reason=prompt("Reason (optional):","")||null;
+  const reason=await prettyPrompt({title:'Mark inactive',message:'Reason (optional):',
+    placeholder:'Reason', okText:'Confirm'})||null;
   const row = kind==="vendo"
     ? {vlan:String(key), ppp_name:null, reason, suppressed_by:"dicayas-page", suppressed_at:new Date().toISOString()}
     : {vlan:null, ppp_name:key, reason, suppressed_by:"dicayas-page", suppressed_at:new Date().toISOString()};
