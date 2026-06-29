@@ -1292,22 +1292,28 @@ async function sbPatch(vid, body){
   if(!r.ok) throw new Error("HTTP "+r.status);
 }
 function refreshVendoLocal(vid, patch){
-  VENDOS.forEach(v=>{ if(v.id===vid) Object.assign(v,patch); });
+  if(vid!=null && vid>=0) VENDOS.forEach(v=>{ if(v.id===vid) Object.assign(v,patch); });
   // rebuild candidate map so popup + cards reflect change
   VLAN_CANDIDATES={}; BYVLAN={}; DUPVLAN=new Set();
   VENDOS.forEach(v=>{ if(v.vlan==null)return; const k=String(v.vlan);
     (VLAN_CANDIDATES[k]=VLAN_CANDIDATES[k]||[]).push(v); if(!BYVLAN[k])BYVLAN[k]=v; });
   Object.entries(VLAN_CANDIDATES).forEach(([k,a])=>{ if(a.length>1)DUPVLAN.add(k); });
+  // Force fresh paint of grid + any open modal/dupe view so badges update immediately
+  try{ if(typeof render==='function') render(); }catch(_){}
+  try{
+    if(document.getElementById('ov').classList.contains('show') && window._curMk!=null){
+      const m=STATUS.find(x=>x.match_key===window._curMk);
+      if(m){ document.getElementById('mTitle').textContent=nameOf(m); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]); }
+    }
+  }catch(_){}
+  try{ if(document.getElementById('dupeOv').classList.contains('show') && typeof renderDupes==='function') renderDupes(); }catch(_){}
 }
 async function unlinkField(vid, field){
   const ok=await askPassword(`Unlink the ${field==='tg_name'?'TG name':'Sheet name'} from this record? (This clears a wrongly-placed name. Harvest money is NOT affected.)`);
   if(!ok) return;
   try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
-  refreshVendoLocal(vid,{[field]:null});
   window._curTab='names';
-  render(); openM(window._curMk);
-  if(document.getElementById('dupeOv').classList.contains('show')) renderDupes();
-  // offer (do NOT auto-open) a replacement link via toast action
+  refreshVendoLocal(vid,{[field]:null}); // rebuilds maps + re-renders grid/modal/dupes
   toastAction("Unlinked. Tap to link a replacement", ()=>linkField(vid, field));
 }
 
