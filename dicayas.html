@@ -460,24 +460,31 @@ function popupCandidates(m){
   const rcToks=rcTokens(cleanComment(m));
 
   // Pick THE record whose NAME matches the router comment (meaningful tokens).
-  let primary=null;
+  let primary=null, best=0;
   if(rcToks.length && onVlan.length){
-    let best=0;
     onVlan.forEach(v=>{
       const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
       if(sc>best){ best=sc; primary=v; }
     });
-    if(best===0) primary=null;
   }
-  // No router match: fall back to a locked row, else the first named row on this VLAN.
-  if(!primary && onVlan.length){
-    primary = onVlan.find(v=>v.name_confirmed===true) || onVlan[0];
+
+  if(!primary){
+    // No record matches the router comment.
+    if(rcToks.length){
+      // The router NAMES a specific machine (e.g. "denzel gym") but nothing is linked to it.
+      // Do NOT borrow an unrelated VLAN sibling (e.g. "Vicada" that merely reuses VLAN 44).
+      // Return empty -> the Names tab shows "Create & link" for the real (router) machine.
+      return [];
+    }
+    // Router comment is blank/all-stopwords: fall back so the user can still manage rows.
+    if(onVlan.length){
+      primary = onVlan.find(v=>v.name_confirmed===true) || onVlan[0];
+    } else {
+      return [];
+    }
   }
-  if(!primary) return [];
 
   // Show ONLY this one machine + its EXACT-name duplicates (true dupes to clean).
-  // Different-named machines that merely reuse this VLAN are NOT shown — that collision
-  // is normal (VLANs repeat across areas) and each has its own card/identity.
   const sheets=new Set(), tgs=new Set();
   if(primary.sheet_name) sheets.add(primary.sheet_name);
   if(primary.tg_name) tgs.add(primary.tg_name);
@@ -497,9 +504,10 @@ function cleanComment(m){
 function nameOf(m){
   const v=serverMatch(m);
   if(v) return v.sheet_name||v.tg_name||("VLAN "+m.vlan+" — (unnamed)");
-  const cands=VLAN_CANDIDATES[m.vlan]||[];
-  const named=cands.find(x=>x.sheet_name||x.tg_name);
-  return (named&&(named.sheet_name||named.tg_name))||("VLAN "+m.vlan+" — (unnamed)");
+  // No matched record: the card represents whatever the ROUTER says is physically here.
+  const rc=cleanComment(m);
+  if(rc) return rc;
+  return "VLAN "+m.vlan+" — (unnamed)";
 }
 function areaOf(m){
   const v=serverMatch(m);
