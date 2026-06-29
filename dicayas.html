@@ -439,31 +439,25 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 // Candidates to show in the popup Names tab:
 // match by the router name, and hide records that have NO name left (fully unlinked).
 function popupCandidates(m){
-  // Identify the machine by the router NAME (not VLAN, which repeats across areas).
-  const rc=(cleanComment(m)||"").toLowerCase().trim();
-
-  // 1) Rows already on THIS exact VLAN that carry a real name (the literal links here)
+  // Records that belong to THIS machine = the named rows physically on this VLAN,
+  // PLUS any rows that share their EXACT sheet_name or tg_name (true duplicates).
+  // We do NOT fuzzy-match against the router comment — generic words like "dicayas",
+  // "dipolog", "polo" appear in hundreds of names and would pull in unrelated records.
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
 
-  // 2) Rows ANYWHERE whose sheet/tg matches the router name (the real machine may sit on no/other VLAN)
-  let byName=[];
-  if(rc){
-    const rcFirst=rc.split(' ')[0];
-    byName=VENDOS.filter(v=>{
-      if(!(v.sheet_name||v.tg_name)) return false;
-      const s=(v.sheet_name||"").toLowerCase(), t=(v.tg_name||"").toLowerCase();
-      return (s && (s===rc || s.includes(rcFirst) || rc.includes(s.split(' ')[0])))
-          || (t && (t===rc || t.includes(rcFirst) || rc.includes(t.split(' ')[0])));
-    });
-  }
+  // collect the exact names present on this VLAN
+  const sheets=new Set(), tgs=new Set();
+  onVlan.forEach(v=>{ if(v.sheet_name) sheets.add(v.sheet_name); if(v.tg_name) tgs.add(v.tg_name); });
 
-  // Union of (named rows on this VLAN) + (named rows matching the router name), de-duped by id.
+  // find true duplicates elsewhere: exact sheet_name OR exact tg_name match
+  const dups=VENDOS.filter(v=>{
+    if(!(v.sheet_name||v.tg_name)) return false;
+    return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
+  });
+
   const seen=new Set(); const out=[];
-  [...onVlan, ...byName].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
-
-  // IMPORTANT: never return blank/unnamed VLAN siblings. If nothing is named here,
-  // return [] so the tab shows the "Link" prompt instead of phantom records.
-  return out;
+  [...onVlan, ...dups].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
+  return out; // [] when no named row sits on this VLAN -> Names tab shows the Link prompt
 }
 
 function cleanComment(m){
