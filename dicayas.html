@@ -403,9 +403,10 @@ async function sbRpc(fn, args){
 // THE row that actually belongs to THIS router's VLAN.
 // VLAN numbers repeat across areas, so we pick by router comment, not VLAN alone.
 function serverMatch(m){
-  const cands=popupCandidates(m); // already router-comment matched + named
+  const cands=popupCandidates(m);
+  // In disambig/collision, no record actually matches the router — don't pick a title from them.
+  if(cands._mode==='disambig' || cands._mode==='collision') return null;
   if(cands.length===1) return cands[0];
-  // prefer a locked one if several match
   const locked=cands.find(v=>v.name_confirmed===true);
   return locked||cands[0]||null;
 }
@@ -469,19 +470,16 @@ function popupCandidates(m){
   }
 
   if(!primary){
-    // No record matches the router comment.
-    if(rcToks.length){
-      // The router NAMES a specific machine (e.g. "denzel gym") but nothing is linked to it.
-      // Do NOT borrow an unrelated VLAN sibling (e.g. "Vicada" that merely reuses VLAN 44).
-      // Return empty -> the Names tab shows "Create & link" for the real (router) machine.
-      return [];
-    }
-    // Router comment is blank/all-stopwords: fall back so the user can still manage rows.
+    // No record token-matches the router comment.
     if(onVlan.length){
-      primary = onVlan.find(v=>v.name_confirmed===true) || onVlan[0];
-    } else {
-      return [];
+      // Records EXIST on this VLAN but none matched the router name (spelling diff, stopwords,
+      // or a genuinely different machine). Show them so the user can attach/pick — never hide
+      // real records and force a duplicate. Flagged as 'disambig' so the UI explains the mismatch.
+      onVlan._mode='disambig';
+      return onVlan;
     }
+    // Truly nothing on this VLAN -> Names tab shows Create & link for the router machine.
+    return [];
   }
 
   // Show ONLY this one machine + its EXACT-name duplicates (true dupes to clean).
@@ -785,8 +783,8 @@ function renderModal(m, cands){
           <div class="finalrow"><span class="k">Final TG</span><span class="v">${esc(keep.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
           <div class="finalrow" style="border:none"><span class="k">Final Area</span><span class="v">${esc(keep.area)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
         </div>`;
-      } else if(cands._mode==='collision'){
-        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ ${surviving.length} DIFFERENT machines share VLAN ${esc(m.vlan)} (router says "${esc(cleanComment(m))||'—'}"). These are NOT the same vendo — they just reuse the VLAN number across areas. Pick the one that matches the router, others belong elsewhere.</p>`;
+      } else if(cands._mode==='collision' || cands._mode==='disambig'){
+        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ Router says "<b>${esc(cleanComment(m))||'—'}</b>" but no record name matches it exactly. The ${surviving.length} record(s) below are on VLAN ${esc(m.vlan)} — if one is really this machine (maybe a spelling difference), tap it to use/attach it. Otherwise create a new record. Do NOT create a duplicate.</p>`;
       } else {
         html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ ${surviving.length} records share this name${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one (with 💰 harvests) — unlink the name from the wrong ones.</p>`;
       }
