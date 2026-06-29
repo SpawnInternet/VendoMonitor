@@ -716,7 +716,12 @@ function renderModal(m, cands){
         html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ VLAN ${esc(m.vlan)} maps to ${surviving.length} active records${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one — unlink names or schedule the wrong empty ones for deletion.</p>`;
       }
     } else if(cands.length===0){
-      html+=`<p style="color:var(--dim);font-size:13px;padding:20px 0">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>`;
+      const suggest=cleanComment(m)||'';
+      html+=`<div style="padding:18px 0;text-align:center">
+        <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>
+        <p style="font-size:12px;color:var(--navy);margin-bottom:12px">Router says: <b>${esc(suggest||'—')}</b></p>
+        <button class="btn gold" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
+      </div>`;
     }
     cands.forEach(d=>{
       const vid=d.id;
@@ -1285,6 +1290,41 @@ function askPasswordValue(message){
   });
 }
 let _pwValResolve=null;
+// ===== CREATE & LINK a vendo to an unlinked VLAN (e.g. "sheever" VLAN 10) =====
+function createLink(vlan, suggestName, server){
+  const body=`
+    <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(vlan)}</span></div>
+    <div class="row"><span class="k">Server</span><span class="v">${esc(server||'—')}</span></div>
+    <div class="sec" style="margin-top:10px">New record details</div>
+    <label class="rl">Name (sheet name)<input id="clName" value="${esc(suggestName||'')}" placeholder="Owner / vendo name"></label>
+    <label class="rl">Area<input id="clArea" value="" placeholder="DIPOLOG / DAPITAN / …"></label>
+    <label class="rl">Address<input id="clAddr" value="" placeholder="optional"></label>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+      <button class="btn ghost" onclick="closeRestore()">Cancel</button>
+      <button class="btn gold" onclick='doCreateLink(${JSON.stringify(String(vlan))}, ${JSON.stringify(server||"Dicayas Server")})'>➕ Create &amp; link</button>
+    </div>`;
+  document.getElementById('restoreBody').innerHTML=body;
+  document.getElementById('restoreOv').classList.add('show');
+}
+async function doCreateLink(vlan, server){
+  const name=document.getElementById('clName').value.trim();
+  const area=document.getElementById('clArea').value.trim();
+  const addr=document.getElementById('clAddr').value.trim();
+  if(!name){ toast("Enter a name first"); return; }
+  const pwd=await askPasswordValue(`Create a new vendo record for VLAN ${vlan} named "${name}"?`);
+  if(pwd===null) return;
+  let res;
+  try{
+    res=await sbRpc('link_vlan_create',{p_vlan:parseInt(vlan), p_name:name, p_area:area||null,
+      p_address:addr||null, p_server:server, p_pwd:pwd, p_by:'dicayas'});
+  }catch(e){ toast("Create failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Create failed')); return; }
+  closeRestore();
+  toast("✅ Linked VLAN "+vlan+" → "+name);
+  await reloadVendos();
+  render();
+  if(window._curMk!=null) openM(window._curMk);
+}
 async function reloadVendos(){
   const fresh=[];
   for(let off=0; off<10000; off+=1000){
