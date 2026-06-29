@@ -100,6 +100,10 @@
   .tgrow.sel{background:#e9f9f2;cursor:default}
   .tgrow .tgnm{font-weight:800;font-size:13px;color:var(--navy)}
   .tgrow .tgmeta{font-size:11px;color:var(--dim)}
+  .lockrow{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 10px;border-radius:8px;background:#fbfaf4;border:1px dashed #e3d9b8}
+  .lockrow.locked{background:#eefaf4;border:1px solid #b6e3d3}
+  .lockrow .lockstate{font-size:11px;font-weight:700;color:var(--navy)}
+  .lnk.lockbtn{color:#1c6b54;font-weight:800}
   .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
   .badge-on{color:var(--grn);font-weight:900} .badge-off{color:var(--offred);font-weight:900}
@@ -386,9 +390,10 @@ function isCleanLink(m){
   const cands=VLAN_CANDIDATES[m.vlan]||[];
   if(cands.length!==1) return false;
   const v=cands[0];
+  // Only mark green when YOU have locked/finalized the record.
+  if(v.name_confirmed!==true) return false;
   const nm=(v.sheet_name||v.tg_name||"").trim();
   if(!nm) return false;
-  if(/^[0-9]+$/.test(nm)) return false; // a bare number is not a real name
   return true;
 }
 function fmtBytes(b){
@@ -767,6 +772,12 @@ function renderModal(m, cands){
           <span class="k">VLAN</span>
           <span class="v">${esc(d.vlan)||'<i style="color:var(--dim)">(none)</i>'}${String(d.vlan)!==String(m.vlan)?` <span class="vlanmismatch" title="Record VLAN differs from server VLAN ${esc(m.vlan)}">≠ server ${esc(m.vlan)}</span>`:' <span class="vlanok">✓ matches server</span>'}</span>
           ${String(d.vlan)!==String(m.vlan)?`<button class="lnk link" onclick='setVlanToServer(${vid},${JSON.stringify(String(m.vlan))})'>Set ${esc(m.vlan)}</button>`:''}
+        </div>
+        <div class="lockrow ${d.name_confirmed?'locked':''}">
+          <span class="lockstate">${d.name_confirmed?'🔒 Locked — finalized & verified':'🔓 Not locked — green marker appears once locked'}</span>
+          ${d.name_confirmed
+            ? `<button class="lnk link" onclick='unlockVendo(${vid})'>🔓 Unlock to edit</button>`
+            : `<button class="lnk lockbtn" onclick='lockVendo(${vid})'>🔒 Lock (finalize)</button>`}
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
           <span style="font-size:11px;color:var(--dim);font-weight:600">${hasMoney?'🔒 protected — has harvest money':(hi&&hi.group_run_id&&ACTIVE_HARVEST.groupIds.has(hi.group_run_id)?'⚠️ group is harvesting — best wait':'safe to delete if duplicate')}</span>
@@ -1393,13 +1404,36 @@ async function doCreateLink(){
 async function reloadVendos(){
   const fresh=[];
   for(let off=0; off<10000; off+=1000){
-    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address&order=id&limit=1000&offset=${off}`);
+    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed&order=id&limit=1000&offset=${off}`);
     if(!page||!page.length) break;
     fresh.push(...page);
     if(page.length<1000) break;
   }
   VENDOS=fresh; refreshVendoLocal(-1,{});
 }
+async function lockVendo(vid){
+  const pwd=await askPasswordValue("Lock & finalize this record? It will show the green ✓ marker.");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('lock_vendo',{p_vendo_id:vid, p_pwd:pwd}); }
+  catch(e){ toast("Lock failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Lock failed')); return; }
+  refreshVendoLocal(vid,{name_confirmed:true});
+  toast("🔒 Locked & finalized");
+  render(); if(window._curMk!=null) openM(window._curMk);
+}
+async function unlockVendo(vid){
+  const pwd=await askPasswordValue("Unlock this record for editing? The green marker will be removed until you re-lock.");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('unlock_vendo',{p_vendo_id:vid, p_pwd:pwd}); }
+  catch(e){ toast("Unlock failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Unlock failed')); return; }
+  refreshVendoLocal(vid,{name_confirmed:false});
+  toast("🔓 Unlocked — you can edit now");
+  render(); if(window._curMk!=null) openM(window._curMk);
+}
+
 async function archiveDelete(vid){
   const v=VENDOS.find(x=>x.id===vid);
   const nm=v?(v.sheet_name||v.tg_name||('VLAN '+v.vlan)):'this record';
@@ -1677,7 +1711,7 @@ async function boot(){
     // PostgREST caps at 1000 rows/request — page through ALL vendos
     VENDOS=[];
     for(let off=0; off<10000; off+=1000){
-      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address&order=id&limit=1000&offset=${off}`);
+      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed&order=id&limit=1000&offset=${off}`);
       if(!page || !page.length) break;
       VENDOS=VENDOS.concat(page);
       if(page.length<1000) break;
