@@ -438,26 +438,55 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 
 // Candidates to show in the popup Names tab:
 // match by the router name, and hide records that have NO name left (fully unlinked).
+// Stopwords = generic location/filler words that must NOT drive matching.
+const RC_STOP=new Set(['dicayas','dipolog','dapitan','sindangan','polanco','roxas','minaog','sinaman',
+  'purok','porok','prk','upper','lower','city','piso','wifi','pisowifi','vendo','jail','billiard',
+  'unahan','atbang','luyo','dool','tapad','silingan','highway','street','st','brgy','barangay',
+  'sitio','blk','block','poblacion','near','duol','area','vlan','spawn']);
+function rcTokens(s){
+  return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/)
+    .filter(w=>w.length>=3 && !RC_STOP.has(w));
+}
+// Score how strongly a record name matches the router comment (count of shared MEANINGFUL tokens)
+function nameMatchScore(rcToks, name){
+  if(!name) return 0;
+  const nToks=new Set(rcTokens(name));
+  let hits=0; rcToks.forEach(t=>{ if(nToks.has(t)) hits++; });
+  return hits;
+}
+
 function popupCandidates(m){
-  // Records that belong to THIS machine = the named rows physically on this VLAN,
-  // PLUS any rows that share their EXACT sheet_name or tg_name (true duplicates).
-  // We do NOT fuzzy-match against the router comment — generic words like "dicayas",
-  // "dipolog", "polo" appear in hundreds of names and would pull in unrelated records.
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
+  const rcToks=rcTokens(cleanComment(m));
 
-  // collect the exact names present on this VLAN
+  // Pick THE record on this VLAN that best matches the router comment by MEANINGFUL tokens.
+  let primary=null;
+  if(rcToks.length && onVlan.length){
+    let best=0;
+    onVlan.forEach(v=>{
+      const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
+      if(sc>best){ best=sc; primary=v; }
+    });
+    if(best===0) primary=null; // no real name overlap -> don't guess
+  }
+  // If only one named row on the VLAN, that's the one.
+  if(!primary && onVlan.length===1) primary=onVlan[0];
+
+  // Base set = the primary record (if found). If none, fall back to all named VLAN rows
+  // ONLY so the user can see/relink (these are genuine VLAN collisions to disambiguate).
+  const base = primary ? [primary] : onVlan;
+
+  // Add EXACT-name duplicates of the base record(s) found anywhere (true duplicates).
   const sheets=new Set(), tgs=new Set();
-  onVlan.forEach(v=>{ if(v.sheet_name) sheets.add(v.sheet_name); if(v.tg_name) tgs.add(v.tg_name); });
-
-  // find true duplicates elsewhere: exact sheet_name OR exact tg_name match
+  base.forEach(v=>{ if(v.sheet_name) sheets.add(v.sheet_name); if(v.tg_name) tgs.add(v.tg_name); });
   const dups=VENDOS.filter(v=>{
     if(!(v.sheet_name||v.tg_name)) return false;
     return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
   });
 
   const seen=new Set(); const out=[];
-  [...onVlan, ...dups].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
-  return out; // [] when no named row sits on this VLAN -> Names tab shows the Link prompt
+  [...base, ...dups].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
+  return out;
 }
 
 function cleanComment(m){
