@@ -493,12 +493,14 @@ function popupCandidates(m){
 
   if(!primary){
     // No record token-matches the router comment.
-    if(onVlan.length){
-      // Records EXIST on this VLAN but none matched the router name (spelling diff, stopwords,
-      // or a genuinely different machine). Show them so the user can attach/pick — never hide
-      // real records and force a duplicate. Flagged as 'disambig' so the UI explains the mismatch.
-      onVlan._mode='disambig';
-      return onVlan;
+    // Exclude records that are explicitly tagged to a DIFFERENT server — VLANs repeat across
+    // servers, so another area's VLAN-73 machine must not appear on the Dicayas card.
+    const SRV='Dicayas Server';
+    let pool=onVlan.filter(v=> !v.server_name || v.server_name===SRV);
+    if(!pool.length) pool=onVlan; // safety: if filtering removed everything, fall back
+    if(pool.length){
+      pool._mode='disambig';
+      return pool;
     }
     // Truly nothing on this VLAN -> Names tab shows Create & link for the router machine.
     return [];
