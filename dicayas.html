@@ -810,11 +810,35 @@ function renderModal(m, cands){
       }
     } else if(cands.length===0){
       const suggest=cleanComment(m)||'';
-      html+=`<div style="padding:18px 0;text-align:center">
-        <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>
-        <p style="font-size:12px;color:var(--navy);margin-bottom:12px">Router says: <b>${esc(suggest||'—')}</b></p>
-        <button class="btn gold" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
-      </div>`;
+      // Look for an EXISTING record (anywhere) that matches the router name but has NO vlan —
+      // that's the real machine waiting to be attached, not a new one to create.
+      const rcToks=rcTokens(suggest);
+      let orphan=null, obest=0;
+      if(rcToks.length){
+        VENDOS.forEach(v=>{
+          if(v.vlan!=null) return; // only orphans (no VLAN)
+          if(!(v.sheet_name||v.tg_name)) return;
+          const sc=Math.max(nameMatchScore(rcToks,v.sheet_name), nameMatchScore(rcToks,v.tg_name));
+          if(sc>obest){ obest=sc; orphan=v; }
+        });
+      }
+      if(orphan){
+        html+=`<div style="padding:18px 0;text-align:center">
+          <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No record is on VLAN ${esc(m.vlan)} yet, but this existing record matches the router:</p>
+          <div class="candbox" style="text-align:left;padding:10px 12px;margin:8px 0">
+            <b>${esc(orphan.sheet_name||orphan.tg_name)}</b><br>
+            <span style="font-size:11px;color:var(--dim)">${esc(orphan.area||'—')} · currently no VLAN</span>
+          </div>
+          <button class="btn gold" onclick='attachOrphan(${orphan.id}, ${JSON.stringify(String(m.vlan))}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>🔗 Attach VLAN ${esc(m.vlan)} to this record</button>
+          <div style="margin-top:8px"><button class="lnk link" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>or create a different new record</button></div>
+        </div>`;
+      } else {
+        html+=`<div style="padding:18px 0;text-align:center">
+          <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>
+          <p style="font-size:12px;color:var(--navy);margin-bottom:12px">Router says: <b>${esc(suggest||'—')}</b></p>
+          <button class="btn gold" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
+        </div>`;
+      }
     }
     cands.forEach(d=>{
       const vid=d.id;
@@ -1541,6 +1565,17 @@ async function pickTg(tg){
       </div>`;
   }
   act.innerHTML=html;
+}
+async function attachOrphan(vendoId, vlan, server){
+  const pwd=await askPasswordValue(`Attach VLAN ${vlan} to this existing record?`);
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('attach_vlan_to_vendo',{p_vendo_id:vendoId, p_vlan:parseInt(vlan), p_server:server, p_pwd:pwd, p_by:'dicayas'}); }
+  catch(e){ toast("Attach failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Attach failed')); return; }
+  toast("🔗 Attached VLAN "+vlan+" → "+(res.tg_name||'record'));
+  await reloadVendos(); render();
+  if(window._curMk!=null) openM(window._curMk);
 }
 async function doAttach(vendoId){
   const pwd=await askPasswordValue(`Attach VLAN ${_linkCtx.vlan} to this "${_linkCtx.pickedTg}" record?`);
