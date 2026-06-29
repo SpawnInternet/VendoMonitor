@@ -1014,12 +1014,20 @@ function closeHv(){ document.getElementById('hvOv').classList.remove('show'); }
 document.getElementById('hvOv').addEventListener('click',e=>{if(e.target.id==='hvOv')closeHv()});
 
 async function dupeUnlink(vid){
-  const ok=await askPassword(`Unlink "${_dupeName}" from this record?`);
+  const ok=await prettyConfirm({title:'Unlink from THIS record only',
+    message:'Clear "'+_dupeName+'" from this one record (#'+vid+')? Other records sharing this name are NOT affected.',
+    okText:'Unlink this one'});
   if(!ok) return;
-  try{ await sbPatch(vid,{[_dupeField]:null}); }catch(e){ toast("Failed: "+e.message); return; }
+  const pwd=await askPasswordValue('Enter password to unlink.');
+  if(pwd===null) return;
+  const fn=_dupeField==='tg_name'?'unlink_tg':'unlink_sheet';
+  let res;
+  try{ res=await sbRpc(fn,{p_vendo_id:vid, p_pwd:pwd}); }
+  catch(e){ toast("Failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Failed')); return; }
   refreshVendoLocal(vid,{[_dupeField]:null});
-  render(); renderDupes();
-  toast("Unlinked");
+  renderDupes();
+  toast("Unlinked from #"+vid+" only");
 }
 async function checkDeletable(vid){
   // returns detailed reference info per table, flagging which have money
@@ -1310,12 +1318,21 @@ function refreshVendoLocal(vid, patch){
   try{ if(document.getElementById('dupeOv').classList.contains('show') && typeof renderDupes==='function') renderDupes(); }catch(_){}
 }
 async function unlinkField(vid, field){
-  const ok=await askPassword(`Unlink the ${field==='tg_name'?'TG name':'Sheet name'} from this record? (This clears a wrongly-placed name. Harvest money is NOT affected.)`);
+  const lbl=field==='tg_name'?'TG name':'Sheet name';
+  const ok=await prettyConfirm({title:'Unlink '+lbl+' (this record only)',
+    message:'Clear the '+lbl+' from THIS record only. Other machines sharing the same name — even in the same harvest group — are NOT touched. Harvest money is unaffected.',
+    okText:'Unlink'});
   if(!ok) return;
-  try{ await sbPatch(vid,{[field]:null}); }catch(e){ toast("Failed: "+e.message); return; }
+  const pwd=await askPasswordValue('Enter password to unlink.');
+  if(pwd===null) return;
+  const fn=field==='tg_name'?'unlink_tg':'unlink_sheet';
+  let res;
+  try{ res=await sbRpc(fn,{p_vendo_id:vid, p_pwd:pwd}); }
+  catch(e){ toast("Failed: "+e.message); return; }
+  if(!res.ok){ toast("⛔ "+(res.error||'Failed')); return; }
   window._curTab='names';
   refreshVendoLocal(vid,{[field]:null}); // rebuilds maps + re-renders grid/modal/dupes
-  toastAction("Unlinked. Tap to link a replacement", ()=>linkField(vid, field));
+  toastAction("Unlinked from this record only. Tap to link a replacement", ()=>linkField(vid, field));
 }
 
 // ===== RESTORABLE SOFT-DELETE (archives to vendo_trash) =====
