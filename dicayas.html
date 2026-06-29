@@ -459,7 +459,7 @@ function popupCandidates(m){
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
   const rcToks=rcTokens(cleanComment(m));
 
-  // Pick THE record on this VLAN that best matches the router comment by MEANINGFUL tokens.
+  // Pick THE record on this VLAN whose NAME matches the router comment (meaningful tokens).
   let primary=null;
   if(rcToks.length && onVlan.length){
     let best=0;
@@ -467,26 +467,30 @@ function popupCandidates(m){
       const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
       if(sc>best){ best=sc; primary=v; }
     });
-    if(best===0) primary=null; // no real name overlap -> don't guess
+    if(best===0) primary=null;
   }
-  // If only one named row on the VLAN, that's the one.
   if(!primary && onVlan.length===1) primary=onVlan[0];
 
-  // Base set = the primary record (if found). If none, fall back to all named VLAN rows
-  // ONLY so the user can see/relink (these are genuine VLAN collisions to disambiguate).
-  const base = primary ? [primary] : onVlan;
+  if(primary){
+    // We identified the real record. Show it + only its EXACT-name duplicates anywhere.
+    const sheets=new Set(), tgs=new Set();
+    if(primary.sheet_name) sheets.add(primary.sheet_name);
+    if(primary.tg_name) tgs.add(primary.tg_name);
+    const dups=VENDOS.filter(v=>{
+      if(v.id===primary.id) return true;
+      if(!(v.sheet_name||v.tg_name)) return false;
+      return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
+    });
+    const seen=new Set(); const out=[];
+    dups.forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
+    out._mode='dupes';        // genuine same-name records
+    return out;
+  }
 
-  // Add EXACT-name duplicates of the base record(s) found anywhere (true duplicates).
-  const sheets=new Set(), tgs=new Set();
-  base.forEach(v=>{ if(v.sheet_name) sheets.add(v.sheet_name); if(v.tg_name) tgs.add(v.tg_name); });
-  const dups=VENDOS.filter(v=>{
-    if(!(v.sheet_name||v.tg_name)) return false;
-    return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
-  });
-
-  const seen=new Set(); const out=[];
-  [...base, ...dups].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
-  return out;
+  // No name matches the router comment: these are DIFFERENT machines colliding on one VLAN.
+  // Show them as separate disambiguation candidates — NOT as "records sharing a name".
+  onVlan._mode='collision';
+  return onVlan;
 }
 
 function cleanComment(m){
@@ -776,6 +780,8 @@ function renderModal(m, cands){
           <div class="finalrow"><span class="k">Final TG</span><span class="v">${esc(keep.tg_name)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
           <div class="finalrow" style="border:none"><span class="k">Final Area</span><span class="v">${esc(keep.area)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
         </div>`;
+      } else if(cands._mode==='collision'){
+        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ ${surviving.length} DIFFERENT machines share VLAN ${esc(m.vlan)} (router says "${esc(cleanComment(m))||'—'}"). These are NOT the same vendo — they just reuse the VLAN number across areas. Pick the one that matches the router, others belong elsewhere.</p>`;
       } else {
         html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ ${surviving.length} records share this name${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one (with 💰 harvests) — unlink the name from the wrong ones.</p>`;
       }
