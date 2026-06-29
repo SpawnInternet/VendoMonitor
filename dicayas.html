@@ -1632,11 +1632,30 @@ async function pickName(name){
   if(!_pickCtx) return;
   const {vid,field}=_pickCtx;
   closePick();
-  const ok=await askPassword(`Link "${name}" as the ${field==='tg_name'?'TG name':'Sheet name'}?`);
+  if(field==='tg_name'){
+    // Guarded TG link: checks duplicate/excel/harvest conflicts before applying
+    const pwd=await askPasswordValue(`Link TG name "${name}" to this record?`);
+    if(pwd===null) return;
+    let res;
+    try{ res=await sbRpc('link_tg_guarded',{p_vendo_id:vid, p_tg:name, p_pwd:pwd, p_force:false}); }
+    catch(e){ toast("Failed: "+e.message); return; }
+    if(!res.ok && res.needs_confirm){
+      const go=await prettyConfirm({title:'⚠️ Possible wrong link',
+        message:res.warning+'  —  Link anyway?', okText:'Link anyway', cancelText:'Cancel'});
+      if(!go) return;
+      try{ res=await sbRpc('link_tg_guarded',{p_vendo_id:vid, p_tg:name, p_pwd:pwd, p_force:true}); }
+      catch(e){ toast("Failed: "+e.message); return; }
+    }
+    if(!res.ok){ toast("⛔ "+(res.error||'Failed')); return; }
+    refreshVendoLocal(vid,{tg_name:name});
+    toast("Linked TG: "+name);
+    return;
+  }
+  // Sheet name (no recon impact) — direct
+  const ok=await askPassword(`Link "${name}" as the Sheet name?`);
   if(!ok) return;
-  try{ await sbPatch(vid,{[field]:name}); }catch(e){ toast("Failed: "+e.message); return; }
-  refreshVendoLocal(vid,{[field]:name});
-  render(); openM(window._curMk);
+  try{ await sbPatch(vid,{sheet_name:name}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{sheet_name:name});
   toast("Linked: "+name);
 }
 let _pickT=null;
