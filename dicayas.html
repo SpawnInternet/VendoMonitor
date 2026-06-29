@@ -1297,6 +1297,7 @@ function createLink(vlan, suggestName, server){
     <div class="row"><span class="k">Server</span><span class="v">${esc(server||'—')}</span></div>
     <div class="sec" style="margin-top:10px">New record details</div>
     <label class="rl">Name (sheet name)<input id="clName" value="${esc(suggestName||'')}" placeholder="Owner / vendo name"></label>
+    <label class="rl">TG name <span style="font-weight:600;text-transform:none;color:var(--dim)">(Telegram identity — optional)</span><input id="clTg" value="" placeholder="leave blank if unknown"></label>
     <label class="rl">Area<input id="clArea" value="" placeholder="DIPOLOG / DAPITAN / …"></label>
     <label class="rl">Address<input id="clAddr" value="" placeholder="optional"></label>
     <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
@@ -1308,6 +1309,7 @@ function createLink(vlan, suggestName, server){
 }
 async function doCreateLink(vlan, server){
   const name=document.getElementById('clName').value.trim();
+  const tg=document.getElementById('clTg').value.trim();
   const area=document.getElementById('clArea').value.trim();
   const addr=document.getElementById('clAddr').value.trim();
   if(!name){ toast("Enter a name first"); return; }
@@ -1315,8 +1317,8 @@ async function doCreateLink(vlan, server){
   if(pwd===null) return;
   let res;
   try{
-    res=await sbRpc('link_vlan_create',{p_vlan:parseInt(vlan), p_name:name, p_area:area||null,
-      p_address:addr||null, p_server:server, p_pwd:pwd, p_by:'dicayas'});
+    res=await sbRpc('link_vlan_create',{p_vlan:parseInt(vlan), p_name:name, p_tg:tg||null,
+      p_area:area||null, p_address:addr||null, p_server:server, p_pwd:pwd, p_by:'dicayas'});
   }catch(e){ toast("Create failed: "+e.message); return; }
   if(!res.ok){ toast("⛔ "+(res.error||'Create failed')); return; }
   closeRestore();
