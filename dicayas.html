@@ -92,6 +92,14 @@
   .btn.ghost{background:#eef1f5;color:var(--navy)} .btn.ghost:hover{background:#e3e8ee}
   .rl{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:8px 0 0;text-transform:uppercase;letter-spacing:.04em}
   .rl input{width:100%;margin-top:3px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-weight:600;color:var(--navy)}
+  .tgresults{max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-bottom:4px}
+  .tgresults:empty{display:none}
+  .tgrow{padding:8px 11px;cursor:pointer;border-bottom:1px solid #eef1f5;display:flex;flex-direction:column;gap:2px}
+  .tgrow:last-child{border-bottom:none}
+  .tgrow:hover{background:#f1f6ff}
+  .tgrow.sel{background:#e9f9f2;cursor:default}
+  .tgrow .tgnm{font-weight:800;font-size:13px;color:var(--navy)}
+  .tgrow .tgmeta{font-size:11px;color:var(--dim)}
   .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
   .badge-on{color:var(--grn);font-weight:900} .badge-off{color:var(--offred);font-weight:900}
@@ -1291,40 +1299,95 @@ function askPasswordValue(message){
 }
 let _pwValResolve=null;
 // ===== CREATE & LINK a vendo to an unlinked VLAN (e.g. "sheever" VLAN 10) =====
+let _linkCtx=null; // {vlan, server, pickedTg, existing:[]}
 function createLink(vlan, suggestName, server){
+  _linkCtx={vlan:String(vlan), server:server||'Dicayas Server', pickedTg:null, existing:[]};
   const body=`
     <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(vlan)}</span></div>
-    <div class="row"><span class="k">Server</span><span class="v">${esc(server||'—')}</span></div>
-    <div class="sec" style="margin-top:10px">New record details</div>
-    <label class="rl">Name (sheet name)<input id="clName" value="${esc(suggestName||'')}" placeholder="Owner / vendo name"></label>
-    <label class="rl">TG name <span style="font-weight:600;text-transform:none;color:var(--dim)">(Telegram identity — optional)</span><input id="clTg" value="" placeholder="leave blank if unknown"></label>
-    <label class="rl">Area<input id="clArea" value="" placeholder="DIPOLOG / DAPITAN / …"></label>
-    <label class="rl">Address<input id="clAddr" value="" placeholder="optional"></label>
-    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
-      <button class="btn ghost" onclick="closeRestore()">Cancel</button>
-      <button class="btn gold" onclick='doCreateLink(${JSON.stringify(String(vlan))}, ${JSON.stringify(server||"Dicayas Server")})'>➕ Create &amp; link</button>
-    </div>`;
+    <div class="row"><span class="k">Server</span><span class="v">${esc(server||'-')}</span></div>
+    <div class="sec" style="margin-top:10px">TG name <span style="color:#a31c2e">*required for reconciliation</span></div>
+    <input id="tgSearch" placeholder="Search Telegram names..." autocomplete="off" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:6px" value="${esc(suggestName||'')}">
+    <div id="tgResults" class="tgresults"></div>
+    <div id="linkAction"></div>`;
   document.getElementById('restoreBody').innerHTML=body;
   document.getElementById('restoreOv').classList.add('show');
+  const inp=document.getElementById('tgSearch');
+  let _t=null;
+  inp.oninput=()=>{ clearTimeout(_t); _t=setTimeout(()=>tgSearch(inp.value.trim()),250); };
+  setTimeout(()=>{ inp.focus(); tgSearch(inp.value.trim()); },60);
 }
-async function doCreateLink(vlan, server){
-  const name=document.getElementById('clName').value.trim();
-  const tg=document.getElementById('clTg').value.trim();
-  const area=document.getElementById('clArea').value.trim();
-  const addr=document.getElementById('clAddr').value.trim();
-  if(!name){ toast("Enter a name first"); return; }
-  const pwd=await askPasswordValue(`Create a new vendo record for VLAN ${vlan} named "${name}"?`);
+async function tgSearch(q){
+  const box=document.getElementById('tgResults');
+  box.innerHTML='<div class="empty" style="padding:8px">Searching...</div>';
+  let rows=[];
+  try{ rows=await sbRpc('search_tg_names',{p_q:q||'', p_limit:30}); }
+  catch(e){ box.innerHTML='<div class="empty">Search failed</div>'; return; }
+  if(!rows.length){ box.innerHTML='<div class="empty" style="padding:8px">No Telegram names found</div>'; return; }
+  box.innerHTML=rows.map(r=>`
+    <div class="tgrow" onclick='pickTg(${JSON.stringify(r.tg_name)})'>
+      <span class="tgnm">${esc(r.tg_name)}</span>
+      <span class="tgmeta">${r.msgs} msgs - ${r.last_seen||'-'}${r.linked?` - <span style="color:#a31c2e">linked${r.linked_vlan?' VLAN '+r.linked_vlan:''}</span>`:' - <span style="color:#1c6b54">free</span>'}</span>
+    </div>`).join('');
+}
+async function pickTg(tg){
+  _linkCtx.pickedTg=tg;
+  document.getElementById('tgSearch').value=tg;
+  document.getElementById('tgResults').innerHTML=`<div class="tgrow sel"><span class="tgnm">&#10003; ${esc(tg)}</span></div>`;
+  let ex=[];
+  try{ ex=await sbRpc('tg_name_vendos',{p_tg:tg}); }catch(_){}
+  _linkCtx.existing=ex;
+  const act=document.getElementById('linkAction');
+  const orphan=ex.find(v=>v.vlan==null);
+  let html='';
+  if(ex.length){
+    html+=`<div class="sec" style="margin-top:12px">Existing record(s) with this TG name</div>`;
+    html+=ex.map(v=>`<div class="candbox" style="padding:8px 10px"><b>${esc(v.sheet_name||v.tg_name)}</b> - ${esc(v.area||'-')} - ${v.vlan==null?'<span style="color:#a31c2e">no VLAN</span>':'VLAN '+v.vlan}</div>`).join('');
+  }
+  if(orphan){
+    html+=`<p style="font-size:12px;color:var(--navy);margin:10px 0">Best: attach VLAN ${esc(_linkCtx.vlan)} to the existing record (keeps reconciliation intact - no duplicate).</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn ghost" onclick="closeRestore()">Cancel</button>
+        <button class="btn gold" onclick='doAttach(${orphan.id})'>&#128279; Attach VLAN ${esc(_linkCtx.vlan)}</button>
+      </div>`;
+  } else {
+    html+=`<div class="sec" style="margin-top:12px">Or create a new record</div>
+      <label class="rl">Sheet name<input id="clName" value="${esc((ex[0]&&ex[0].sheet_name)||tg)}" placeholder="Owner / vendo name"></label>
+      <label class="rl">Area<input id="clArea" value="${esc((ex[0]&&ex[0].area)||'')}" placeholder="DIPOLOG / DAPITAN"></label>
+      <label class="rl">Address<input id="clAddr" value="" placeholder="optional"></label>
+      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+        <button class="btn ghost" onclick="closeRestore()">Cancel</button>
+        <button class="btn gold" onclick='doCreateLink()'>&#10133; Create &amp; link</button>
+      </div>`;
+  }
+  act.innerHTML=html;
+}
+async function doAttach(vendoId){
+  const pwd=await askPasswordValue(`Attach VLAN ${_linkCtx.vlan} to this "${_linkCtx.pickedTg}" record?`);
   if(pwd===null) return;
   let res;
-  try{
-    res=await sbRpc('link_vlan_create',{p_vlan:parseInt(vlan), p_name:name, p_tg:tg||null,
-      p_area:area||null, p_address:addr||null, p_server:server, p_pwd:pwd, p_by:'dicayas'});
-  }catch(e){ toast("Create failed: "+e.message); return; }
-  if(!res.ok){ toast("⛔ "+(res.error||'Create failed')); return; }
+  try{ res=await sbRpc('attach_vlan_to_vendo',{p_vendo_id:vendoId, p_vlan:parseInt(_linkCtx.vlan), p_server:_linkCtx.server, p_pwd:pwd, p_by:'dicayas'}); }
+  catch(e){ toast("Attach failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Attach failed')); return; }
   closeRestore();
-  toast("✅ Linked VLAN "+vlan+" → "+name);
-  await reloadVendos();
-  render();
+  toast("Linked VLAN "+_linkCtx.vlan+" -> "+res.tg_name+(res.other_rows_same_vlan?` (${res.other_rows_same_vlan} other rows on this VLAN)`:''));
+  await reloadVendos(); render();
+  if(window._curMk!=null) openM(window._curMk);
+}
+async function doCreateLink(){
+  const tg=_linkCtx.pickedTg;
+  if(!tg){ toast("Pick a Telegram name first"); return; }
+  const name=(document.getElementById('clName')||{}).value?.trim()||tg;
+  const area=(document.getElementById('clArea')||{}).value?.trim()||'';
+  const addr=(document.getElementById('clAddr')||{}).value?.trim()||'';
+  const pwd=await askPasswordValue(`Create a new vendo for VLAN ${_linkCtx.vlan}, TG "${tg}"?`);
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('link_vlan_create',{p_vlan:parseInt(_linkCtx.vlan), p_name:name, p_tg:tg, p_area:area||null, p_address:addr||null, p_server:_linkCtx.server, p_pwd:pwd, p_by:'dicayas'}); }
+  catch(e){ toast("Create failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Create failed')); return; }
+  closeRestore();
+  toast("Linked VLAN "+_linkCtx.vlan+" -> "+tg);
+  await reloadVendos(); render();
   if(window._curMk!=null) openM(window._curMk);
 }
 async function reloadVendos(){
