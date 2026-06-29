@@ -439,22 +439,31 @@ function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;"
 // Candidates to show in the popup Names tab:
 // match by the router name, and hide records that have NO name left (fully unlinked).
 function popupCandidates(m){
-  const all=VLAN_CANDIDATES[m.vlan]||[];
-  // keep only records that still have a name
-  const named=all.filter(v=>v.sheet_name||v.tg_name);
+  // Identify the machine by the router NAME (not VLAN, which repeats across areas).
   const rc=(cleanComment(m)||"").toLowerCase().trim();
+
+  // 1) Rows already on THIS exact VLAN that carry a real name (the literal links here)
+  const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
+
+  // 2) Rows ANYWHERE whose sheet/tg matches the router name (the real machine may sit on no/other VLAN)
+  let byName=[];
   if(rc){
-    // records whose sheet or tg matches the router name (first word match)
     const rcFirst=rc.split(' ')[0];
-    const matches=named.filter(v=>{
+    byName=VENDOS.filter(v=>{
+      if(!(v.sheet_name||v.tg_name)) return false;
       const s=(v.sheet_name||"").toLowerCase(), t=(v.tg_name||"").toLowerCase();
       return (s && (s===rc || s.includes(rcFirst) || rc.includes(s.split(' ')[0])))
           || (t && (t===rc || t.includes(rcFirst) || rc.includes(t.split(' ')[0])));
     });
-    if(matches.length) return matches;
   }
-  // fallback: all still-named records (or, if none named, show all so user can link)
-  return named.length? named : all;
+
+  // Union of (named rows on this VLAN) + (named rows matching the router name), de-duped by id.
+  const seen=new Set(); const out=[];
+  [...onVlan, ...byName].forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
+
+  // IMPORTANT: never return blank/unnamed VLAN siblings. If nothing is named here,
+  // return [] so the tab shows the "Link" prompt instead of phantom records.
+  return out;
 }
 
 function cleanComment(m){
@@ -687,8 +696,10 @@ function openM(mk){
   renderModal(m, cands);
   document.getElementById('ov').classList.add('show');
   updateNavButtons();
-  // load harvest/group info for candidates, then re-render names tab
-  loadHarvestInfo(cands.map(c=>c.id)).then(()=>{
+  // prefetch harvest/group info for BOTH vlan rows and name-matched rows, then re-render
+  const pcands=popupCandidates(m);
+  const allIds=[...new Set([...cands.map(c=>c.id), ...pcands.map(c=>c.id)])];
+  loadHarvestInfo(allIds).then(()=>{
     if(document.getElementById('ov').classList.contains('show') && window._curMk===mk)
       renderModal(m, cands);
   });
@@ -743,7 +754,7 @@ function renderModal(m, cands){
           <div class="finalrow" style="border:none"><span class="k">Final Area</span><span class="v">${esc(keep.area)||'<i style="color:var(--dim)">(none)</i>'}</span></div>
         </div>`;
       } else {
-        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ VLAN ${esc(m.vlan)} maps to ${surviving.length} active records${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one — unlink names or schedule the wrong empty ones for deletion.</p>`;
+        html+=`<p style="color:#a31c2e;font-size:12px;font-weight:700;margin:4px 0 10px">⚠️ ${surviving.length} records share this name${pendingCount?` (${pendingCount} pending deletion)`:''}. Keep the real one (with 💰 harvests) — unlink the name from the wrong ones.</p>`;
       }
     } else if(cands.length===0){
       const suggest=cleanComment(m)||'';
