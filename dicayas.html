@@ -812,27 +812,34 @@ function renderModal(m, cands){
       }
     } else if(cands.length===0){
       const suggest=cleanComment(m)||'';
-      // Look for an EXISTING record (anywhere) that matches the router name but has NO vlan —
-      // that's the real machine waiting to be attached, not a new one to create.
       const rcToks=rcTokens(suggest);
-      let orphan=null, obest=0;
+      // Find records ANYWHERE whose name strongly matches the router comment — whether they
+      // have no VLAN (orphan) or are on a DIFFERENT VLAN (wrongly assigned). Need >=2 matching
+      // meaningful tokens to be confident (avoids false positives like michel/milcher).
+      let matches=[];
       if(rcToks.length){
         VENDOS.forEach(v=>{
-          if(v.vlan!=null) return; // only orphans (no VLAN)
+          if(String(v.vlan)===String(m.vlan)) return; // already-on-this-VLAN handled elsewhere
           if(!(v.sheet_name||v.tg_name)) return;
           const sc=Math.max(nameMatchScore(rcToks,v.sheet_name), nameMatchScore(rcToks,v.tg_name));
-          if(sc>obest){ obest=sc; orphan=v; }
+          if(sc>=2) matches.push({v, sc});
         });
+        matches.sort((a,b)=>b.sc-a.sc);
+        matches=matches.slice(0,4);
       }
-      if(orphan){
-        html+=`<div style="padding:18px 0;text-align:center">
-          <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No record is on VLAN ${esc(m.vlan)} yet, but this existing record matches the router:</p>
-          <div class="candbox" style="text-align:left;padding:10px 12px;margin:8px 0">
-            <b>${esc(orphan.sheet_name||orphan.tg_name)}</b><br>
-            <span style="font-size:11px;color:var(--dim)">${esc(orphan.area||'—')} · currently no VLAN</span>
-          </div>
-          <button class="btn gold" onclick='attachOrphan(${orphan.id}, ${JSON.stringify(String(m.vlan))}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>🔗 Attach VLAN ${esc(m.vlan)} to this record</button>
-          <div style="margin-top:8px"><button class="lnk link" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>or create a different new record</button></div>
+      if(matches.length){
+        html+=`<div style="padding:14px 0">
+          <p style="color:var(--dim);font-size:13px;margin-bottom:8px;text-align:center">No record is on VLAN ${esc(m.vlan)} yet, but these existing records match the router name:</p>`;
+        matches.forEach(({v,sc})=>{
+          const where=v.vlan==null?'currently no VLAN':('currently VLAN '+v.vlan);
+          html+=`<div class="candbox" style="text-align:left;padding:10px 12px;margin:6px 0">
+            <b>${esc(v.sheet_name||v.tg_name)}</b> <span style="font-size:10px;color:#1c6b54">· ${sc} word match</span><br>
+            <span style="font-size:11px;color:var(--dim)">${esc(v.area||'—')} · ${where}</span>
+            <button class="btn gold" style="float:right;padding:5px 12px;font-size:12px" onclick='attachOrphan(${v.id}, ${JSON.stringify(String(m.vlan))}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>🔗 ${v.vlan==null?'Attach':'Move'} to VLAN ${esc(m.vlan)}</button>
+            <div style="clear:both"></div>
+          </div>`;
+        });
+        html+=`<div style="margin-top:8px;text-align:center"><button class="lnk link" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>None of these — create a new record</button></div>
         </div>`;
       } else {
         html+=`<div style="padding:18px 0;text-align:center">
@@ -1569,13 +1576,18 @@ async function pickTg(tg){
   act.innerHTML=html;
 }
 async function attachOrphan(vendoId, vlan, server){
-  const pwd=await askPasswordValue(`Attach VLAN ${vlan} to this existing record?`);
+  const v=VENDOS.find(x=>x.id===vendoId);
+  const moving = v && v.vlan!=null && String(v.vlan)!==String(vlan);
+  const msg = moving
+    ? `Move this record from VLAN ${v.vlan} to VLAN ${vlan}? (It will no longer be on VLAN ${v.vlan}.)`
+    : `Attach VLAN ${vlan} to this record?`;
+  const pwd=await askPasswordValue(msg);
   if(pwd===null) return;
   let res;
   try{ res=await sbRpc('attach_vlan_to_vendo',{p_vendo_id:vendoId, p_vlan:parseInt(vlan), p_server:server, p_pwd:pwd, p_by:'dicayas'}); }
   catch(e){ toast("Attach failed: "+e.message); return; }
   if(!res.ok){ toast("⛔ "+(res.error||'Attach failed')); return; }
-  toast("🔗 Attached VLAN "+vlan+" → "+(res.tg_name||'record'));
+  toast((moving?"🔀 Moved to VLAN ":"🔗 Attached VLAN ")+vlan+" → "+(res.tg_name||'record'));
   await reloadVendos(); render();
   if(window._curMk!=null) openM(window._curMk);
 }
