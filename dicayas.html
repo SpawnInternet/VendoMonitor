@@ -459,7 +459,7 @@ function popupCandidates(m){
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
   const rcToks=rcTokens(cleanComment(m));
 
-  // Pick THE record on this VLAN whose NAME matches the router comment (meaningful tokens).
+  // Pick THE record whose NAME matches the router comment (meaningful tokens).
   let primary=null;
   if(rcToks.length && onVlan.length){
     let best=0;
@@ -469,28 +469,25 @@ function popupCandidates(m){
     });
     if(best===0) primary=null;
   }
-  if(!primary && onVlan.length===1) primary=onVlan[0];
-
-  if(primary){
-    // We identified the real record. Show it + only its EXACT-name duplicates anywhere.
-    const sheets=new Set(), tgs=new Set();
-    if(primary.sheet_name) sheets.add(primary.sheet_name);
-    if(primary.tg_name) tgs.add(primary.tg_name);
-    const dups=VENDOS.filter(v=>{
-      if(v.id===primary.id) return true;
-      if(!(v.sheet_name||v.tg_name)) return false;
-      return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
-    });
-    const seen=new Set(); const out=[];
-    dups.forEach(v=>{ if(!seen.has(v.id)){ seen.add(v.id); out.push(v); } });
-    out._mode='dupes';        // genuine same-name records
-    return out;
+  // No router match: fall back to a locked row, else the first named row on this VLAN.
+  if(!primary && onVlan.length){
+    primary = onVlan.find(v=>v.name_confirmed===true) || onVlan[0];
   }
+  if(!primary) return [];
 
-  // No name matches the router comment: these are DIFFERENT machines colliding on one VLAN.
-  // Show them as separate disambiguation candidates — NOT as "records sharing a name".
-  onVlan._mode='collision';
-  return onVlan;
+  // Show ONLY this one machine + its EXACT-name duplicates (true dupes to clean).
+  // Different-named machines that merely reuse this VLAN are NOT shown — that collision
+  // is normal (VLANs repeat across areas) and each has its own card/identity.
+  const sheets=new Set(), tgs=new Set();
+  if(primary.sheet_name) sheets.add(primary.sheet_name);
+  if(primary.tg_name) tgs.add(primary.tg_name);
+  const out=VENDOS.filter(v=>{
+    if(v.id===primary.id) return true;
+    if(!(v.sheet_name||v.tg_name)) return false;
+    return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
+  });
+  out._mode='dupes';
+  return out;
 }
 
 function cleanComment(m){
