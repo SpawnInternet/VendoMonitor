@@ -847,7 +847,11 @@ function renderModal(m, cands){
           <span class="v">${esc(d.area)||'<i style="color:var(--dim)">(none)</i>'}</span>
           <button class="lnk link" onclick='changeArea(${vid})'>Change</button>
         </div>
-        ${d.address?`<div class="row" style="padding:4px 0"><span class="k">📍 Address</span><span class="v" style="font-size:13px;text-align:right">${esc(d.address)}</span></div>`:''}
+        <div class="linkrow">
+          <span class="k">📍 Address</span>
+          <span class="v" style="font-size:13px;text-align:right">${esc(d.address)||'<i style="color:var(--dim)">(none)</i>'}</span>
+          <button class="lnk link" onclick='changeAddress(${vid})'>Change</button>
+        </div>
         <div class="linkrow">
           <span class="k">VLAN</span>
           <span class="v">${esc(d.vlan)||'<i style="color:var(--dim)">(none)</i>'}${String(d.vlan)!==String(m.vlan)?` <span class="vlanmismatch" title="Record VLAN differs from server VLAN ${esc(m.vlan)}">≠ server ${esc(m.vlan)}</span>`:' <span class="vlanok">✓ matches server</span>'}</span>
@@ -1257,6 +1261,20 @@ function changeArea(vid){
   document.getElementById('areaOv').classList.add('show');
 }
 function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; }
+async function changeAddress(vid){
+  const v=VENDOS.find(x=>x.id===vid);
+  const cur=v?(v.address||''):'';
+  const newAddr=await prettyPrompt({title:'📍 Change address',
+    message:'Set the real address/location of this vendo:',
+    value:cur, placeholder:'e.g. Catalina Drive, Minaog', okText:'Save'});
+  if(newAddr===null) return; // cancelled
+  const pwd=await askPasswordValue('Enter password to change address.');
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  try{ await sbPatch(vid,{address:newAddr.trim()||null}); }catch(e){ toast("Failed: "+e.message); return; }
+  refreshVendoLocal(vid,{address:newAddr.trim()||null});
+  toast("Address updated");
+}
 document.getElementById('areaOv').addEventListener('click',e=>{if(e.target.id==='areaOv')closeArea()});
 async function pickArea(area){
   const vid=_areaVid; if(!vid) return;
