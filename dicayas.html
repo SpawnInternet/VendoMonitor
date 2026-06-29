@@ -1582,14 +1582,34 @@ function linkField(vid, field){
 function closePick(){ document.getElementById('pickOv').classList.remove('show'); _pickCtx=null; }
 document.getElementById('pickOv').addEventListener('click',e=>{if(e.target.id==='pickOv')closePick()});
 
-function renderPickList(q){
+async function renderPickList(q){
   if(!_pickCtx)return;
   const field=_pickCtx.field; // 'sheet_name' or 'tg_name'
-  q=(q||'').toLowerCase().trim();
-  // search ONLY the field being edited: Sheet picker = sheet names, TG picker = tg names
-  const seen=new Map(); // name -> area
+  q=(q||'').trim();
+  const listEl=document.getElementById('pickList');
+
+  if(field==='tg_name'){
+    // TG names come from the REAL Telegram income source (transactions), not vendos.
+    listEl.innerHTML='<div class="empty" style="padding:18px">Searching Telegram names…</div>';
+    let rows=[];
+    try{ rows=await sbRpc('search_tg_names',{p_q:q||'', p_limit:40}); }
+    catch(e){ listEl.innerHTML='<div class="empty">Search failed</div>'; return; }
+    if(!rows.length){ listEl.innerHTML='<div class="empty" style="padding:24px">No Telegram names — type a new one below</div>'; return; }
+    const ql=q.toLowerCase();
+    const hl=(s)=>{ if(!ql)return esc(s); const i=s.toLowerCase().indexOf(ql); if(i<0)return esc(s);
+      return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+ql.length))+'</mark>'+esc(s.slice(i+ql.length)); };
+    listEl.innerHTML = rows.map(r=>`<div class="pickitem" onclick='pickName(${JSON.stringify(r.tg_name)})'>
+        <span>${hl(r.tg_name)}</span>
+        <span class="area" style="font-size:10px">${r.msgs} msgs · ${r.last_seen||'—'}${r.linked?` · <span style="color:#a31c2e">linked${r.linked_vlan?' V'+r.linked_vlan:''}</span>`:' · <span style="color:#1c6b54">free</span>'}</span>
+      </div>`).join('');
+    return;
+  }
+
+  // Sheet-name picker: search existing vendo sheet names
+  q=q.toLowerCase();
+  const seen=new Map();
   VENDOS.forEach(v=>{
-    const nm=v[field];
+    const nm=v.sheet_name;
     if(!nm) return;
     if(q && !nm.toLowerCase().includes(q)) return;
     if(!seen.has(nm)) seen.set(nm, v.area||'');
@@ -1597,7 +1617,7 @@ function renderPickList(q){
   let items=[...seen.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(0,80);
   const hl=(s)=>{ if(!q)return esc(s); const i=s.toLowerCase().indexOf(q); if(i<0)return esc(s);
     return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length)); };
-  document.getElementById('pickList').innerHTML = items.length
+  listEl.innerHTML = items.length
     ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
     : '<div class="empty" style="padding:24px">No matches — type a new name below</div>';
 }
@@ -1612,7 +1632,8 @@ async function pickName(name){
   render(); openM(window._curMk);
   toast("Linked: "+name);
 }
-document.getElementById('pickSearch').oninput=(e)=>renderPickList(e.target.value);
+let _pickT=null;
+document.getElementById('pickSearch').oninput=(e)=>{ clearTimeout(_pickT); const val=e.target.value; _pickT=setTimeout(()=>renderPickList(val),220); };
 document.getElementById('pickUseCustom').onclick=()=>{
   const val=document.getElementById('pickCustom').value.trim();
   if(!val){ toast("Type a name first"); return; }
