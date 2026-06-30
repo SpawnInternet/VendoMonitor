@@ -545,12 +545,22 @@ function hasName(m){
 }
 function isEmptySlot(m){
   // empty = offline + no lease + no name + no sales + no traffic + no users
-  return !m.online && !m.lease_status && !hasName(m) && !(SALES_MONTH[m.vlan]>0)
+  return !effOnline(m) && !m.lease_status && !hasName(m) && !(SALES_MONTH[m.vlan]>0)
     && m.online_via!=='traffic' && !(m.user_count>0);
 }
 
+// A machine marked pulled-out / not-active in its lease note or router comment
+// must never count as Online, even if a stale DHCP lease still reports it up.
+function isPulledOut(m){
+  const t=((m.lease_note||'')+' '+(m.router_comment||'')).toLowerCase();
+  return /\bpull\s*-?\s*out\b|\bpullout\b|\bpulled\s*out\b|\bnot?\s*active\b|\binactive\b|\bde-?activ/.test(t);
+}
+// Effective online: real link AND not pulled out / deactivated.
+function effOnline(m){ return !!m.online && !isPulledOut(m); }
+
 function flagsOf(m){
   const f=[];
+  if(isPulledOut(m)) f.push({t:"pulled out",c:"dup"});
   const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
   if(rx===0) f.push({t:"rx=0",c:""});
   if((rx+tx)<100000) f.push({t:"low data",c:""});
@@ -565,7 +575,7 @@ function flagsOf(m){
 }
 
 function cardHtml(m){
-  const on=m.online, fl=flagsOf(m);
+  const on=effOnline(m), fl=flagsOf(m);
   const rx=Number(m.rx_bytes||0),tx=Number(m.tx_bytes||0);
   const note=m.lease_note;
   const noLease=!m.lease_status; // VLAN exists but machine never got a lease
@@ -599,8 +609,8 @@ function sortVendos(arr){
 }
 
 function render(){
-  let on=STATUS.filter(m=>m.online);
-  const offAll=STATUS.filter(m=>!m.online);
+  let on=STATUS.filter(m=>effOnline(m));
+  const offAll=STATUS.filter(m=>!effOnline(m));
   const empties=offAll.filter(isEmptySlot);
   const off=offAll.filter(m=>!isEmptySlot(m));
   // split real offline: waiting (has lease_status) vs no-lease
@@ -627,7 +637,7 @@ function render(){
   document.getElementById('lastUpd').textContent = "updated "+ago(last)+" ago";
   document.getElementById('summary').innerHTML=`
     <div class="stat"><div class="n">${STATUS.length}</div><div class="l">Vendos</div></div>
-    <div class="stat on"><div class="n">${STATUS.filter(m=>m.online).length}</div><div class="l">Online</div></div>
+    <div class="stat on"><div class="n">${STATUS.filter(m=>effOnline(m)).length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
@@ -1162,12 +1172,12 @@ function buildNavList(mk){
   // determine which vendos are visible in the active tab, in sorted order
   const active=document.querySelector('.tab.active')?.dataset.tab||'online';
   let list;
-  if(active==='online') list=STATUS.filter(m=>m.online);
+  if(active==='online') list=STATUS.filter(m=>effOnline(m));
   else if(active==='offline'){
-    const off=STATUS.filter(m=>!m.online).filter(m=>!isEmptySlot(m));
+    const off=STATUS.filter(m=>!effOnline(m)).filter(m=>!isEmptySlot(m));
     list=off; // both waiting + nolease sections
   }
-  else if(active==='empty') list=STATUS.filter(m=>!m.online).filter(isEmptySlot);
+  else if(active==='empty') list=STATUS.filter(m=>!effOnline(m)).filter(isEmptySlot);
   else if(active==='search'){
     // mirror applySearch filter
     const q=(document.getElementById('q').value||"").toLowerCase();
@@ -1182,8 +1192,8 @@ function buildNavList(mk){
       if(f==="hasnote"&&!m.lease_note)return false;
       if(f==="noise"&&!m.maybe_noise)return false;
       if(f==="nolease"&&m.lease_status)return false;
-      if(f==="online"&&!m.online)return false;
-      if(f==="offline"&&m.online)return false;
+      if(f==="online"&&!effOnline(m))return false;
+      if(f==="offline"&&effOnline(m))return false;
       return true;
     });
   }
