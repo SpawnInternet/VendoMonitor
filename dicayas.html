@@ -410,12 +410,11 @@ function serverMatch(m){
   if(cands._mode==='disambig' || cands._mode==='collision'){
     const rcToks=rcTokens(cleanComment(m));
     if(rcToks.length){
-      const SRV='Dicayas Server';
       // Match by NAME against the router comment across all vendos (VLANs repeat across
       // areas, so name is ground truth). Honor a LOCKED record above all.
       let best=null, bestSc=0, bestLocked=false;
       VENDOS.forEach(v=>{
-        if(v.server_name && v.server_name!==SRV) return; // don't bleed other servers
+        if(!inServerArea(v)) return; // don't bleed other areas/servers
         const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
         if(sc<=0) return;
         const lk=(v.name_confirmed===true);
@@ -500,8 +499,20 @@ function nameMatchScore(rcToks, name){
   return hits;
 }
 
+// Areas physically served by the Dicayas Server. VLAN numbers repeat across areas,
+// so a machine in another area that shares a VLAN number must NOT appear on this card.
+const DICAYAS_AREAS=new Set(['dipolog','mix areas']);
+function inServerArea(v){
+  // server_name wins when present; otherwise fall back to area (most rows have null server_name)
+  if(v.server_name) return v.server_name==='Dicayas Server';
+  const a=(v.area||'').toLowerCase().trim();
+  return DICAYAS_AREAS.has(a);
+}
+
 function popupCandidates(m){
-  const onVlan=(VLAN_CANDIDATES[m.vlan]||[]).filter(v=>v.sheet_name||v.tg_name);
+  const onVlan=(VLAN_CANDIDATES[m.vlan]||[])
+    .filter(v=>v.sheet_name||v.tg_name)
+    .filter(inServerArea);
   const rcToks=rcTokens(cleanComment(m));
 
   // Pick THE record whose NAME matches the router comment (meaningful tokens).
@@ -514,15 +525,11 @@ function popupCandidates(m){
   }
 
   if(!primary){
-    // No record token-matches the router comment.
-    // Exclude records that are explicitly tagged to a DIFFERENT server — VLANs repeat across
-    // servers, so another area's VLAN-73 machine must not appear on the Dicayas card.
-    const SRV='Dicayas Server';
-    let pool=onVlan.filter(v=> !v.server_name || v.server_name===SRV);
-    if(!pool.length) pool=onVlan; // safety: if filtering removed everything, fall back
-    if(pool.length){
-      pool._mode='disambig';
-      return pool;
+    // No record token-matches the router comment. onVlan is already restricted to
+    // Dicayas-served areas, so anything here is a genuine same-server disambiguation.
+    if(onVlan.length){
+      onVlan._mode='disambig';
+      return onVlan;
     }
     // Truly nothing on this VLAN -> Names tab shows Create & link for the router machine.
     return [];
@@ -556,7 +563,7 @@ function nameOf(m){
 function areaOf(m){
   const v=serverMatch(m);
   if(v) return v.area||"—";
-  const cands=VLAN_CANDIDATES[m.vlan]||[];
+  const cands=(VLAN_CANDIDATES[m.vlan]||[]).filter(inServerArea);
   return cands.length>1? (cands.length+" areas") : (cands[0]&&cands[0].area)||"—";
 }
 
