@@ -404,8 +404,30 @@ async function sbRpc(fn, args){
 // VLAN numbers repeat across areas, so we pick by router comment, not VLAN alone.
 function serverMatch(m){
   const cands=popupCandidates(m);
-  // In disambig/collision, no record actually matches the router — don't pick a title from them.
-  if(cands._mode==='disambig' || cands._mode==='collision') return null;
+  // In disambig/collision, no record token-matched the router on the VLAN path.
+  // But a human may have LOCKED the correct record by name. Match by NAME (router
+  // comment), not VLAN, and honor that lock so the green marker shows.
+  if(cands._mode==='disambig' || cands._mode==='collision'){
+    const rcToks=rcTokens(cleanComment(m));
+    if(rcToks.length){
+      const SRV='Dicayas Server';
+      // Match by NAME against the router comment across all vendos (VLANs repeat across
+      // areas, so name is ground truth). Honor a LOCKED record above all.
+      let best=null, bestSc=0, bestLocked=false;
+      VENDOS.forEach(v=>{
+        if(v.server_name && v.server_name!==SRV) return; // don't bleed other servers
+        const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
+        if(sc<=0) return;
+        const lk=(v.name_confirmed===true);
+        // prefer locked; among same lock-state prefer higher score
+        if((lk && !bestLocked) || (lk===bestLocked && sc>bestSc)){
+          best=v; bestSc=sc; bestLocked=lk;
+        }
+      });
+      if(best && bestLocked) return best;   // green only when the name-matched record is locked
+    }
+    return null;
+  }
   if(cands.length===1) return cands[0];
   const locked=cands.find(v=>v.name_confirmed===true);
   return locked||cands[0]||null;
