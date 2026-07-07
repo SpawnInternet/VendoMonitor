@@ -528,9 +528,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div id="home-crucial" style="display:none;margin-bottom:16px">
     <div style="font-size:12px;font-weight:800;color:#025AC6;letter-spacing:.04em;margin:0 2px 8px;display:flex;align-items:center;gap:6px">🔥 CRUCIAL AREAS — HARVEST SOON</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin:0 2px 8px">
-      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DF1A35;margin-right:4px"></span>60+ days</span>
-      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FEB30C;margin-right:4px"></span>30–59 days</span>
-      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#028867;margin-right:4px"></span>under 30</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DF1A35;margin-right:4px"></span>100+ overdue</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FEB30C;margin-right:4px"></span>50–99</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#028867;margin-right:4px"></span>under 50</span>
     </div>
     <div id="home-crucial-list"></div>
   </div>
@@ -1695,35 +1695,44 @@ async function loadCrucialAreas(){
       if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]={lhd:v.last_harvest_date,status:v.status};});
     }
     const now=Date.now();
-    const agg={};
-    items.forEach(it=>{
-      const gid=it.group_run_id;
-      const v=dateMap[it.vendo_id]; if(!v||v.status!=='active') return;
-      if(!agg[gid]) agg[gid]={overdue:0,oldest:0};
-      const d=v.lhd?Math.floor((now-new Date(v.lhd+'T12:00:00'))/86400000):9999;
-      if(d>30) agg[gid].overdue++;
-      if(d<9999 && d>agg[gid].oldest) agg[gid].oldest=d;
-    });
+    // Aggregate BY AREA (roll up all groups in each area)
     const gmap={}; groups.forEach(g=>gmap[g.id]=g);
-    const ranked=Object.entries(agg).map(([gid,o])=>({gid,...o,g:gmap[gid]}))
-      .filter(x=>x.g&&x.overdue>0).sort((a,b)=>b.overdue-a.overdue).slice(0,3);
+    const areaAgg={};
+    items.forEach(it=>{
+      const g=gmap[it.group_run_id]; if(!g) return;
+      const area=(g.area||'').toUpperCase(); if(!area) return;
+      const v=dateMap[it.vendo_id]; if(!v||v.status!=='active') return;
+      if(!areaAgg[area]) areaAgg[area]={overdue:0,oldest:0,groups:new Set()};
+      areaAgg[area].groups.add(it.group_run_id);
+      const d=v.lhd?Math.floor((now-new Date(v.lhd+'T12:00:00'))/86400000):9999;
+      if(d>30) areaAgg[area].overdue++;
+      if(d<9999 && d>areaAgg[area].oldest) areaAgg[area].oldest=d;
+    });
+    const ranked=Object.entries(areaAgg).map(([area,o])=>({area,overdue:o.overdue,oldest:o.oldest,groupCount:o.groups.size}))
+      .filter(x=>x.overdue>0).sort((a,b)=>b.overdue-a.overdue);
     if(!ranked.length){ wrap.style.display='none'; return; }
-    const _tier=days=>days>=60?{bg:'#FBE1E4',fg:'#B00E23'}:days>=30?{bg:'#FEF1D6',fg:'#8A6206'}:{bg:'#DBF3EC',fg:'#046B52'};
+    // color by COUNT: 100+ red, 50-99 amber, under 50 green
+    const _tier=n=>n>=100?'#DF1A35':n>=50?'#FEB30C':'#028867';
     listEl.innerHTML=ranked.map(x=>{
-      const g=x.g; const t=_tier(x.oldest||0);
-      return `<div class="crucial-row" data-cgid="${x.gid}" style="cursor:pointer;background:#E7F0FB;border:1px solid #B9D4F2;border-radius:12px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:11px">
-        <div style="width:38px;height:38px;border-radius:11px;background:#025AC6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;flex-shrink:0">📍</div>
+      const badgeColor=_tier(x.overdue);
+      const label=x.area.charAt(0)+x.area.slice(1).toLowerCase();
+      return `<div class="crucial-row" data-carea="${x.area}" style="cursor:pointer;background:#fff;border-radius:13px;padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(2,90,198,.05)">
+        ${areaIconHtml(x.area,40)}
         <div style="flex:1;min-width:0">
-          <div style="font-size:14px;font-weight:700;color:#083A82">${g.group_label||g.area}</div>
-          <div style="font-size:11px;color:#4671A8">${x.overdue} vendos overdue${x.oldest?' · oldest '+fmtDays(x.oldest):''}</div>
+          <div style="font-size:15px;font-weight:700;color:#083A82">${label}</div>
+          <div style="font-size:11px;color:#6b87a8">${x.overdue} overdue · ${x.groupCount} group${x.groupCount>1?'s':''}${x.oldest?' · oldest '+fmtDays(x.oldest):''}</div>
         </div>
-        <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;white-space:nowrap;background:${t.bg};color:${t.fg}">${x.overdue}</span>
-        <span style="color:#025AC6;font-size:16px">›</span>
+        <span style="min-width:36px;height:30px;padding:0 10px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;background:${badgeColor}">${x.overdue}</span>
+        <span style="color:#B9C7DC;font-size:16px">›</span>
       </div>`;
     }).join('');
     wrap.style.display='';
-    listEl.querySelectorAll('[data-cgid]').forEach(el=>{
-      el.addEventListener('click',()=>{ _sortMode='date'; startGroup(el.dataset.cgid); });
+    listEl.querySelectorAll('[data-carea]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const areaId=el.dataset.carea;
+        const label=areaId.charAt(0)+areaId.slice(1).toLowerCase();
+        openGroupPicker(JSON.stringify({id:areaId,label:label}));
+      });
     });
   }catch(e){ console.warn('[crucial] failed:',e&&e.message); wrap.style.display='none'; }
 }
