@@ -1717,7 +1717,7 @@ async function loadCrucialAreas(){
           <div style="font-size:14px;font-weight:700;color:#083A82">${g.group_label||g.area}</div>
           <div style="font-size:11px;color:#4671A8">${x.overdue} vendos overdue${x.oldest?' · oldest '+fmtDays(x.oldest):''}</div>
         </div>
-        <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;white-space:nowrap;background:${t.bg};color:${t.fg}">${x.overdue} · ${fmtDays(x.oldest||0)}</span>
+        <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;white-space:nowrap;background:${t.bg};color:${t.fg}">${x.overdue}</span>
         <span style="color:#025AC6;font-size:16px">›</span>
       </div>`;
     }).join('');
@@ -1813,7 +1813,7 @@ async function showAllGroups(){
   sorted.forEach((g,i)=>{
     const o=overdue[g.id]||{overdue:0,oldest:0};
     const t=o.oldest>=60?{bg:'#FBE1E4',fg:'#B00E23'}:o.oldest>=30?{bg:'#FEF1D6',fg:'#8A6206'}:{bg:'#DBF3EC',fg:'#046B52'};
-    const badge=o.overdue>0?`<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;white-space:nowrap;margin-left:auto;background:${t.bg};color:${t.fg}">${o.overdue} · ${fmtDays(o.oldest||0)}</span>`:'';
+    const badge=o.overdue>0?`<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;white-space:nowrap;margin-left:auto;background:${t.bg};color:${t.fg}">${o.overdue}</span>`:'';
     html+=`<div class="picker-item" style="cursor:pointer" data-allgroup-idx="${i}" data-allgroup-id="${g.id}">
       ${areaIconHtml(g.area,44)}
       <div class="gi-left"><div style="font-size:15px;font-weight:700">${g.group_label||g.group_id}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${g.area?g.area.charAt(0)+g.area.slice(1).toLowerCase():''} · ${g.total_vendos||0} vendos</div></div>
@@ -1823,7 +1823,7 @@ async function showAllGroups(){
   });
   listEl.innerHTML=html||'<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet</div>';
   listEl.querySelectorAll('[data-allgroup-idx]').forEach(el=>{
-    el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); startGroup(sorted[i].id); });
+    el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
   });
 }
 
@@ -1888,6 +1888,7 @@ async function openGroupPicker(areaJson){
     el.addEventListener('click',()=>{
       const i=parseInt(el.dataset.groupIdx);
       closeGroupPicker();
+      _sortMode='date';
       startGroup(areaGroups[i].id);
     });
   });
@@ -2281,7 +2282,14 @@ function setSortMode(m){
   });
   renderVendoList();
 }
+function syncSortButtons(){
+  ['gps','date','az','za'].forEach(k=>{
+    const b=document.getElementById('sb-'+k);
+    if(b){ b.style.background=(k===_sortMode)?'#FFB725':'#fff'; b.style.color=(k===_sortMode)?'#0D1045':'var(--text)'; }
+  });
+}
 function renderVendoList(){
+  syncSortButtons();
   const all=currentItems;
   const _area=currentGroupDef&&currentGroupDef.area;const _initCentroid=(currentGroupDef&&AREA_CENTROIDS[_area])||{lat:START_LAT,lng:START_LNG};
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
