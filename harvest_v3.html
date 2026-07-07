@@ -482,6 +482,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <!-- Crucial areas — top overdue groups -->
   <div id="home-crucial" style="display:none;margin-bottom:16px">
     <div style="font-size:12px;font-weight:800;color:#025AC6;letter-spacing:.04em;margin:0 2px 8px;display:flex;align-items:center;gap:6px">🔥 CRUCIAL AREAS — HARVEST SOON</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin:0 2px 8px">
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DF1A35;margin-right:4px"></span>60+ days</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#FEB30C;margin-right:4px"></span>30–59 days</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#028867;margin-right:4px"></span>under 30</span>
+    </div>
     <div id="home-crucial-list"></div>
   </div>
 
@@ -1692,15 +1697,16 @@ async function loadCrucialAreas(){
     const ranked=Object.entries(agg).map(([gid,o])=>({gid,...o,g:gmap[gid]}))
       .filter(x=>x.g&&x.overdue>0).sort((a,b)=>b.overdue-a.overdue).slice(0,3);
     if(!ranked.length){ wrap.style.display='none'; return; }
+    const _tier=days=>days>=60?{bg:'#FBE1E4',fg:'#B00E23'}:days>=30?{bg:'#FEF1D6',fg:'#8A6206'}:{bg:'#DBF3EC',fg:'#046B52'};
     listEl.innerHTML=ranked.map(x=>{
-      const g=x.g;
+      const g=x.g; const t=_tier(x.oldest||0);
       return `<div class="crucial-row" data-cgid="${x.gid}" style="cursor:pointer;background:#E7F0FB;border:1px solid #B9D4F2;border-radius:12px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:11px">
         <div style="width:38px;height:38px;border-radius:11px;background:#025AC6;display:flex;align-items:center;justify-content:center;color:#fff;font-size:19px;flex-shrink:0">📍</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:700;color:#083A82">${g.group_label||g.area}</div>
           <div style="font-size:11px;color:#4671A8">${x.overdue} vendos overdue${x.oldest?' · oldest '+x.oldest+' days':''}</div>
         </div>
-        <div style="text-align:center;flex-shrink:0"><div style="font-size:20px;font-weight:800;color:#025AC6;line-height:1">${x.overdue}</div></div>
+        <span style="font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;white-space:nowrap;background:${t.bg};color:${t.fg}">${x.overdue} · ${x.oldest||0}d</span>
         <span style="color:#025AC6;font-size:16px">›</span>
       </div>`;
     }).join('');
