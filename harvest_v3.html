@@ -268,10 +268,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .eod-val{font-size:15px;font-weight:700;color:var(--text)}
 .eod-vendo-row{background:#f9fafb;border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .eod-code{font-size:11px;font-weight:700;color:#1D206F;background:#EEF1FA;border-radius:5px;padding:2px 7px}
-.hero-balance{background:linear-gradient(135deg,#0D1045 0%,#1D206F 70%,#311D76 100%);border-radius:16px;padding:24px 20px;margin-bottom:16px;color:#fff;text-align:center}
-.hero-label{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em}
-.hero-amount{font-size:36px;font-weight:700;margin-top:4px}
-.hero-sub{font-size:12px;opacity:.75;margin-top:4px}
+.hero-balance{background:linear-gradient(135deg,#2E3A8C 0%,#3D4CA8 60%,#5B4B9E 100%);border-radius:16px;padding:20px;margin-bottom:12px;color:#fff;text-align:center}
+.hero-label{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.08em}
+.hero-amount{font-size:28px;font-weight:700;margin-top:3px}
+.hero-sub{font-size:12px;opacity:.8;margin-top:3px}
 .quick-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
 .qs-box{background:#fff;border-radius:12px;border:1px solid var(--border);padding:12px;text-align:center}
 .qs-val{font-size:18px;font-weight:700;color:#1D206F}
@@ -477,6 +477,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <div style="font-size:10px;opacity:.7;margin-top:4px;text-align:right" id="home-quota-remaining">₱25,000 to go</div>
     </div>
+  </div>
+
+  <!-- Crucial areas — top overdue groups -->
+  <div id="home-crucial" style="display:none;margin-bottom:16px">
+    <div style="font-size:12px;font-weight:800;color:#B57F09;letter-spacing:.04em;margin:0 2px 8px;display:flex;align-items:center;gap:6px">🔥 CRUCIAL AREAS — HARVEST SOON</div>
+    <div id="home-crucial-list"></div>
   </div>
 
 <!-- Quick stats row -->
@@ -1635,7 +1641,7 @@ async function showHomeScreen(){
       const lb=document.getElementById('home-quota-label');
       if(lb) lb.textContent=pct>=100?'🎉 Quota reached!':'Daily Quota ₱25,000';
       const bar=document.getElementById('home-quota-bar');
-      if(bar){ bar.style.width=pct+'%'; bar.style.background=pct>=100?'#4ade80':pct>=70?'#fde68a':'#fff'; }
+      if(bar){ bar.style.width=pct+'%'; bar.style.background=pct>=100?'#4ade80':'#FFB725'; }
       const pp=document.getElementById('home-quota-pct');
       if(pp) pp.textContent=Math.round(pct)+'%';
       const ml=document.getElementById('home-month-label');
@@ -1646,6 +1652,53 @@ async function showHomeScreen(){
       }
     }
   }catch(e){}
+  loadCrucialAreas();
+}
+
+async function loadCrucialAreas(){
+  const wrap=document.getElementById('home-crucial');
+  const listEl=document.getElementById('home-crucial-list');
+  if(!wrap||!listEl) return;
+  try{
+    const groups=await loadPermGroups();
+    if(!groups||!groups.length){ wrap.style.display='none'; return; }
+    const ids=groups.map(g=>g.id).filter(x=>x!=null);
+    if(!ids.length){ wrap.style.display='none'; return; }
+    const r=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendos(last_harvest_date,status)&limit=8000`,{headers:HDR});
+    const rows=await r.json();
+    if(!Array.isArray(rows)){ wrap.style.display='none'; return; }
+    const now=Date.now();
+    const agg={};
+    rows.forEach(row=>{
+      const gid=row.group_run_id;
+      const v=row.vendos; if(!v||v.status!=='active') return;
+      if(!agg[gid]) agg[gid]={overdue:0,oldest:0};
+      const lhd=v.last_harvest_date;
+      const d=lhd?Math.floor((now-new Date(lhd+'T12:00:00'))/86400000):9999;
+      if(d>30) agg[gid].overdue++;
+      if(d<9999 && d>agg[gid].oldest) agg[gid].oldest=d;
+    });
+    const gmap={}; groups.forEach(g=>gmap[g.id]=g);
+    const ranked=Object.entries(agg).map(([gid,o])=>({gid,...o,g:gmap[gid]}))
+      .filter(x=>x.g&&x.overdue>0).sort((a,b)=>b.overdue-a.overdue).slice(0,3);
+    if(!ranked.length){ wrap.style.display='none'; return; }
+    listEl.innerHTML=ranked.map(x=>{
+      const g=x.g;
+      return `<div class="crucial-row" data-cgid="${x.gid}" style="cursor:pointer;background:#FEF6E0;border:1px solid #F5D98A;border-radius:12px;padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;gap:11px">
+        <div style="width:38px;height:38px;border-radius:11px;background:#FFB725;display:flex;align-items:center;justify-content:center;color:#7a4e05;font-size:19px;flex-shrink:0">📍</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:700;color:#5A3D05">${g.group_label||g.area}</div>
+          <div style="font-size:11px;color:#96792e">${x.overdue} vendos overdue${x.oldest?' · oldest '+x.oldest+' days':''}</div>
+        </div>
+        <div style="text-align:center;flex-shrink:0"><div style="font-size:20px;font-weight:800;color:#B57F09;line-height:1">${x.overdue}</div></div>
+        <span style="color:#B57F09;font-size:16px">›</span>
+      </div>`;
+    }).join('');
+    wrap.style.display='';
+    listEl.querySelectorAll('[data-cgid]').forEach(el=>{
+      el.addEventListener('click',()=>{ _sortMode='date'; startGroup(el.dataset.cgid); });
+    });
+  }catch(e){ wrap.style.display='none'; }
 }
 
 function bnavSwitchFromHome(tab){
