@@ -1664,17 +1664,27 @@ async function loadCrucialAreas(){
     if(!groups||!groups.length){ wrap.style.display='none'; return; }
     const ids=groups.map(g=>g.id).filter(x=>x!=null);
     if(!ids.length){ wrap.style.display='none'; return; }
-    const r=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendos(last_harvest_date,status)&limit=8000`,{headers:HDR});
-    const rows=await r.json();
-    if(!Array.isArray(rows)){ wrap.style.display='none'; return; }
+    // Query 1: items (group_run_id -> vendo_id)
+    const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=8000`,{headers:HDR});
+    const items=await r1.json();
+    if(!Array.isArray(items)||!items.length){ wrap.style.display='none'; return; }
+    // Query 2: vendo dates (id -> last_harvest_date, status)
+    const vids=[...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
+    const dateMap={};
+    // chunk vendo ids to keep URL length sane
+    for(let i=0;i<vids.length;i+=300){
+      const chunk=vids.slice(i,i+300);
+      const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
+      const vs=await r2.json();
+      if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]={lhd:v.last_harvest_date,status:v.status};});
+    }
     const now=Date.now();
     const agg={};
-    rows.forEach(row=>{
-      const gid=row.group_run_id;
-      const v=row.vendos; if(!v||v.status!=='active') return;
+    items.forEach(it=>{
+      const gid=it.group_run_id;
+      const v=dateMap[it.vendo_id]; if(!v||v.status!=='active') return;
       if(!agg[gid]) agg[gid]={overdue:0,oldest:0};
-      const lhd=v.last_harvest_date;
-      const d=lhd?Math.floor((now-new Date(lhd+'T12:00:00'))/86400000):9999;
+      const d=v.lhd?Math.floor((now-new Date(v.lhd+'T12:00:00'))/86400000):9999;
       if(d>30) agg[gid].overdue++;
       if(d<9999 && d>agg[gid].oldest) agg[gid].oldest=d;
     });
@@ -1698,7 +1708,7 @@ async function loadCrucialAreas(){
     listEl.querySelectorAll('[data-cgid]').forEach(el=>{
       el.addEventListener('click',()=>{ _sortMode='date'; startGroup(el.dataset.cgid); });
     });
-  }catch(e){ wrap.style.display='none'; }
+  }catch(e){ console.warn('[crucial] failed:',e&&e.message); wrap.style.display='none'; }
 }
 
 function bnavSwitchFromHome(tab){
@@ -1745,13 +1755,21 @@ async function fetchGroupOverdue(areaGroups){
   areaGroups.forEach(g=>result[g.id]={overdue:0,oldest:0});
   if(!ids.length) return result;
   try{
-    const r=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,vendos(last_harvest_date)&limit=5000`,{headers:HDR});
-    const rows=await r.json();
-    if(!Array.isArray(rows)) return result;
+    const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=5000`,{headers:HDR});
+    const items=await r1.json();
+    if(!Array.isArray(items)) return result;
+    const vids=[...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
+    const dateMap={};
+    for(let i=0;i<vids.length;i+=300){
+      const chunk=vids.slice(i,i+300);
+      const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date&limit=400`,{headers:HDR});
+      const vs=await r2.json();
+      if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]=v.last_harvest_date;});
+    }
     const now=Date.now();
-    rows.forEach(row=>{
+    items.forEach(row=>{
       const gid=row.group_run_id; if(!result[gid]) return;
-      const lhd=row.vendos&&row.vendos.last_harvest_date;
+      const lhd=dateMap[row.vendo_id];
       const d=lhd?Math.floor((now-new Date(lhd+'T12:00:00'))/86400000):9999;
       if(d>30) result[gid].overdue++;
       if(d<9999 && d>result[gid].oldest) result[gid].oldest=d;
