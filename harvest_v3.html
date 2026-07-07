@@ -651,6 +651,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <input type="text" id="search-inp" aria-label="Search vendo name" placeholder="Search vendo name…" oninput="onSearch(this.value)" autocomplete="off">
     <span id="search-clear" onclick="clearSearch()" style="display:none;font-size:14px;color:var(--muted);cursor:pointer">✕</span>
   </div>
+  <div class="sort-ctl" id="sort-ctl" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <span style="font-size:11px;color:var(--muted);font-weight:700">Sort:</span>
+    <button class="sortb on" id="sb-gps" onclick="setSortMode('gps')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#1e3cb8;color:#fff;font-family:inherit;cursor:pointer">📍 Nearest</button>
+    <button class="sortb" id="sb-date" onclick="setSortMode('date')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">🕐 Last harvest</button>
+    <button class="sortb" id="sb-az" onclick="setSortMode('az')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">A–Z</button>
+    <button class="sortb" id="sb-za" onclick="setSortMode('za')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">Z–A</button>
+  </div>
   <div id="history-search-bar" style="display:none;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px">
     <div style="display:flex;gap:8px;align-items:center">
       <span style="color:var(--muted);font-size:14px">🔍</span>
@@ -2092,6 +2099,15 @@ function switchTab(tab){
 function onSearch(v){if(!currentGroupRun||!currentItems.length) return;searchQuery=v.trim().toLowerCase();document.getElementById('search-clear').style.display=v?'inline':'none';renderVendoList();}
 function clearSearch(){searchQuery='';document.getElementById('search-inp').value='';document.getElementById('search-clear').style.display='none';renderVendoList();}
 
+let _sortMode='gps';
+function setSortMode(m){
+  _sortMode=m;
+  ['gps','date','az','za'].forEach(k=>{
+    const b=document.getElementById('sb-'+k);
+    if(b){ b.style.background=(k===m)?'#1e3cb8':'#fff'; b.style.color=(k===m)?'#fff':'var(--text)'; }
+  });
+  renderVendoList();
+}
 function renderVendoList(){
   const all=currentItems;
   const _area=currentGroupDef&&currentGroupDef.area;const _initCentroid=(currentGroupDef&&AREA_CENTROIDS[_area])||{lat:START_LAT,lng:START_LNG};
@@ -2137,20 +2153,30 @@ function renderVendoList(){
   let view=activeTab==='done'?done:activeTab==='issues'?issues:pending;
   if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
 
-  // GPS sort — filter outliers > 15km from start point
-  let sorted=false;
+  // Sort respects collector-chosen _sortMode (gps route / last-harvest / A-Z / Z-A)
+  let sorted=false; let _sortLabel='';
+  const _nm=i=>(i.sheet_name||i.tg_name||'Unknown');
+  const _days=i=>i.last_harvest_date?Math.floor((Date.now()-new Date(i.last_harvest_date+'T12:00:00'))/86400000):99999;
   if(activeTab!=='done'){
-    const centroid=(currentGroupDef&&AREA_CENTROIDS[currentGroupDef.area])||{lat:START_LAT,lng:START_LNG};
-    const MAX_DIST_KM=20;
-    view.forEach(item=>{item._dist=(item.lat&&item.lng)?haversine(centroid.lat,centroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
-    const withG=view.filter(i=>i._dist!==null&&i._dist<=MAX_DIST_KM),noG=view.filter(i=>i._dist===null||i._dist>MAX_DIST_KM);
-    if(withG.length){
-      const out=[],pool=[...withG];let cLat=centroid.lat,cLng=centroid.lng;
-      while(pool.length){let bi=0,bd=Infinity;pool.forEach((x,i)=>{const d=haversine(cLat,cLng,parseFloat(x.lat),parseFloat(x.lng));if(d<bd){bd=d;bi=i;}});const ch=pool.splice(bi,1)[0];ch._legDist=bd;cLat=parseFloat(ch.lat);cLng=parseFloat(ch.lng);out.push(ch);}
-      view=[...out,...noG];sorted=true;
+    if(_sortMode==='az'){ view.sort((a,b)=>_nm(a).localeCompare(_nm(b))); sorted=false; _sortLabel=''; }
+    else if(_sortMode==='za'){ view.sort((a,b)=>_nm(b).localeCompare(_nm(a))); sorted=false; _sortLabel=''; }
+    else if(_sortMode==='date'){ view.sort((a,b)=>_days(b)-_days(a)); sorted=false; _sortLabel='🕐 Most overdue first'; }
+    else {
+      const centroid=(currentGroupDef&&AREA_CENTROIDS[currentGroupDef.area])||{lat:START_LAT,lng:START_LNG};
+      const MAX_DIST_KM=20;
+      view.forEach(item=>{item._dist=(item.lat&&item.lng)?haversine(centroid.lat,centroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
+      const withG=view.filter(i=>i._dist!==null&&i._dist<=MAX_DIST_KM),noG=view.filter(i=>i._dist===null||i._dist>MAX_DIST_KM);
+      if(withG.length){
+        const out=[],pool=[...withG];let cLat=centroid.lat,cLng=centroid.lng;
+        while(pool.length){let bi=0,bd=Infinity;pool.forEach((x,i)=>{const d=haversine(cLat,cLng,parseFloat(x.lat),parseFloat(x.lng));if(d<bd){bd=d;bi=i;}});const ch=pool.splice(bi,1)[0];ch._legDist=bd;cLat=parseFloat(ch.lat);cLng=parseFloat(ch.lng);out.push(ch);}
+        view=[...out,...noG];sorted=true;
+      }
     }
   }
-  document.getElementById('sort-info').style.display=sorted?'flex':'none';
+  const _si=document.getElementById('sort-info');
+  if(_sortMode==='gps'){ _si.style.display=sorted?'flex':'none'; _si.innerHTML='📍 GPS-optimized — each stop is closest to previous'; }
+  else if(_sortLabel){ _si.style.display='flex'; _si.innerHTML=_sortLabel; }
+  else { _si.style.display='none'; }
 
   if(!view.length){
     const m=searchQuery?`No match for "${searchQuery}"`:{'pending':'🎉 All vendos recorded!','done':'No harvests yet.','issues':'No skipped vendos.'}[activeTab];
@@ -2238,11 +2264,12 @@ function renderVendoList(){
   // Split finalHtml into chunks of ~10 items for progressive rendering
   // Build as array of strings first for chunking
   const chunks=[];
-  if(activeTab==='done'){
+  if(activeTab==='done' || _sortMode==='az' || _sortMode==='za' || _sortMode==='date'){
+    // flat sorted list (no barangay regrouping — preserves chosen sort)
     const items=view;
     for(let i=0;i<items.length;i+=10) chunks.push(items.slice(i,i+10).map((it,j)=>renderItem(it,i+j)).join(''));
   } else {
-    // Already grouped by barangay — chunk by section
+    // GPS mode — grouped by barangay
     let seqC2=0;
     Object.entries(byBarangay).forEach(([barangay,items])=>{
       chunks.push(renderBarangaySection(barangay,items,seqC2));
