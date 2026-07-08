@@ -670,7 +670,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="sortb on" id="sb-gps" onclick="setSortMode('gps')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#FFB725;color:#0146A0;font-family:inherit;cursor:pointer">📍 Nearest</button>
     <button class="sortb" id="sb-date" onclick="setSortMode('date')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">🕐 Last harvest</button>
     <button class="sortb" id="sb-az" onclick="setSortMode('az')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">A–Z</button>
-    <button class="sortb" id="sb-za" onclick="setSortMode('za')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">Z–A</button>
+    <button class="sortb" id="sb-vlan" onclick="setSortMode('vlan')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">VLAN</button>
   </div>
   <div id="history-search-bar" style="display:none;background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px">
     <div style="display:flex;gap:8px;align-items:center">
@@ -683,6 +683,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="tab tab-green" id="tab-done" onclick="switchTab('done')">Done<span class="tab-badge" id="cnt-done">0</span></button>
     <button class="tab tab-amber" id="tab-issues" onclick="switchTab('issues')">Issues<span class="tab-badge" id="cnt-issues">0</span></button>
     <button class="tab tab-gray" id="tab-sync" onclick="switchTab('sync')" style="font-size:11px">Sync<span class="tab-badge" id="cnt-sync">0</span></button>
+    <button class="tab tab-gray" id="tab-pullout" onclick="switchTab('pullout')" style="font-size:11px">📤 Pull Out<span class="tab-badge" id="cnt-pullout">0</span></button>
     <button class="tab" id="tab-history" onclick="switchTab('history')" style="font-size:11px;background:linear-gradient(135deg,#025AC6,#025AC6);color:#fff" >History</button>
   </div>
   <div class="sort-info" id="sort-info" style="display:none">📍 GPS-optimized — each stop is closest to previous</div>
@@ -1205,7 +1206,7 @@ async function downloadAllOffline(manual=false){
         const items = allItems.map(item=>{
           const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
           return {
-            ...item, status:'pending',
+            ...item, status:(item.status==='pulled_out'?'pulled_out':'pending'),
             last_harvest_date:(cached && cached.last_harvest_date)||item.last_harvest_date,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
@@ -2169,6 +2170,17 @@ async function startGroup(groupId){
           contact_number: item.contact_number || (cached && cached.contact_number) || ''
         };
       }
+      // Preserve pulled-out vendos so they don't reappear in Pending
+      if(item.status==='pulled_out'){
+        return {
+          ...item, status:'pulled_out',
+          last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+          vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
+          address: item.address || (cached && cached.address) || '',
+          owner_name: item.owner_name || (cached && cached.owner_name) || '',
+          contact_number: item.contact_number || (cached && cached.contact_number) || ''
+        };
+      }
       return {
         ...item, status:'pending',
         last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
@@ -2191,8 +2203,8 @@ async function startGroup(groupId){
     if(navigator.onLine){
       const _todayT = new Date().toISOString().split('T')[0];
       fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:_harvestedTodayCount,skipped_count:0,started_at:new Date().toISOString()})});
-      // Only reset items NOT harvested today (older harvested rows revert to pending; today's stay)
-      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}&or=(status.neq.harvested,harvested_at.lt.${_todayT}T00:00:00)`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
+      // Only reset items NOT harvested today (older harvested rows revert to pending; today's stay). Never touch pulled_out.
+      fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}&status=neq.pulled_out&or=(status.neq.harvested,harvested_at.lt.${_todayT}T00:00:00)`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'pending'})});
     }
 
     currentGroupRun = {...g, harvested_count:_harvestedTodayCount, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
@@ -2323,7 +2335,7 @@ async function resumeSession(){
 // ── RENDER VENDO LIST ─────────────────────────────────────────────
 function switchTab(tab){
   activeTab=tab;
-  ['pending','done','issues','sync','history'].forEach(t=>{
+  ['pending','done','issues','sync','pullout','history'].forEach(t=>{
     const el=document.getElementById('tab-'+t);
     if(!el) return;
     el.classList.toggle('active',t===tab);
@@ -2346,16 +2358,18 @@ function onSearch(v){if(!currentGroupRun||!currentItems.length) return;searchQue
 function clearSearch(){searchQuery='';document.getElementById('search-inp').value='';document.getElementById('search-clear').style.display='none';renderVendoList();}
 
 let _sortMode='gps';
+let _sortDir={gps:1,date:1,az:1,vlan:1}; // 1 = default direction, -1 = reversed
 function setSortMode(m){
-  _sortMode=m;
-  ['gps','date','az','za'].forEach(k=>{
+  if(_sortMode===m){ _sortDir[m]=(_sortDir[m]===1?-1:1); } // same button tapped again → flip direction
+  else { _sortMode=m; }
+  ['gps','date','az','vlan'].forEach(k=>{
     const b=document.getElementById('sb-'+k);
-    if(b){ b.style.background=(k===m)?'#FFB725':'#fff'; b.style.color=(k===m)?'#0146A0':'var(--text)'; }
+    if(b){ b.style.background=(k===_sortMode)?'#FFB725':'#fff'; b.style.color=(k===_sortMode)?'#0146A0':'var(--text)'; }
   });
   renderVendoList();
 }
 function syncSortButtons(){
-  ['gps','date','az','za'].forEach(k=>{
+  ['gps','date','az','vlan'].forEach(k=>{
     const b=document.getElementById('sb-'+k);
     if(b){ b.style.background=(k===_sortMode)?'#FFB725':'#fff'; b.style.color=(k===_sortMode)?'#0146A0':'var(--text)'; }
   });
@@ -2373,6 +2387,7 @@ function renderVendoList(){
   });
   const done=all.filter(i=>i.status==='harvested');
   const issues=all.filter(i=>i.status==='skipped');
+  const pulled=all.filter(i=>i.status==='pulled_out');
   const total=all.length,doneCnt=done.length,pct=total?Math.round(doneCnt/total*100):0;
 
   document.getElementById('rt-progress').style.width=pct+'%';
@@ -2383,6 +2398,7 @@ function renderVendoList(){
   document.getElementById('cnt-done').textContent=done.length;
   document.getElementById('sched-day-num').textContent=done.length;
   document.getElementById('cnt-issues').textContent=issues.length;
+  const _cp=document.getElementById('cnt-pullout'); if(_cp) _cp.textContent=pulled.length;
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
 
   const allTouched=(pending.length===0);
@@ -2403,18 +2419,38 @@ function renderVendoList(){
     return;
   }
 
-  let view=activeTab==='done'?done:activeTab==='issues'?issues:pending;
+  let view=activeTab==='done'?done:activeTab==='issues'?issues:activeTab==='pullout'?pulled:pending;
   if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
 
-  // Sort respects collector-chosen _sortMode (gps route / last-harvest / A-Z / Z-A)
+  // Sort respects collector-chosen _sortMode + toggle direction (_sortDir)
   let sorted=false; let _sortLabel='';
   const _nm=i=>(i.sheet_name||i.tg_name||'Unknown');
   const _days=i=>i.last_harvest_date?Math.floor((Date.now()-new Date(i.last_harvest_date+'T12:00:00'))/86400000):99999;
+  const _vlanNum=i=>{ const v=parseInt(i.vlan); return isNaN(v)?null:v; };
   if(activeTab!=='done'){
-    if(_sortMode==='az'){ view.sort((a,b)=>_nm(a).localeCompare(_nm(b))); sorted=false; _sortLabel=''; }
-    else if(_sortMode==='za'){ view.sort((a,b)=>_nm(b).localeCompare(_nm(a))); sorted=false; _sortLabel=''; }
-    else if(_sortMode==='date'){ view.sort((a,b)=>_days(b)-_days(a)); sorted=false; _sortLabel='🕐 Most overdue first'; }
-    else {
+    const dir=_sortDir[_sortMode]||1;
+    if(_sortMode==='az'){
+      view.sort((a,b)=>_nm(a).localeCompare(_nm(b))*dir); sorted=false;
+      _sortLabel=dir===1?'🔤 A → Z':'🔤 Z → A';
+    }
+    else if(_sortMode==='date'){
+      // dir 1 = most overdue first (oldest/never first); dir -1 = latest first
+      view.sort((a,b)=>(_days(b)-_days(a))*dir); sorted=false;
+      _sortLabel=dir===1?'🕐 Most overdue first':'🕐 Latest harvest first';
+    }
+    else if(_sortMode==='vlan'){
+      // dir 1 = VLAN 1 onwards, blanks last; dir -1 = blanks first then high→low
+      view.sort((a,b)=>{
+        const va=_vlanNum(a), vb=_vlanNum(b);
+        if(va===null&&vb===null) return 0;
+        if(va===null) return dir===1?1:-1;   // blank goes last (dir1) / first (dir-1)
+        if(vb===null) return dir===1?-1:1;
+        return (va-vb)*dir;
+      });
+      sorted=false;
+      _sortLabel=dir===1?'🔢 VLAN 1 → high (blank last)':'🔢 Blank → VLAN high → 1';
+    }
+    else { // gps / nearest
       const centroid=(currentGroupDef&&AREA_CENTROIDS[currentGroupDef.area])||{lat:START_LAT,lng:START_LNG};
       const MAX_DIST_KM=20;
       view.forEach(item=>{item._dist=(item.lat&&item.lng)?haversine(centroid.lat,centroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
@@ -2422,17 +2458,20 @@ function renderVendoList(){
       if(withG.length){
         const out=[],pool=[...withG];let cLat=centroid.lat,cLng=centroid.lng;
         while(pool.length){let bi=0,bd=Infinity;pool.forEach((x,i)=>{const d=haversine(cLat,cLng,parseFloat(x.lat),parseFloat(x.lng));if(d<bd){bd=d;bi=i;}});const ch=pool.splice(bi,1)[0];ch._legDist=bd;cLat=parseFloat(ch.lat);cLng=parseFloat(ch.lng);out.push(ch);}
-        view=[...out,...noG];sorted=true;
+        let ordered=[...out,...noG];
+        if(dir===-1) ordered=[...out.reverse(),...noG]; // farthest→nearest
+        view=ordered; sorted=true;
+        _sortLabel=dir===1?'':'📍 Farthest → nearest';
       }
     }
   }
   const _si=document.getElementById('sort-info');
-  if(_sortMode==='gps'){ _si.style.display=sorted?'flex':'none'; _si.innerHTML='📍 GPS-optimized — each stop is closest to previous'; }
+  if(_sortMode==='gps'&&(_sortDir.gps||1)===1){ _si.style.display=sorted?'flex':'none'; _si.innerHTML='📍 GPS-optimized — each stop is closest to previous'; }
   else if(_sortLabel){ _si.style.display='flex'; _si.innerHTML=_sortLabel; }
   else { _si.style.display='none'; }
 
   if(!view.length){
-    const m=searchQuery?`No match for "${searchQuery}"`:{'pending':'🎉 All vendos recorded!','done':'No harvests yet.','issues':'No skipped vendos.'}[activeTab];
+    const m=searchQuery?`No match for "${searchQuery}"`:{'pending':'🎉 All vendos recorded!','done':'No harvests yet.','issues':'No skipped vendos.','pullout':'No pulled-out vendos.'}[activeTab];
     document.getElementById('vendo-list').innerHTML=`<div class="loading"><span>${m}</span></div>`;return;
   }
 
@@ -2440,9 +2479,10 @@ function renderVendoList(){
   const noGpsItems=activeTab!=='done'?view.filter(i=>!i.lat||!i.lng):[];
 
   const renderItem=(item,seqIdx)=>{
-    const cls=item.status==='harvested'?'done':item.status==='skipped'?'issue':'';
+    const cls=item.status==='harvested'?'done':item.status==='skipped'?'issue':item.status==='pulled_out'?'issue':'';
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
-      item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':'<span class="pill pill-gray">Tap to harvest</span>';
+      item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':
+      item.status==='pulled_out'?'<span class="pill pill-red">📤 Pulled out</span>':'<span class="pill pill-gray">Tap to harvest</span>';
     const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
     const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):null;
     const lhdColor=item.status==='harvested'?'#9ca3af':daysSince===null?'#6b7280':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#025AC6':'#15803d';
@@ -2518,7 +2558,7 @@ function renderVendoList(){
   // Split finalHtml into chunks of ~10 items for progressive rendering
   // Build as array of strings first for chunking
   const chunks=[];
-  if(activeTab==='done' || _sortMode==='az' || _sortMode==='za' || _sortMode==='date'){
+  if(activeTab==='done' || activeTab==='pullout' || _sortMode==='az' || _sortMode==='vlan' || _sortMode==='date'){
     // flat sorted list (no barangay regrouping — preserves chosen sort)
     const items=view;
     for(let i=0;i<items.length;i+=10) chunks.push(items.slice(i,i+10).map((it,j)=>renderItem(it,i+j)).join(''));
@@ -2639,8 +2679,21 @@ async function submitPullOut(){
       body:JSON.stringify(body)
     });
     if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+    // Mark this vendo as pulled out so it leaves the harvest list
+    currentItem.status='pulled_out';
+    if(currentItemIdx!=null && currentItems[currentItemIdx]) currentItems[currentItemIdx].status='pulled_out';
+    // Persist status on the harvest_group_items row (gateway allows PATCH)
+    if(currentItem.id){
+      fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{
+        method:'PATCH',
+        headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify({status:'pulled_out',collector_note:'PULL OUT: '+reason})
+      }).catch(e=>console.error('pullout status persist failed',e));
+    }
+    if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
     closePullOut();
-    toast('✅ Pull-out job order sent for '+nm);
+    toast('✅ Pulled out — '+nm+' moved to Pull Out tab');
+    try{ renderVendoList(); }catch(_){}
   }catch(e){
     console.error('pull-out failed',e);
     toast('❌ Failed to send — '+(e.message||'try again'));
