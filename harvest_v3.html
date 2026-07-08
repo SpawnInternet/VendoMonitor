@@ -795,11 +795,46 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <button onclick="copyGPS()" style="flex:1;padding:8px 10px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;font-family:inherit">📋 Copy coords</button>
         <a id="gps-verify-a" href="#" target="_blank" style="flex:1;padding:8px 10px;background:#f0fdf4;border:1.5px solid var(--green-mid);border-radius:8px;font-size:12px;font-weight:700;color:var(--green);text-decoration:none;text-align:center;display:inline-block">🗺 Verify Maps</a>
       </div>
+      <!-- Pull Out — sends a job order to the dispatch board -->
+      <div style="margin-top:14px;padding-top:12px;border-top:1px dashed #e5e7eb">
+        <button class="btn" id="pullout-open-btn" onclick="openPullOut()" style="width:100%;background:#fef2f2;border:1.5px solid #fecaca;color:#b91c1c;font-weight:700">📤 Pull Out Vendo</button>
+      </div>
     </div>
     <!-- Legacy stubs so existing JS refs don't crash -->
     <button id="gps-btn" style="display:none"></button>
     <div id="gps-verify-link" style="display:none"></div>
     <canvas id="camera-canvas" style="display:none"></canvas>
+  </div>
+
+  <!-- Pull Out reason popup -->
+  <div id="pullout-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="background:#b91c1c;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700;font-size:16px">📤 Pull Out Vendo</div>
+        <button onclick="closePullOut()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:18px">
+        <div id="pullout-vendo-name" style="font-weight:700;font-size:15px;margin-bottom:2px">—</div>
+        <div id="pullout-vendo-sub" style="font-size:12px;color:#6b7280;margin-bottom:14px">—</div>
+        <div class="coin-label">Reason for pull out</div>
+        <select id="pullout-reason-select" class="text-input" style="margin-bottom:10px">
+          <option value="">Select a reason…</option>
+          <option>Owner stopped / quit</option>
+          <option>Low income / not earning</option>
+          <option>Relocating vendo</option>
+          <option>Machine defective</option>
+          <option>Owner requested removal</option>
+          <option>Non-payment / debt</option>
+          <option>Other (specify below)</option>
+        </select>
+        <div class="coin-label">Details <span style="color:#9ca3af">optional</span></div>
+        <textarea id="pullout-reason-note" class="text-input" rows="3" placeholder="Add any detail for the lineman…" style="resize:vertical"></textarea>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn" onclick="closePullOut()" style="flex:1;background:#f3f4f6;border:1.5px solid #e5e7eb;color:#374151;font-weight:700">Cancel</button>
+          <button class="btn" id="pullout-submit-btn" onclick="submitPullOut()" style="flex:1;background:#b91c1c;border:1.5px solid #b91c1c;color:#fff;font-weight:700">Send Job Order</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Coins Section V3: Spawn Share hero + popup for breakdown -->
@@ -2502,6 +2537,59 @@ function renderVendoList(){
     };
     appendChunk(0);
   });
+}
+
+// ── PULL OUT → JOB ORDER ──────────────────────────────────────────
+function openPullOut(){
+  if(!currentItem){ toast('Open a vendo first'); return; }
+  const nm=currentItem.sheet_name||currentItem.tg_name||'Vendo';
+  document.getElementById('pullout-vendo-name').textContent=nm;
+  document.getElementById('pullout-vendo-sub').textContent=
+    (currentItem.address||currentItem.barangay||currentItem.area||'—')+
+    (currentItem.vlan?(' · VLAN '+currentItem.vlan):'');
+  document.getElementById('pullout-reason-select').value='';
+  document.getElementById('pullout-reason-note').value='';
+  document.getElementById('pullout-modal').style.display='flex';
+}
+function closePullOut(){ document.getElementById('pullout-modal').style.display='none'; }
+async function submitPullOut(){
+  const reason=(document.getElementById('pullout-reason-select').value||'').trim();
+  const note=(document.getElementById('pullout-reason-note').value||'').trim();
+  if(!reason){ toast('Please select a reason'); return; }
+  if(!navigator.onLine){ toast('⚠️ You are offline — try again when connected'); return; }
+  const btn=document.getElementById('pullout-submit-btn');
+  btn.disabled=true; btn.textContent='Sending…';
+  const nm=currentItem.sheet_name||currentItem.tg_name||'Vendo';
+  const issueText='PULL OUT: '+reason+(note?(' — '+note):'');
+  const body={
+    type:'vendo_pullout',
+    source:'harvest',
+    status:'new',
+    priority:'normal',
+    area:currentItem.area||null,
+    customer:nm,
+    vlan:currentItem.vlan?String(currentItem.vlan):null,
+    address:currentItem.address||currentItem.barangay||null,
+    contact:currentItem.contact_number||null,
+    issue:issueText,
+    vendo_id:currentItem.vendo_id||null,
+    tg_reported_by:selectedCollector||null
+  };
+  try{
+    const r=await fetch(`${SB}/rest/v1/job_orders`,{
+      method:'POST',
+      headers:{...HDR,'Prefer':'return=minimal'},
+      body:JSON.stringify(body)
+    });
+    if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+    closePullOut();
+    toast('✅ Pull-out job order sent for '+nm);
+  }catch(e){
+    console.error('pull-out failed',e);
+    toast('❌ Failed to send — '+(e.message||'try again'));
+  }finally{
+    btn.disabled=false; btn.textContent='Send Job Order';
+  }
 }
 
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
