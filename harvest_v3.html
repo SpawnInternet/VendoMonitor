@@ -662,7 +662,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div class="search-bar" id="search-bar">
     <span style="color:var(--muted);font-size:14px">🔍</span>
-    <input type="text" id="search-inp" aria-label="Search vendo name" placeholder="Search vendo name…" oninput="onSearch(this.value)" autocomplete="off">
+    <input type="text" id="search-inp" aria-label="Search vendo name or VLAN" placeholder="Search name, VLAN, or address…" oninput="onSearch(this.value)" autocomplete="off">
     <span id="search-clear" onclick="clearSearch()" style="display:none;font-size:14px;color:var(--muted);cursor:pointer">✕</span>
   </div>
   <div class="sort-ctl" id="sort-ctl" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
@@ -841,6 +841,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <button class="btn" onclick="closePullOut()" style="flex:1;background:#f3f4f6;border:1.5px solid #e5e7eb;color:#374151;font-weight:700">Cancel</button>
           <button class="btn" id="pullout-submit-btn" onclick="submitPullOut()" style="flex:1;background:#b91c1c;border:1.5px solid #b91c1c;color:#fff;font-weight:700">Send Job Order</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pull Out DETAIL (read-only) popup -->
+  <div id="pullout-detail-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#fff;border-radius:16px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="background:#b91c1c;color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div style="font-weight:700;font-size:16px">📤 Pull Out Details</div>
+        <button onclick="closePulloutDetail()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:18px">
+        <div id="pod-name" style="font-weight:700;font-size:16px;margin-bottom:2px">—</div>
+        <div id="pod-sub" style="font-size:12px;color:#6b7280;margin-bottom:16px">—</div>
+
+        <div style="font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reason</div>
+        <div id="pod-reason" style="font-size:14px;color:#111;margin-bottom:14px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">—</div>
+
+        <div style="font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Details</div>
+        <div id="pod-details" style="font-size:14px;color:#374151;margin-bottom:14px;padding:10px 12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;white-space:pre-wrap">—</div>
+
+        <div style="font-size:10px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Date pulled out</div>
+        <div id="pod-date" style="font-size:14px;color:#374151;margin-bottom:18px">—</div>
+
+        <button class="btn" onclick="closePulloutDetail()" style="width:100%;background:#f3f4f6;border:1.5px solid #e5e7eb;color:#374151;font-weight:700">Close</button>
       </div>
     </div>
   </div>
@@ -2172,8 +2197,15 @@ async function startGroup(groupId){
       }
       // Preserve pulled-out vendos so they don't reappear in Pending
       if(item.status==='pulled_out'){
+        // collector_note stored as "PULL OUT: <reason> — <details>"; harvested_at = pull-out time
+        let _r='', _d='';
+        const _n=item.collector_note||'';
+        const _m=_n.replace(/^PULL OUT:\s*/i,'');
+        if(_m.includes(' — ')){ const p=_m.split(' — '); _r=p.shift().trim(); _d=p.join(' — ').trim(); }
+        else { _r=_m.trim(); }
         return {
           ...item, status:'pulled_out',
+          _pulloutReason:_r, _pulloutDetails:_d, _pulloutAt:item.harvested_at||null,
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
@@ -2420,7 +2452,7 @@ function renderVendoList(){
   }
 
   let view=activeTab==='done'?done:activeTab==='issues'?issues:activeTab==='pullout'?pulled:pending;
-  if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')).toLowerCase().includes(searchQuery));
+  if(searchQuery) view=view.filter(i=>((i.sheet_name||i.tg_name||'')+' '+(i.owner_name||'')+' '+(i.barangay||i.area||'')+' '+(i.address||'')+' '+(i.vlan!=null?('vlan '+i.vlan+' '+i.vlan):'')+' '+(i.vendo_code||'')).toLowerCase().includes(searchQuery));
 
   // Sort respects collector-chosen _sortMode + toggle direction (_sortDir)
   let sorted=false; let _sortLabel='';
@@ -2503,7 +2535,7 @@ function renderVendoList(){
       ? `<div style="display:inline-block;background:#025AC6;color:#fff;font-size:13px;font-weight:900;padding:3px 10px;border-radius:6px;letter-spacing:.08em;margin-bottom:4px">${item.vendo_code.toUpperCase()}</div>`
       : '';
     const vlanHtml = `<div style="display:inline-block;background:${item.vlan?'#e6f1fb':'#f1f1f1'};color:${item.vlan?'#0c447c':'#9ca3af'};font-size:12px;font-weight:700;padding:3px 9px;border-radius:6px;margin-bottom:4px;margin-left:6px">VLAN ${item.vlan||'—'}</div>`;
-    return `<div class="vendo-item ${cls}" onclick="openItem(${item._origIdx})">
+    return `<div class="vendo-item ${cls}" onclick="${item.status==='pulled_out'?`showPulloutDetail(${item._origIdx})`:`openItem(${item._origIdx})`}">
       <div class="vi-seq">${seqIdx+1}</div>
       <div class="vi-left">
         ${vcodeHtml}${vlanHtml}
@@ -2604,6 +2636,24 @@ function openPullOut(){
 }
 function closePullOut(){ document.getElementById('pullout-modal').style.display='none'; }
 
+function showPulloutDetail(idx){
+  const it=currentItems[idx]; if(!it) return;
+  const nm=it.sheet_name||it.tg_name||'Vendo';
+  document.getElementById('pod-name').textContent=nm;
+  document.getElementById('pod-sub').textContent=
+    (it.address||it.barangay||it.area||'—')+(it.vlan?(' · VLAN '+it.vlan):'');
+  document.getElementById('pod-reason').textContent=it._pulloutReason||'—';
+  document.getElementById('pod-details').textContent=it._pulloutDetails||'—';
+  let dtxt='—';
+  if(it._pulloutAt){
+    const d=new Date(it._pulloutAt);
+    if(!isNaN(d)) dtxt=d.toLocaleDateString('en-PH',{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+  }
+  document.getElementById('pod-date').textContent=dtxt;
+  document.getElementById('pullout-detail-modal').style.display='flex';
+}
+function closePulloutDetail(){ document.getElementById('pullout-detail-modal').style.display='none'; }
+
 async function pulloutValidatePin(pin){
   if(!pin || pin.length!==4) return false;
   // fast path: cached PIN
@@ -2679,15 +2729,18 @@ async function submitPullOut(){
       body:JSON.stringify(body)
     });
     if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+    const _pulloutTs=new Date().toISOString();
+    const _noteStr='PULL OUT: '+reason+(note?(' — '+note):'');
     // Mark this vendo as pulled out so it leaves the harvest list
-    currentItem.status='pulled_out';
-    if(currentItemIdx!=null && currentItems[currentItemIdx]) currentItems[currentItemIdx].status='pulled_out';
-    // Persist status on the harvest_group_items row (gateway allows PATCH)
+    const _stamp=(it)=>{ if(!it) return; it.status='pulled_out'; it._pulloutReason=reason; it._pulloutDetails=note||''; it._pulloutAt=_pulloutTs; it.collector_note=_noteStr; };
+    _stamp(currentItem);
+    if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
+    // Persist on the harvest_group_items row (gateway allows PATCH); harvested_at doubles as pull-out timestamp
     if(currentItem.id){
       fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{
         method:'PATCH',
         headers:{...HDR,'Prefer':'return=minimal'},
-        body:JSON.stringify({status:'pulled_out',collector_note:'PULL OUT: '+reason})
+        body:JSON.stringify({status:'pulled_out',collector_note:_noteStr,harvested_at:_pulloutTs})
       }).catch(e=>console.error('pullout status persist failed',e));
     }
     if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
