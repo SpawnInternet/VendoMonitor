@@ -1288,9 +1288,10 @@ updateOnline();
 if('serviceWorker' in navigator){
   let _swReloading = false;
   window._swPendingReload = false;
-  // When a new SW takes control, reload — but never interrupt active data entry
+  const _hadControllerAtLoad = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', ()=>{
     if(_swReloading) return;
+    if(!_hadControllerAtLoad) return;
     const _active = document.querySelector('.screen.active');
     const _onForm = _active && (_active.id==='screen-form' || _active.id==='screen-camera');
     const _sheetOpen = document.querySelector('.confirm-overlay.show, #collection-sheet-overlay.show');
