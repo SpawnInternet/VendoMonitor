@@ -1,5 +1,5 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v10.7.1';
+const CACHE = 'spawn-harvest-v3-v10.7.2';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
