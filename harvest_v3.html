@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.8</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.9</div>
     </div>
 
   </div>
@@ -1371,7 +1371,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.8';
+const APP_VERSION = 'v10.9';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1803,19 +1803,36 @@ function closeAreaPicker(){ document.getElementById('area-picker-sheet')?.classL
 
 async function fetchGroupOverdue(areaGroups){
   // For each group run id, count vendos whose last_harvest_date is >30 days or null.
-  // One query per area is enough — pull items+vendo dates for these group runs.
   const ids=areaGroups.map(g=>g.id).filter(x=>x!=null);
   const result={};
   areaGroups.forEach(g=>result[g.id]={overdue:0,oldest:0});
   if(!ids.length) return result;
   try{
-    const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=5000`,{headers:HDR});
-    const items=await r1.json();
+    // Cache the group_run_id -> vendo_id item map (rarely changes) for 6h
+    const mapKey='ovd_items_'+ids.join('_');
+    let items=null;
+    const cachedMap=localStorage.getItem(mapKey);
+    const cachedMapTs=parseInt(localStorage.getItem(mapKey+'_ts')||'0');
+    if(cachedMap && (Date.now()-cachedMapTs < 6*3600*1000)){
+      items=JSON.parse(cachedMap);
+    } else {
+      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=5000`,{headers:HDR});
+      items=await r1.json();
+      if(Array.isArray(items)){ try{ localStorage.setItem(mapKey,JSON.stringify(items)); localStorage.setItem(mapKey+'_ts',Date.now().toString()); }catch(_){} }
+    }
     if(!Array.isArray(items)) return result;
-    const vids=[...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
+    // Prefer the preloaded vendo cache for dates — avoids a whole batch of vendo fetches
     const dateMap={};
-    for(let i=0;i<vids.length;i+=300){
-      const chunk=vids.slice(i,i+300);
+    const missing=[];
+    items.forEach(i=>{
+      if(i.vendo_id==null) return;
+      if(_vendoCacheMap && _vendoCacheMap[i.vendo_id]) dateMap[i.vendo_id]=_vendoCacheMap[i.vendo_id].last_harvest_date;
+      else missing.push(i.vendo_id);
+    });
+    // Only fetch the ones not in cache (usually none)
+    const uniqMissing=[...new Set(missing)];
+    for(let i=0;i<uniqMissing.length;i+=300){
+      const chunk=uniqMissing.slice(i,i+300);
       const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date&limit=400`,{headers:HDR});
       const vs=await r2.json();
       if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]=v.last_harvest_date;});
@@ -1840,30 +1857,37 @@ async function showAllGroups(){
   const listEl=document.getElementById('group-picker-list');
   if(!sheet) return;
   if(title) title.textContent='All Groups';
-  listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading groups…</span></div>';
   sheet.classList.add('show');
-  const groups=await loadPermGroups();
+  const groups=await loadPermGroups(); // cached, instant
   const withGroups=groups.filter(g=>g.group_label||g.group_id);
-  const overdue=await fetchGroupOverdue(withGroups);
-  const sorted=[...withGroups].sort((a,b)=>((overdue[b.id]||{overdue:0}).overdue)-((overdue[a.id]||{overdue:0}).overdue));
-  let html='';
-  sorted.forEach((g,i)=>{
-    const o=overdue[g.id]||{overdue:0,oldest:0};
-    const t=o.oldest>=60?{bg:'#FBE1E4',fg:'#B00E23'}:o.oldest>=30?{bg:'#FEF1D6',fg:'#8A6206'}:{bg:'#DBF3EC',fg:'#046B52'};
-    const badge=o.overdue>0?`<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;white-space:nowrap;margin-left:auto;background:${t.bg};color:${t.fg}">${o.overdue}</span>`:'';
-    html+=`<div class="picker-item" style="cursor:pointer" data-allgroup-idx="${i}" data-allgroup-id="${g.id}">
-      ${areaIconHtml(g.area,44)}
-      <div class="gi-left"><div style="font-size:15px;font-weight:700">${g.group_label||g.group_id}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${g.area?g.area.charAt(0)+g.area.slice(1).toLowerCase():''} · ${g.total_vendos||0} vendos</div></div>
-      ${badge}
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#025AC6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:8px"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>`;
+  // Render immediately (no overdue yet) so there's no spinner
+  const renderList=(sorted, overdue)=>{
+    let html='';
+    sorted.forEach((g,i)=>{
+      const o=(overdue&&overdue[g.id])||{overdue:0,oldest:0};
+      const t=o.oldest>=60?{bg:'#FBE1E4',fg:'#B00E23'}:o.oldest>=30?{bg:'#FEF1D6',fg:'#8A6206'}:{bg:'#DBF3EC',fg:'#046B52'};
+      const badge=o.overdue>0?`<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;white-space:nowrap;margin-left:auto;background:${t.bg};color:${t.fg}">${o.overdue}</span>`:'';
+      html+=`<div class="picker-item" style="cursor:pointer" data-allgroup-idx="${i}" data-allgroup-id="${g.id}">
+        ${areaIconHtml(g.area,44)}
+        <div class="gi-left"><div style="font-size:15px;font-weight:700">${g.group_label||g.group_id}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${g.area?g.area.charAt(0)+g.area.slice(1).toLowerCase():''} · ${g.total_vendos||0} vendos</div></div>
+        ${badge}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#025AC6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:8px"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    });
+    listEl.innerHTML=html||'<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet</div>';
+    listEl.querySelectorAll('[data-allgroup-idx]').forEach(el=>{
+      el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
+    });
+  };
+  // 1) instant paint using group order as-is
+  renderList(withGroups, null);
+  // 2) warm caches right away so tapping is instant
+  setTimeout(()=>prewarmGroups(withGroups),100);
+  // 3) compute overdue in background, then re-sort + repaint badges
+  fetchGroupOverdue(withGroups).then(overdue=>{
+    const sorted=[...withGroups].sort((a,b)=>((overdue[b.id]||{overdue:0}).overdue)-((overdue[a.id]||{overdue:0}).overdue));
+    if(document.getElementById('group-picker-sheet')?.classList.contains('show')) renderList(sorted, overdue);
   });
-  listEl.innerHTML=html||'<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet</div>';
-  listEl.querySelectorAll('[data-allgroup-idx]').forEach(el=>{
-    el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
-  });
-  // Background: warm caches so tapping any group is instant
-  setTimeout(()=>prewarmGroups(sorted),300);
 }
 
 async function openGroupPicker(areaJson){
