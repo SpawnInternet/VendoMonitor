@@ -1,5 +1,5 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v10.6';
+const CACHE = 'spawn-harvest-v3-v10.6.1';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
@@ -23,7 +23,7 @@ self.addEventListener('activate', e => {
           .filter(k => k.startsWith('spawn-harvest-v3') && k !== CACHE)
           .map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())
+    )
   );
 });
 
