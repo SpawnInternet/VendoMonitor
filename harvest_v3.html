@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.9</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.0</div>
     </div>
 
   </div>
@@ -1371,7 +1371,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.9';
+const APP_VERSION = 'v11.0';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1398,11 +1398,13 @@ window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
   pinLoadCollectors();
 
-  // Clear ALL stale data from previous app versions
+  // Clear only genuinely stale per-item caches from old versions.
+  // Keep perm_groups, grp_cache, overdue maps, and the login session so
+  // refreshes and version bumps stay fast and don't log the collector out.
   const savedVersion = localStorage.getItem('harvest_app_version');
   if(savedVersion !== APP_VERSION){
     Object.keys(localStorage)
-      .filter(k=>k.startsWith('cached_')||k.startsWith('harvest_')||k.startsWith('perm_groups')||k.startsWith('grp_cache'))
+      .filter(k=>k.startsWith('cached_'))
       .forEach(k=>localStorage.removeItem(k));
     localStorage.setItem('harvest_app_version', APP_VERSION);
   }
@@ -1423,7 +1425,15 @@ window.addEventListener('DOMContentLoaded',()=>{
     const nm=document.getElementById('signedin-name');
     if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
     if(nm) nm.textContent=_sess.name||'Collector';
-    showScreen('screen-signedin');
+    // On refresh: restore where the collector was, don't force a "continue" tap.
+    const _last = (()=>{ try{ return JSON.parse(localStorage.getItem('harvest_session')||'null'); }catch(_){ return null; } })();
+    if(_last && _last.groupId){
+      // was inside a group — reopen it directly (uses cache = instant)
+      try{ startGroup(_last.groupId); }
+      catch(_){ showHomeScreen(); }
+    } else {
+      showHomeScreen();
+    }
   } else {
     spawnClearSession();
     showScreen('screen-collector');
@@ -1708,16 +1718,28 @@ async function loadCrucialAreas(){
     if(!groups||!groups.length){ wrap.style.display='none'; return; }
     const ids=groups.map(g=>g.id).filter(x=>x!=null);
     if(!ids.length){ wrap.style.display='none'; return; }
-    // Query 1: items (group_run_id -> vendo_id)
-    const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=8000`,{headers:HDR});
-    const items=await r1.json();
+    // Query 1: items (group_run_id -> vendo_id) — cached 6h
+    const mapKey='crucial_items_'+ids.length;
+    let items=null;
+    const cm=localStorage.getItem(mapKey), cmts=parseInt(localStorage.getItem(mapKey+'_ts')||'0');
+    if(cm && (Date.now()-cmts < 6*3600*1000)){ items=JSON.parse(cm); }
+    else {
+      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=8000`,{headers:HDR});
+      items=await r1.json();
+      if(Array.isArray(items)){ try{ localStorage.setItem(mapKey,JSON.stringify(items)); localStorage.setItem(mapKey+'_ts',Date.now().toString()); }catch(_){} }
+    }
     if(!Array.isArray(items)||!items.length){ wrap.style.display='none'; return; }
-    // Query 2: vendo dates (id -> last_harvest_date, status)
+    // Vendo dates/status: prefer preloaded cache, only fetch what's missing
     const vids=[...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
     const dateMap={};
-    // chunk vendo ids to keep URL length sane
-    for(let i=0;i<vids.length;i+=300){
-      const chunk=vids.slice(i,i+300);
+    const missing=[];
+    vids.forEach(id=>{
+      const c=_vendoCacheMap&&_vendoCacheMap[id];
+      if(c) dateMap[id]={lhd:c.last_harvest_date,status:c.status};
+      else missing.push(id);
+    });
+    for(let i=0;i<missing.length;i+=300){
+      const chunk=missing.slice(i,i+300);
       const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
       const vs=await r2.json();
       if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]={lhd:v.last_harvest_date,status:v.status};});
