@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.6.2</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.7</div>
     </div>
 
   </div>
@@ -1434,7 +1434,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.6';
+const APP_VERSION = 'v10.7';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2537,7 +2537,7 @@ function renderVendoList(){
       ? `<div style="display:inline-block;background:#025AC6;color:#fff;font-size:13px;font-weight:900;padding:3px 10px;border-radius:6px;letter-spacing:.08em;margin-bottom:4px">${item.vendo_code.toUpperCase()}</div>`
       : '';
     const vlanHtml = `<div style="display:inline-block;background:${item.vlan?'#e6f1fb':'#f1f1f1'};color:${item.vlan?'#0c447c':'#9ca3af'};font-size:12px;font-weight:700;padding:3px 9px;border-radius:6px;margin-bottom:4px;margin-left:6px">VLAN ${item.vlan||'—'}</div>`;
-    return `<div class="vendo-item ${cls}" onclick="${item.status==='pulled_out'?`showPulloutDetail(${item._origIdx})`:`openItem(${item._origIdx})`}">
+    return `<div class="vendo-item ${cls}" ${item.status==='pulled_out'?`data-pullout-idx="${item._origIdx}"`:''} onclick="${item.status==='pulled_out'?`showPulloutDetail(${item._origIdx})`:`openItem(${item._origIdx})`}">
       <div class="vi-seq">${seqIdx+1}</div>
       <div class="vi-left">
         ${vcodeHtml}${vlanHtml}
@@ -2655,6 +2655,15 @@ function showPulloutDetail(idx){
   document.getElementById('pullout-detail-modal').style.display='flex';
 }
 function closePulloutDetail(){ document.getElementById('pullout-detail-modal').style.display='none'; }
+// Delegated fallback: guarantees the pull-out detail popup opens even if an
+// older cached inline handler is present on the card.
+document.addEventListener('click', function(e){
+  const card = e.target.closest && e.target.closest('[data-pullout-idx]');
+  if(!card) return;
+  // ignore clicks on inner links/buttons that stop propagation themselves
+  const idx = parseInt(card.getAttribute('data-pullout-idx'));
+  if(!isNaN(idx)){ e.preventDefault(); showPulloutDetail(idx); }
+}, true);
 
 async function pulloutValidatePin(pin){
   if(!pin || pin.length!==4) return false;
