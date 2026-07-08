@@ -371,7 +371,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="topbar-back" id="topbar-back" onclick="topbarBack()">← Back</button>
     <div>
       <div class="topbar-logo" style="display:flex;align-items:center;gap:7px">
-        <img src="/VendoMonitor/spawn-logo.png" alt="" style="width:22px;height:22px;object-fit:contain;border-radius:4px">
+        <img src="/VendoMonitor/spawn-logo.png" alt="" style="width:28px;height:28px;object-fit:contain">
         Spawn Harvest
       </div>
       <div class="topbar-sub" id="topbar-sub">Collector PWA</div>
@@ -394,8 +394,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <!-- Hero -->
     <div style="text-align:center;margin-bottom:24px">
       <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
-        style="width:64px;height:64px;object-fit:contain;border-radius:50%;display:block;margin:0 auto 10px">
-      <div style="font-size:24px;font-weight:900;color:#1e2d5a;letter-spacing:-.3px">Spawn Harvest</div>
+        style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
+      <div style="font-size:26px;font-weight:900;color:#0D1045;letter-spacing:1px">SPAWN <span style="color:#1F6FC0">HARVEST</span></div>
       <div style="font-size:12px;color:#8b99b8;margin-top:4px">Select your name then enter PIN</div>
     </div>
 
@@ -434,22 +434,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="pin-key del" onclick="hvPinKey('clr')">✕</button>
     </div>
 
-    <!-- Resume banner -->
-    <div id="resume-banner" style="display:none;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:14px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:6px">⚡ Resume previous session?</div>
-      <div style="font-size:13px;color:var(--text);margin-bottom:10px"><b id="resume-collector-name"></b> — <b id="resume-group-name"></b></div>
-      <button class="btn btn-green" onclick="resumeSession()" style="margin-bottom:6px">▶ Resume</button>
-      <button class="btn btn-gray" onclick="clearResume()">✕ Start fresh</button>
-    </div>
-
     <div style="text-align:center;padding-top:4px">
+      <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.5</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v10.6</div>
     </div>
 
   </div>
 
 </div><!-- /screen-collector -->
+
+<div class="screen" id="screen-signedin" style="background:#eef1fa;min-height:100vh">
+  <div style="max-width:360px;margin:0 auto;padding:36px 16px 24px">
+    <div style="text-align:center;margin-bottom:22px">
+      <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
+        style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
+      <div style="font-size:26px;font-weight:900;color:#0D1045;letter-spacing:1px">SPAWN <span style="color:#1F6FC0">HARVEST</span></div>
+    </div>
+    <div style="background:#fff;border:1px solid #e5e9f2;border-radius:16px;padding:26px 20px;text-align:center">
+      <div id="signedin-avatar" style="width:58px;height:58px;border-radius:50%;background:#0D1045;color:#fff;font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px">?</div>
+      <div style="font-size:13px;color:#8b99b8;margin-bottom:2px">Signed in as</div>
+      <div id="signedin-name" style="font-size:20px;font-weight:700;color:#1e2d5a;margin-bottom:20px">Collector</div>
+      <button class="btn" onclick="continueSession()" style="background:#0D1045;color:#fff;margin-bottom:10px">➜ Continue</button>
+      <button class="btn btn-gray" onclick="pinLogout()">🚪 Not you? Log out</button>
+    </div>
+    <div style="text-align:center;padding-top:14px">
+      <div style="font-size:11px;color:#8b99b8">🕘 Stays signed in until 9:00 PM</div>
+    </div>
+  </div>
+</div><!-- /screen-signedin -->
 
 <!-- ── SCREEN 1b: AREA SELECT ─────────────────────────── -->
 <div class="screen" id="screen-home">
@@ -1232,7 +1245,7 @@ function showScreen(id){
   // Show/hide back button and logout based on screen
   const backBtn=document.getElementById('topbar-back');
   const logoutBtn=document.getElementById('topbar-logout');
-  const noBack=['screen-collector'];
+  const noBack=['screen-collector','screen-signedin'];
   if(backBtn){
     backBtn.style.display=noBack.includes(id)?'none':'inline-block';
     // Label: ← Back on form, ⌂ Home everywhere else
@@ -1317,32 +1330,39 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v10.5';
+const APP_VERSION = 'v10.6';
+
+// ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
+const SPAWN_CUTOFF_HOUR = 21; // 9PM Asia/Manila
+function spawnManilaNow(){
+  // Returns {date:'YYYY-MM-DD', hour:Number} in Asia/Manila
+  const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hour12:false}).formatToParts(new Date());
+  const g = t => parts.find(p=>p.type===t)?.value;
+  return { date: `${g('year')}-${g('month')}-${g('day')}`, hour: parseInt(g('hour'),10) };
+}
+function spawnSaveSession(c, team, pin){
+  const now = spawnManilaNow();
+  try{
+    localStorage.setItem('spawn_session', JSON.stringify({
+      id: c.id||'', name: c.name||'', team: team||'', pin: pin||'',
+      date: now.date, ts: Date.now()
+    }));
+  }catch(e){}
+}
+function spawnGetValidSession(){
+  let s; try{ s = JSON.parse(localStorage.getItem('spawn_session')||'null'); }catch(e){ s=null; }
+  if(!s || !s.name) return null;
+  const now = spawnManilaNow();
+  // Expired if a different Manila day, OR it's now 9PM or later on the same day
+  if(s.date !== now.date) return null;
+  if(now.hour >= SPAWN_CUTOFF_HOUR) return null;
+  return s;
+}
+function spawnClearSession(){ try{ localStorage.removeItem('spawn_session'); }catch(e){} }
 
 window.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
   pinLoadCollectors();
-
-  // Restore on reload — return the collector to where they were, just refreshed.
-  const _savedName = sessionStorage.getItem('col_name');
-  const _savedTeam = sessionStorage.getItem('col_team');
-  const _lastScreen = sessionStorage.getItem('last_screen');
-  if(_savedName && _lastScreen && _lastScreen !== 'screen-collector'){
-    selectedCollector = _savedName;
-    selectedTeam = _savedTeam || (_savedName==='Tandoy'?'TeamB':'TeamA');
-    document.getElementById('topbar-sub').textContent = _savedName;
-    if(_lastScreen === 'screen-route' || _lastScreen === 'screen-form'){
-      // Restore the active group/route so the vendo list comes back
-      resumeSession().catch(()=>showHomeScreen());
-    } else if(_lastScreen === 'screen-home'){
-      showHomeScreen();
-    } else {
-      // areas / eod / expense / gate etc — safe landing on home
-      showHomeScreen();
-    }
-  } else {
-    showScreen('screen-collector');
-  }
 
   // Clear ALL stale data from previous app versions
   const savedVersion = localStorage.getItem('harvest_app_version');
@@ -1353,37 +1373,42 @@ window.addEventListener('DOMContentLoaded',()=>{
     localStorage.setItem('harvest_app_version', APP_VERSION);
   }
 
-  // Show resume banner — check localStorage first, then DB for cross-device resume
-  const saved = JSON.parse(localStorage.getItem('harvest_session')||'null');
-  if(saved && saved.collector && saved.groupId && saved.groupLabel){
-    document.getElementById('resume-banner').style.display='';
-    document.getElementById('resume-collector-name').textContent=saved.collector;
-    document.getElementById('resume-group-name').textContent=saved.groupLabel||'—';
+  // ── Persistent login: stay signed in until 9PM Manila / new day ──
+  const _sess = spawnGetValidSession();
+  if(_sess){
+    // Rehydrate identity from the saved session (survives app close)
+    selectedCollector = _sess.name;
+    selectedTeam = _sess.team || (_sess.name==='Tandoy'?'TeamB':'TeamA');
+    try{
+      sessionStorage.setItem('col_id', _sess.id||'');
+      sessionStorage.setItem('col_name', _sess.name||'');
+      sessionStorage.setItem('col_team', selectedTeam||'');
+      sessionStorage.setItem('col_pin', _sess.pin||'');
+    }catch(e){}
+    document.getElementById('topbar-sub').textContent = _sess.name;
+    // Show the "already signed in" Continue card
+    const av=document.getElementById('signedin-avatar');
+    const nm=document.getElementById('signedin-name');
+    if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
+    if(nm) nm.textContent=_sess.name||'Collector';
+    showScreen('screen-signedin');
   } else {
-    localStorage.removeItem('harvest_session');
-    // Check DB for any active group run today (cross-device resume)
-    (async()=>{try {
-      const today = new Date().toISOString().slice(0,10);
-      const r = await fetch(`${SB}/rest/v1/harvest_groups?status=eq.active&started_at=gte.${today}T00:00:00+08:00&select=id,group_id,collector,area,started_at,harvested_count&order=started_at.desc&limit=5`,{headers:HDR});
-      const runs = await r.json();
-      if(Array.isArray(runs) && runs.length){
-        const run = runs[0];
-        const grps = await loadPermGroups();
-        const grp = (grps||[]).find(g=>g.id===run.group_id||g.group_id===run.group_id);
-        const label = grp?(grp.group_id||grp.area||'Group'):'Group';
-        localStorage.setItem('harvest_session', JSON.stringify({
-          collector: run.collector||'',
-          groupId: run.group_id||run.id,
-          groupRunId: run.id,
-          groupLabel: `${label} (${run.harvested_count||0} done)`
-        }));
-        document.getElementById('resume-banner').style.display='';
-        document.getElementById('resume-collector-name').textContent=run.collector||'Collector';
-        document.getElementById('resume-group-name').textContent=`${label} · ${run.harvested_count||0} harvested`;
-      }
-    } catch(e){}})();
+    // Session expired or none — clean up and show login
+    spawnClearSession();
+    showScreen('screen-collector');
   }
 });
+
+// Continue from the "already signed in" card → go to home
+function continueSession(){
+  const s = spawnGetValidSession();
+  if(!s){ spawnClearSession(); showScreen('screen-collector'); return; }
+  selectedCollector = s.name;
+  selectedTeam = s.team || (s.name==='Tandoy'?'TeamB':'TeamA');
+  document.getElementById('topbar-sub').textContent = s.name;
+  showHomeScreen();
+  setTimeout(()=>downloadAllOffline(false), 1200);
+}
 
 // ── COLLECTOR SELECT ──────────────────────────────────────────────
 // ── PIN LOGIN ─────────────────────────────────────────────────────
@@ -1508,6 +1533,7 @@ async function pinSubmit(){
       localStorage.setItem('spawn_collector_name', cached.name||'');
       const _today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
       localStorage.setItem('spawn_last_active_date', _today);
+      spawnSaveSession(cached, selectedTeam, pin);
       showHomeScreen();
       return;
     }
@@ -1557,6 +1583,7 @@ async function pinSubmit(){
       console.log('[Login] New day detected — cleared in-memory expenses and packs');
     }
     localStorage.setItem('spawn_last_active_date', _today);
+    spawnSaveSession(collector, selectedTeam, pin);
     showHomeScreen();
     // Auto-cache all groups for offline use (background, non-blocking)
     setTimeout(()=>downloadAllOffline(false), 1200);
@@ -1572,6 +1599,7 @@ async function pinSubmit(){
       sessionStorage.setItem('col_name', cached.name||'');
       sessionStorage.setItem('col_team', selectedTeam||'');
       sessionStorage.setItem('col_pin', pin);
+      spawnSaveSession(cached, selectedTeam, pin);
       showHomeScreen();
     }else{
       const msg=e.name==='AbortError'?'❌ Server timeout — try again':'❌ Wrong PIN — try again';
@@ -1588,6 +1616,7 @@ function pinLogout(){
   selectedCollector=null; selectedTeam=null;
   _pinSelectedName=null;
   try{ sessionStorage.removeItem('col_name'); sessionStorage.removeItem('col_team'); sessionStorage.removeItem('col_id'); sessionStorage.removeItem('col_pin'); }catch(e){}
+  spawnClearSession();
   document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
   document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
   document.getElementById('pin-error').style.display='none';
@@ -3360,7 +3389,7 @@ function forceClearSession(){
     .forEach(k=>localStorage.removeItem(k));
   Object.keys(localStorage).filter(k=>k.startsWith('cached_items_'))
     .forEach(k=>localStorage.removeItem(k));
-  document.getElementById('resume-banner').style.display='none';
+  {const _rb=document.getElementById('resume-banner'); if(_rb) _rb.style.display='none';}
   document.getElementById('group-section') && (document.getElementById('group-section').style.display='none');
   selectedCollector=null; selectedTeam=null; _pinSelectedName=null;
   showScreen('screen-collector');
@@ -3480,7 +3509,7 @@ async function flushQueue(){
 
 function clearResume(){
   localStorage.removeItem('harvest_session');
-  document.getElementById('resume-banner').style.display='none';
+  {const _rb=document.getElementById('resume-banner'); if(_rb) _rb.style.display='none';}
 }
 
 // ── PWA LOGGER — writes to pwa_logs table ─────────────────────────
