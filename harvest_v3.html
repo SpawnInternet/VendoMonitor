@@ -1925,6 +1925,8 @@ async function showAllGroups(){
   listEl.querySelectorAll('[data-allgroup-idx]').forEach(el=>{
     el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
   });
+  // Background: warm caches so tapping any group is instant
+  setTimeout(()=>prewarmGroups(sorted),300);
 }
 
 async function openGroupPicker(areaJson){
@@ -1977,6 +1979,8 @@ async function openGroupPicker(areaJson){
     html+='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No groups yet for this area</div>';
   }
   listEl.innerHTML=html;
+  // Background: warm caches for this area's groups so tapping is instant
+  setTimeout(()=>prewarmGroups(areaGroups),300);
   // Banner → open worst group, sorted oldest-first
   const bannerEl=listEl.querySelector('[data-banner-group]');
   if(bannerEl) bannerEl.addEventListener('click',()=>{ closeGroupPicker(); _sortMode='date'; startGroup(bannerEl.dataset.bannerGroup); });
@@ -2066,6 +2070,59 @@ async function loadGroupsScreen(collector, area){
 }
 
 // ── START GROUP (reuses permanent group items) ────────────────────
+// ── PRE-WARM: fetch group items into localStorage in the background ──
+// so tapping a group is instant (no spinner). Skips groups already fresh.
+let _prewarming = false;
+async function prewarmGroups(groupDefs){
+  if(_prewarming || !navigator.onLine || !Array.isArray(groupDefs) || !groupDefs.length) return;
+  _prewarming = true;
+  const TTL = 12*3600*1000;
+  const _todayStr = new Date().toISOString().split('T')[0];
+  const toWarm = groupDefs.filter(g=>{
+    const ts = parseInt(localStorage.getItem('grp_cache_ts_'+g.id)||'0');
+    const has = localStorage.getItem('grp_cache_'+g.id);
+    return !(has && (Date.now()-ts < TTL));
+  });
+  // limit concurrency to avoid a burst
+  const CHUNK = 3;
+  for(let c=0;c<toWarm.length;c+=CHUNK){
+    await Promise.all(toWarm.slice(c,c+CHUNK).map(async g=>{
+      try{
+        const r = await fetch(
+          `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${g.id}`+
+          `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+          `&order=id.asc&limit=2000`,{headers:HDR});
+        const allItems = await r.json();
+        if(!Array.isArray(allItems)||!allItems.length) return;
+        const items = allItems.map(item=>{
+          const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
+          const lhd = (item.vendo_id && cached && cached.last_harvest_date) || item.last_harvest_date;
+          const base = {
+            ...item,
+            last_harvest_date:lhd,
+            vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
+            address: item.address || (cached && cached.address) || '',
+            owner_name: item.owner_name || (cached && cached.owner_name) || '',
+            contact_number: item.contact_number || (cached && cached.contact_number) || ''
+          };
+          if(item.status==='harvested' && item.harvested_at && String(item.harvested_at).split('T')[0]===_todayStr){
+            return {...base, status:'harvested'};
+          }
+          if(item.status==='pulled_out'){
+            let _r='', _d=''; const _m=(item.collector_note||'').replace(/^PULL OUT:\s*/i,'');
+            if(_m.includes(' — ')){ const p=_m.split(' — '); _r=p.shift().trim(); _d=p.join(' — ').trim(); } else { _r=_m.trim(); }
+            return {...base, status:'pulled_out', _pulloutReason:_r, _pulloutDetails:_d, _pulloutAt:item.harvested_at||null};
+          }
+          return {...base, status:'pending', coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null};
+        });
+        localStorage.setItem('grp_cache_'+g.id, JSON.stringify({g, items}));
+        localStorage.setItem('grp_cache_ts_'+g.id, Date.now().toString());
+      }catch(e){ /* silent — pre-warm is best-effort */ }
+    }));
+  }
+  _prewarming = false;
+}
+
 async function startGroup(groupId){
   showScreen('screen-route');
   const listEl = document.getElementById('vendo-list');
@@ -2156,13 +2213,13 @@ async function startGroup(groupId){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
         `&select=id,vendo_id,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
-        `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
+        `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR}
       );
       const batch = await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
       allItems.push(...batch);
-      if(batch.length<500) break;
-      offset+=500;
+      if(batch.length<2000) break;
+      offset+=2000;
     }
 
     // Use storage cache for vendo data — avoids slow batch DB fetches
