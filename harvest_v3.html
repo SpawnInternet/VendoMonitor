@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.7</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.8</div>
     </div>
 
   </div>
@@ -503,6 +503,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div id="offline-ready-sub" style="font-size:11px;color:#15803d;margin-top:1px">Tap to download all groups for offline use</div>
     </div>
     <svg id="offline-ready-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+
+  <!-- Data saver -->
+  <div id="datasaver-card" onclick="toggleDataSaver()" style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #eef2f7;border-radius:14px;padding:10px 14px;margin-bottom:14px;cursor:pointer">
+    <div id="ds-icon" style="width:34px;height:34px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">📶</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">Data saver</div>
+      <div id="ds-sub" style="font-size:11px;color:var(--muted);margin-top:1px">Off — refreshes normally</div>
+    </div>
+    <div id="ds-switch" style="width:40px;height:22px;border-radius:11px;background:#cbd5e1;position:relative;flex-shrink:0;transition:background .15s">
+      <div id="ds-knob" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
+    </div>
   </div>
 
   <!-- Quick stats row -->
@@ -1408,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.7';
+const APP_VERSION = 'v11.8';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2353,6 +2365,7 @@ async function startGroup(groupId){
 // NOT overwrite the cache — their taps must never be lost to a background refresh.
 async function _revalidateGroup(groupId){
   if(!navigator.onLine) return;
+  if(dataSaverOn()) return;   // office changes will appear on the next manual download
   try{
     const r = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&select=cache_epoch`,{headers:HDR});
     const rows = await r.json();
@@ -4193,7 +4206,7 @@ async function flushQueue(){
   }finally{
     _flushing = false;   // ALWAYS release, even if something above threw.
     // Repaint the home summary so pending badges clear and DB totals take over.
-    try{ if(typeof loadHomeStats==='function') loadHomeStats(); }catch(_){}
+    try{ invalidateHomeCache(); if(typeof loadHomeStats==='function') loadHomeStats(); }catch(_){}
   }
 }
 
@@ -4559,7 +4572,72 @@ async function showHomeScreen(){
   const hb = document.getElementById('bnav-home');
   if(hb) hb.classList.add('active');
   loadHomeStats();
+  try{ _paintDataSaver(); }catch(_){}
   loadCrucialAreas();
+}
+
+// ── DATA SAVER ──────────────────────────────────────────────────────────────
+// Collectors are on prepaid data in areas with weak signal. When on, background
+// refreshes are skipped and cached data is served for longer. Harvesting, syncing,
+// and photo upload are NEVER blocked — money always gets through.
+function _dsAuto(){
+  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if(!c) return false;
+  if(c.saveData) return true;                                  // phone's own Data Saver
+  return ['slow-2g','2g'].includes(c.effectiveType||'');       // very weak signal
+}
+function dataSaverOn(){
+  const s = localStorage.getItem('data_saver');
+  if(s === '1') return true;
+  if(s === '0') return false;
+  return _dsAuto();   // unset -> follow the phone
+}
+function _paintDataSaver(){
+  const on = dataSaverOn();
+  const sw=document.getElementById('ds-switch'), kn=document.getElementById('ds-knob'),
+        ic=document.getElementById('ds-icon'), sub=document.getElementById('ds-sub');
+  if(!sw) return;
+  sw.style.background = on ? '#028867' : '#cbd5e1';
+  kn.style.left = on ? '20px' : '2px';
+  ic.style.background = on ? '#d1fae5' : '#f1f5f9';
+  const auto = localStorage.getItem('data_saver')===null && _dsAuto();
+  sub.textContent = on
+    ? (auto ? 'On (auto — weak signal). Saves mobile data.' : 'On — saves mobile data')
+    : 'Off — refreshes normally';
+}
+function toggleDataSaver(){
+  localStorage.setItem('data_saver', dataSaverOn() ? '0' : '1');
+  _paintDataSaver();
+  toast(dataSaverOn() ? '📶 Data saver ON — fewer background refreshes' : '📶 Data saver OFF', 2500);
+}
+
+// Refresh the home cache in the background, then repaint. Never blocks the UI.
+let _homeRefreshing = false;
+async function _refreshHomeLater(collectorName, today, cacheKey){
+  if(_homeRefreshing || !navigator.onLine) return;
+  if(dataSaverOn()) return;   // cached numbers are good enough; saves a round-trip
+  _homeRefreshing = true;
+  try{
+    const r = await fetch(
+      `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}`+
+      `&select=vendo_id,sheet_name,tg_name,vendo_name,spawn_share,coins_total,harvested_at`+
+      `&order=harvested_at.desc`, {headers:HDR});
+    const d = await r.json();
+    if(Array.isArray(d)){
+      localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(),rows:d}));
+      if(document.getElementById('screen-home')?.classList.contains('active')) loadHomeStats();
+    }
+  }catch(_){}
+  finally{ _homeRefreshing = false; }
+}
+// A new harvest/expense must not be masked by a 90s-old cache.
+function invalidateHomeCache(){
+  const c = selectedCollector||sessionStorage.getItem('col_name')||'';
+  const t = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  try{
+    localStorage.removeItem('home_cache_'+c+'_'+t);
+    localStorage.removeItem('home_exp_'+c+'_'+t);
+  }catch(_){}
 }
 
 async function loadHomeStats(){
@@ -4589,14 +4667,33 @@ async function loadHomeStats(){
 
   let todayHarvests = [];
   let dbOk = false;
+  // Serve the cached copy instantly, then refresh in the background. Opening Home
+  // should never cost a round-trip on a weak signal out in the field.
+  const _cacheKey = 'home_cache_'+collectorName+'_'+today;
+  const _CACHE_TTL = dataSaverOn() ? 10*60*1000 : 90*1000;
+  try{
+    const c = JSON.parse(localStorage.getItem(_cacheKey)||'null');
+    if(c && Array.isArray(c.rows)){
+      todayHarvests = c.rows; dbOk = true;
+      if(navigator.onLine && (Date.now()-(c.ts||0) > _CACHE_TTL)) _refreshHomeLater(collectorName, today, _cacheKey);
+    }
+  }catch(_){}
+
   try {
-    if(navigator.onLine){
+    if(navigator.onLine && !dbOk){
+      // select= only the 7 fields this screen renders. Without it PostgREST returns all
+      // 37 columns of `harvests` — including notes, admin_notes, photo_url, recon_gap.
       const rToday = await fetch(
-        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
+        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}`+
+        `&select=vendo_id,sheet_name,tg_name,vendo_name,spawn_share,coins_total,harvested_at`+
+        `&order=harvested_at.desc`,
         {headers:HDR}
       );
       const d = await rToday.json();
-      if(Array.isArray(d)){ todayHarvests = d; dbOk = true; }
+      if(Array.isArray(d)){
+        todayHarvests = d; dbOk = true;
+        try{ localStorage.setItem(_cacheKey, JSON.stringify({ts:Date.now(),rows:d})); }catch(_){}
+      }
     }
   } catch(e){ /* offline or transient — fall through with queue-only numbers */ }
 
@@ -4631,10 +4728,20 @@ async function loadHomeStats(){
     // Fetch today's expenses and calculate net to remit
     try {
       let expTotal = 0;
-      if(navigator.onLine){
+      const _eKey = 'home_exp_'+collectorName+'_'+today;
+      let _cachedExp = null;
+      try{ _cachedExp = JSON.parse(localStorage.getItem(_eKey)||'null'); }catch(_){}
+      if(_cachedExp && (Date.now()-(_cachedExp.ts||0) < 90*1000)){
+        expTotal = _cachedExp.total;
+      } else if(navigator.onLine){
         const eResp = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collectorName)}&expense_date=eq.${today}&select=amount`,{headers:HDR});
         const eData = await eResp.json();
-        if(Array.isArray(eData)) expTotal = eData.reduce((s,e)=>s+Number(e.amount||0),0);
+        if(Array.isArray(eData)){
+          expTotal = eData.reduce((s,e)=>s+Number(e.amount||0),0);
+          try{ localStorage.setItem(_eKey, JSON.stringify({ts:Date.now(),total:expTotal})); }catch(_){}
+        }
+      } else if(_cachedExp){
+        expTotal = _cachedExp.total;   // stale beats nothing when offline
       }
       expTotal += _pendExp;   // queued expenses count too
       const netToRemit = todaySpawn - expTotal;
