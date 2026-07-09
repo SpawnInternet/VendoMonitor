@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.0</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.1</div>
     </div>
 
   </div>
@@ -1420,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.0';
+const APP_VERSION = 'v12.1';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1793,6 +1793,24 @@ async function loadCrucialAreas(){
       const vs=await r2.json();
       if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]={lhd:v.last_harvest_date,status:v.status};});
     }
+    // _vendoCacheMap is a snapshot refreshed hourly by cron, so a vendo harvested or
+    // pulled out minutes ago still looks overdue. The group items in hand are current —
+    // let them win.
+    const _todayISO = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    items.forEach(it=>{
+      if(it.vendo_id==null || !dateMap[it.vendo_id]) return;
+      if(it.status==='pulled_out'){ dateMap[it.vendo_id].status='pulled_out'; return; }
+      if(it.status==='harvested' && it.harvested_at){
+        const d=String(it.harvested_at).slice(0,10);
+        if(d > (dateMap[it.vendo_id].lhd||'')) dateMap[it.vendo_id].lhd = d;
+      }
+    });
+    // Anything harvested or pulled out but not yet synced also counts as handled.
+    (offlineQueue||[]).forEach(q=>{
+      if(q.type==='harvest' && q.vendoId && dateMap[q.vendoId]) dateMap[q.vendoId].lhd=_todayISO;
+      if(q.type==='job_order' && q.vendoId && dateMap[q.vendoId]) dateMap[q.vendoId].status='pulled_out';
+    });
+
     const now=Date.now();
     // Aggregate BY AREA (roll up all groups in each area)
     const gmap={}; groups.forEach(g=>gmap[g.id]=g);
@@ -2890,13 +2908,19 @@ async function submitPullOut(){
   const _noteStr=issueText;
   const _stamp=(it)=>{ if(!it) return; it.status='pulled_out'; it._pulloutReason=reason; it._pulloutDetails=note||''; it._pulloutAt=_pulloutTs; it.collector_note=_noteStr; };
   const _itemUpdate={status:'pulled_out',collector_note:_noteStr,harvested_at:_pulloutTs};
+  // The home screen's overdue count reads vendos.status and skips anything not 'active'.
+  // Without this the machine stays 'active' forever and keeps counting as overdue even
+  // after it has physically been removed.
+  const _vendoPullout={status:'pulled_out',pulled_out_at:_pulloutTs,
+                       pulled_out_by:selectedCollector||'collector',pullout_reason:reason};
 
   // OFFLINE: queue the job order instead of refusing. The collector is standing at a
   // machine they've already removed — making them come back when there's signal is worse
   // than holding the record locally. The UI moves it to Pull Out right away either way.
   if(!navigator.onLine){
     offlineQueue.push({type:'job_order',uid:'j_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-                       data:body,itemId:currentItem.id||null,itemUpdate:_itemUpdate,ts:Date.now()});
+                       data:body,itemId:currentItem.id||null,itemUpdate:_itemUpdate,
+                       vendoId:currentItem.vendo_id||null,vendoUpdate:_vendoPullout,ts:Date.now()});
     localStorage.setItem('hq',JSON.stringify(offlineQueue));
     _stamp(currentItem);
     if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
@@ -2926,6 +2950,13 @@ async function submitPullOut(){
         headers:{...HDR,'Prefer':'return=minimal'},
         body:JSON.stringify(_itemUpdate)
       }).catch(e=>console.error('pullout status persist failed',e));
+    }
+    if(currentItem.vendo_id){
+      fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+        method:'PATCH',
+        headers:{...HDR,'Prefer':'return=minimal'},
+        body:JSON.stringify(_vendoPullout)
+      }).catch(e=>console.error('pullout vendo status failed',e));
     }
     if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
     closePullOut();
@@ -4177,6 +4208,10 @@ async function flushQueue(){
         // Persist the pull-out on the group item too (was deferred while offline).
         if(q.itemId){
           await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate||{})});
+        }
+        // And on the vendo, so it stops counting toward the overdue total.
+        if(q.vendoId && q.vendoUpdate){
+          await fetch(`${SB}/rest/v1/vendos?id=eq.${q.vendoId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.vendoUpdate)});
         }
       } else if(q.type==='vendoUpdate'&&q.vendoId){
         if(q.photoKey){
