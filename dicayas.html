@@ -620,6 +620,8 @@ function isEmptySlot(m){
 // A machine marked pulled-out / not-active in its lease note or router comment
 // must never count as Online, even if a stale DHCP lease still reports it up.
 function isPulledOut(m){
+  // Authoritative: an explicit suppress row wins over any text heuristic.
+  if(m.vlan!=null && SUPPRESS.some(s=>s.vlan!=null && String(s.vlan)===String(m.vlan))) return true;
   const t=((m.lease_note||'')+' '+(m.router_comment||'')).toLowerCase();
   return /\bpull\s*-?\s*out\b|\bpullout\b|\bpulled\s*out\b|\bnot?\s*active\b|\binactive\b|\bde-?activ/.test(t);
 }
@@ -1994,8 +1996,7 @@ async function pullOut(kind, key, label){
     });
     if(!r.ok) throw new Error("HTTP "+r.status);
   }catch(e){ toast("Failed: "+e.message); return; }
-  if(kind==="vendo") STATUS=STATUS.filter(x=>String(x.vlan)!==String(key));
-  else SUBS=SUBS.filter(x=>x.ppp_name!==key);
+  if(kind!=="vendo") SUBS=SUBS.filter(x=>x.ppp_name!==key);
   closeM();
   await loadSuppress();
   render(); renderSubs();
@@ -2081,8 +2082,8 @@ async function boot(){
       SALES_MONTH={};
       tx.forEach(r=>{ const k=String(r.vendo); SALES_MONTH[k]=(SALES_MONTH[k]||0)+Number(r.amount||0); });
     }catch(e){ SALES_MONTH={}; }
-    render(); renderSubs();
     await loadSuppress();
+    render(); renderSubs();
   }catch(e){
     document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+esc(e.message)+'</div>');
   }
