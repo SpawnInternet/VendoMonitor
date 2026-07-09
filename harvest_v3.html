@@ -6,11 +6,17 @@
 <title>Spawn Harvest</title>
 <link rel="manifest" href="/VendoMonitor/manifest-v3.json">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#025AC6">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Spawn Harvest</title>
+<!-- iOS ignores the manifest for the home-screen icon; it reads this tag only,
+     and it does NOT honour transparency (it composites onto black). Opaque PNG. -->
+<meta name="apple-mobile-web-app-title" content="Spawn Harvest">
+<link rel="apple-touch-icon" sizes="180x180" href="/VendoMonitor/v3-apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/VendoMonitor/v3-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/VendoMonitor/v3-icon-512.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -381,6 +387,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
+    <button class="topbar-logout" id="topbar-install" onclick="promptInstall()" style="display:none;margin-right:6px">⬇️ Install</button>
     <button class="topbar-logout" id="topbar-logout" onclick="pinLogout()">🚪 Logout</button>
     <div class="sync-badge">
       <div class="sync-dot" id="sync-dot"></div>
@@ -440,7 +447,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.3</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.4</div>
     </div>
 
   </div>
@@ -1365,6 +1372,48 @@ function showScreen(id){
   }
 }
 function toast(msg,dur=2500){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+
+// ── INSTALL (Add to Home Screen) ─────────────────────────────────────────────
+// Chrome/Edge/Samsung fire `beforeinstallprompt` when the manifest + SW + HTTPS
+// criteria are met. The event MUST be captured and preventDefault()'d, otherwise
+// the browser decides on its own whether to surface anything. iOS Safari never
+// fires it, so that platform gets a short instruction toast instead.
+let _deferredInstall = null;
+function _isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstall = e;
+  const b = document.getElementById('topbar-install');
+  if(b && !_isStandalone()) b.style.display = '';
+});
+window.addEventListener('appinstalled', () => {
+  _deferredInstall = null;
+  const b = document.getElementById('topbar-install');
+  if(b) b.style.display = 'none';
+  try{ pwLog('info','PWA installed',{}); }catch(_){}
+  toast('✅ Installed — open Spawn Harvest from your home screen', 4000);
+});
+async function promptInstall(){
+  if(_deferredInstall){
+    _deferredInstall.prompt();
+    const { outcome } = await _deferredInstall.userChoice;
+    if(outcome !== 'accepted') toast('Install cancelled', 2000);
+    _deferredInstall = null;
+    return;
+  }
+  // iOS Safari: no programmatic install. Tell the collector exactly what to tap.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  toast(isIOS ? 'Tap Share, then "Add to Home Screen"'
+              : 'Open your browser menu and choose "Install app"', 5000);
+}
+// Already installed? Never show the button.
+if(_isStandalone()){
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const b = document.getElementById('topbar-install'); if(b) b.style.display='none';
+  });
+}
 function todayPHT(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());}
 
 function updateOnline(){
