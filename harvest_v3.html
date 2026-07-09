@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.3</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.4</div>
     </div>
 
   </div>
@@ -1408,7 +1408,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.3';
+const APP_VERSION = 'v11.4';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -4070,17 +4070,32 @@ async function flushQueue(){
         }
       } else if(q.type==='expense'){
         // Offline expense — photo blob was stashed in IndexedDB, upload then insert.
+        // NOTE: must NOT use uploadPhoto() here. That helper falls back to
+        // currentItem.vendo_id when no id is passed, which would write the receipt to
+        // vendo-profiles/vendo_{id}.jpg and clobber a vendo's profile photo.
         let _url=q.data.receipt_photo_url||null;
         if(q.photoKey){
           const _blob=await getPhotoOffline(q.photoKey);
           if(_blob){
-            _url=await uploadPhoto(_blob,'expense',null);
-            if(_url) await deletePhotoOffline(q.photoKey);
+            const _fname=`expenses/exp_${q.ts||Date.now()}.jpg`;
+            const _ab=await _blob.arrayBuffer();
+            const _pr=await fetch(`${SB}/storage/v1/object/harvest-photos/${_fname}`,{
+              method:'POST', headers:{...HDR,'Content-Type':'image/jpeg','x-upsert':'true'}, body:_ab
+            });
+            if(_pr.ok){
+              _url=`${SB}/storage/v1/object/public/harvest-photos/${_fname}`;
+              await deletePhotoOffline(q.photoKey);
+            } else {
+              throw new Error('expense photo upload '+_pr.status); // retry whole item later
+            }
           }
           q.photoKey=null;
         }
         const _er=await fetch(`${SB}/rest/v1/collector_expenses`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({...q.data,receipt_photo_url:_url})});
         if(!_er.ok && _er.status!==409) throw new Error('expense '+_er.status);
+        // Landed. Drop the local pending copy so loadAndRenderExpenses doesn't
+        // rehydrate it alongside the real DB row.
+        if(typeof _expenses!=='undefined') _expenses=_expenses.filter(e=>e._uid!==q.uid);
       } else if(q.type==='vendoUpdate'&&q.vendoId){
         if(q.photoKey){
           const _blob=await getPhotoOffline(q.photoKey);
@@ -4834,20 +4849,23 @@ async function saveExpense(){
   // OFFLINE: queue it. Previously this POSTed, swallowed the error, and still said
   // "saved" — the expense existed only in memory and vanished on reload.
   if(!navigator.onLine){
+    const _ts = Date.now();
     let _pk=null;
     if(_expPhotoBlob){
-      _pk='exp_'+Date.now();
+      _pk='exp_'+_ts;
       if(!(await savePhotoOffline(_pk,_expPhotoBlob))) _pk=null;
     }
-    offlineQueue.push({type:'expense',uid:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-                       data:{..._row,receipt_photo_url:null},photoKey:_pk,ts:Date.now()});
+    const _uid='e_'+_ts+'_'+Math.random().toString(36).slice(2,8);
+    offlineQueue.push({type:'expense',uid:_uid,
+                       data:{..._row,receipt_photo_url:null},photoKey:_pk,ts:_ts});
     localStorage.setItem('hq',JSON.stringify(offlineQueue));
-    _expenses.push({...expense,id:null,_pending:true});
+    _expenses.push({...expense,id:null,_uid,_pending:true});
     const badge=document.getElementById('exp-badge');
     badge.textContent=_expenses.length; badge.style.display='block';
     document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
     closeAddExpense(); renderExpenses();
-    toast('📴 Expense saved offline — will sync when online',3000);
+    toast(_pk?'📴 Expense + receipt saved offline — will sync when online'
+              :'📴 Expense saved offline — will sync when online',3000);
     return;
   }
 
@@ -4864,10 +4882,19 @@ async function saveExpense(){
   // The POST failed while online (server error / dropped connection). Queue it and
   // tell the truth rather than showing a green check for data that never landed.
   if(!_ok){
-    offlineQueue.push({type:'expense',uid:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
-                       data:{..._row,receipt_photo_url:photoUrl},photoKey:null,ts:Date.now()});
+    const _ts = Date.now();
+    // If the photo upload ALSO failed, photoUrl is null and the blob exists only in
+    // memory — stash it now or the receipt is lost on reload.
+    let _pk=null;
+    if(!photoUrl && _expPhotoBlob){
+      _pk='exp_'+_ts;
+      if(!(await savePhotoOffline(_pk,_expPhotoBlob))) _pk=null;
+    }
+    const _uid='e_'+_ts+'_'+Math.random().toString(36).slice(2,8);
+    offlineQueue.push({type:'expense',uid:_uid,
+                       data:{..._row,receipt_photo_url:photoUrl},photoKey:_pk,ts:_ts});
     localStorage.setItem('hq',JSON.stringify(offlineQueue));
-    _expenses.push({...expense,id:null,_pending:true});
+    _expenses.push({...expense,id:null,_uid,_pending:true});
     const badge=document.getElementById('exp-badge');
     badge.textContent=_expenses.length; badge.style.display='block';
     closeAddExpense(); renderExpenses();
@@ -4890,7 +4917,22 @@ async function saveExpense(){
 async function loadAndRenderExpenses(){
   const collector = selectedCollector||sessionStorage.getItem('col_name')||localStorage.getItem('spawn_collector_name')||'';
   const today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-  if(!collector) { renderExpenses(); return; }
+
+  // Rehydrate expenses that are queued but not yet synced. Without this they are
+  // invisible after a reload (the DB has no row yet) and the collector re-enters them.
+  const _pendingUids = new Set(_expenses.map(e=>e._uid).filter(Boolean));
+  (offlineQueue||[]).forEach(q=>{
+    if(q.type!=='expense' || !q.data) return;
+    if(q.data.expense_date!==today) return;
+    if(_pendingUids.has(q.uid)) return;
+    _expenses.push({id:null,_uid:q.uid,_pending:true,category:q.data.category,
+      description:q.data.description||'',amount:Number(q.data.amount),
+      receipt_photo_url:q.data.receipt_photo_url||null,created_at:''});
+  });
+  {const b=document.getElementById('exp-badge');
+   if(b){ b.textContent=_expenses.length; b.style.display=_expenses.length?'block':'none'; }}
+
+  if(!collector || !navigator.onLine) { renderExpenses(); return; }
   try {
     const r = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${today}&select=id,category,description,amount,receipt_photo_url&order=created_at.asc`,{headers:HDR});
     const data = await r.json();
