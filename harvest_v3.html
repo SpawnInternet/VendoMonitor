@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.1</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.2</div>
     </div>
 
   </div>
@@ -1068,6 +1068,23 @@ let currentItemIdx = null;
 let capturedGPS = null;
 let offlineQueue = JSON.parse(localStorage.getItem('hq')||'[]');
 let syncLog = JSON.parse(localStorage.getItem('hs')||'[]');
+// ── One-time repair (pre-v13.1) ──────────────────────────────────────────────
+// Before v13.1 the syncLog row carried no `uid`, so flushQueue()'s
+// `s.uid === q.uid` match never fired and rows stayed 'queued' forever even
+// after the harvest reached the server. Any such row whose work is no longer in
+// the offline queue has, by definition, already synced. Mark it so. Rows still
+// present in `hq` are genuinely pending and are left alone.
+try{
+  if(syncLog.some(s=>s.status!=='synced' && !s.uid)){
+    const _qTs = new Set(offlineQueue.map(q=>q.ts));
+    let _fixed = 0;
+    syncLog = syncLog.map(s=>{
+      if(s.status!=='synced' && !s.uid && !_qTs.has(s.ts)){ _fixed++; return {...s,status:'synced'}; }
+      return s;
+    });
+    if(_fixed){ localStorage.setItem('hs',JSON.stringify(syncLog)); console.info('[syncLog] repaired',_fixed,'orphaned rows'); }
+  }
+}catch(_){}
 let activeTab = 'pending';
 let searchQuery = '';
 let nextGroupDef = null;
