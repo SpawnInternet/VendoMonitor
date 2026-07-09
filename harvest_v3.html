@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.0</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.1</div>
     </div>
 
   </div>
@@ -3030,6 +3030,7 @@ async function submitPullOut(){
     return;
   }
 
+  let _joPosted = false;
   try{
     const r=await fetch(`${SB}/rest/v1/job_orders`,{
       method:'POST',
@@ -3037,6 +3038,7 @@ async function submitPullOut(){
       body:JSON.stringify(body)
     });
     if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+    _joPosted = true;   // past this line the row EXISTS — never re-queue it
     // Mark this vendo as pulled out so it leaves the harvest list
     _stamp(currentItem);
     if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
@@ -3062,9 +3064,22 @@ async function submitPullOut(){
     try{ renderVendoList(); }catch(_){}
   }catch(e){
     console.error('pull-out failed',e);
-    // Same trap as startGroup: navigator.onLine was true but the request never
-    // landed. Don't lose the pull-out — queue it exactly as the offline branch
-    // would have, so it syncs when the connection actually works.
+    if(_joPosted){
+      // The job_order row already exists — the failure was in a follow-up call
+      // (item PATCH, vendo PATCH, or a render). Re-queueing here is what created
+      // duplicate VENDO_PULLOUT cards on the dispatch board. Keep the local state
+      // and let the next drain reconcile the PATCHes; do NOT insert again.
+      _stamp(currentItem);
+      if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
+      if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
+      pwLog('error','pullout posted but follow-up failed',{vendo:currentItem&&currentItem.vendo_id,error:e.message});
+      closePullOut();
+      toast('✅ Pulled out — '+nm);
+      try{ renderVendoList(); }catch(_){}
+      return;
+    }
+    // The POST itself never landed. navigator.onLine was true but the request
+    // died — queue it exactly as the offline branch would.
     offlineQueue.push({type:'job_order',uid:'j_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
                        data:body,itemId:currentItem.id||null,itemUpdate:_itemUpdate,
                        vendoId:currentItem.vendo_id||null,vendoUpdate:_vendoPullout,ts:Date.now()});
@@ -3937,6 +3952,16 @@ async function submitHarvest(){
   }
 
   try {
+    // One id shared by the queue item AND the syncLog row. Previously the uid was
+    // created inside the offline branch only, so drainQueue()'s `s.uid === q.uid`
+    // match could never fire and queued rows stayed "Pending" forever even after
+    // they synced. `_ts` is captured once so both records agree.
+    const _ts = Date.now();
+    const _uid = 'h_'+currentItem.id+'_'+_ts+'_'+Math.random().toString(36).slice(2,8);
+    // Whether the write actually landed. navigator.onLine only means an interface
+    // is attached — a POST can still fail. Do not report 'synced' on its word.
+    let _submitted = false;
+
     if(navigator.onLine){
       // ── v3 Option B: try validated submit-harvest endpoint first ──
       // If it succeeds, skip the passthrough calls below. If it fails
@@ -3971,6 +3996,7 @@ async function submitHarvest(){
           const _bJson = await _bResp.json().catch(()=>({}));
           if(_bJson && _bJson.ok){
             _bOk = true;
+            _submitted = true;
             window._pendingPackItems=[];
             if(currentGroupRun){
               currentGroupRun.harvested_count++;
@@ -3984,11 +4010,16 @@ async function submitHarvest(){
 
       if(!_bOk){
       // Update group item
-      await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(itemUpdate)});
+      const _iResp = await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(itemUpdate)});
       // Save harvest record
       const _hResp = await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(harvestRecord)});
       const _hRows = await _hResp.json().catch(()=>[]);
       const _hId = (_hRows&&_hRows[0]&&_hRows[0].id)||null;
+      // Only claim the write landed if it demonstrably did. A silent failure here
+      // used to be reported as "synced" and the coins vanished from the tally.
+      // NOTE: do NOT throw — the outer catch just toasts and drops the harvest.
+      // Falling through with _submitted=false queues it for retry instead.
+      _submitted = !!(_iResp.ok && _hResp.ok && _hId);
       // Save pack items
       if(_hId && window._pendingPackItems && window._pendingPackItems.length){
         const today2 = harvestRecord.harvest_date;
@@ -4026,7 +4057,11 @@ async function submitHarvest(){
         currentGroupRun.total_net=(parseFloat(currentGroupRun.total_net)||0)+net;
       }
       } // end if(!_bOk) — A-passthrough fallback
-    } else {
+    }
+
+    // Queue when offline OR when an "online" submit silently failed. The coins are
+    // real either way; the only wrong answer is dropping them.
+    if(!_submitted){
       const _pendingPacks = (window._pendingPackItems||[]).map(p=>({
         vendo_id:currentItem.vendo_id||null,
         vendo_code:p.vendo_code||'',
@@ -4037,7 +4072,6 @@ async function submitHarvest(){
         saved_by:'collector'
       }));
       window._pendingPackItems=[];
-      const _ts=Date.now();
       let _photoKey=null;
       if(capturedPhotoBlob){
         _photoKey='photo_'+currentItem.id+'_'+_ts;
@@ -4045,10 +4079,11 @@ async function submitHarvest(){
         if(!_saved) _photoKey=null;
       }
       const _photoLabel=ownerName||currentItem.sheet_name||currentItem.tg_name||'vendo';
-      const _uid = 'h_'+currentItem.id+'_'+_ts+'_'+Math.random().toString(36).slice(2,8);
       offlineQueue.push({type:'harvest',uid:_uid,itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,photoKey:_photoKey,photoLabel:_photoLabel,ts:_ts});
       localStorage.setItem('hq',JSON.stringify(offlineQueue));
-      toast(_photoKey?'📴 Saved offline (with photo) — will sync when online':'📴 Saved offline — will sync when online',3000);
+      toast(navigator.onLine
+        ? '⚠️ Weak signal — saved, will sync when connected'
+        : (_photoKey?'📴 Saved offline (with photo) — will sync when online':'📴 Saved offline — will sync when online'),3000);
     }
 
     // Update in-memory
@@ -4058,7 +4093,7 @@ async function submitHarvest(){
     if(contact) currentItems[currentItemIdx].contact_number=contact;
     if(ownerRealName) currentItems[currentItemIdx].owner_name=ownerRealName;
 
-    syncLog.unshift({name:ownerName||currentItem.sheet_name||'?',net,ts:Date.now(),status:navigator.onLine?'synced':'queued'});
+    syncLog.unshift({name:ownerName||currentItem.sheet_name||'?',net,uid:_uid,ts:_ts,status:_submitted?'synced':'queued'});
     if(syncLog.length>100) syncLog=syncLog.slice(0,100);
     localStorage.setItem('hs',JSON.stringify(syncLog));
     localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
@@ -4080,7 +4115,7 @@ async function submitHarvest(){
     }
 
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
-    toast(navigator.onLine?'✅ Saved!':'⚡ Saved offline');
+    if(_submitted) toast('✅ Saved!');
     setTimeout(()=>showHarvestReceipt(),600);
   } catch(e){
     toast('❌ '+e.message,4000);
@@ -4344,8 +4379,25 @@ async function flushQueue(){
         // rehydrate it alongside the real DB row.
         if(typeof _expenses!=='undefined') _expenses=_expenses.filter(e=>e._uid!==q.uid);
       } else if(q.type==='job_order'){
-        const _jr=await fetch(`${SB}/rest/v1/job_orders`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
-        if(!_jr.ok && _jr.status!==409) throw new Error('job_order '+_jr.status);
+        // job_orders has no unique constraint, so a replayed queue item silently
+        // inserts a SECOND card on the dispatch board. Check first. Scoped to
+        // today + this vendo + still-open statuses so a genuine re-pull later
+        // is not blocked.
+        let _exists = false;
+        if(q.vendoId && q.data && q.data.type){
+          try{
+            const _chk = await fetch(
+              `${SB}/rest/v1/job_orders?vendo_id=eq.${q.vendoId}`+
+              `&type=eq.${encodeURIComponent(q.data.type)}`+
+              `&date=eq.${encodeURIComponent(q.data.date||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}))}`+
+              `&status=in.(new,open,approved,dispatched)&select=id&limit=1`,{headers:HDR});
+            if(_chk.ok){ const _rows = await _chk.json().catch(()=>[]); _exists = Array.isArray(_rows) && _rows.length>0; }
+          }catch(_){ /* check failed: fall through and attempt the insert */ }
+        }
+        if(!_exists){
+          const _jr=await fetch(`${SB}/rest/v1/job_orders`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
+          if(!_jr.ok && _jr.status!==409) throw new Error('job_order '+_jr.status);
+        }
         // Persist the pull-out on the group item too (was deferred while offline).
         if(q.itemId){
           await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate||{})});
