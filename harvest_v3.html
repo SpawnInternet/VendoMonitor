@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.1</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.2</div>
     </div>
 
   </div>
@@ -1204,6 +1204,7 @@ async function downloadAllOffline(manual=false){
         // Write to same cache format startGroup() reads
         localStorage.setItem('grp_cache_'+groupId, JSON.stringify({g, items}));
         localStorage.setItem('grp_cache_ts_'+groupId, Date.now().toString());
+        if(g.cache_epoch!=null) localStorage.setItem('grp_epoch_'+groupId, String(g.cache_epoch));
         totalItems += items.length;
         done++;
         setOfflineCardState('downloading','Downloading…','Cached '+(done+skipped)+' of '+groups.length+' groups');
@@ -1401,7 +1402,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.1';
+const APP_VERSION = 'v11.2';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2130,6 +2131,7 @@ async function prewarmGroups(groupDefs){
         });
         localStorage.setItem('grp_cache_'+g.id, JSON.stringify({g, items}));
         localStorage.setItem('grp_cache_ts_'+g.id, Date.now().toString());
+        if(g.cache_epoch!=null) localStorage.setItem('grp_epoch_'+g.id, String(g.cache_epoch));
       }catch(e){ /* silent — pre-warm is best-effort */ }
     }));
   }
@@ -2170,6 +2172,9 @@ async function startGroup(groupId){
     renderVendoList();
     // Background: refresh last_harvest_date silently
     _refreshLHD(groupId);
+    // Background: has the office changed this group (pull-outs, renames, moves)?
+    // Never blocks the paint. Offline or failure = keep showing cache.
+    _revalidateGroup(groupId);
     return;
   }
 
@@ -2334,6 +2339,49 @@ async function startGroup(groupId){
 }
 
 // Background-refresh last_harvest_date without blocking UI
+// Compare the group's server cache_epoch against what we cached. If the office
+// changed something structural (pull-out, rename, VLAN, group move), refetch and
+// repaint. Runs AFTER the cache paint, so it never delays the list.
+//
+// SAFETY: if the collector has unsynced work in offlineQueue for this group, we do
+// NOT overwrite the cache — their taps must never be lost to a background refresh.
+async function _revalidateGroup(groupId){
+  if(!navigator.onLine) return;
+  try{
+    const r = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&select=cache_epoch`,{headers:HDR});
+    const rows = await r.json();
+    if(!Array.isArray(rows) || !rows.length) return;
+    const serverEpoch = Number(rows[0].cache_epoch || 0);
+    const localEpoch  = Number(localStorage.getItem('grp_epoch_'+groupId) || 0);
+    if(!serverEpoch || serverEpoch <= localEpoch) return;   // cache is current
+
+    // Don't clobber unsynced harvests.
+    if(offlineQueue && offlineQueue.length){
+      console.warn('[revalidate] group '+groupId+' is stale but '+offlineQueue.length+
+                   ' unsynced item(s) pending — deferring refresh until after sync');
+      return;
+    }
+
+    // Stale. Drop the cache and pull fresh.
+    localStorage.removeItem('grp_cache_ts_'+groupId);
+    await prewarmGroups([{id:groupId}]);
+
+    // prewarmGroups is a no-op if another prewarm is already running, or if the
+    // fetch failed. Only trust the epoch once the cache was genuinely rewritten —
+    // otherwise we'd mark stale data as fresh and never refetch it.
+    const wroteTs = parseInt(localStorage.getItem('grp_cache_ts_'+groupId)||'0');
+    if(!wroteTs) return;            // nothing fetched; try again on next open
+    localStorage.setItem('grp_epoch_'+groupId, String(serverEpoch));
+
+    const fresh = JSON.parse(localStorage.getItem('grp_cache_'+groupId)||'null');
+    if(fresh && fresh.items && currentGroupRun && currentGroupRun.id===groupId){
+      currentItems = fresh.items;
+      renderVendoList();
+      toast('🔄 List updated',2000);
+    }
+  }catch(e){ /* offline or transient — keep serving cache */ }
+}
+
 async function _refreshLHD(groupId){
   try{
     const CACHE_KEY='grp_cache_'+groupId;
