@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.5</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.6</div>
     </div>
 
   </div>
@@ -670,7 +670,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="sort-ctl" id="sort-ctl" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
     <span style="font-size:11px;color:var(--muted);font-weight:700">Sort:</span>
     <button class="sortb on" id="sb-gps" onclick="setSortMode('gps')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#FFB725;color:#0146A0;font-family:inherit;cursor:pointer">📍 Nearest</button>
-    <button class="sortb" id="sb-date" onclick="setSortMode('date')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">🕐 Last harvest</button>
+    <button class="sortb" id="sb-date" onclick="setSortMode('date')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">⏳ Overdue <span id="sb-date-arrow" style="opacity:.7"></span></button>
     <button class="sortb" id="sb-az" onclick="setSortMode('az')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">A–Z</button>
     <button class="sortb" id="sb-vlan" onclick="setSortMode('vlan')" style="font-size:12px;font-weight:700;padding:5px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--text);font-family:inherit;cursor:pointer">VLAN</button>
   </div>
@@ -1408,7 +1408,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.5';
+const APP_VERSION = 'v11.6';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2517,21 +2517,30 @@ function clearSearch(){searchQuery='';document.getElementById('search-inp').valu
 
 let _sortMode='gps';
 let _sortDir={gps:1,date:1,az:1,vlan:1}; // 1 = default direction, -1 = reversed
+// Ascending/descending is only meaningful for the active button, so only it shows an
+// arrow. Overdue also turns RED when pointing at the most-overdue machines — that's the
+// state a collector actually cares about, so it should not look like every other tab.
+function _paintSortButtons(){
+  ['gps','date','az','vlan'].forEach(k=>{
+    const b=document.getElementById('sb-'+k);
+    if(!b) return;
+    const active=(k===_sortMode);
+    const dir=_sortDir[k]||1;
+    const overdueFirst = active && k==='date' && dir===1;
+    b.style.background = overdueFirst ? '#DF1A35' : (active ? '#FFB725' : '#fff');
+    b.style.color      = overdueFirst ? '#fff'    : (active ? '#0146A0' : 'var(--text)');
+    b.style.borderColor= overdueFirst ? '#DF1A35' : 'var(--border)';
+  });
+  const arrow=document.getElementById('sb-date-arrow');
+  if(arrow) arrow.textContent = (_sortMode==='date') ? ((_sortDir.date===1)?'↓':'↑') : '';
+}
 function setSortMode(m){
   if(_sortMode===m){ _sortDir[m]=(_sortDir[m]===1?-1:1); } // same button tapped again → flip direction
   else { _sortMode=m; }
-  ['gps','date','az','vlan'].forEach(k=>{
-    const b=document.getElementById('sb-'+k);
-    if(b){ b.style.background=(k===_sortMode)?'#FFB725':'#fff'; b.style.color=(k===_sortMode)?'#0146A0':'var(--text)'; }
-  });
+  _paintSortButtons();
   renderVendoList();
 }
-function syncSortButtons(){
-  ['gps','date','az','vlan'].forEach(k=>{
-    const b=document.getElementById('sb-'+k);
-    if(b){ b.style.background=(k===_sortMode)?'#FFB725':'#fff'; b.style.color=(k===_sortMode)?'#0146A0':'var(--text)'; }
-  });
-}
+function syncSortButtons(){ _paintSortButtons(); }
 function renderVendoList(){
   syncSortButtons();
   const all=currentItems;
@@ -2594,7 +2603,7 @@ function renderVendoList(){
     else if(_sortMode==='date'){
       // dir 1 = most overdue first (oldest/never first); dir -1 = latest first
       view.sort((a,b)=>(_days(b)-_days(a))*dir); sorted=false;
-      _sortLabel=dir===1?'🕐 Most overdue first':'🕐 Latest harvest first';
+      _sortLabel=dir===1?'⏳ Most overdue first':'⏳ Recently harvested first';
     }
     else if(_sortMode==='vlan'){
       // dir 1 = VLAN 1 onwards, blanks last; dir -1 = blanks first then high→low
@@ -4071,6 +4080,12 @@ async function flushQueue(){
         let _hId=null;
         if(_hr.status===409){
           pwLog('sync','Duplicate blocked by DB — already saved',{item_id:q.itemId});
+        } else if(!_hr.ok){
+          // ANY other failure must THROW. Previously this fell through silently: the
+          // group item PATCH above had already written the coins, the harvests row was
+          // never created, and the queue reported success. Real money vanished.
+          const _t=await _hr.text().catch(()=>'');
+          throw new Error('harvest POST '+_hr.status+' '+_t.slice(0,200));
         } else {
           const _hrows=await _hr.json().catch(()=>[]);
           _hId=_hrows&&_hrows[0]&&_hrows[0].id;
