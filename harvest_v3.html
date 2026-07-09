@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.2</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.3</div>
     </div>
 
   </div>
@@ -1349,7 +1349,13 @@ function updateOnline(){
   if(dot){dot.style.background=ok?'#4ade80':'#dc2626';dot.title=ok?'Online':'Offline';}
   const connLbl=document.getElementById('conn-lbl');
   if(connLbl){connLbl.textContent=ok?'Online':'Offline';}
-  if(ok&&offlineQueue.length){ toast('🌐 Back online — syncing '+offlineQueue.length+' pending items…',3000); flushQueue(); }
+  if(ok&&offlineQueue.length){
+    toast('🌐 Back online — syncing '+offlineQueue.length+' pending items…',3000);
+    // Debounce: Android fires 'online' repeatedly when WiFi flaps. flushQueue has its
+    // own re-entry guard, but settling first avoids hammering the gateway.
+    clearTimeout(window._flushTimer);
+    window._flushTimer = setTimeout(()=>flushQueue(), 800);
+  }
   if(typeof updateOfflineReadyCard==='function') updateOfflineReadyCard();
 }
 window.addEventListener('online',updateOnline);
@@ -1402,7 +1408,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.2';
+const APP_VERSION = 'v11.3';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -3804,7 +3810,8 @@ async function submitHarvest(){
         if(!_saved) _photoKey=null;
       }
       const _photoLabel=ownerName||currentItem.sheet_name||currentItem.tg_name||'vendo';
-      offlineQueue.push({type:'harvest',itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,photoKey:_photoKey,photoLabel:_photoLabel,ts:_ts});
+      const _uid = 'h_'+currentItem.id+'_'+_ts+'_'+Math.random().toString(36).slice(2,8);
+      offlineQueue.push({type:'harvest',uid:_uid,itemId:currentItem.id,itemUpdate,harvestRecord,vendoUpdate,vendoId:currentItem.vendo_id,groupRunId:currentGroupRun?.id,packItems:_pendingPacks,photoKey:_photoKey,photoLabel:_photoLabel,ts:_ts});
       localStorage.setItem('hq',JSON.stringify(offlineQueue));
       toast(_photoKey?'📴 Saved offline (with photo) — will sync when online':'📴 Saved offline — will sync when online',3000);
     }
@@ -4011,9 +4018,13 @@ function goHome(){
 }
 
 // ── OFFLINE FLUSH ─────────────────────────────────────────────────
+let _flushing = false;
 async function flushQueue(){
-  if(!offlineQueue.length) return;
+  if(_flushing) return;              // RE-ENTRY GUARD. The 'online' event fires
+  if(!offlineQueue.length) return;   // repeatedly on flaky WiFi; without this,
+  _flushing = true;                  // two flushes race and POST the same harvest twice.
   const remaining=[],groupUpdates={};
+  try{
   for(const q of offlineQueue){
     try {
       if(q.type==='harvest'){
@@ -4035,8 +4046,15 @@ async function flushQueue(){
         }
         await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate)});
         const _hr=await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(q.harvestRecord)});
-        const _hrows=await _hr.json().catch(()=>[]);
-        const _hId=_hrows&&_hrows[0]&&_hrows[0].id;
+        // 409 = unique index (vendo_id, harvested_at) rejected a replay. The row is
+        // ALREADY in the DB from an earlier flush. Treat as success, never re-POST.
+        let _hId=null;
+        if(_hr.status===409){
+          pwLog('sync','Duplicate blocked by DB — already saved',{item_id:q.itemId});
+        } else {
+          const _hrows=await _hr.json().catch(()=>[]);
+          _hId=_hrows&&_hrows[0]&&_hrows[0].id;
+        }
         // Sync pack items if any
         if(_hId && q.packItems && q.packItems.length){
           const _packs=q.packItems.map(p=>({...p,harvest_id:_hId}));
@@ -4050,6 +4068,19 @@ async function flushQueue(){
           if(q.vendoUpdate&&q.vendoUpdate.contact_number) groupUpdates[q.groupRunId].contacts_added++;
           groupUpdates[q.groupRunId].total_net+=parseFloat(q.harvestRecord.net_collectible||0);
         }
+      } else if(q.type==='expense'){
+        // Offline expense — photo blob was stashed in IndexedDB, upload then insert.
+        let _url=q.data.receipt_photo_url||null;
+        if(q.photoKey){
+          const _blob=await getPhotoOffline(q.photoKey);
+          if(_blob){
+            _url=await uploadPhoto(_blob,'expense',null);
+            if(_url) await deletePhotoOffline(q.photoKey);
+          }
+          q.photoKey=null;
+        }
+        const _er=await fetch(`${SB}/rest/v1/collector_expenses`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({...q.data,receipt_photo_url:_url})});
+        if(!_er.ok && _er.status!==409) throw new Error('expense '+_er.status);
       } else if(q.type==='vendoUpdate'&&q.vendoId){
         if(q.photoKey){
           const _blob=await getPhotoOffline(q.photoKey);
@@ -4066,7 +4097,11 @@ async function flushQueue(){
           groupUpdates[q.groupRunId].skipped_count++;
         }
       }
-      syncLog=syncLog.map(s=>s.ts===q.ts?{...s,status:'synced'}:s);
+      // Mark synced by unique id (ts alone can collide on fast taps).
+      syncLog=syncLog.map(s=>((q.uid&&s.uid===q.uid)||(!q.uid&&s.ts===q.ts))?{...s,status:'synced'}:s);
+      // Persist immediately: if the app dies on the NEXT item, this one is not replayed.
+      localStorage.setItem('hq',JSON.stringify(offlineQueue.filter(x=>x!==q&&!remaining.includes(x))));
+      localStorage.setItem('hs',JSON.stringify(syncLog));
     } catch(e) {
       remaining.push(q);
       pwLog('error', 'Sync failed: '+q.type, {item_id:q.itemId, error:e.message});
@@ -4090,9 +4125,16 @@ async function flushQueue(){
   offlineQueue=remaining;
   localStorage.setItem('hq',JSON.stringify(offlineQueue));
   localStorage.setItem('hs',JSON.stringify(syncLog));
-  if(!remaining.length){
+  // Only claim "all synced" if nothing is left AND no syncLog row is still pending.
+  const _stillPending = syncLog.filter(s=>s.status!=='synced').length;
+  if(!remaining.length && !_stillPending){
     toast('✅ All synced!',3000);
-    pwLog('sync','All items synced',{count:offlineQueue.length+remaining.length});
+    pwLog('sync','All items synced',{count:syncLog.length});
+  } else if(remaining.length){
+    toast('⚠️ '+remaining.length+' item(s) still waiting to sync',3500);
+  }
+  }finally{
+    _flushing = false;   // ALWAYS release, even if something above threw.
   }
 }
 
@@ -4774,7 +4816,7 @@ async function saveExpense(){
   if(!_expPhotoBlob){ toast('📸 Photo required — take a receipt photo first'); return; }
   const desc = _selCat==='others' ? (document.getElementById('exp-desc-inp').value||'Others') : _selCat.replace('_',' ');
   let photoUrl = null;
-  if(_expPhotoBlob){
+  if(_expPhotoBlob && navigator.onLine){
     try {
       const fname = `expenses/exp_${Date.now()}.jpg`;
       const ab = await _expPhotoBlob.arrayBuffer();
@@ -4787,15 +4829,52 @@ async function saveExpense(){
   const expense = { category:_selCat, description:desc, amount:amt, receipt_photo_url:photoUrl, created_at:new Date().toISOString() };
   const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const _col = selectedCollector||sessionStorage.getItem('col_name')||'';
-  let _savedId = null;
+  const _row = {collector:_col,expense_date:_today,category:_selCat,description:desc,amount:amt};
+
+  // OFFLINE: queue it. Previously this POSTed, swallowed the error, and still said
+  // "saved" — the expense existed only in memory and vanished on reload.
+  if(!navigator.onLine){
+    let _pk=null;
+    if(_expPhotoBlob){
+      _pk='exp_'+Date.now();
+      if(!(await savePhotoOffline(_pk,_expPhotoBlob))) _pk=null;
+    }
+    offlineQueue.push({type:'expense',uid:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+                       data:{..._row,receipt_photo_url:null},photoKey:_pk,ts:Date.now()});
+    localStorage.setItem('hq',JSON.stringify(offlineQueue));
+    _expenses.push({...expense,id:null,_pending:true});
+    const badge=document.getElementById('exp-badge');
+    badge.textContent=_expenses.length; badge.style.display='block';
+    document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length;
+    closeAddExpense(); renderExpenses();
+    toast('📴 Expense saved offline — will sync when online',3000);
+    return;
+  }
+
+  let _savedId = null, _ok = false;
   try {
     const _dbR = await fetch(`${SB}/rest/v1/collector_expenses`,{
       method:'POST', headers:{...HDR,Prefer:'return=representation'},
-      body:JSON.stringify({collector:_col,expense_date:_today,category:_selCat,description:desc,amount:amt,receipt_photo_url:photoUrl})
+      body:JSON.stringify({..._row,receipt_photo_url:photoUrl})
     });
-    const _dbD = await _dbR.json();
-    if(Array.isArray(_dbD)&&_dbD[0]) _savedId=_dbD[0].id;
+    _ok = _dbR.ok;
+    if(_ok){ const _dbD = await _dbR.json(); if(Array.isArray(_dbD)&&_dbD[0]) _savedId=_dbD[0].id; }
   } catch(e){ console.warn('Expense DB save failed',e); }
+
+  // The POST failed while online (server error / dropped connection). Queue it and
+  // tell the truth rather than showing a green check for data that never landed.
+  if(!_ok){
+    offlineQueue.push({type:'expense',uid:'e_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+                       data:{..._row,receipt_photo_url:photoUrl},photoKey:null,ts:Date.now()});
+    localStorage.setItem('hq',JSON.stringify(offlineQueue));
+    _expenses.push({...expense,id:null,_pending:true});
+    const badge=document.getElementById('exp-badge');
+    badge.textContent=_expenses.length; badge.style.display='block';
+    closeAddExpense(); renderExpenses();
+    toast('⚠️ Could not reach server — expense queued for sync',3500);
+    return;
+  }
+
   expense.id = _savedId;
   _expenses.push(expense);
   // Update badge
