@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.9</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.0</div>
     </div>
 
   </div>
@@ -1742,45 +1742,11 @@ function pinLogout(){
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
 
 // ── HOME SCREEN ────────────────────────────────────────────
-async function showHomeScreen(){
-  showScreen('screen-home');
-  const name = selectedCollector||sessionStorage.getItem('col_name')||'';
-  const el = document.getElementById('home-collector-name');
-  if(el) el.textContent = name;
-  const bnav = document.getElementById('bottom-nav');
-  if(bnav) bnav.classList.add('show');
-  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
-  const hb = document.getElementById('bnav-home');
-  if(hb) hb.classList.add('active');
-  updateOfflineReadyCard();
-  // Load today's spawn share
-  try {
-    const today = new Date().toISOString().split('T')[0];
-    const r = await fetch(`${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(name)}&harvest_date=eq.${today}&select=coins_total,sheet_name,harvested_at`,{headers:HDR});
-    const rows = await r.json();
-    if(Array.isArray(rows)){
-      const gross = rows.reduce((s,h)=>s+(parseFloat(h.coins_total)||0),0);
-      const spawn = gross*0.75;
-      const QUOTA=25000;
-      const pct=Math.min(100,(spawn/QUOTA)*100);
-      const el2=document.getElementById('home-month-total');
-      if(el2) el2.textContent='₱'+fmt(spawn);
-      const lb=document.getElementById('home-quota-label');
-      if(lb) lb.textContent=pct>=100?'🎉 Quota reached!':'Daily Quota ₱25,000';
-      const bar=document.getElementById('home-quota-bar');
-      if(bar){ bar.style.width=pct+'%'; bar.style.background=pct>=100?'#4ade80':'#FFB725'; }
-      const pp=document.getElementById('home-quota-pct');
-      if(pp) pp.textContent=Math.round(pct)+'%';
-      const ml=document.getElementById('home-month-label');
-      if(ml) ml.textContent=new Date().toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
-      const list=document.getElementById('home-recent-list');
-      if(list&&rows.length){
-        list.innerHTML=rows.slice(0,6).map(h=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div style="font-size:13px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.sheet_name||'—'}</div><div style="font-size:14px;font-weight:700;color:#025AC6">₱${fmt((parseFloat(h.coins_total)||0)*0.75)}</div></div>`).join('');
-      }
-    }
-  }catch(e){}
-  loadCrucialAreas();
-}
+// NOTE: an earlier duplicate `showHomeScreen()` lived here. It was dead — the
+// definition at the bottom of this file shadowed it — but it read harvest_date
+// from `toISOString()` (UTC, wrong for Manila) and derived spawn share from
+// `coins_total * 0.75` instead of net_collectible. Removed rather than left as a
+// trap. The live definition is the one near loadHomeStats().
 
 // ── SINGLE SOURCE OF TRUTH FOR "OVERDUE" ────────────────────────────────────
 // Three screens used to compute this independently — Home's Crucial Areas, the group
@@ -2202,7 +2168,7 @@ async function prewarmGroups(groupDefs){
   if(_prewarming || !navigator.onLine || !Array.isArray(groupDefs) || !groupDefs.length) return;
   _prewarming = true;
   const TTL = 12*3600*1000;
-  const _todayStr = new Date().toISOString().split('T')[0];
+  const _todayStr = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const toWarm = groupDefs.filter(g=>{
     const ts = parseInt(localStorage.getItem('grp_cache_ts_'+g.id)||'0');
     const has = localStorage.getItem('grp_cache_'+g.id);
@@ -2388,7 +2354,9 @@ async function startGroup(groupId){
       }
     }
 
-    const _todayStr = new Date().toISOString().split('T')[0];
+    // Manila-local: last_harvest_date is written in Manila time by submitHarvest().
+    // A UTC slice would call a 6 AM Manila harvest 'yesterday'.
+    const _todayStr = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
     currentItems = allItems.map(item=>{
       const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
       // Preserve items already harvested TODAY (e.g. via dashboard admin or another device)
@@ -2441,7 +2409,9 @@ async function startGroup(groupId){
     // Reset DB stats (background, don't await) — but PRESERVE items already harvested today
     const _harvestedTodayCount = currentItems.filter(i=>i.status==='harvested').length;
     if(navigator.onLine){
-      const _todayT = new Date().toISOString().split('T')[0];
+      // Manila-local — this guards which rows get reset to pending. A UTC slice
+      // before 8 AM Manila would reset vendos harvested this morning.
+      const _todayT = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
       fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({status:'active',harvested_count:_harvestedTodayCount,skipped_count:0,started_at:new Date().toISOString()})});
       // Reset items NOT harvested today. Older harvested rows revert to pending; today's stay.
       // pulled_out must NEVER be touched. The guard is written as `status=eq.harvested` +
@@ -3903,7 +3873,12 @@ async function submitHarvest(){
   if(!net){toast('Enter Net Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
   const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
   const spawn=Math.round(net*0.75),customer=net-spawn;
-  const now=new Date().toISOString(),today=now.split('T')[0];
+  const now=new Date().toISOString();
+  // `harvested_at` stays UTC (a true instant). `harvest_date` is a calendar day and
+  // MUST be Manila-local: a 6 AM Manila harvest is 22:00 UTC the previous day, so
+  // slicing the ISO string would file a dawn route under yesterday — and the home
+  // screen, which queries Manila-today, would report ₱0 for real work.
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const ownerName=(document.getElementById('owner-name-inp').value||'').trim();
   const ownerRealName=(document.getElementById('owner-real-name-inp')||{}).value||'';
   const contact=(document.getElementById('contact-inp').value||'').trim();
@@ -4851,7 +4826,9 @@ async function _refreshHomeLater(collectorName, today, cacheKey){
       `&order=harvested_at.desc`, {headers:HDR});
     const d = await r.json();
     if(Array.isArray(d)){
-      localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(),rows:d}));
+      const _blob = JSON.stringify({ts:Date.now(),rows:d});
+      localStorage.setItem(cacheKey, _blob);
+      try{ localStorage.setItem(cacheKey+'_last', _blob); }catch(_){}
       if(document.getElementById('screen-home')?.classList.contains('active')) loadHomeStats();
     }
   }catch(_){}
@@ -4901,6 +4878,7 @@ async function loadHomeStats(){
 
   let todayHarvests = [];
   let dbOk = false;
+  let _staleRows = null;   // last-known-good, used only if the live fetch fails
   // Serve the cached copy instantly, then refresh in the background. Opening Home
   // should never cost a round-trip on a weak signal out in the field.
   const _cacheKey = 'home_cache_'+collectorName+'_'+today;
@@ -4912,9 +4890,22 @@ async function loadHomeStats(){
       if(navigator.onLine && (Date.now()-(c.ts||0) > _CACHE_TTL)) _refreshHomeLater(collectorName, today, _cacheKey);
     }
   }catch(_){}
+  // invalidateHomeCache() deletes _cacheKey after every harvest, so the read above
+  // finds nothing and we must go to the network. Keep a shadow copy: if that fetch
+  // dies on a weak signal, showing the collector ₱0 for a full day's work is far
+  // worse than showing a number that is one harvest stale.
+  if(!dbOk){
+    try{
+      const s = JSON.parse(localStorage.getItem(_cacheKey+'_last')||'null');
+      if(s && Array.isArray(s.rows)) _staleRows = s.rows;
+    }catch(_){}
+  }
 
   try {
-    if(navigator.onLine && !dbOk){
+    // navigator.onLine only means an interface is attached — the fetch can still
+    // fail. Attempt it whenever we have no fresh rows, and treat a thrown request
+    // or a non-array body as failure rather than as "zero harvests today".
+    if(!dbOk){
       // select= only the 7 fields this screen renders. Without it PostgREST returns all
       // 37 columns of `harvests` — including notes, admin_notes, photo_url, recon_gap.
       const rToday = await fetch(
@@ -4923,13 +4914,23 @@ async function loadHomeStats(){
         `&order=harvested_at.desc`,
         {headers:HDR}
       );
+      if(!rToday.ok) throw new Error('HTTP '+rToday.status);
       const d = await rToday.json();
       if(Array.isArray(d)){
         todayHarvests = d; dbOk = true;
-        try{ localStorage.setItem(_cacheKey, JSON.stringify({ts:Date.now(),rows:d})); }catch(_){}
+        try{
+          const _blob = JSON.stringify({ts:Date.now(),rows:d});
+          localStorage.setItem(_cacheKey, _blob);
+          localStorage.setItem(_cacheKey+'_last', _blob);   // survives invalidateHomeCache()
+        }catch(_){}
       }
     }
-  } catch(e){ /* offline or transient — fall through with queue-only numbers */ }
+  } catch(e){
+    // Offline or transient. Fall back to the last successful read rather than
+    // silently reporting ₱0. Queued rows are merged in below either way.
+    if(_staleRows){ todayHarvests = _staleRows; dbOk = true; }
+    console.warn('[home] live fetch failed, using last-known rows:', e && e.message);
+  }
 
   try {
     // Merge: DB rows + queued rows. A queued item that already synced is skipped by
@@ -5743,7 +5744,7 @@ async function submitEodSession(){
       body: JSON.stringify({
         collector_id: collectorId,
         collector_name: collectorName,
-        session_date: new Date().toISOString().split('T')[0],
+        session_date: new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
         total_packs_1k: totalP1k,
         total_packs_300: totalP300,
         total_bugi: totalBugi,
