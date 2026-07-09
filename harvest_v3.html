@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.6</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.7</div>
     </div>
 
   </div>
@@ -1408,7 +1408,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.6';
+const APP_VERSION = 'v11.7';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -4192,6 +4192,8 @@ async function flushQueue(){
   }
   }finally{
     _flushing = false;   // ALWAYS release, even if something above threw.
+    // Repaint the home summary so pending badges clear and DB totals take over.
+    try{ if(typeof loadHomeStats==='function') loadHomeStats(); }catch(_){}
   }
 }
 
@@ -4572,16 +4574,44 @@ async function loadHomeStats(){
 
   document.getElementById('home-today-label').textContent = todayLabel;
 
-  try {
-    // TODAY's harvests for this collector
-    const rToday = await fetch(
-      `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
-      {headers:HDR}
-    );
-    const todayHarvests = await rToday.json();
+  // ── Unsynced work sitting in the offline queue ──────────────────────────────
+  // The collector tapped these; the coins are real. They must count on the home
+  // screen even before they reach the server, otherwise the app reports ₱0 for a
+  // full day's work and nobody trusts the number.
+  const _pendH = (offlineQueue||[]).filter(q=>q.type==='harvest' && q.harvestRecord
+                    && q.harvestRecord.harvest_date===today
+                    && q.harvestRecord.collector===collectorName);
+  const _pendE = (offlineQueue||[]).filter(q=>q.type==='expense' && q.data
+                    && q.data.expense_date===today
+                    && q.data.collector===collectorName);
+  const _pendSpawn = _pendH.reduce((s,q)=>s+(parseFloat(q.harvestRecord.spawn_share)||0),0);
+  const _pendExp   = _pendE.reduce((s,q)=>s+(Number(q.data.amount)||0),0);
 
-    const todaySpawn  = Array.isArray(todayHarvests) ? todayHarvests.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0) : 0;
-    const todayVendos = Array.isArray(todayHarvests) ? todayHarvests.length : 0;
+  let todayHarvests = [];
+  let dbOk = false;
+  try {
+    if(navigator.onLine){
+      const rToday = await fetch(
+        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(collectorName)}&harvest_date=eq.${today}&order=harvested_at.desc`,
+        {headers:HDR}
+      );
+      const d = await rToday.json();
+      if(Array.isArray(d)){ todayHarvests = d; dbOk = true; }
+    }
+  } catch(e){ /* offline or transient — fall through with queue-only numbers */ }
+
+  try {
+    // Merge: DB rows + queued rows. A queued item that already synced is skipped by
+    // matching (vendo_id, harvested_at) — the same pair the DB unique index enforces.
+    const _seen = new Set(todayHarvests.map(h=>h.vendo_id+'|'+h.harvested_at));
+    const _pendRows = _pendH
+      .filter(q=>!_seen.has(q.harvestRecord.vendo_id+'|'+q.harvestRecord.harvested_at))
+      .map(q=>({...q.harvestRecord, _pending:true}));
+    const _all = _pendRows.concat(todayHarvests)
+      .sort((a,b)=>new Date(b.harvested_at)-new Date(a.harvested_at));
+
+    const todaySpawn  = _all.reduce((s,h)=>s+(parseFloat(h.spawn_share)||0),0);
+    const todayVendos = _all.length;
 
     // Update hero
     document.getElementById('home-today-spawn').textContent = '₱'+fmt(todaySpawn);
@@ -4600,29 +4630,55 @@ async function loadHomeStats(){
 
     // Fetch today's expenses and calculate net to remit
     try {
-      const eResp = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collectorName)}&expense_date=eq.${today}&select=amount`,{headers:HDR});
-      const eData = await eResp.json();
-      const expTotal = Array.isArray(eData) ? eData.reduce((s,e)=>s+Number(e.amount||0),0) : 0;
+      let expTotal = 0;
+      if(navigator.onLine){
+        const eResp = await fetch(`${SB}/rest/v1/collector_expenses?collector=eq.${encodeURIComponent(collectorName)}&expense_date=eq.${today}&select=amount`,{headers:HDR});
+        const eData = await eResp.json();
+        if(Array.isArray(eData)) expTotal = eData.reduce((s,e)=>s+Number(e.amount||0),0);
+      }
+      expTotal += _pendExp;   // queued expenses count too
       const netToRemit = todaySpawn - expTotal;
       document.getElementById('home-spawn-today').textContent = '₱'+fmt(netToRemit);
       document.getElementById('home-expense-today').textContent = expTotal > 0 ? '−₱'+fmt(expTotal) : '₱0';
     } catch(e) {
-      document.getElementById('home-spawn-today').textContent = '₱'+fmt(todaySpawn);
-      document.getElementById('home-expense-today').textContent = '₱0';
+      const netToRemit = todaySpawn - _pendExp;
+      document.getElementById('home-spawn-today').textContent = '₱'+fmt(netToRemit);
+      document.getElementById('home-expense-today').textContent = _pendExp>0 ? '−₱'+fmt(_pendExp) : '₱0';
     }
+
+    // Banner: be explicit about what has not reached the server yet.
+    const _pc = _pendRows.length + _pendE.length;
+    let pb = document.getElementById('home-pending-banner');
+    if(_pc){
+      if(!pb){
+        pb=document.createElement('div');
+        pb.id='home-pending-banner';
+        pb.style.cssText='margin:8px 0;padding:8px 12px;border-radius:8px;background:#FFF4D6;border:1px solid #FFB725;color:#7A5200;font-size:12px;font-weight:700;text-align:center';
+        const anchor=document.getElementById('home-recent-list');
+        if(anchor&&anchor.parentNode) anchor.parentNode.insertBefore(pb,anchor);
+      }
+      pb.textContent='📴 '+_pc+' item'+(_pc>1?'s':'')+' not yet synced — included below';
+      pb.style.display='block';
+    } else if(pb){ pb.style.display='none'; }
 
     // Recent harvests
     const listEl = document.getElementById('home-recent-list');
-    if(!Array.isArray(todayHarvests)||!todayHarvests.length){
+    if(!_all.length){
       listEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div>';
     } else {
+      const todayHarvests = _all;   // keep the render block below unchanged
       listEl.innerHTML = todayHarvests.slice(0,8).map(h=>{
-        const name = h.sheet_name||h.tg_name||'Unknown';
+        const name = h.sheet_name||h.tg_name||h.vendo_name||'Unknown';
         const time = h.harvested_at ? new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}) : '—';
-        const spawn = (parseFloat(h.coins_total)||0)*0.75;
-        return `<div class="home-recent-row">
+        // Use spawn_share, not coins_total*0.75 — they differ once free/old/saloy
+        // are deducted, and the hero total above uses spawn_share.
+        const spawn = (parseFloat(h.spawn_share)||0);
+        const pend = h._pending
+          ? '<span style="margin-left:6px;font-size:10px;font-weight:800;color:#7A5200;background:#FFF4D6;border:1px solid #FFB725;border-radius:4px;padding:1px 5px">NOT SYNCED</span>'
+          : '';
+        return `<div class="home-recent-row"${h._pending?' style="background:#FFFBF0"':''}>
           <div>
-            <div class="home-recent-name">${name}</div>
+            <div class="home-recent-name">${name}${pend}</div>
             <div class="home-recent-meta">${time}</div>
           </div>
           <div class="home-recent-amt">₱${fmt(spawn)}</div>
@@ -4630,6 +4686,7 @@ async function loadHomeStats(){
       }).join('');
     }
   } catch(e){
+    console.warn('loadHomeStats render failed:', e.message);
     document.getElementById('home-today-spawn').textContent = '₱—';
     document.getElementById('home-quota-remaining').textContent = 'offline';
     document.getElementById('home-recent-list').innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Could not load — check connection</div>';
