@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.2</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.3</div>
     </div>
 
   </div>
@@ -1783,7 +1783,11 @@ function _ovdOverlay(items, dateMap, statusMap){
     if(row.vendo_id==null) return;
     if(row.status==='pulled_out'){ statusMap[row.vendo_id]='pulled_out'; return; }
     if(row.status==='harvested' && row.harvested_at){
-      const d = String(row.harvested_at).slice(0,10);
+      // harvested_at is a UTC timestamptz; last_harvest_date and todayISO are
+      // Manila calendar days. Slicing the raw string compares different zones —
+      // a 06:00 Manila harvest is 22:00 UTC the day before, so the vendo would
+      // read one day staler than it is and could stay flagged overdue.
+      const d = new Date(row.harvested_at).toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
       if(d > (dateMap[row.vendo_id]||'')) dateMap[row.vendo_id] = d;
     }
   });
@@ -3286,15 +3290,21 @@ async function saveVendoDetails(){
     if(tgName) vendoUpdate.tg_name=tgName;
     if(addressEdit) vendoUpdate.address=addressEdit;
 
-    // Save to vendos table — queue if offline
+    // Save to vendos table — queue if offline OR if the write fails.
     if(currentItem.vendo_id && Object.keys(vendoUpdate).length){
+      let _vOk = false;
       if(navigator.onLine){
-        await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
-          method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
-          body:JSON.stringify(vendoUpdate)
-        });
-      } else {
-        // Queue for later sync — store photo in IndexedDB if captured
+        try{
+          const _vr = await fetch(`${SB}/rest/v1/vendos?id=eq.${currentItem.vendo_id}`,{
+            method:'PATCH', headers:{...HDR,'Prefer':'return=minimal'},
+            body:JSON.stringify(vendoUpdate)
+          });
+          _vOk = _vr.ok;
+        }catch(_){ _vOk = false; }
+      }
+      if(!_vOk){
+        // navigator.onLine was true but the PATCH never landed — queue it rather
+        // than silently dropping the collector's GPS / contact / name edit.
         const _ts=Date.now();
         let _photoKey=null;
         if(capturedPhotoBlob){
@@ -5826,8 +5836,13 @@ async function submitEodSession(){
         submitted_at: new Date().toISOString()
       })
     });
+    if(!sessRes.ok) throw new Error('session POST failed: HTTP '+sessRes.status);
     const sessData = await sessRes.json();
     const sessId = Array.isArray(sessData) ? sessData[0]?.id : sessData?.id;
+    // Without a session id the packs and expenses below are skipped. Reporting
+    // "submitted" here would show a green check, flip the button to Re-submit,
+    // and silently lose a full shift of coin counts. Fail loudly instead.
+    if(!sessId) throw new Error('session POST returned no id');
 
     if(sessId){
       // Save pack data per vendo
@@ -5876,7 +5891,11 @@ async function submitEodSession(){
       renderEod();
     },1500);
   } catch(e){
-    toast('Error submitting. Try again.');
+    // Deliberately NOT writing eod_submitted_* — the button must stay actionable.
+    toast(navigator.onLine
+      ? '❌ End of Day not saved — please tap Submit again'
+      : '📴 No connection — End of Day not saved. Reconnect and submit again', 5000);
+    try{ pwLog('error','EOD submit failed',{error:e&&e.message}); }catch(_){}
     console.error(e);
   }
 }
