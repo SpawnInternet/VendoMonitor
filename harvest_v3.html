@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.3</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.4</div>
     </div>
 
   </div>
@@ -1420,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.3';
+const APP_VERSION = 'v12.4';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1790,13 +1790,15 @@ async function loadCrucialAreas(){
     if(!groups||!groups.length){ wrap.style.display='none'; return; }
     const ids=groups.map(g=>g.id).filter(x=>x!=null);
     if(!ids.length){ wrap.style.display='none'; return; }
-    // Query 1: items (group_run_id -> vendo_id) — cached 6h
-    const mapKey='crucial_items_'+ids.length;
+    // Query 1: items — cached 6h. MUST include status/harvested_at, otherwise the
+    // freshness overlay below silently does nothing (it reads it.status on rows that
+    // never carried one) and pulled-out machines keep counting as overdue.
+    const mapKey='crucial_items_v2_'+ids.length;
     let items=null;
     const cm=localStorage.getItem(mapKey), cmts=parseInt(localStorage.getItem(mapKey+'_ts')||'0');
     if(cm && (Date.now()-cmts < 6*3600*1000)){ items=JSON.parse(cm); }
     else {
-      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id&limit=8000`,{headers:HDR});
+      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,status,harvested_at&limit=8000`,{headers:HDR});
       items=await r1.json();
       if(Array.isArray(items)){ try{ localStorage.setItem(mapKey,JSON.stringify(items)); localStorage.setItem(mapKey+'_ts',Date.now().toString()); }catch(_){} }
     }
@@ -1842,6 +1844,7 @@ async function loadCrucialAreas(){
       const g=gmap[it.group_run_id]; if(!g) return;
       const area=(g.area||'').toUpperCase(); if(!area) return;
       const v=dateMap[it.vendo_id]; if(!v||v.status!=='active') return;
+      if(it.status==='pulled_out') return;   // gone, regardless of what vendos.status says
       if(!areaAgg[area]) areaAgg[area]={overdue:0,oldest:0,groups:new Set()};
       areaAgg[area].groups.add(it.group_run_id);
       const d=v.lhd?Math.floor((now-new Date(v.lhd+'T12:00:00'))/86400000):9999;
@@ -4751,7 +4754,9 @@ function invalidateHomeCache(){
     localStorage.removeItem('home_exp_'+c+'_'+t);
     // The group-picker overdue counts cache their item map for 6h. A harvest or
     // pull-out must show up immediately, not after the cache expires.
-    Object.keys(localStorage).forEach(k=>{ if(k.indexOf('ovd_items_')===0) localStorage.removeItem(k); });
+    Object.keys(localStorage).forEach(k=>{
+      if(k.indexOf('ovd_items_')===0 || k.indexOf('crucial_items_')===0) localStorage.removeItem(k);
+    });
   }catch(_){}
 }
 
