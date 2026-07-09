@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.4</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.5</div>
     </div>
 
   </div>
@@ -1420,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.4';
+const APP_VERSION = 'v12.5';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1781,6 +1781,119 @@ async function showHomeScreen(){
   loadCrucialAreas();
 }
 
+// ── SINGLE SOURCE OF TRUTH FOR "OVERDUE" ────────────────────────────────────
+// Three screens used to compute this independently — Home's Crucial Areas, the group
+// picker, and the group header — each with its own cache and its own copy of the rules.
+// They disagreed. Everything now goes through here.
+//
+// A vendo is overdue when: the vendo is active, its group row is not pulled_out, and
+// more than 30 days have passed since it was last harvested. Work done but not yet
+// synced counts as done.
+const _OVD_TTL = 5*60*1000;
+let _ovdInflight = null;
+
+function _ovdOverlay(items, dateMap, statusMap){
+  const todayISO = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+  // The item rows are fresher than any vendo snapshot — let them win.
+  items.forEach(row=>{
+    if(row.vendo_id==null) return;
+    if(row.status==='pulled_out'){ statusMap[row.vendo_id]='pulled_out'; return; }
+    if(row.status==='harvested' && row.harvested_at){
+      const d = String(row.harvested_at).slice(0,10);
+      if(d > (dateMap[row.vendo_id]||'')) dateMap[row.vendo_id] = d;
+    }
+  });
+  (offlineQueue||[]).forEach(q=>{
+    if(q.type==='harvest'   && q.vendoId) dateMap[q.vendoId]   = todayISO;
+    if(q.type==='job_order' && q.vendoId) statusMap[q.vendoId] = 'pulled_out';
+  });
+}
+
+function _ovdIsOverdue(row, dateMap, statusMap, now){
+  const st = statusMap[row.vendo_id];
+  if(st && st!=='active') return -1;          // gone
+  if(row.status==='pulled_out') return -1;    // gone
+  const lhd = dateMap[row.vendo_id];
+  return lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000) : 9999;
+}
+
+// Returns { byGroup:{id:{overdue,oldest}}, byArea:{AREA:{overdue,oldest,groups:Set}} }
+async function computeOverdue(){
+  const cached = (()=>{ try{
+    const c = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null');
+    if(c && Date.now()-c.ts < _OVD_TTL) return c.data;
+  }catch(_){} return null; })();
+  if(cached) return _ovdRehydrate(cached);
+  if(_ovdInflight) return _ovdInflight;
+
+  _ovdInflight = (async ()=>{
+    const groups = await loadPermGroups();
+    const out = {byGroup:{}, byArea:{}};
+    if(!groups || !groups.length) return out;
+    const ids = groups.map(g=>g.id).filter(x=>x!=null);
+    if(!ids.length) return out;
+
+    // ONE fetch of item rows, with the fields the rules actually need.
+    const r1 = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})`+
+                           `&select=group_run_id,vendo_id,status,harvested_at&limit=8000`,{headers:HDR});
+    const items = await r1.json();
+    if(!Array.isArray(items) || !items.length) return out;
+
+    // ONE fetch of vendo state. Not _vendoCacheMap — that is an hourly cron snapshot and
+    // is exactly why these numbers lagged behind reality.
+    const vids = [...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
+    const dateMap={}, statusMap={};
+    for(let i=0;i<vids.length;i+=300){
+      const chunk = vids.slice(i,i+300);
+      const r2 = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
+      const vs = await r2.json();
+      if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=v.last_harvest_date; statusMap[v.id]=v.status; });
+    }
+
+    _ovdOverlay(items, dateMap, statusMap);
+
+    const now = Date.now();
+    const gmap={}; groups.forEach(g=>gmap[g.id]=g);
+    groups.forEach(g=>{ out.byGroup[g.id]={overdue:0,oldest:0}; });
+
+    items.forEach(row=>{
+      const g = gmap[row.group_run_id]; if(!g) return;
+      const d = _ovdIsOverdue(row, dateMap, statusMap, now);
+      if(d < 0) return;
+      const gb = out.byGroup[g.id]; if(!gb) return;
+      if(d>30) gb.overdue++;
+      if(d<9999 && d>gb.oldest) gb.oldest=d;
+
+      const area=(g.area||'').toUpperCase(); if(!area) return;
+      if(!out.byArea[area]) out.byArea[area]={overdue:0,oldest:0,groups:new Set()};
+      out.byArea[area].groups.add(g.id);
+      if(d>30) out.byArea[area].overdue++;
+      if(d<9999 && d>out.byArea[area].oldest) out.byArea[area].oldest=d;
+    });
+
+    try{
+      sessionStorage.setItem('ovd_snapshot', JSON.stringify({ts:Date.now(), data:_ovdDehydrate(out)}));
+    }catch(_){}
+    return out;
+  })();
+
+  try{ return await _ovdInflight; }
+  finally{ _ovdInflight = null; }
+}
+
+// Sets do not survive JSON. Convert on the way in and out.
+function _ovdDehydrate(o){
+  const a={};
+  Object.entries(o.byArea).forEach(([k,v])=>{ a[k]={overdue:v.overdue,oldest:v.oldest,groups:[...v.groups]}; });
+  return {byGroup:o.byGroup, byArea:a};
+}
+function _ovdRehydrate(o){
+  const a={};
+  Object.entries(o.byArea||{}).forEach(([k,v])=>{ a[k]={overdue:v.overdue,oldest:v.oldest,groups:new Set(v.groups||[])}; });
+  return {byGroup:o.byGroup||{}, byArea:a};
+}
+function invalidateOverdue(){ try{ sessionStorage.removeItem('ovd_snapshot'); }catch(_){} }
+
 async function loadCrucialAreas(){
   const wrap=document.getElementById('home-crucial');
   const listEl=document.getElementById('home-crucial-list');
@@ -1788,69 +1901,8 @@ async function loadCrucialAreas(){
   try{
     const groups=await loadPermGroups();
     if(!groups||!groups.length){ wrap.style.display='none'; return; }
-    const ids=groups.map(g=>g.id).filter(x=>x!=null);
-    if(!ids.length){ wrap.style.display='none'; return; }
-    // Query 1: items — cached 6h. MUST include status/harvested_at, otherwise the
-    // freshness overlay below silently does nothing (it reads it.status on rows that
-    // never carried one) and pulled-out machines keep counting as overdue.
-    const mapKey='crucial_items_v2_'+ids.length;
-    let items=null;
-    const cm=localStorage.getItem(mapKey), cmts=parseInt(localStorage.getItem(mapKey+'_ts')||'0');
-    if(cm && (Date.now()-cmts < 6*3600*1000)){ items=JSON.parse(cm); }
-    else {
-      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,status,harvested_at&limit=8000`,{headers:HDR});
-      items=await r1.json();
-      if(Array.isArray(items)){ try{ localStorage.setItem(mapKey,JSON.stringify(items)); localStorage.setItem(mapKey+'_ts',Date.now().toString()); }catch(_){} }
-    }
-    if(!Array.isArray(items)||!items.length){ wrap.style.display='none'; return; }
-    // Vendo dates/status: prefer preloaded cache, only fetch what's missing
-    const vids=[...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
-    const dateMap={};
-    const missing=[];
-    vids.forEach(id=>{
-      const c=_vendoCacheMap&&_vendoCacheMap[id];
-      if(c) dateMap[id]={lhd:c.last_harvest_date,status:c.status};
-      else missing.push(id);
-    });
-    for(let i=0;i<missing.length;i+=300){
-      const chunk=missing.slice(i,i+300);
-      const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
-      const vs=await r2.json();
-      if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]={lhd:v.last_harvest_date,status:v.status};});
-    }
-    // _vendoCacheMap is a snapshot refreshed hourly by cron, so a vendo harvested or
-    // pulled out minutes ago still looks overdue. The group items in hand are current —
-    // let them win.
-    const _todayISO = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-    items.forEach(it=>{
-      if(it.vendo_id==null || !dateMap[it.vendo_id]) return;
-      if(it.status==='pulled_out'){ dateMap[it.vendo_id].status='pulled_out'; return; }
-      if(it.status==='harvested' && it.harvested_at){
-        const d=String(it.harvested_at).slice(0,10);
-        if(d > (dateMap[it.vendo_id].lhd||'')) dateMap[it.vendo_id].lhd = d;
-      }
-    });
-    // Anything harvested or pulled out but not yet synced also counts as handled.
-    (offlineQueue||[]).forEach(q=>{
-      if(q.type==='harvest' && q.vendoId && dateMap[q.vendoId]) dateMap[q.vendoId].lhd=_todayISO;
-      if(q.type==='job_order' && q.vendoId && dateMap[q.vendoId]) dateMap[q.vendoId].status='pulled_out';
-    });
-
-    const now=Date.now();
-    // Aggregate BY AREA (roll up all groups in each area)
-    const gmap={}; groups.forEach(g=>gmap[g.id]=g);
-    const areaAgg={};
-    items.forEach(it=>{
-      const g=gmap[it.group_run_id]; if(!g) return;
-      const area=(g.area||'').toUpperCase(); if(!area) return;
-      const v=dateMap[it.vendo_id]; if(!v||v.status!=='active') return;
-      if(it.status==='pulled_out') return;   // gone, regardless of what vendos.status says
-      if(!areaAgg[area]) areaAgg[area]={overdue:0,oldest:0,groups:new Set()};
-      areaAgg[area].groups.add(it.group_run_id);
-      const d=v.lhd?Math.floor((now-new Date(v.lhd+'T12:00:00'))/86400000):9999;
-      if(d>30) areaAgg[area].overdue++;
-      if(d<9999 && d>areaAgg[area].oldest) areaAgg[area].oldest=d;
-    });
+    const {byArea}=await computeOverdue();
+    const areaAgg=byArea;
     const ranked=Object.entries(areaAgg).map(([area,o])=>({area,overdue:o.overdue,oldest:o.oldest,groupCount:o.groups.size}))
       .filter(x=>x.overdue>0).sort((a,b)=>b.overdue-a.overdue);
     if(!ranked.length){ wrap.style.display='none'; return; }
@@ -1917,72 +1969,11 @@ function showAreasScreen(){
 function closeAreaPicker(){ document.getElementById('area-picker-sheet')?.classList.remove('show'); }
 
 async function fetchGroupOverdue(areaGroups){
-  // For each group run id, count vendos whose last_harvest_date is >30 days or null.
-  const ids=areaGroups.map(g=>g.id).filter(x=>x!=null);
   const result={};
-  areaGroups.forEach(g=>result[g.id]={overdue:0,oldest:0});
-  if(!ids.length) return result;
+  (areaGroups||[]).forEach(g=>{ result[g.id]={overdue:0,oldest:0}; });
   try{
-    // Cache the group_run_id -> vendo_id item map (rarely changes) for 6h.
-    // MUST include status: a pulled_out item is not overdue, it's gone.
-    const mapKey='ovd_items_v2_'+ids.join('_');
-    let items=null;
-    const cachedMap=localStorage.getItem(mapKey);
-    const cachedMapTs=parseInt(localStorage.getItem(mapKey+'_ts')||'0');
-    if(cachedMap && (Date.now()-cachedMapTs < 6*3600*1000)){
-      items=JSON.parse(cachedMap);
-    } else {
-      const r1=await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,status,harvested_at&limit=5000`,{headers:HDR});
-      items=await r1.json();
-      if(Array.isArray(items)){ try{ localStorage.setItem(mapKey,JSON.stringify(items)); localStorage.setItem(mapKey+'_ts',Date.now().toString()); }catch(_){} }
-    }
-    if(!Array.isArray(items)) return result;
-    // Prefer the preloaded vendo cache for dates — avoids a whole batch of vendo fetches
-    const dateMap={};
-    const statusMap={};
-    const missing=[];
-    items.forEach(i=>{
-      if(i.vendo_id==null) return;
-      const c=_vendoCacheMap && _vendoCacheMap[i.vendo_id];
-      if(c){ dateMap[i.vendo_id]=c.last_harvest_date; statusMap[i.vendo_id]=c.status; }
-      else missing.push(i.vendo_id);
-    });
-    // Only fetch the ones not in cache (usually none)
-    const uniqMissing=[...new Set(missing)];
-    for(let i=0;i<uniqMissing.length;i+=300){
-      const chunk=uniqMissing.slice(i,i+300);
-      const r2=await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
-      const vs=await r2.json();
-      if(Array.isArray(vs)) vs.forEach(v=>{dateMap[v.id]=v.last_harvest_date; statusMap[v.id]=v.status;});
-    }
-    // _vendoCacheMap is an hourly cron snapshot, and the item map above may be 6h old.
-    // The item rows themselves are the freshest thing we have — let them win.
-    const _todayISO=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-    items.forEach(row=>{
-      if(row.vendo_id==null) return;
-      if(row.status==='pulled_out'){ statusMap[row.vendo_id]='pulled_out'; return; }
-      if(row.status==='harvested' && row.harvested_at){
-        const d=String(row.harvested_at).slice(0,10);
-        if(d > (dateMap[row.vendo_id]||'')) dateMap[row.vendo_id]=d;
-      }
-    });
-    // Work done but not yet synced still counts as done.
-    (offlineQueue||[]).forEach(q=>{
-      if(q.type==='harvest' && q.vendoId) dateMap[q.vendoId]=_todayISO;
-      if(q.type==='job_order' && q.vendoId) statusMap[q.vendoId]='pulled_out';
-    });
-    const now=Date.now();
-    items.forEach(row=>{
-      const gid=row.group_run_id; if(!result[gid]) return;
-      // Pulled out or deactivated machines are not overdue — they are not there.
-      const st=statusMap[row.vendo_id];
-      if(st && st!=='active') return;
-      if(row.status==='pulled_out') return;
-      const lhd=dateMap[row.vendo_id];
-      const d=lhd?Math.floor((now-new Date(lhd+'T12:00:00'))/86400000):9999;
-      if(d>30) result[gid].overdue++;
-      if(d<9999 && d>result[gid].oldest) result[gid].oldest=d;
-    });
+    const {byGroup}=await computeOverdue();
+    (areaGroups||[]).forEach(g=>{ if(byGroup[g.id]) result[g.id]=byGroup[g.id]; });
   }catch(e){}
   return result;
 }
@@ -4757,6 +4748,7 @@ function invalidateHomeCache(){
     Object.keys(localStorage).forEach(k=>{
       if(k.indexOf('ovd_items_')===0 || k.indexOf('crucial_items_')===0) localStorage.removeItem(k);
     });
+    invalidateOverdue();
   }catch(_){}
 }
 
