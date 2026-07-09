@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.7</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.8</div>
     </div>
 
   </div>
@@ -2259,7 +2259,11 @@ async function startGroup(groupId){
   const cachedRaw = localStorage.getItem(CACHE_KEY);
   const cachedTs = parseInt(localStorage.getItem(CACHE_TS_KEY)||'0');
   const CACHE_TTL = 12*3600*1000; // 12 hours — safe for full-day offline harvesting
-  const _cachedParsed = cachedRaw ? JSON.parse(cachedRaw) : null;
+  // Guarded: a truncated/corrupt cache entry would otherwise throw here —
+  // outside the try block below — and take the whole screen down.
+  let _cachedParsed = null;
+  try { _cachedParsed = cachedRaw ? JSON.parse(cachedRaw) : null; }
+  catch(_){ _cachedParsed = null; try{ localStorage.removeItem(CACHE_KEY); }catch(__){} }
   const cacheHit = _cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0 && (Date.now()-cachedTs < CACHE_TTL);
   // GPS refreshed silently in background — no cache bust needed
   const _effectiveCacheHit = cacheHit;
@@ -2443,6 +2447,32 @@ async function startGroup(groupId){
   } catch(e){
     console.error('startGroup error:', e);
     pwLog('error','startGroup failed',{group:groupId,error:e.message});
+
+    // ── Stale-cache rescue ────────────────────────────────────────
+    // navigator.onLine only means "an interface is attached" — it does NOT mean
+    // packets reach Supabase. On flaky mobile data the cold load above throws
+    // `Failed to fetch` while onLine is still true, so both offline branches
+    // were skipped. Before dead-ending a collector who is standing at a machine
+    // with a full coin box, serve whatever cache we have, however old.
+    if(_cachedParsed && _cachedParsed.items && _cachedParsed.items.length > 0){
+      const cached = _cachedParsed;
+      currentGroupDef = cached.g;
+      currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
+      currentItems = cached.items;
+      document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
+      document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
+      document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
+      localStorage.setItem('harvest_session',JSON.stringify({
+        collector:selectedCollector, groupId:groupId, groupRunId:groupId, groupLabel:cached.g.group_label||cached.g.group_id
+      }));
+      activeTab='pending';
+      renderVendoList();
+      const _ageH = Math.floor((Date.now()-cachedTs)/3600000);
+      toast('⚠️ Weak signal — showing saved list'+(_ageH>0?(' ('+_ageH+'h old)'):'')+'. Harvests will sync later.',4500);
+      pwLog('error','startGroup stale-cache rescue',{group:groupId,age_hours:_ageH});
+      return;
+    }
+
     listEl.innerHTML='';
     const div=document.createElement('div');
     div.className='loading';
@@ -3045,7 +3075,22 @@ async function submitPullOut(){
     try{ renderVendoList(); }catch(_){}
   }catch(e){
     console.error('pull-out failed',e);
-    toast('❌ Failed to send — '+(e.message||'try again'));
+    // Same trap as startGroup: navigator.onLine was true but the request never
+    // landed. Don't lose the pull-out — queue it exactly as the offline branch
+    // would have, so it syncs when the connection actually works.
+    offlineQueue.push({type:'job_order',uid:'j_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+                       data:body,itemId:currentItem.id||null,itemUpdate:_itemUpdate,
+                       vendoId:currentItem.vendo_id||null,vendoUpdate:_vendoPullout,ts:Date.now()});
+    localStorage.setItem('hq',JSON.stringify(offlineQueue));
+    _stamp(currentItem);
+    if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
+    if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
+    try{ document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length; }catch(_){}
+    try{ invalidateHomeCache(); applyOverdueDelta(currentItem&&currentItem.vendo_id); }catch(_){}
+    pwLog('error','pullout queued after send failure',{vendo:currentItem&&currentItem.vendo_id,error:e.message});
+    closePullOut();
+    toast('⚠️ Weak signal — pull out saved, will sync when connected',4000);
+    try{ renderVendoList(); }catch(_){}
     btn.disabled=false; btn.textContent='Confirm & Send';
   }
 }
