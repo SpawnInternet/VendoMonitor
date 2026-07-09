@@ -408,14 +408,15 @@ function serverMatch(m){
   // But a human may have LOCKED the correct record by name. Match by NAME (router
   // comment), not VLAN, and honor that lock so the green marker shows.
   if(cands._mode==='disambig' || cands._mode==='collision'){
-    const rcToks=rcTokens(cleanComment(m));
+    const rc=cleanComment(m);
+    const rcToks=rcTokens(rc);
     if(rcToks.length){
       // Match by NAME against the router comment across all vendos (VLANs repeat across
       // areas, so name is ground truth). Honor a LOCKED record above all.
       let best=null, bestSc=0, bestLocked=false;
       VENDOS.forEach(v=>{
         if(!inServerArea(v)) return; // don't bleed other areas/servers
-        const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
+        const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc), nameMatchScore(rcToks, v.tg_name, rc));
         if(sc<=0) return;
         const lk=(v.name_confirmed===true);
         // prefer locked; among same lock-state prefer higher score
@@ -467,8 +468,15 @@ const RC_STOP=new Set(['dicayas','dipolog','dapitan','sindangan','polanco','roxa
   'sitio','blk','block','poblacion','near','duol','area','vlan','spawn','gym','beside','hall',
   'cawa','cawa2x','school','store','tindahan','bahay','house','front','back','side','road','crossing']);
 function rcTokens(s){
-  return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/)
-    .filter(w=>w.length>=3 && !RC_STOP.has(w));
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9 ]/g,' ').split(/\s+/)
+    .filter(w=>w.length>=2 && !RC_STOP.has(w));
+}
+// Normalize a full name for exact comparison: lowercase, strip accents + all punctuation.
+// Router comment "MJ" and sheet_name "MJ" must compare equal. So must "Niño" / "Nino".
+function normName(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]/g,'');
 }
 // Edit distance for tolerant token matching (handles spelling diffs like denzel/denzil)
 function _lev(a,b){
@@ -492,8 +500,15 @@ function _fuzzyEq(a,b){
   return d<=1 || (d===2 && Math.min(a.length,b.length)>=8);
 }
 // Score how strongly a record name matches the router comment (fuzzy meaningful-token overlap)
-function nameMatchScore(rcToks, name){
+function nameMatchScore(rcToks, name, rawComment){
   if(!name) return 0;
+  // NAME IS GROUND TRUTH. If the router comment and the record name are the same
+  // string (ignoring case/accents/punctuation), that IS the machine. VLANs repeat
+  // across areas, so an exact name hit outranks any amount of token overlap.
+  if(rawComment){
+    const a=normName(name), b=normName(rawComment);
+    if(a && a===b) return 999;
+  }
   const nToks=rcTokens(name);
   let hits=0; rcToks.forEach(t=>{ if(nToks.some(n=>_fuzzyEq(t,n))) hits++; });
   return hits;
@@ -513,13 +528,37 @@ function popupCandidates(m){
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[])
     .filter(v=>v.sheet_name||v.tg_name)
     .filter(inServerArea);
-  const rcToks=rcTokens(cleanComment(m));
+  const rc=cleanComment(m);
+  const rcToks=rcTokens(rc);
 
-  // Pick THE record whose NAME matches the router comment (meaningful tokens).
+  // NAME IS GROUND TRUTH. First look for an EXACT name match anywhere on this server —
+  // not just on this VLAN, because VLAN numbers are reused across areas. If the router
+  // comment equals a record's sheet_name or tg_name, that record IS the machine.
   let primary=null, best=0;
-  if(rcToks.length && onVlan.length){
+  const rcNorm=normName(rc);
+  if(rcNorm){
+    const exact=VENDOS.filter(v=>inServerArea(v) &&
+      (normName(v.sheet_name)===rcNorm || normName(v.tg_name)===rcNorm));
+    if(exact.length===1){
+      // Name is unique on this server -> unambiguous, VLAN irrelevant.
+      primary=exact[0]; best=999;
+    } else if(exact.length>1){
+      // Several records share this name. Name alone can't identify the machine,
+      // so VLAN breaks the tie. Prefer: locked-on-this-VLAN > on-this-VLAN > locked.
+      const onThisVlan=exact.filter(v=>String(v.vlan)===String(m.vlan));
+      const pick = onThisVlan.find(v=>v.name_confirmed===true)
+                || (onThisVlan.length===1 ? onThisVlan[0] : null)
+                || (exact.filter(v=>v.name_confirmed===true).length===1
+                      ? exact.find(v=>v.name_confirmed===true) : null);
+      if(pick){ primary=pick; best=999; }
+      // else: still ambiguous -> fall through to disambig so a human chooses.
+    }
+  }
+
+  // No exact name hit -> fall back to fuzzy token overlap among records on this VLAN.
+  if(!primary && rcToks.length && onVlan.length){
     onVlan.forEach(v=>{
-      const sc=Math.max(nameMatchScore(rcToks, v.sheet_name), nameMatchScore(rcToks, v.tg_name));
+      const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc), nameMatchScore(rcToks, v.tg_name, rc));
       if(sc>best){ best=sc; primary=v; }
     });
   }
@@ -862,7 +901,7 @@ function renderModal(m, cands){
         VENDOS.forEach(v=>{
           if(String(v.vlan)===String(m.vlan)) return; // already-on-this-VLAN handled elsewhere
           if(!(v.sheet_name||v.tg_name)) return;
-          const sc=Math.max(nameMatchScore(rcToks,v.sheet_name), nameMatchScore(rcToks,v.tg_name));
+          const sc=Math.max(nameMatchScore(rcToks,v.sheet_name,suggest), nameMatchScore(rcToks,v.tg_name,suggest));
           if(sc>=2) matches.push({v, sc});
         });
         matches.sort((a,b)=>b.sc-a.sc);
