@@ -2057,13 +2057,17 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
-    // PostgREST caps at 1000 rows/request — page through ALL vendos
-    VENDOS=[];
-    for(let off=0; off<10000; off+=1000){
-      const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed&order=id&limit=1000&offset=${off}`);
-      if(!page || !page.length) break;
-      VENDOS=VENDOS.concat(page);
-      if(page.length<1000) break;
+    // PostgREST caps at 1000 rows/request — fetch page 1, then the rest in parallel
+    const SEL="vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed&order=id&limit=1000";
+    const first=await sb(`${SEL}&offset=0`);
+    VENDOS=first||[];
+    if(first && first.length===1000){
+      const rest=await Promise.all(
+        [1,2,3,4,5,6,7,8,9].map(i=>sb(`${SEL}&offset=${i*1000}`).catch(()=>[]))
+      );
+      for(const page of rest){
+        if(page && page.length) VENDOS=VENDOS.concat(page);
+      }
     }
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
@@ -2073,27 +2077,46 @@ async function boot(){
       if(!BYVLAN[k]) BYVLAN[k]=v;
     });
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
-    STATUS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000");
-    SUBS=await sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000");
-    try{ GROUPS=await sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label") || []; }catch(e){ GROUPS=[]; }
-    await loadActiveHarvest();
-    renderHarvestBanner();
-    // monthly sales per vlan — used to classify empty slots vs real offline
-    try{
-      const now=new Date();
-      const monthStart=new Date(now.getFullYear(),now.getMonth(),1).toISOString();
-      const tx=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${monthStart}&limit=200000`);
-      SALES_MONTH={};
-      tx.forEach(r=>{ const k=String(r.vendo); SALES_MONTH[k]=(SALES_MONTH[k]||0)+Number(r.amount||0); });
-    }catch(e){ SALES_MONTH={}; }
+    // these four are independent of each other — fire together
+    const [status, subs, groups, salesRows] = await Promise.all([
+      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
+      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
+      sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
+      sbRpc("sales_month_by_vendo").catch(()=>[])
+    ]);
+    STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    SALES_MONTH={};
+    (salesRows||[]).forEach(r=>{ SALES_MONTH[String(r.vendo)]=Number(r.total||0); });
+
     await loadSuppress();
     render(); renderSubs();
+
+    // non-blocking: banner can fill in after the grid is on screen
+    loadActiveHarvest().then(renderHarvestBanner).catch(()=>{});
   }catch(e){
     document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+esc(e.message)+'</div>');
   }
 }
 boot();
-setInterval(boot,90000);
+
+// Only mikrotik_status is genuinely live. Vendos/groups/sales change rarely,
+// so the 90s tick refreshes just the machine state instead of the whole dataset.
+async function refreshStatus(){
+  if(document.hidden) return;              // don't poll a backgrounded tab
+  if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
+  try{
+    const [status, subs] = await Promise.all([
+      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
+      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000")
+    ]);
+    STATUS=status||[]; SUBS=subs||[];
+    await loadSuppress();
+    render(); renderSubs();
+  }catch(e){ /* transient — next tick retries */ }
+}
+setInterval(refreshStatus, 90000);
+// full reload every 15 min picks up new vendos / group changes
+setInterval(boot, 900000);
 </script>
 </body>
 </html>
