@@ -1,16 +1,30 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v11.6.0';
+const CACHE = 'spawn-harvest-v3-v11.7.0';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
   '/VendoMonitor/manifest-v3.json',
+  // Precached so an installed app shows its icon and splash offline from the
+  // very first launch, before any network request has succeeded.
+  '/VendoMonitor/v3-icon-192.png',
+  '/VendoMonitor/v3-icon-512.png',
+  '/VendoMonitor/v3-icon-maskable-192.png',
+  '/VendoMonitor/v3-icon-maskable-512.png',
+  '/VendoMonitor/v3-apple-touch-icon.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(APP_SHELL).catch(()=>{}))
+    caches.open(CACHE).then(cache =>
+      // addAll() is atomic: one 404 rejects the whole batch and the app installs
+      // with an EMPTY cache — offline launch then shows nothing. Cache each file
+      // independently so a missing icon costs only that icon.
+      Promise.all(APP_SHELL.map(url =>
+        cache.add(url).catch(err => console.warn('[sw] precache miss:', url, err && err.message))
+      ))
+    )
   );
 });
 
