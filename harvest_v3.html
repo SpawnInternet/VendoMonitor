@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.0</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.1</div>
     </div>
 
   </div>
@@ -977,6 +977,18 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
   const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
   const STOR_UP_RE = /\/storage\/v1\/object\/(?!public\/)([a-z0-9_-]+)\/(.+)$/i;
 
+  // ── In-flight de-dupe: identical concurrent GETs share one round-trip ──
+  // Reads only. Writes (POST/PATCH/DELETE) are NEVER de-duped — two taps that
+  // both mean to write must both write.
+  const _inflight = new Map();
+  function _dedupe(key, makeReq){
+    const hit = _inflight.get(key);
+    if(hit) return hit.then(r=>r.clone());   // clone: body can only be read once
+    const p = makeReq().finally(()=>_inflight.delete(key));
+    _inflight.set(key, p);
+    return p.then(r=>r.clone());
+  }
+
   window.fetch = async function(input, init){
     try {
       const url = (typeof input === 'string') ? input : (input && input.url) || '';
@@ -995,11 +1007,13 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
           const query = m[3] || '';
           const prefer = hdrs['Prefer'] || hdrs['prefer'] || '';
           const body = opts.body ? JSON.parse(opts.body) : undefined;
-          return _origFetch(GW_URL, {
+          const send = () => _origFetch(GW_URL, {
             method: 'POST',
             headers: { 'Content-Type':'application/json', 'x-gw-token': GW_TOKEN },
             body: JSON.stringify({ kind:'rest', table, method, query, body, prefer })
           });
+          if (method === 'GET') return _dedupe('GET|'+table+'|'+query, send);
+          return send();
         }
 
         // ---- Storage upload (non-public path = write) ----
@@ -1147,8 +1161,16 @@ async function downloadAllOffline(manual=false){
   setOfflineCardState('downloading','Downloading…','Caching all groups for offline use');
   try {
     const groups = await loadPermGroups(true);
+    // Skip groups whose cache is still fresh. Manual tap forces a full refresh.
+    const DL_TTL = 12*3600*1000;
+    const stale = manual ? groups : groups.filter(g=>{
+      const ts = parseInt(localStorage.getItem('grp_cache_ts_'+g.id)||'0');
+      return !(localStorage.getItem('grp_cache_'+g.id) && (Date.now()-ts < DL_TTL));
+    });
+    const skipped = groups.length - stale.length;
     let done = 0, totalItems = 0;
-    for(const g of groups){
+
+    const fetchGroup = async (g) => {
       const groupId = g.id;
       try {
         // Fetch all items for this group (paginated)
@@ -1165,7 +1187,7 @@ async function downloadAllOffline(manual=false){
           if(batch.length<500) break;
           offset += 500;
         }
-        if(!allItems.length){ done++; continue; }
+        if(!allItems.length){ done++; return; }
         // Pull last_harvest_date from vendo cache if available
         const items = allItems.map(item=>{
           const cached = _vendoCacheMap && item.vendo_id ? _vendoCacheMap[item.vendo_id] : null;
@@ -1184,12 +1206,20 @@ async function downloadAllOffline(manual=false){
         localStorage.setItem('grp_cache_ts_'+groupId, Date.now().toString());
         totalItems += items.length;
         done++;
-        setOfflineCardState('downloading','Downloading…','Cached '+done+' of '+groups.length+' groups');
+        setOfflineCardState('downloading','Downloading…','Cached '+(done+skipped)+' of '+groups.length+' groups');
       } catch(e){ console.warn('Prefetch group '+groupId+' failed:', e.message); }
+    };
+
+    // Run 3 at a time instead of one-by-one.
+    const CHUNK = 3;
+    for(let c=0;c<stale.length;c+=CHUNK){
+      await Promise.all(stale.slice(c,c+CHUNK).map(fetchGroup));
     }
+
+    done += skipped;
     localStorage.setItem('offline_dl_ts', Date.now().toString());
     localStorage.setItem('offline_dl_groups', String(done));
-    localStorage.setItem('offline_dl_items', String(totalItems));
+    if(totalItems) localStorage.setItem('offline_dl_items', String(totalItems));
     if(manual) toast('✅ '+done+' groups ready offline ('+totalItems+' vendos)',3500);
     updateOfflineReadyCard();
   } catch(e){
@@ -1371,7 +1401,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.0';
+const APP_VERSION = 'v11.1';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
