@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.4</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.5</div>
     </div>
 
   </div>
@@ -1408,7 +1408,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.4';
+const APP_VERSION = 'v11.5';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2839,7 +2839,6 @@ async function submitPullOut(){
   }
   pinErr.style.display='none';
 
-  if(!navigator.onLine){ toast('⚠️ You are offline — try again when connected'); btn.disabled=false; btn.textContent='Confirm & Send'; return; }
   btn.textContent='Sending…';
   const nm=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   const issueText='PULL OUT: '+reason+(note?(' — '+note):'');
@@ -2857,6 +2856,30 @@ async function submitPullOut(){
     vendo_id:currentItem.vendo_id||null,
     tg_reported_by:selectedCollector||null
   };
+
+  const _pulloutTs=new Date().toISOString();
+  const _noteStr=issueText;
+  const _stamp=(it)=>{ if(!it) return; it.status='pulled_out'; it._pulloutReason=reason; it._pulloutDetails=note||''; it._pulloutAt=_pulloutTs; it.collector_note=_noteStr; };
+  const _itemUpdate={status:'pulled_out',collector_note:_noteStr,harvested_at:_pulloutTs};
+
+  // OFFLINE: queue the job order instead of refusing. The collector is standing at a
+  // machine they've already removed — making them come back when there's signal is worse
+  // than holding the record locally. The UI moves it to Pull Out right away either way.
+  if(!navigator.onLine){
+    offlineQueue.push({type:'job_order',uid:'j_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+                       data:body,itemId:currentItem.id||null,itemUpdate:_itemUpdate,ts:Date.now()});
+    localStorage.setItem('hq',JSON.stringify(offlineQueue));
+    _stamp(currentItem);
+    if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
+    if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
+    try{ document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length; }catch(_){}
+    closePullOut();
+    toast('📴 Pull out saved offline — '+nm+' will sync when connected',3500);
+    try{ renderVendoList(); }catch(_){}
+    btn.disabled=false; btn.textContent='Confirm & Send';
+    return;
+  }
+
   try{
     const r=await fetch(`${SB}/rest/v1/job_orders`,{
       method:'POST',
@@ -2864,10 +2887,7 @@ async function submitPullOut(){
       body:JSON.stringify(body)
     });
     if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
-    const _pulloutTs=new Date().toISOString();
-    const _noteStr='PULL OUT: '+reason+(note?(' — '+note):'');
     // Mark this vendo as pulled out so it leaves the harvest list
-    const _stamp=(it)=>{ if(!it) return; it.status='pulled_out'; it._pulloutReason=reason; it._pulloutDetails=note||''; it._pulloutAt=_pulloutTs; it.collector_note=_noteStr; };
     _stamp(currentItem);
     if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
     // Persist on the harvest_group_items row (gateway allows PATCH); harvested_at doubles as pull-out timestamp
@@ -2875,7 +2895,7 @@ async function submitPullOut(){
       fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${currentItem.id}`,{
         method:'PATCH',
         headers:{...HDR,'Prefer':'return=minimal'},
-        body:JSON.stringify({status:'pulled_out',collector_note:_noteStr,harvested_at:_pulloutTs})
+        body:JSON.stringify(_itemUpdate)
       }).catch(e=>console.error('pullout status persist failed',e));
     }
     if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
@@ -4096,6 +4116,13 @@ async function flushQueue(){
         // Landed. Drop the local pending copy so loadAndRenderExpenses doesn't
         // rehydrate it alongside the real DB row.
         if(typeof _expenses!=='undefined') _expenses=_expenses.filter(e=>e._uid!==q.uid);
+      } else if(q.type==='job_order'){
+        const _jr=await fetch(`${SB}/rest/v1/job_orders`,{method:'POST',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.data)});
+        if(!_jr.ok && _jr.status!==409) throw new Error('job_order '+_jr.status);
+        // Persist the pull-out on the group item too (was deferred while offline).
+        if(q.itemId){
+          await fetch(`${SB}/rest/v1/harvest_group_items?id=eq.${q.itemId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(q.itemUpdate||{})});
+        }
       } else if(q.type==='vendoUpdate'&&q.vendoId){
         if(q.photoKey){
           const _blob=await getPhotoOffline(q.photoKey);
