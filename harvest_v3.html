@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.5</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.6</div>
     </div>
 
   </div>
@@ -1062,6 +1062,7 @@ let selectedTeam = null;
 let currentGroupRun = null;   // active harvest_groups row
 let currentGroupDef = null;   // permanent group def from DB {id, group_id, group_label, area, collector, team}
 let currentItems = [];        // harvest_group_items rows for current run
+let _dupConfirmed = false;   // reset on every vendo open; see submitHarvest
 let currentItem = null;
 let currentItemIdx = null;
 let capturedGPS = null;
@@ -1420,7 +1421,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.5';
+const APP_VERSION = 'v12.6';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1856,6 +1857,7 @@ async function computeOverdue(){
     const gmap={}; groups.forEach(g=>gmap[g.id]=g);
     groups.forEach(g=>{ out.byGroup[g.id]={overdue:0,oldest:0}; });
 
+    const counted = {};   // vendo_id -> AREA, for applyOverdueDelta
     items.forEach(row=>{
       const g = gmap[row.group_run_id]; if(!g) return;
       const d = _ovdIsOverdue(row, dateMap, statusMap, now);
@@ -1867,12 +1869,12 @@ async function computeOverdue(){
       const area=(g.area||'').toUpperCase(); if(!area) return;
       if(!out.byArea[area]) out.byArea[area]={overdue:0,oldest:0,groups:new Set()};
       out.byArea[area].groups.add(g.id);
-      if(d>30) out.byArea[area].overdue++;
+      if(d>30){ out.byArea[area].overdue++; counted[row.vendo_id]=area; }
       if(d<9999 && d>out.byArea[area].oldest) out.byArea[area].oldest=d;
     });
 
     try{
-      sessionStorage.setItem('ovd_snapshot', JSON.stringify({ts:Date.now(), data:_ovdDehydrate(out)}));
+      sessionStorage.setItem('ovd_snapshot', JSON.stringify({ts:Date.now(), data:_ovdDehydrate(out), counted}));
     }catch(_){}
     return out;
   })();
@@ -1893,6 +1895,29 @@ function _ovdRehydrate(o){
   return {byGroup:o.byGroup||{}, byArea:a};
 }
 function invalidateOverdue(){ try{ sessionStorage.removeItem('ovd_snapshot'); }catch(_){} }
+
+// A harvest or pull-out changes exactly ONE vendo. Refetching all ~1,050 items and
+// ~1,050 vendos to learn that (≈139 KB, and 4 MB across a 30-harvest shift) is absurd
+// on prepaid mobile data. Adjust the cached snapshot in place instead: decrement the
+// group and its area, but only if that vendo was actually being counted as overdue.
+function applyOverdueDelta(vendoId, groupRunId){
+  if(vendoId==null || groupRunId==null) return;
+  let snap;
+  try{ snap = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null'); }catch(_){ return; }
+  if(!snap || !snap.data) return;
+  const seen = snap.counted || {};
+  // `counted` records which vendos contributed to the totals. If this one didn't
+  // (already harvested, pulled out, or not yet 30 days old) the totals don't move.
+  if(!seen[vendoId]) return;
+  const area = seen[vendoId];
+  const g = snap.data.byGroup && snap.data.byGroup[groupRunId];
+  const a = snap.data.byArea && snap.data.byArea[area];
+  if(g && g.overdue > 0) g.overdue--;
+  if(a && a.overdue > 0) a.overdue--;
+  delete seen[vendoId];
+  snap.counted = seen;
+  try{ sessionStorage.setItem('ovd_snapshot', JSON.stringify(snap)); }catch(_){}
+}
 
 async function loadCrucialAreas(){
   const wrap=document.getElementById('home-crucial');
@@ -2966,7 +2991,7 @@ async function submitPullOut(){
     if(currentItemIdx!=null) _stamp(currentItems[currentItemIdx]);
     if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
     try{ document.getElementById('cnt-sync').textContent=offlineQueue.length||syncLog.length; }catch(_){}
-    try{ invalidateHomeCache(); }catch(_){}
+    try{ invalidateHomeCache(); applyOverdueDelta(currentItem&&currentItem.vendo_id, currentGroupRun&&currentGroupRun.id); }catch(_){}
     closePullOut();
     toast('📴 Pull out saved offline — '+nm+' will sync when connected',3500);
     try{ renderVendoList(); }catch(_){}
@@ -3000,7 +3025,7 @@ async function submitPullOut(){
       }).catch(e=>console.error('pullout vendo status failed',e));
     }
     if(currentGroupRun) try{ localStorage.setItem('cached_items_'+currentGroupRun.id,JSON.stringify(currentItems)); }catch(_){}
-    try{ invalidateHomeCache(); }catch(_){}
+    try{ invalidateHomeCache(); applyOverdueDelta(currentItem&&currentItem.vendo_id, currentGroupRun&&currentGroupRun.id); }catch(_){}
     closePullOut();
     toast('✅ Pulled out — '+nm+' moved to Pull Out tab');
     try{ renderVendoList(); }catch(_){}
@@ -3014,6 +3039,7 @@ async function submitPullOut(){
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
 function openItem(idx){
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
+  _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
   const _vcodeEl=document.getElementById('form-vcode');
@@ -3774,6 +3800,22 @@ document.addEventListener('click',function(e){
 });
 
 async function submitHarvest(){
+  // A vendo already harvested today is almost always a double-tap or a collector
+  // reopening the wrong card. It has happened twice in ~600 real harvests, so it is
+  // possible — but it must be deliberate, not accidental. Each duplicate invents a
+  // full spawn share out of nothing.
+  if(currentItem && currentItem.status==='harvested' && currentItem.harvested_at){
+    const _d = String(currentItem.harvested_at).split('T')[0];
+    const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    if(_d === _today && !_dupConfirmed){
+      const nm = currentItem.sheet_name || currentItem.tg_name || 'This vendo';
+      const t = new Date(currentItem.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+      if(!confirm(nm+' was already harvested today at '+t+'.\n\nHarvesting again creates a SECOND record and a second spawn share.\n\nAre you sure this machine was emptied twice?')){
+        return;
+      }
+      _dupConfirmed = true;
+    }
+  }
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
 
@@ -3970,9 +4012,12 @@ async function submitHarvest(){
     localStorage.setItem('hs',JSON.stringify(syncLog));
     localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
     _histCache=null; try{localStorage.removeItem(_histKey());}catch(_){} // Invalidate history cache
-    // A harvest changes the overdue counts. Without this the group picker keeps
-    // showing the pre-harvest number until its 6h cache expires.
-    try{ invalidateHomeCache(); }catch(_){}
+    // A harvest changes the overdue counts. Adjust the cached snapshot in place rather
+    // than discarding it — a refetch is ~139 KB and this only moves one vendo.
+    try{
+      invalidateHomeCache();
+      applyOverdueDelta(currentItem&&currentItem.vendo_id, currentGroupRun&&currentGroupRun.id);
+    }catch(_){}
     // Invalidate group cache so next open fetches fresh last_harvest_date
     if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
 
@@ -4748,7 +4793,8 @@ function invalidateHomeCache(){
     Object.keys(localStorage).forEach(k=>{
       if(k.indexOf('ovd_items_')===0 || k.indexOf('crucial_items_')===0) localStorage.removeItem(k);
     });
-    invalidateOverdue();
+    // NOT invalidateOverdue() — that would force a ~139 KB refetch on every harvest.
+    // Callers apply a local delta instead; see applyOverdueDelta.
   }catch(_){}
 }
 
