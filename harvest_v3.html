@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.2</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.3</div>
     </div>
 
   </div>
@@ -505,17 +505,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <svg id="offline-ready-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
   </div>
 
-  <!-- Data saver -->
-  <div id="datasaver-card" onclick="toggleDataSaver()" style="display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid #eef2f7;border-radius:14px;padding:10px 14px;margin-bottom:14px;cursor:pointer">
-    <div id="ds-icon" style="width:34px;height:34px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">📶</div>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:var(--text)">Data saver</div>
-      <div id="ds-sub" style="font-size:11px;color:var(--muted);margin-top:1px">Off — refreshes normally</div>
-    </div>
-    <div id="ds-switch" style="width:40px;height:22px;border-radius:11px;background:#cbd5e1;position:relative;flex-shrink:0;transition:background .15s">
-      <div id="ds-knob" style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>
-    </div>
-  </div>
 
   <!-- Quick stats row -->
   <div style="display:flex;background:#fff;border-radius:13px;box-shadow:0 2px 8px rgba(2,90,198,.05);overflow:hidden;margin-bottom:14px">
@@ -1175,10 +1164,21 @@ async function downloadAllOffline(manual=false){
     const groups = await loadPermGroups(true);
     // Skip groups whose cache is still fresh. Manual tap forces a full refresh.
     const DL_TTL = 12*3600*1000;
-    const stale = manual ? groups : groups.filter(g=>{
+    let stale = manual ? groups : groups.filter(g=>{
       const ts = parseInt(localStorage.getItem('grp_cache_ts_'+g.id)||'0');
       return !(localStorage.getItem('grp_cache_'+g.id) && (Date.now()-ts < DL_TTL));
     });
+    // Fetch the collector's OWN area first. Ailyn works Dapitan (259 vendos) — she
+    // should not wait on Dipolog's 471 before she can start. The rest still download,
+    // just after, because collectors do get reassigned.
+    const _myArea = (localStorage.getItem('spawn_collector_area')||'').toUpperCase();
+    if(_myArea && !manual){
+      stale = stale.slice().sort((a,b)=>{
+        const am=((a.area||'').toUpperCase()===_myArea)?0:1;
+        const bm=((b.area||'').toUpperCase()===_myArea)?0:1;
+        return am-bm;
+      });
+    }
     const skipped = groups.length - stale.length;
     let done = 0, totalItems = 0;
 
@@ -1420,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.2';
+const APP_VERSION = 'v12.3';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1550,12 +1550,18 @@ async function pinLoadCollectors(){
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),5000);
-    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&order=name.asc`,{headers:HDR,signal:ctrl.signal});
+    // Never select `pin` or `area_pin` here — this runs BEFORE anyone authenticates,
+    // so every column returned is public. It was fetching all 10 columns and caching
+    // them to localStorage, which put every collector's PIN on the device.
+    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&select=id,name,area,collector_code,photo_url&order=name.asc`,{headers:HDR,signal:ctrl.signal});
     clearTimeout(tid);
     const data=await r.json();
     if(Array.isArray(data)&&data.length){
-      _pinCollectors=data; render(data); _pinDbReady=true;
-      try{ localStorage.setItem('spawn_collectors_cache', JSON.stringify(data)); }catch(e){}
+      // Defensive: strip credential fields before anything is cached, even though the
+      // query above no longer requests them.
+      const _safe=data.map(c=>{ const {pin,area_pin,...rest}=c; return rest; });
+      _pinCollectors=_safe; render(_safe); _pinDbReady=true;
+      try{ localStorage.setItem('spawn_collectors_cache', JSON.stringify(_safe)); }catch(e){}
     }
   }catch(e){}
 }
@@ -1641,11 +1647,27 @@ async function pinSubmit(){
   try{
     const ctrl=new AbortController();
     const tid=setTimeout(()=>ctrl.abort(),8000);
-    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&active=eq.true`,{headers:HDR,signal:ctrl.signal});
+    // Ask the server "is there a collector with this name AND this pin?" — it answers
+    // with a row or nothing. The PIN is never sent back to the device, and the response
+    // carries no `pin` column at all.
+    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.${encodeURIComponent(pin)}&active=eq.true&select=id,name,area,collector_code,photo_url`,{headers:HDR,signal:ctrl.signal});
     clearTimeout(tid);
     if(!r.ok) throw new Error('Server error '+r.status);
     const rows=await r.json();
-    if(!rows.length||rows[0].pin!==pin){
+    // FAIL CLOSED. If the gateway ever drops the `pin=eq.` filter, this query would
+    // return the collector regardless of PIN. A deliberately wrong PIN must return
+    // nothing; if it doesn't, the filter is not being honoured and we refuse to log in.
+    if(rows.length){
+      const probe=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.__nope__&active=eq.true&select=id&limit=1`,{headers:HDR});
+      const probeRows=await probe.json().catch(()=>[]);
+      if(Array.isArray(probeRows) && probeRows.length){
+        errEl.textContent='⚠️ Login unavailable — server misconfigured';
+        if(errEl){errEl.style.display='';}
+        if(btn){btn.disabled=false; btn.textContent='Login →';}
+        return;
+      }
+    }
+    if(!rows.length){
       errEl.textContent='❌ Wrong PIN — try again';
       if(errEl){errEl.style.display='';errEl.style.animation='none';void errEl.offsetWidth;errEl.style.animation='shake .4s ease';}
       if(btn){btn.disabled=false; btn.textContent='Login →';}
@@ -1656,6 +1678,7 @@ async function pinSubmit(){
     // Success
     const collector=rows[0];
     selectedCollector=collector.name;
+    try{ if(collector.area) localStorage.setItem('spawn_collector_area', collector.area); }catch(_){}
     selectedTeam=collector.team||( collector.name==='Tandoy'?'TeamB':'TeamA');
     document.getElementById('topbar-sub').textContent=collector.name;
     document.getElementById('pin-inp').value='';[1,2,3,4].forEach(i=>{const d=document.getElementById('pd'+i);if(d){d.style.background='transparent';d.style.borderColor='var(--border)';}});
@@ -2413,7 +2436,6 @@ async function startGroup(groupId){
 // NOT overwrite the cache — their taps must never be lost to a background refresh.
 async function _revalidateGroup(groupId){
   if(!navigator.onLine) return;
-  if(dataSaverOn()) return;   // office changes will appear on the next manual download
   try{
     const r = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&select=cache_epoch`,{headers:HDR});
     const rows = await r.json();
@@ -2868,9 +2890,10 @@ async function pulloutValidatePin(pin){
   try{
     const colName=selectedCollector||sessionStorage.getItem('col_name')||localStorage.getItem('spawn_collector_name')||'';
     if(!colName) return false;
-    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(colName)}&select=pin&limit=1`,{headers:HDR});
+    // Filter on the pin server-side; never fetch it to the device.
+    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(colName)}&pin=eq.${encodeURIComponent(pin)}&select=id&limit=1`,{headers:HDR});
     const rows=await r.json();
-    if(Array.isArray(rows)&&rows.length&&String(rows[0].pin)===pin){
+    if(Array.isArray(rows)&&rows.length){
       sessionStorage.setItem('col_pin',pin);
       return true;
     }
@@ -4515,7 +4538,7 @@ async function _fetchHistory(){
 }
 let _histRefreshing=false;
 async function _refreshHistoryLater(){
-  if(_histRefreshing || !navigator.onLine || dataSaverOn()) return;
+  if(_histRefreshing || !navigator.onLine) return;
   _histRefreshing=true;
   try{
     const d=await _fetchHistory();
@@ -4536,7 +4559,7 @@ async function renderHistory(){
       const c=JSON.parse(localStorage.getItem(_histKey())||'null');
       if(c && Array.isArray(c.rows)){
         _histCache=c.rows;
-        const TTL = dataSaverOn() ? 30*60*1000 : 5*60*1000;
+        const TTL = 5*60*1000;
         if(Date.now()-(c.ts||0) > TTL) _refreshHistoryLater();
       }
     }catch(_){}
@@ -4698,50 +4721,13 @@ async function showHomeScreen(){
   const hb = document.getElementById('bnav-home');
   if(hb) hb.classList.add('active');
   loadHomeStats();
-  try{ _paintDataSaver(); }catch(_){}
   loadCrucialAreas();
-}
-
-// ── DATA SAVER ──────────────────────────────────────────────────────────────
-// Collectors are on prepaid data in areas with weak signal. When on, background
-// refreshes are skipped and cached data is served for longer. Harvesting, syncing,
-// and photo upload are NEVER blocked — money always gets through.
-function _dsAuto(){
-  const c = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-  if(!c) return false;
-  if(c.saveData) return true;                                  // phone's own Data Saver
-  return ['slow-2g','2g'].includes(c.effectiveType||'');       // very weak signal
-}
-function dataSaverOn(){
-  const s = localStorage.getItem('data_saver');
-  if(s === '1') return true;
-  if(s === '0') return false;
-  return _dsAuto();   // unset -> follow the phone
-}
-function _paintDataSaver(){
-  const on = dataSaverOn();
-  const sw=document.getElementById('ds-switch'), kn=document.getElementById('ds-knob'),
-        ic=document.getElementById('ds-icon'), sub=document.getElementById('ds-sub');
-  if(!sw) return;
-  sw.style.background = on ? '#028867' : '#cbd5e1';
-  kn.style.left = on ? '20px' : '2px';
-  ic.style.background = on ? '#d1fae5' : '#f1f5f9';
-  const auto = localStorage.getItem('data_saver')===null && _dsAuto();
-  sub.textContent = on
-    ? (auto ? 'On (auto — weak signal). Saves mobile data.' : 'On — saves mobile data')
-    : 'Off — refreshes normally';
-}
-function toggleDataSaver(){
-  localStorage.setItem('data_saver', dataSaverOn() ? '0' : '1');
-  _paintDataSaver();
-  toast(dataSaverOn() ? '📶 Data saver ON — fewer background refreshes' : '📶 Data saver OFF', 2500);
 }
 
 // Refresh the home cache in the background, then repaint. Never blocks the UI.
 let _homeRefreshing = false;
 async function _refreshHomeLater(collectorName, today, cacheKey){
   if(_homeRefreshing || !navigator.onLine) return;
-  if(dataSaverOn()) return;   // cached numbers are good enough; saves a round-trip
   _homeRefreshing = true;
   try{
     const r = await fetch(
@@ -4799,7 +4785,7 @@ async function loadHomeStats(){
   // Serve the cached copy instantly, then refresh in the background. Opening Home
   // should never cost a round-trip on a weak signal out in the field.
   const _cacheKey = 'home_cache_'+collectorName+'_'+today;
-  const _CACHE_TTL = dataSaverOn() ? 10*60*1000 : 90*1000;
+  const _CACHE_TTL = 90*1000;
   try{
     const c = JSON.parse(localStorage.getItem(_cacheKey)||'null');
     if(c && Array.isArray(c.rows)){
@@ -5597,9 +5583,9 @@ async function checkEodPin(){
     try{
       const colName = selectedCollector || sessionStorage.getItem('col_name') || localStorage.getItem('spawn_collector_name') || '';
       if(colName){
-        const r = await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(colName)}&select=pin&limit=1`,{headers:HDR});
+        const r = await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(colName)}&pin=eq.${encodeURIComponent(_eodPin)}&select=id&limit=1`,{headers:HDR});
         const rows = await r.json();
-        if(Array.isArray(rows) && rows.length && String(rows[0].pin) === _eodPin){
+        if(Array.isArray(rows) && rows.length){
           valid = true;
           // refresh the cache for next time
           sessionStorage.setItem('col_pin', _eodPin);
