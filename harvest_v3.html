@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.8</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v11.9</div>
     </div>
 
   </div>
@@ -1420,7 +1420,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v11.8';
+const APP_VERSION = 'v11.9';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -3631,12 +3631,32 @@ function calcNet(){
 var _tgNamesCache=null;
 function _loadTgNames(cb){
   if(_tgNamesCache){cb(_tgNamesCache);return;}
-  fetch(SB+'/rest/v1/transactions?select=vendo&is_skipped=eq.false&limit=50000',{headers:HDR})
+  // Was: transactions?select=vendo&limit=50000 — ~1 MB downloaded to derive ~890
+  // distinct names. Persist across reloads and pull from a much smaller source.
+  try{
+    var c=JSON.parse(localStorage.getItem('tg_names_cache')||'null');
+    if(c && Array.isArray(c.names) && (Date.now()-(c.ts||0) < 24*3600*1000)){
+      _tgNamesCache=c.names; cb(_tgNamesCache); return;
+    }
+  }catch(_){}
+  if(!navigator.onLine){ cb([]); return; }
+  fetch(SB+'/rest/v1/tg_vendo_names?select=name&limit=2000',{headers:HDR})
     .then(r=>r.json()).then(rows=>{
-      var s=new Set(rows.map(function(x){return x.vendo;}).filter(Boolean));
+      var s=new Set((rows||[]).map(function(x){return x.name;}).filter(Boolean));
+      if(!s.size) throw new Error('empty');
       _tgNamesCache=[...s].sort();
+      try{ localStorage.setItem('tg_names_cache', JSON.stringify({ts:Date.now(),names:_tgNamesCache})); }catch(_){}
       cb(_tgNamesCache);
-    }).catch(function(){_tgNamesCache=[];cb([]);});
+    }).catch(function(){
+      // Fallback to the old path if the view isn't reachable through the gateway.
+      fetch(SB+'/rest/v1/transactions?select=vendo&is_skipped=eq.false&limit=50000',{headers:HDR})
+        .then(r=>r.json()).then(rows=>{
+          var s=new Set((rows||[]).map(function(x){return x.vendo;}).filter(Boolean));
+          _tgNamesCache=[...s].sort();
+          try{ localStorage.setItem('tg_names_cache', JSON.stringify({ts:Date.now(),names:_tgNamesCache})); }catch(_){}
+          cb(_tgNamesCache);
+        }).catch(function(){_tgNamesCache=[];cb([]);});
+    });
 }
 function tgFuzzy(sheet,list){
   var a=(sheet||'').toLowerCase().replace(/[^a-z0-9 ]/g,'');
@@ -3869,7 +3889,7 @@ async function submitHarvest(){
     if(syncLog.length>100) syncLog=syncLog.slice(0,100);
     localStorage.setItem('hs',JSON.stringify(syncLog));
     localStorage.setItem('cached_items_'+currentGroupRun?.id,JSON.stringify(currentItems));
-    _histCache=null; // Invalidate history cache
+    _histCache=null; try{localStorage.removeItem(_histKey());}catch(_){} // Invalidate history cache
     // Invalidate group cache so next open fetches fresh last_harvest_date
     if(currentGroupRun?.id) localStorage.removeItem('grp_cache_ts_'+currentGroupRun.id);
 
@@ -4412,19 +4432,55 @@ async function showHistDetail(idx){
 
 // ── HARVEST HISTORY ───────────────────────────────────────────────
 let _histCache = null;
+const HIST_LIMIT = 120;   // a collector never scrolls past ~4 months of their own work
+function _histKey(){ return 'hist_cache_'+(selectedCollector||''); }
+async function _fetchHistory(){
+  const r=await fetch(
+    `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&select=id,harvest_date,vendo_name,sheet_name,area,route_code,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,spawn_share,collector_note,harvested_at&order=harvest_date.desc,harvested_at.desc&limit=${HIST_LIMIT}`,
+    {headers:HDR}
+  );
+  const d=await r.json();
+  if(!Array.isArray(d)) throw new Error('bad history payload');
+  return d;
+}
+let _histRefreshing=false;
+async function _refreshHistoryLater(){
+  if(_histRefreshing || !navigator.onLine || dataSaverOn()) return;
+  _histRefreshing=true;
+  try{
+    const d=await _fetchHistory();
+    _histCache=d;
+    localStorage.setItem(_histKey(), JSON.stringify({ts:Date.now(),rows:d}));
+    if(activeTab==='history') renderHistory();
+  }catch(_){}
+  finally{ _histRefreshing=false; }
+}
 async function renderHistory(){
   const listEl=document.getElementById('vendo-list');
   const q=(document.getElementById('hist-search-inp')?.value||'').toLowerCase().trim();
 
-  // Load from DB if not cached
+  // _histCache is a plain JS variable — it dies on every app reload, so History used to
+  // refetch up to 500 rows each time the app opened. Persist it and paint from disk.
   if(!_histCache){
+    try{
+      const c=JSON.parse(localStorage.getItem(_histKey())||'null');
+      if(c && Array.isArray(c.rows)){
+        _histCache=c.rows;
+        const TTL = dataSaverOn() ? 30*60*1000 : 5*60*1000;
+        if(Date.now()-(c.ts||0) > TTL) _refreshHistoryLater();
+      }
+    }catch(_){}
+  }
+
+  if(!_histCache){
+    if(!navigator.onLine){
+      listEl.innerHTML='<div class="loading"><span style="color:var(--muted)">📴 History unavailable offline</span></div>';
+      return;
+    }
     listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading history…</span></div>';
     try{
-      const r=await fetch(
-        `${SB}/rest/v1/harvests?collector=eq.${encodeURIComponent(selectedCollector)}&select=id,harvest_date,vendo_name,sheet_name,area,route_code,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,spawn_share,collector_note,harvested_at&order=harvest_date.desc,harvested_at.desc&limit=500`,
-        {headers:HDR}
-      );
-      _histCache=await r.json();
+      _histCache=await _fetchHistory();
+      try{ localStorage.setItem(_histKey(), JSON.stringify({ts:Date.now(),rows:_histCache})); }catch(_){}
     }catch(e){
       listEl.innerHTML='<div class="loading"><span style="color:var(--red)">❌ Could not load history</span></div>';
       return;
@@ -4952,7 +5008,7 @@ function bnavSwitch(tab){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('screen-route').classList.add('active');
     window.scrollTo(0,0);
-    _histCache=null;
+    _histCache=null; try{localStorage.removeItem(_histKey());}catch(_){}
     switchTab('history');
   }
 }
