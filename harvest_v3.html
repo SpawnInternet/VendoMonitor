@@ -440,7 +440,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.8</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v12.9</div>
     </div>
 
   </div>
@@ -2249,6 +2249,22 @@ async function prewarmGroups(groupDefs){
   _prewarming = false;
 }
 
+// `grp_cache_<id>` = the group list as last downloaded (statuses go stale as soon
+// as a vendo is harvested). `cached_items_<id>` = the live rows submitHarvest(),
+// submitPullOut() and skip() keep up to date. Any path that serves grp_cache_
+// MUST overlay the live rows first, or harvested vendos reappear as Pending and
+// a collector can harvest the same coin box twice.
+function _mergeLiveItems(groupId, baseItems){
+  try{
+    const raw = localStorage.getItem('cached_items_'+groupId);
+    if(!raw) return baseItems;
+    const live = JSON.parse(raw);
+    if(!Array.isArray(live) || !live.length) return baseItems;
+    const byId = new Map(live.map(r=>[r.id, r]));
+    return baseItems.map(r=> byId.has(r.id) ? {...r, ...byId.get(r.id)} : r);
+  }catch(_){ return baseItems; }
+}
+
 async function startGroup(groupId){
   showScreen('screen-route');
   const listEl = document.getElementById('vendo-list');
@@ -2275,7 +2291,7 @@ async function startGroup(groupId){
     currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
     // Save collector to harvest_groups
     if(selectedCollector) fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}`,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify({collector:selectedCollector})}).catch(()=>{});
-    currentItems = cached.items;
+    currentItems = _mergeLiveItems(groupId, cached.items);
     document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
@@ -2298,7 +2314,7 @@ async function startGroup(groupId){
     const cached = _cachedParsed;
     currentGroupDef = cached.g;
     currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
-    currentItems = cached.items;
+    currentItems = _mergeLiveItems(groupId, cached.items);
     document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
     document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
@@ -2458,7 +2474,8 @@ async function startGroup(groupId){
       const cached = _cachedParsed;
       currentGroupDef = cached.g;
       currentGroupRun = {...cached.g, harvested_count:0, skipped_count:0, gps_added:0, contacts_added:0, total_net:0, status:'active'};
-      currentItems = cached.items;
+
+      currentItems = _mergeLiveItems(groupId, cached.items);
       document.getElementById('topbar-sub').textContent=cached.g.group_label||cached.g.group_id;
       document.getElementById('sched-group-name').textContent=cached.g.group_label||cached.g.group_id;
       document.getElementById('sched-group-meta').textContent=(cached.g.barangays?cached.g.barangays+' · ':'')+selectedCollector;
