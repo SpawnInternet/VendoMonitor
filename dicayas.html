@@ -1541,6 +1541,10 @@ function refreshVendoLocal(vid, patch){
   VENDOS.forEach(v=>{ if(v.vlan==null)return; const k=String(v.vlan);
     (VLAN_CANDIDATES[k]=VLAN_CANDIDATES[k]||[]).push(v); if(!BYVLAN[k])BYVLAN[k]=v; });
   Object.entries(VLAN_CANDIDATES).forEach(([k,a])=>{ if(a.length>1)DUPVLAN.add(k); });
+  // VENDOS was just mutated in place — the name index and the popupCandidates cache
+  // are now stale. serverMatch() reads both, so without this the modal header falls
+  // through nameOf() to "(unnamed)" even though the record has a sheet_name.
+  buildNameIndex();
   // Force fresh paint of grid + any open modal/dupe view so badges update immediately
   try{ if(typeof render==='function') render(); }catch(_){}
   try{
