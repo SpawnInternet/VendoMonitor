@@ -7,8 +7,16 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<!-- v2026-06-15-spawncount -->
-<meta name="theme-color" content="#1e3cb8">
+<!-- v2026-06-15-spawncount | PWA v1.0 -->
+<meta name="theme-color" content="#025AC6">
+<link rel="manifest" href="office-manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spawn Count">
+<link rel="apple-touch-icon" href="sc-icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="sc-icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="sc-icon-512.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -1620,5 +1628,34 @@ loadAccounts();
     </button>
   </div>
 </div>
+<!-- ── PWA: service worker registration ────────────────────────── -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw-office.js', { scope: '/VendoMonitor/' })
+      .then(function (reg) {
+        // If an updated SW is waiting, activate it immediately
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', function () {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              nw.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
+      .catch(function (err) { console.warn('SW register failed:', err); });
+
+  var _reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (_reloaded) return;
+    _reloaded = true;
+    window.location.reload();
+  });
+  });
+}
+</script>
 </body>
 </html>
