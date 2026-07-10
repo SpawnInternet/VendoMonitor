@@ -380,6 +380,28 @@ const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
 let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
+// Perf: normalized-name -> [vendo,...] for Dicayas-area rows only. Rebuilt on every
+// data load. Replaces a full VENDOS scan (with 2 normName calls per row) that used to
+// run once per card, per render — ~1.1M string ops per pass at 750 cards.
+let NAME_INDEX=new Map();
+// Perf: popupCandidates() is pure w.r.t. VENDOS/VLAN_CANDIDATES/STATUS-row identity,
+// but is called from flagsOf() (once per card) AND again from applySearch(). Cache by
+// match_key; cleared whenever the underlying vendo data changes.
+let _pcCache=new Map();
+function buildNameIndex(){
+  NAME_INDEX=new Map();
+  for(const v of VENDOS){
+    if(!inServerArea(v)) continue;
+    for(const n of [normName(v.sheet_name), normName(v.tg_name)]){
+      if(!n) continue;
+      let a=NAME_INDEX.get(n);
+      if(!a){ a=[]; NAME_INDEX.set(n,a); }
+      if(!a.includes(v)) a.push(v);
+    }
+  }
+  _pcCache=new Map();
+}
+function invalidateVendoCaches(){ buildNameIndex(); }
 let STATUS=[], SUBS=[];
 let SALES_MONTH={}; // vlan -> peso total this month (for classification)
 
@@ -525,6 +547,13 @@ function inServerArea(v){
 }
 
 function popupCandidates(m){
+  const k=m&&m.match_key;
+  if(k!=null && _pcCache.has(k)) return _pcCache.get(k);
+  const r=_popupCandidatesRaw(m);
+  if(k!=null) _pcCache.set(k,r);
+  return r;
+}
+function _popupCandidatesRaw(m){
   const onVlan=(VLAN_CANDIDATES[m.vlan]||[])
     .filter(v=>v.sheet_name||v.tg_name)
     .filter(inServerArea);
@@ -537,8 +566,9 @@ function popupCandidates(m){
   let primary=null, best=0;
   const rcNorm=normName(rc);
   if(rcNorm){
-    const exact=VENDOS.filter(v=>inServerArea(v) &&
-      (normName(v.sheet_name)===rcNorm || normName(v.tg_name)===rcNorm));
+    // was: VENDOS.filter(...) — a full scan with 2 normName() calls per row, per card.
+    // NAME_INDEX is prebuilt and already restricted to inServerArea rows.
+    const exact=NAME_INDEX.get(rcNorm)||[];
     if(exact.length===1){
       // Name is unique on this server -> unambiguous, VLAN irrelevant.
       primary=exact[0]; best=999;
@@ -679,6 +709,7 @@ function sortVendos(arr){
 }
 
 function render(){
+  _pcCache=new Map();
   // Pulled-out machines live on the Inactive tab only — they must not appear
   // in Online, Waiting, No-lease or Empty.
   const LIVE=STATUS.filter(m=>!isPulledOut(m));
@@ -715,7 +746,10 @@ function render(){
     <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
     <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
-  applySearch();
+  // Perf: don't rebuild a grid nobody is looking at. applySearch() re-filters and
+  // re-sorts all rows and rebuilds a 6th grid; skip it when its tab is hidden.
+  const sg=document.getElementById('grid-search');
+  if(sg && sg.offsetParent!==null) applySearch();
 }
 
 function applySearch(){
@@ -1715,6 +1749,7 @@ async function reloadVendos(){
     if(page.length<1000) break;
   }
   VENDOS=fresh; refreshVendoLocal(-1,{});
+  invalidateVendoCaches();
 }
 async function lockVendo(vid){
   const pwd=await askPasswordValue("Lock & finalize this record? It will show the green ✓ marker.");
@@ -1755,6 +1790,7 @@ async function archiveDelete(vid){
   if(!res.ok){ toast("⛔ "+(res.error||'Cannot delete')); return; }
   // remove locally + rebuild maps
   VENDOS=VENDOS.filter(x=>x.id!==vid);
+  invalidateVendoCaches();
   refreshVendoLocal(-1,{});
   toast("🗑 Archived. Restore anytime from the Trash tab.");
   try{ document.getElementById('ov').classList.remove('show'); }catch(_){}
@@ -2077,6 +2113,7 @@ async function boot(){
       if(!BYVLAN[k]) BYVLAN[k]=v;
     });
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
+    buildNameIndex();
     // these four are independent of each other — fire together
     const [status, subs, groups, salesRows] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
