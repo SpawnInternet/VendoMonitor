@@ -1,16 +1,13 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v11.9.0';
+const CACHE = 'spawn-harvest-v3-v12.0.0';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
   '/VendoMonitor/manifest-v3.json',
-  // Precached so an installed app shows its icon and splash offline from the
-  // very first launch, before any network request has succeeded.
-  '/VendoMonitor/v3-icon-192.png',
-  '/VendoMonitor/v3-icon-512.png',
-  '/VendoMonitor/v3-icon-maskable-192.png',
-  '/VendoMonitor/v3-icon-maskable-512.png',
-  '/VendoMonitor/v3-apple-touch-icon.png',
+  // Shared with v2 — v3 uses the same mark. Precached so an installed app shows
+  // its icon and splash offline from the first launch.
+  '/VendoMonitor/icon-192.png',
+  '/VendoMonitor/icon-512.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
