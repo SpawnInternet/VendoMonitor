@@ -2177,9 +2177,10 @@ function klAdd(){
   const notes = document.getElementById('kl-notes').value.trim();
   const lineman = document.getElementById('kl-lineman').value.trim();
   const wifikey = document.getElementById('kl-wifikey').value.trim();
+  const reason = document.getElementById('kl-reason').value.trim();
   if(!name){ alert('Select collector name'); return; }
   if(!areas.length){ alert('Check at least one area'); return; }
-  const body = { collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, returned:false };
+  const body = { collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, lineman_reason:reason||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
       if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
@@ -2189,17 +2190,61 @@ function klAdd(){
       klClearAreas();
       document.getElementById('kl-lineman').value='';
       document.getElementById('kl-wifikey').value='';
+      document.getElementById('kl-reason').value='';
       klLoad();
     })
     .catch(e=>alert('Save failed: '+e.message));
 }
 
+const KL_RETURN_PW = '101510';
+
 function klMarkReturned(id){
-  const note = prompt('Return notes (optional):','');
-  if(note===null) return; // cancelled
+  const rec = _klRows.find(r=>r.id===id) || {};
+  const stamp = new Date();
+  const stampStr = stamp.toLocaleString('en-PH',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+  // remove any existing modal
+  const old = document.getElementById('kl-return-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kl-return-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#028867,#025AC6);padding:20px 22px;color:#fff;">'
+    +   '<div style="font-size:19px;font-weight:800;display:flex;align-items:center;gap:8px;">🔑 Return Keys</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.collector_name||'')+' · '+klEsc(rec.area||'—')+'</div>'
+    + '</div>'
+    + '<div style="padding:20px 22px;">'
+    +   '<div style="background:#f0fdf9;border:1.5px solid #028867;border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:#065f46;">'
+    +     '📅 Return stamp: <b>'+stampStr+'</b> <span style="color:#059669;">(auto)</span>'
+    +   '</div>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Return notes (optional)</label>'
+    +   '<input id="kl-rt-note" placeholder="remarks..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
+    +   '<input id="kl-rt-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')klConfirmReturn('+id+')">'
+    +   '<div id="kl-rt-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+    +   '<div style="display:flex;gap:8px;margin-top:20px;">'
+    +     '<button onclick="klCloseReturn()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="klConfirmReturn('+id+')" style="flex:2;padding:11px;background:#028867;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm Return</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) klCloseReturn(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const p=document.getElementById('kl-rt-pw'); if(p) p.focus(); }, 60);
+}
+
+function klCloseReturn(){
+  const ov = document.getElementById('kl-return-modal'); if(ov) ov.remove();
+}
+
+function klConfirmReturn(id){
+  const pw = (document.getElementById('kl-rt-pw')||{}).value || '';
+  const err = document.getElementById('kl-rt-err');
+  if(pw !== KL_RETURN_PW){ if(err) err.style.display='block'; const p=document.getElementById('kl-rt-pw'); if(p){p.value='';p.focus();} return; }
+  const note = (document.getElementById('kl-rt-note')||{}).value.trim();
   const body = { returned:true, returned_at:new Date().toISOString(), returned_notes:note||null };
   fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
-    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseReturn(); klLoad(); })
     .catch(e=>alert('Update failed: '+e.message));
 }
 
@@ -2227,7 +2272,7 @@ function klRender(){
   let rows = _klRows.slice();
   if(filt==='out')      rows = rows.filter(r=>!r.returned);
   else if(filt==='returned') rows = rows.filter(r=>r.returned);
-  if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')).toLowerCase().includes(q));
+  if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')+' '+(r.lineman_reason||'')).toLowerCase().includes(q));
 
   const out = _klRows.filter(r=>!r.returned).length;
   const outKeys = _klRows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||0),0);
@@ -2254,6 +2299,7 @@ function klRender(){
       +     '</div>'
       +     (r.notes?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
       +     ((r.lineman||r.wifi_key)?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman||'—')+(r.wifi_key?(' · 📶 WiFi key: '+klEsc(r.wifi_key)):'')+'</div>':'')
+      +     (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">💬 Reason: '+klEsc(r.lineman_reason)+'</div>':'')
       +     '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Taken: '+_fmt(r.taken_at)
       +       (returned?(' · Returned: '+_fmt(r.returned_at)):'')+'</div>'
       +     (returned&&r.returned_notes?'<div style="font-size:10px;color:#028867;margin-top:2px;">↩ '+klEsc(r.returned_notes)+'</div>':'')
