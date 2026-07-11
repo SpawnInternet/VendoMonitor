@@ -12,7 +12,7 @@ const DASH_VERSION = '2026-06-15-v1';
 
 // Aliases — var to avoid redeclaration errors
 var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var _KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+var _KEY = "gw";
 var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
 
 const _php = v => v==null?'—':'₱'+Math.round(Number(v)).toLocaleString();
