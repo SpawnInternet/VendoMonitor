@@ -2121,12 +2121,31 @@ function rcptOpenModal(hdr){
 
 /* ══ KEYS — Key Monitoring (taken / returned) ══ */
 let _klRows = [];
+const KL_AREAS = ['POLANCO','BANDERA','ROXAS','KATIPUNAN','SANGKOL','COGON','SINAMAN','DICAYAS','MINAOG','PUNTA','EGOT/ESTAKA','GULAYON/GALAS','TURNO','SANTA ISABEL','MIPUTAK','DAPITAN AREAS'];
+
+function klBuildAreas(){
+  const box = document.getElementById('kl-area-box');
+  if(!box || box.children.length) return;
+  box.innerHTML = KL_AREAS.map(a=>
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;">'
+    + '<input type="checkbox" class="kl-area-cb" value="'+klEsc(a)+'" style="width:15px;height:15px;cursor:pointer;">'+klEsc(a)+'</label>'
+  ).join('');
+}
+
+function klSelectedAreas(){
+  return Array.from(document.querySelectorAll('#kl-area-box .kl-area-cb:checked')).map(c=>c.value);
+}
+
+function klClearAreas(){
+  document.querySelectorAll('#kl-area-box .kl-area-cb').forEach(c=>c.checked=false);
+}
 
 function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function klLoad(){
   const list = document.getElementById('kl-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  klBuildAreas();
   // default date to today
   const dEl = document.getElementById('kl-date');
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
@@ -2151,13 +2170,15 @@ function klLoad(){
 
 function klAdd(){
   const name = document.getElementById('kl-name').value.trim();
-  const area = document.getElementById('kl-area').value;
+  const areas = klSelectedAreas();
+  const area = areas.join(', ');
   const count = parseInt(document.getElementById('kl-count').value,10)||0;
   const kdate = document.getElementById('kl-date').value || null;
   const notes = document.getElementById('kl-notes').value.trim();
   const lineman = document.getElementById('kl-lineman').value.trim();
   const wifikey = document.getElementById('kl-wifikey').value.trim();
   if(!name){ alert('Select collector name'); return; }
+  if(!areas.length){ alert('Check at least one area'); return; }
   const body = { collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
@@ -2165,7 +2186,7 @@ function klAdd(){
       document.getElementById('kl-name').value='';
       document.getElementById('kl-notes').value='';
       document.getElementById('kl-count').value='1';
-      document.getElementById('kl-area').value='';
+      klClearAreas();
       document.getElementById('kl-lineman').value='';
       document.getElementById('kl-wifikey').value='';
       klLoad();
