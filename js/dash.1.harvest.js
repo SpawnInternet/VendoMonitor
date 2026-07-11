@@ -14,6 +14,8 @@ const DASH_VERSION = '2026-06-15-v1';
 var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
 var _KEY = "gw";
 var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
+// anon key — used ONLY for the realtime websocket (read-only live feed; cannot write data)
+var _ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM0MDQ4MDIsImV4cCI6MjA1ODk4MDgwMn0.1Nf1cVMSnFkFMDFRzDFUsxbvZy2vBFJnFOdOthHxq9k";
 
 const _php = v => v==null?'—':'₱'+Math.round(Number(v)).toLocaleString();
 const _fmt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
@@ -1005,7 +1007,8 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
     <div style="font-size:20px;font-weight:700;color:${c};line-height:1">${v}</div>
     <div style="font-size:10px;color:var(--mu);margin-top:3px;font-weight:500">${l}</div>
   </div>`).join('');
-  el.innerHTML=filtered.slice(0,500).map((item,i)=>{
+
+  const rowHtml = (item,i)=>{
     const timeStr=item.harvested_at?new Date(item.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
     return `<div onclick="lfShowDetail(${lfItems.indexOf(item)>=0?lfItems.indexOf(item):i})" style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
       <div style="font-size:10px;color:var(--mu);white-space:nowrap;padding-top:2px;min-width:50px;">${timeStr}</div>
@@ -1021,7 +1024,36 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
         ${item.net_collectible!=null?`<div style="font-size:10px;color:var(--mu);">net ${_php(item.net_collectible)}</div>`:''}
       </div>
     </div>`;
-  }).join('');
+  };
+
+  if(window._lfGroupByCollector){
+    // group records under collector headers with per-collector totals
+    const groups={};
+    filtered.forEach(it=>{ const k=it.collector||'— No collector —'; (groups[k]=groups[k]||[]).push(it); });
+    const order=Object.keys(groups).sort((a,b)=>
+      groups[b].reduce((s,i)=>s+Number(i.spawn_share||0),0) - groups[a].reduce((s,i)=>s+Number(i.spawn_share||0),0));
+    el.innerHTML = order.map(name=>{
+      const rows=groups[name];
+      const gSpawn=rows.reduce((s,i)=>s+Number(i.spawn_share||0),0);
+      const gCoins=rows.reduce((s,i)=>s+Number(i.coins_total||0),0);
+      const areas=[...new Set(rows.map(r=>r.area).filter(Boolean))].join(', ');
+      return `<div style="margin-bottom:4px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;background:#f0f4ff;border-left:3px solid #6d28d9;padding:8px 12px;position:sticky;top:0;z-index:1;">
+          <div>
+            <span style="font-weight:800;font-size:13px;color:#4c1d95;">${name}</span>
+            <span style="font-size:10px;color:var(--mu);margin-left:6px;">${rows.length} vendo${rows.length!==1?'s':''}${areas?' · '+areas:''}</span>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:14px;font-weight:800;color:#15803d;">${_php(gSpawn)}</div>
+            <div style="font-size:9px;color:var(--mu);">coins ${_php(gCoins)}</div>
+          </div>
+        </div>
+        ${rows.map((it,i)=>rowHtml(it,i)).join('')}
+      </div>`;
+    }).join('');
+  } else {
+    el.innerHTML=filtered.slice(0,500).map((item,i)=>rowHtml(item,i)).join('');
+  }
 }
 
 function lfFlyToCollector(collector){
@@ -1045,6 +1077,16 @@ function lfFlyToCollector(collector){
 
 function lfRender(){ lfRenderRows(lfItems,'lf-list','lf-stats','lf-count','lf-search'); }
 function lfHistRender(){ lfRenderRows(lfHistItems,'lf-hist-list','lf-hist-stats','lf-hist-count','lf-hist-search'); }
+
+function lfToggleGroup(){
+  window._lfGroupByCollector = !window._lfGroupByCollector;
+  document.querySelectorAll('.lf-group-btn').forEach(b=>{
+    b.textContent = window._lfGroupByCollector ? '👥 Grouped by collector' : '☰ Group by collector';
+    b.style.background = window._lfGroupByCollector ? '#6d28d9' : '#fff';
+    b.style.color = window._lfGroupByCollector ? '#fff' : '#6d28d9';
+  });
+  lfRender(); lfHistRender();
+}
 
 async function lfLoadHistoryDate(){
   const date=document.getElementById('lf-hist-date').value;
@@ -1076,7 +1118,7 @@ function lfConnect(){
   if(lfConnected) return;
   lfLoadToday();
   try{
-    const wsUrl = `wss://cviraqfhphhsonjmrtvu.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=${_KEY}`;
+    const wsUrl = `wss://cviraqfhphhsonjmrtvu.supabase.co/realtime/v1/websocket?vsn=1.0.0&apikey=${_ANON}`;
     lfWs = new WebSocket(wsUrl);
     lfWs.onopen = ()=>{
       lfWs.send(JSON.stringify({topic:'realtime:public:harvests',event:'phx_join',payload:{},ref:'1'}));
