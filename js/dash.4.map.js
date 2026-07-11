@@ -67,7 +67,7 @@ setInterval(()=>{if(document.getElementById('panel-vmap-top')?.classList.contain
 
 // Config — var (not const) so shared.js can also declare without conflict
 var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var SB_KEY = "gw";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
 
 // ── COLLECTOR PHOTOS (bucket: collector-photos) ──
 window._collectorPhotos = {};  // name(lowercase) -> photo_url
@@ -3193,7 +3193,22 @@ function rcShowCollectorDeficits(collector, date) {
   document.body.appendChild(pop);
 }
 
-window.addEventListener('load', () => { loadCollectorPhotos(); setTimeout(() => loadDashboard(), 500); ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){ var el=document.getElementById(oid); if(el) el.style.display='none'; }); });
+window.addEventListener('load', () => { loadCollectorPhotos(); setTimeout(() => loadDashboard(), 500); ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){ var el=document.getElementById(oid); if(el) el.style.display='none'; });
+  // ── Deep-link: ?p=<panel> opens a single tab directly (used by command center) ──
+  try {
+    var _pp = new URLSearchParams(location.search).get('p');
+    if (_pp) {
+      setTimeout(function(){
+        var _btn = document.querySelector('.nav-bar button[onclick*="showP(\'' + _pp + '\'"]');
+        if (typeof showP === 'function') showP(_pp, _btn || null);
+        // focus mode: hide the top nav bar so only the panel shows in an embedded window
+        if (new URLSearchParams(location.search).get('focus') !== '0') {
+          var _nav = document.querySelector('.nav-bar'); if (_nav) _nav.style.display = 'none';
+        }
+      }, 650);
+    }
+  } catch(e) { console.warn('deep-link p= failed', e); }
+});
 
 // Full dashboard refresh every 5 min
 setInterval(()=>{
