@@ -123,8 +123,8 @@ function collectorPhotoUpload(name){
   inp.onchange = async () => {
     const file = inp.files[0];
     if(!file) return;
-    const pw = prompt('Admin password to set '+name+"'s photo:");
-    if(pw!=='101510'){ toast('Wrong password'); return; }
+    const pw = await askAdminPw('Enter admin password to set '+name+"'s photo.");
+    if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
     toast('Compressing & uploading…');
     try{
       const blob = await compressImage(file, 400, 0.8); // 400px max, 80% quality
@@ -367,7 +367,7 @@ async function gpsSaveCoords(vendoId){
   if(!m){ toast('Invalid format. Use: lat, lng'); return; }
   const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
   if(isNaN(lat)||isNaN(lng)||lat<4||lat>22||lng<115||lng<0){ if(lat<4||lat>22||lng<115||lng>128){ toast('Coordinates outside Philippines — double check'); } }
-  const pw=prompt('Admin password:'); if(pw!=='101510'){ toast('Wrong password'); return; }
+  const pw=await askAdminPw('Enter admin password to confirm.'); if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
   try{
     const r=await fetch(`${SB_URL}/rest/v1/vendos?id=eq.${vendoId}`,{method:'PATCH',
       headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
@@ -389,7 +389,7 @@ function gpsUploadPhoto(vendoId){
   inp.type='file'; inp.accept='image/*';
   inp.onchange=async()=>{
     const file=inp.files[0]; if(!file) return;
-    const pw=prompt('Admin password:'); if(pw!=='101510'){ toast('Wrong password'); return; }
+    const pw=await askAdminPw('Enter admin password to confirm.'); if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
     // Try to read GPS from photo EXIF BEFORE compression (compression strips EXIF)
     try{
       const gps=await readExifGps(file);
@@ -1895,8 +1895,8 @@ async function csSaveNew() {
 }
 
 async function csChangePin(id, name) {
-  const pw = prompt('Admin password:');
-  if(pw!=='101510'){toast('Wrong password');return;}
+  const pw = await askAdminPw('Enter admin password to confirm.');
+  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const newPin = prompt('New PIN for '+name+' (4 digits):');
   if(!newPin||newPin.length!==4||isNaN(newPin)){toast('PIN must be 4 digits');return;}
   try{
@@ -4512,8 +4512,8 @@ async function oaSaveNew() {
 }
 
 async function oaChangePin(id, name, currentPin, currentRole) {
-  const pw = prompt('Admin password:');
-  if(pw!=='101510'){toast('Wrong password');return;}
+  const pw = await askAdminPw('Enter admin password to confirm.');
+  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const newPin = prompt('New PIN for '+name+' (4 digits):\nCurrent: '+currentPin);
   if(newPin===null) return;
   if(!newPin||newPin.length!==4||isNaN(newPin)){toast('PIN must be 4 digits');return;}
@@ -4725,8 +4725,8 @@ async function nmSaveRow(id){
   const inp = document.getElementById('nm-inp-'+id);
   if(!inp) return;
   const tgName = inp.value.trim();
-  const pw = prompt('Admin password:');
-  if(pw!=='101510'){toast('Wrong password');return;}
+  const pw = await askAdminPw('Enter admin password to confirm.');
+  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{
       method:'PATCH',
@@ -4744,8 +4744,8 @@ async function nmSaveRow(id){
 
 async function nmUnlink(id){
   if(!confirm('Remove TG link for this vendo?')) return;
-  const pw = prompt('Admin password:');
-  if(pw!=='101510'){toast('Wrong password');return;}
+  const pw = await askAdminPw('Enter admin password to confirm.');
+  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{
       method:'PATCH',
