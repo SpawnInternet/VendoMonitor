@@ -964,7 +964,7 @@ function gUpdateBackBtn(id) {
 
 function showP(id, btn) {
   // Hide all fixed overlays when switching panels
-  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps'].forEach(function(oid){
+  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps','hvt-keys'].forEach(function(oid){
     var oel=document.getElementById(oid); if(oel) oel.style.display='none';
   });
   _navHistory = [];
