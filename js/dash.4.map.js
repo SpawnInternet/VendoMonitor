@@ -1185,7 +1185,7 @@ async function perfLoad() {
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
   try {
     const monthSel = document.getElementById('perf-month')?.value||'';
-    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area,sheet_name,tg_name&order=harvest_date.desc&limit=1000`;
+    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area,sheet_name,tg_name,harvested_at&order=harvest_date.desc&limit=5000`;
     if(monthSel){
       // Get first and last day of selected month properly
       const [yr,mo] = monthSel.split('-').map(Number);
@@ -1212,25 +1212,18 @@ async function perfLoad() {
     // Sort by spawn share desc
     const sorted = Object.entries(byCol).sort((a,b)=>b[1].spawn-a[1].spawn);
     const medals = ['🥇','🥈','🥉'];
+    window._perfData = {};   // collector -> {stats, harvests}
 
     el.innerHTML = `
       <div style="margin-bottom:12px;font-size:11px;color:var(--mu);">Based on all ${rows.length} harvest records · ranked by Spawn Share</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
         ${sorted.map(([name,s],i)=>{
           const days = s.dates.size;
-          const avg = days ? (s.spawn/s.count).toFixed(0) : 0;
+          const avg = s.count ? (s.spawn/s.count).toFixed(0) : 0;
           const medal = medals[i]||'';
-          // Build harvest rows for breakdown
-          const harvestRows = rows.filter(r=>r.collector===name).sort((a,b)=>b.harvest_date.localeCompare(a.harvest_date));
-          const breakdownId = 'perf-bd-'+name.replace(/[^a-z0-9]/gi,'_');
-          const harvestHtml = harvestRows.map(h=>`
-            <div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid #f3f4f6;font-size:11px;">
-              <span style="color:#475569;">${h.harvest_date}</span>
-              <span style="color:#6b7280;">${h.sheet_name||h.tg_name||'—'}</span>
-              <span style="color:#475569;">${h.area||'—'}</span>
-              <span style="font-weight:600;color:#15803d;">${_php(h.spawn_share)}</span>
-            </div>`).join('');
-          return `<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;">
+          const harvestRows = rows.filter(r=>r.collector===name).sort((a,b)=>(b.harvest_date||'').localeCompare(a.harvest_date||''));
+          window._perfData[name] = { stats:{count:s.count,net:s.net,spawn:s.spawn,coins:s.coins,days}, harvests:harvestRows };
+          return `<div onclick="perfShowPopup('${name.replace(/'/g,"\\'")}')" style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='var(--bd)';">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
               <div style="font-size:22px;">${medal||'🏅'}</div>
               <div>
@@ -1256,11 +1249,9 @@ async function perfLoad() {
                 <div style="color:var(--mu);font-size:9px;">Avg per harvest</div>
               </div>
             </div>
-            <button onclick="perfShowPopup('${breakdownId}')"
-              style="width:100%;padding:5px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;cursor:pointer;color:#1565c0;">
-              📋 View ${harvestRows.length} harvests
-            </button>
-            <div id="${breakdownId}" style="display:none;">${harvestHtml}</div>
+            <div style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;text-align:center;color:#6d28d9;font-weight:700;">
+              📋 View ${harvestRows.length} harvests ›
+            </div>
           </div>`;
         }).join('')}
       </div>`;
@@ -1268,6 +1259,48 @@ async function perfLoad() {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';
   }
 }
+
+// Pretty popup showing a collector's harvest breakdown
+function perfShowPopup(name){
+  const d = (window._perfData||{})[name];
+  if(!d) return;
+  const s=d.stats, hs=d.harvests;
+  const old=document.getElementById('perf-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='perf-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit;';
+  const initial=(name||'?').trim().charAt(0).toUpperCase();
+  const avg=s.count?(s.spawn/s.count).toFixed(0):0;
+  const rowsHtml = hs.map(h=>{
+    const t=h.harvested_at?new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;">
+      <div style="min-width:74px;"><div style="font-size:11px;color:#475569;font-weight:600;">${h.harvest_date||'—'}</div><div style="font-size:9px;color:var(--mu);">${t}</div></div>
+      <div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;">${h.sheet_name||h.tg_name||'<span style=\"color:#9ca3af;font-style:italic\">unmatched</span>'}</div><div style="font-size:10px;color:var(--mu);">${h.area||''}</div></div>
+      <div style="text-align:right;"><div style="font-size:13px;font-weight:800;color:#15803d;">${_php(h.spawn_share)}</div><div style="font-size:9px;color:var(--mu);">coins ${_php(h.coins_total)}</div></div>
+    </div>`;
+  }).join('');
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#6d28d9,#025AC6);padding:18px 22px;color:#fff;flex-shrink:0;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;">${initial}</div>
+          <div><div style="font-size:19px;font-weight:800;">${name}</div><div style="font-size:11px;opacity:.9;">${s.count} harvests · ${s.days} days active</div></div>
+        </div>
+        <button onclick="perfClosePopup()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:14px;">
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.spawn)}</div><div style="font-size:8px;opacity:.85;">spawn</div></div>
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.net)}</div><div style="font-size:8px;opacity:.85;">net</div></div>
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.coins)}</div><div style="font-size:8px;opacity:.85;">coins</div></div>
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(avg)}</div><div style="font-size:8px;opacity:.85;">avg</div></div>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1;">${rowsHtml}</div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) perfClosePopup(); });
+  document.body.appendChild(ov);
+}
+function perfClosePopup(){ const o=document.getElementById('perf-modal'); if(o) o.remove(); }
 
 // ── FIX hvNewTab to include perf ─────────────────────────────────
 // DASHBOARD SEARCH
