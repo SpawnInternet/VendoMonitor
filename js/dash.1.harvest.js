@@ -1497,7 +1497,7 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
   if(overlay) overlay.remove();
   overlay = document.createElement('div');
   overlay.id = 'rc-names-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;display:flex;align-items:center;justify-content:center;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100002;display:flex;align-items:center;justify-content:center;';
   overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
 
   const matchStatus = tgName
