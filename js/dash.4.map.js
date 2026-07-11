@@ -67,7 +67,7 @@ setInterval(()=>{if(document.getElementById('panel-vmap-top')?.classList.contain
 
 // Config — var (not const) so shared.js can also declare without conflict
 var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var SB_KEY = "gw";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
 
 // ── COLLECTOR PHOTOS (bucket: collector-photos) ──
 window._collectorPhotos = {};  // name(lowercase) -> photo_url
@@ -123,8 +123,8 @@ function collectorPhotoUpload(name){
   inp.onchange = async () => {
     const file = inp.files[0];
     if(!file) return;
-    const pw = await askAdminPw('Enter admin password to set '+name+"'s photo.");
-    if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
+    const pw = prompt('Admin password to set '+name+"'s photo:");
+    if(pw!=='101510'){ toast('Wrong password'); return; }
     toast('Compressing & uploading…');
     try{
       const blob = await compressImage(file, 400, 0.8); // 400px max, 80% quality
@@ -367,7 +367,7 @@ async function gpsSaveCoords(vendoId){
   if(!m){ toast('Invalid format. Use: lat, lng'); return; }
   const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
   if(isNaN(lat)||isNaN(lng)||lat<4||lat>22||lng<115||lng<0){ if(lat<4||lat>22||lng<115||lng>128){ toast('Coordinates outside Philippines — double check'); } }
-  const pw=await askAdminPw('Enter admin password to confirm.'); if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
+  const pw=prompt('Admin password:'); if(pw!=='101510'){ toast('Wrong password'); return; }
   try{
     const r=await fetch(`${SB_URL}/rest/v1/vendos?id=eq.${vendoId}`,{method:'PATCH',
       headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
@@ -389,7 +389,7 @@ function gpsUploadPhoto(vendoId){
   inp.type='file'; inp.accept='image/*';
   inp.onchange=async()=>{
     const file=inp.files[0]; if(!file) return;
-    const pw=await askAdminPw('Enter admin password to confirm.'); if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
+    const pw=prompt('Admin password:'); if(pw!=='101510'){ toast('Wrong password'); return; }
     // Try to read GPS from photo EXIF BEFORE compression (compression strips EXIF)
     try{
       const gps=await readExifGps(file);
@@ -987,12 +987,6 @@ function showP(id, btn) {
   if(id==="status")     loadSystemStatus();
   if(id==="suspicious") loadSuspicious();
   if(id==="joborders")  { colLoad(); }
-  if(id==="spawnjobs"){
-    var frm=document.getElementById('spawnjobs-frame');
-    if(frm && (!frm.src || frm.src==='about:blank' || frm.src.endsWith('about:blank'))){
-      frm.src='spawn-jobs.html';
-    }
-  }
 }
 
 function showBread(text, backFn) {
@@ -1191,7 +1185,7 @@ async function perfLoad() {
   el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--mu);">Loading…</div>';
   try {
     const monthSel = document.getElementById('perf-month')?.value||'';
-    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area,sheet_name,tg_name,harvested_at&order=harvest_date.desc&limit=5000`;
+    let perfUrl = `${_SB}/rest/v1/harvests?select=collector,net_collectible,spawn_share,coins_total,harvest_date,area,sheet_name,tg_name&order=harvest_date.desc&limit=1000`;
     if(monthSel){
       // Get first and last day of selected month properly
       const [yr,mo] = monthSel.split('-').map(Number);
@@ -1218,18 +1212,25 @@ async function perfLoad() {
     // Sort by spawn share desc
     const sorted = Object.entries(byCol).sort((a,b)=>b[1].spawn-a[1].spawn);
     const medals = ['🥇','🥈','🥉'];
-    window._perfData = {};   // collector -> {stats, harvests}
 
     el.innerHTML = `
       <div style="margin-bottom:12px;font-size:11px;color:var(--mu);">Based on all ${rows.length} harvest records · ranked by Spawn Share</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
         ${sorted.map(([name,s],i)=>{
           const days = s.dates.size;
-          const avg = s.count ? (s.spawn/s.count).toFixed(0) : 0;
+          const avg = days ? (s.spawn/s.count).toFixed(0) : 0;
           const medal = medals[i]||'';
-          const harvestRows = rows.filter(r=>r.collector===name).sort((a,b)=>(b.harvest_date||'').localeCompare(a.harvest_date||''));
-          window._perfData[name] = { stats:{count:s.count,net:s.net,spawn:s.spawn,coins:s.coins,days}, harvests:harvestRows };
-          return `<div onclick="perfShowPopup('${name.replace(/'/g,"\\'")}')" style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='var(--bd)';">
+          // Build harvest rows for breakdown
+          const harvestRows = rows.filter(r=>r.collector===name).sort((a,b)=>b.harvest_date.localeCompare(a.harvest_date));
+          const breakdownId = 'perf-bd-'+name.replace(/[^a-z0-9]/gi,'_');
+          const harvestHtml = harvestRows.map(h=>`
+            <div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid #f3f4f6;font-size:11px;">
+              <span style="color:#475569;">${h.harvest_date}</span>
+              <span style="color:#6b7280;">${h.sheet_name||h.tg_name||'—'}</span>
+              <span style="color:#475569;">${h.area||'—'}</span>
+              <span style="font-weight:600;color:#15803d;">${_php(h.spawn_share)}</span>
+            </div>`).join('');
+          return `<div style="background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px 16px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
               <div style="font-size:22px;">${medal||'🏅'}</div>
               <div>
@@ -1255,9 +1256,11 @@ async function perfLoad() {
                 <div style="color:var(--mu);font-size:9px;">Avg per harvest</div>
               </div>
             </div>
-            <div style="width:100%;padding:6px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;text-align:center;color:#6d28d9;font-weight:700;">
-              📋 View ${harvestRows.length} harvests ›
-            </div>
+            <button onclick="perfShowPopup('${breakdownId}')"
+              style="width:100%;padding:5px;border:1px solid #e5e7eb;border-radius:6px;background:#f8faff;font-size:11px;cursor:pointer;color:#1565c0;">
+              📋 View ${harvestRows.length} harvests
+            </button>
+            <div id="${breakdownId}" style="display:none;">${harvestHtml}</div>
           </div>`;
         }).join('')}
       </div>`;
@@ -1265,48 +1268,6 @@ async function perfLoad() {
     el.innerHTML = '<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';
   }
 }
-
-// Pretty popup showing a collector's harvest breakdown
-function perfShowPopup(name){
-  const d = (window._perfData||{})[name];
-  if(!d) return;
-  const s=d.stats, hs=d.harvests;
-  const old=document.getElementById('perf-modal'); if(old) old.remove();
-  const ov=document.createElement('div');
-  ov.id='perf-modal';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit;';
-  const initial=(name||'?').trim().charAt(0).toUpperCase();
-  const avg=s.count?(s.spawn/s.count).toFixed(0):0;
-  const rowsHtml = hs.map(h=>{
-    const t=h.harvested_at?new Date(h.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid #f3f4f6;">
-      <div style="min-width:74px;"><div style="font-size:11px;color:#475569;font-weight:600;">${h.harvest_date||'—'}</div><div style="font-size:9px;color:var(--mu);">${t}</div></div>
-      <div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;">${h.sheet_name||h.tg_name||'<span style=\"color:#9ca3af;font-style:italic\">unmatched</span>'}</div><div style="font-size:10px;color:var(--mu);">${h.area||''}</div></div>
-      <div style="text-align:right;"><div style="font-size:13px;font-weight:800;color:#15803d;">${_php(h.spawn_share)}</div><div style="font-size:9px;color:var(--mu);">coins ${_php(h.coins_total)}</div></div>
-    </div>`;
-  }).join('');
-  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;">
-    <div style="background:linear-gradient(135deg,#6d28d9,#025AC6);padding:18px 22px;color:#fff;flex-shrink:0;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;">${initial}</div>
-          <div><div style="font-size:19px;font-weight:800;">${name}</div><div style="font-size:11px;opacity:.9;">${s.count} harvests · ${s.days} days active</div></div>
-        </div>
-        <button onclick="perfClosePopup()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:14px;">
-        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.spawn)}</div><div style="font-size:8px;opacity:.85;">spawn</div></div>
-        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.net)}</div><div style="font-size:8px;opacity:.85;">net</div></div>
-        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(s.coins)}</div><div style="font-size:8px;opacity:.85;">coins</div></div>
-        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:7px;text-align:center;"><div style="font-size:14px;font-weight:800;">${_php(avg)}</div><div style="font-size:8px;opacity:.85;">avg</div></div>
-      </div>
-    </div>
-    <div style="overflow-y:auto;flex:1;">${rowsHtml}</div>
-  </div>`;
-  ov.addEventListener('click',e=>{ if(e.target===ov) perfClosePopup(); });
-  document.body.appendChild(ov);
-}
-function perfClosePopup(){ const o=document.getElementById('perf-modal'); if(o) o.remove(); }
 
 // ── FIX hvNewTab to include perf ─────────────────────────────────
 // DASHBOARD SEARCH
@@ -1934,8 +1895,8 @@ async function csSaveNew() {
 }
 
 async function csChangePin(id, name) {
-  const pw = await askAdminPw('Enter admin password to confirm.');
-  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
   const newPin = prompt('New PIN for '+name+' (4 digits):');
   if(!newPin||newPin.length!==4||isNaN(newPin)){toast('PIN must be 4 digits');return;}
   try{
@@ -3234,14 +3195,45 @@ function rcShowCollectorDeficits(collector, date) {
 
 window.addEventListener('load', () => { loadCollectorPhotos(); setTimeout(() => loadDashboard(), 500); ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){ var el=document.getElementById(oid); if(el) el.style.display='none'; });
   // ── Deep-link: ?p=<panel> opens a single tab directly (used by command center) ──
+  //    Optional ?t=<subtab> opens a Harvest sub-tab (hvNewTab) with its loader.
   try {
-    var _pp = new URLSearchParams(location.search).get('p');
+    var _q = new URLSearchParams(location.search);
+    var _pp = _q.get('p');
+    var _tt = _q.get('t');
     if (_pp) {
       setTimeout(function(){
         var _btn = document.querySelector('.nav-bar button[onclick*="showP(\'' + _pp + '\'"]');
         if (typeof showP === 'function') showP(_pp, _btn || null);
+
+        // Harvest sub-tab: open the requested inner tab and run its loader
+        if (_pp === 'harvest' && _tt && typeof hvNewTab === 'function') {
+          setTimeout(function(){
+            try {
+              var _hb = document.getElementById('hbtn-' + _tt);
+              hvNewTab(_tt, _hb || null);
+              // fire the same loaders the buttons trigger
+              var L = {
+                recon:    function(){ typeof rcInitDates==='function' && rcInitDates(); },
+                progress: function(){ typeof loadProgress==='function' && loadProgress(); },
+                names:    function(){ typeof nmLoad==='function' && nmLoad(); },
+                perf:     function(){ if(typeof perfLoad==='function'){ var m=document.getElementById('perf-month'); if(m && !m.value){ var n=new Date(); m.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0'); } perfLoad(); } },
+                ledger:   function(){ typeof elLoad==='function' && elLoad(); },
+                gps:      function(){ typeof gpsTraceLoad==='function' && gpsTraceLoad(); },
+                keys:     function(){ typeof klLoad==='function' && klLoad(); },
+                livefeed: function(){ typeof loadVendoHarvestRecords==='function' && loadVendoHarvestRecords(); }
+              };
+              if (L[_tt]) L[_tt]();
+              // hide the harvest sub-tab bar too, for a clean single-tab window
+              if (_q.get('focus') !== '0') {
+                var _hn = document.querySelector('.hv-hvtab'); 
+                if (_hn && _hn.parentElement) _hn.parentElement.style.display = 'none';
+              }
+            } catch(e2){ console.warn('subtab open failed', e2); }
+          }, 500);
+        }
+
         // focus mode: hide the top nav bar so only the panel shows in an embedded window
-        if (new URLSearchParams(location.search).get('focus') !== '0') {
+        if (_q.get('focus') !== '0') {
           var _nav = document.querySelector('.nav-bar'); if (_nav) _nav.style.display = 'none';
         }
       }, 650);
@@ -4551,8 +4543,8 @@ async function oaSaveNew() {
 }
 
 async function oaChangePin(id, name, currentPin, currentRole) {
-  const pw = await askAdminPw('Enter admin password to confirm.');
-  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
   const newPin = prompt('New PIN for '+name+' (4 digits):\nCurrent: '+currentPin);
   if(newPin===null) return;
   if(!newPin||newPin.length!==4||isNaN(newPin)){toast('PIN must be 4 digits');return;}
@@ -4764,8 +4756,8 @@ async function nmSaveRow(id){
   const inp = document.getElementById('nm-inp-'+id);
   if(!inp) return;
   const tgName = inp.value.trim();
-  const pw = await askAdminPw('Enter admin password to confirm.');
-  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
   try{
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{
       method:'PATCH',
@@ -4783,8 +4775,8 @@ async function nmSaveRow(id){
 
 async function nmUnlink(id){
   if(!confirm('Remove TG link for this vendo?')) return;
-  const pw = await askAdminPw('Enter admin password to confirm.');
-  if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw = prompt('Admin password:');
+  if(pw!=='101510'){toast('Wrong password');return;}
   try{
     const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{
       method:'PATCH',
