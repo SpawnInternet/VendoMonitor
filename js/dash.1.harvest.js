@@ -2175,12 +2175,9 @@ function klAdd(){
   const count = parseInt(document.getElementById('kl-count').value,10)||0;
   const kdate = document.getElementById('kl-date').value || null;
   const notes = document.getElementById('kl-notes').value.trim();
-  const lineman = document.getElementById('kl-lineman').value.trim();
-  const wifikey = document.getElementById('kl-wifikey').value.trim();
-  const reason = document.getElementById('kl-reason').value.trim();
   if(!name){ alert('Select collector name'); return; }
   if(!areas.length){ alert('Check at least one area'); return; }
-  const body = { collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, lineman_reason:reason||null, returned:false };
+  const body = { record_type:'collector', collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
       if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
@@ -2188,11 +2185,56 @@ function klAdd(){
       document.getElementById('kl-notes').value='';
       document.getElementById('kl-count').value='1';
       klClearAreas();
-      document.getElementById('kl-lineman').value='';
-      document.getElementById('kl-wifikey').value='';
-      document.getElementById('kl-reason').value='';
       klLoad();
     })
+    .catch(e=>alert('Save failed: '+e.message));
+}
+
+function klOpenLineman(){
+  const old = document.getElementById('kl-lineman-modal'); if(old) old.remove();
+  const now = new Date();
+  const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  const ov = document.createElement('div');
+  ov.id = 'kl-lineman-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+    +   '<div style="font-size:18px;font-weight:800;">🛠️ Lineman WiFi Key</div>'
+    +   '<button onclick="klCloseLineman()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
+    + '</div>'
+    + '<div style="padding:18px 22px;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Lineman Name</label>'
+    +   '<input id="kl-lm-name" placeholder="e.g. Jericho" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">WiFi Key GI DALA</label>'
+    +   '<input id="kl-lm-wifikey" placeholder="e.g. RETES PISO WIFI DOHINOB" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Reason (nganong gi dala ang wifi key)</label>'
+    +   '<input id="kl-lm-reason" placeholder="e.g. ibalhin ang box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Date</label>'
+    +   '<input id="kl-lm-date" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:18px;outline:none;">'
+    +   '<div style="display:flex;gap:8px;">'
+    +     '<button onclick="klCloseLineman()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="klAddLineman()" style="flex:2;padding:11px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Log Lineman Key</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) klCloseLineman(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const n=document.getElementById('kl-lm-name'); if(n) n.focus(); }, 60);
+}
+
+function klCloseLineman(){ const ov=document.getElementById('kl-lineman-modal'); if(ov) ov.remove(); }
+
+function klAddLineman(){
+  const lineman = (document.getElementById('kl-lm-name')||{}).value.trim();
+  const wifikey = (document.getElementById('kl-lm-wifikey')||{}).value.trim();
+  const reason  = (document.getElementById('kl-lm-reason')||{}).value.trim();
+  const kdate   = (document.getElementById('kl-lm-date')||{}).value || null;
+  if(!lineman){ alert('Enter lineman name'); return; }
+  if(!wifikey){ alert('Enter the wifi key'); return; }
+  const body = { record_type:'lineman', collector_name:lineman, lineman:lineman, wifi_key:wifikey, lineman_reason:reason||null, key_date:kdate, keys_taken:1, returned:false };
+  fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseLineman(); klLoad(); })
     .catch(e=>alert('Save failed: '+e.message));
 }
 
@@ -2272,6 +2314,8 @@ function klRender(){
   let rows = _klRows.slice();
   if(filt==='out')      rows = rows.filter(r=>!r.returned);
   else if(filt==='returned') rows = rows.filter(r=>r.returned);
+  else if(filt==='collector') rows = rows.filter(r=>r.record_type!=='lineman');
+  else if(filt==='lineman') rows = rows.filter(r=>r.record_type==='lineman');
   if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')+' '+(r.lineman_reason||'')).toLowerCase().includes(q));
 
   const out = _klRows.filter(r=>!r.returned).length;
@@ -2282,17 +2326,20 @@ function klRender(){
 
   list.innerHTML = rows.map(r=>{
     const returned = !!r.returned;
+    const isLM = (r.record_type==='lineman');
     const bd = returned ? '#028867' : '#DF1A35';
     const badge = returned
       ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅</span>'
       : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
     return '<div onclick="klDetail('+r.id+')" style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:.1s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(0,0,0,.10)\';this.style.borderColor=\'#025AC6\';this.style.borderLeftColor=\''+bd+'\';" onmouseout="this.style.boxShadow=\'none\';this.style.borderColor=\'#e5e7eb\';this.style.borderLeftColor=\''+bd+'\';">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.collector_name)+'</div>'
+      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+(isLM?'🛠️ ':'')+klEsc(r.collector_name)+'</div>'
       +   badge
       + '</div>'
-      + '<div style="font-size:12px;color:#374151;margin-top:3px;">📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>'
-      + (r.lineman?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman)+(r.wifi_key?(' · 📶 '+klEsc(r.wifi_key)):'')+'</div>':'')
+      + (isLM
+          ? '<div style="font-size:12px;color:#025AC6;margin-top:3px;font-weight:600;">📶 '+klEsc(r.wifi_key||'—')+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>'
+            + (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">💬 '+klEsc(r.lineman_reason)+'</div>':'')
+          : '<div style="font-size:12px;color:#374151;margin-top:3px;">📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>')
       + '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Tap for details ›</div>'
       + '</div>';
   }).join('');
