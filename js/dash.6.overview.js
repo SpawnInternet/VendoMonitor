@@ -43,7 +43,7 @@ async function overviewLoad() {
   }
 }
 
-function _php(v){ return '₱'+Math.round(Number(v||0)).toLocaleString(); }
+// _php is already defined globally in dash.1.harvest.js (loads first) — reuse it.
 // safe fallbacks in case fmt helpers load later or are missing
 const _fmtNum = (v)=> (typeof fmtNum==='function'? fmtNum(v) : Number(v||0).toLocaleString());
 const _fmtDateShort = (d)=>{ try{ return (typeof fmtDateShort==='function')? fmtDateShort(d) : String(d).slice(5); }catch(e){ return String(d); } };
