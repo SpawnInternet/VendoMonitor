@@ -123,7 +123,7 @@ function overviewRender(ov, data) {
   if (gGrid) {
     const ICONS = { Dipolog:"🏙", Dapitan:"🌊", Sindangan:"🏝", Polanco:"🌿", Roxas:"🌺", "Pre-v3 / Admin":"🗂" };
     gGrid.innerHTML = groups.map((g,i) => `
-      <div class="area-card" style="border-left:3px solid ${BRAND_SERIES[i%BRAND_SERIES.length]}">
+      <div class="area-card" style="border-left:3px solid ${BRAND_SERIES[i%BRAND_SERIES.length]};cursor:pointer" onclick="showGroupVendosPopup('${g.grp.replace(/'/g,"\\'")}')" title="View ${g.grp} vendos">
         <div style="font-size:16px">${ICONS[g.grp]||"📍"}</div>
         <div style="font-size:10px;font-weight:700;color:var(--tx)">${g.grp}</div>
         <div style="font-size:11px;font-weight:700;color:${BRAND.teal}">${_php(g.spawn)}</div>
@@ -253,4 +253,81 @@ async function showTodayHarvestPopup(){
     });
     body.innerHTML=H;
   }catch(e){ const body=document.getElementById('th-body'); if(body) body.innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px;">Error: '+(e&&e.message||e)+'</div>'; }
+}
+
+// ── Popup: vendos in a group with their spawn share (this month) ──
+const _GRP_ROUTES = {
+  'Dipolog':['GRP-A1','GRP-A2','GRP-A3'],
+  'Dapitan':['GRP-B1','GRP-B2','GRP-B3'],
+  'Sindangan':['GRP-A4'],
+  'Polanco':['GRP-A5'],
+  'Roxas':['GRP-A6']
+};
+async function showGroupVendosPopup(grp){
+  const old=document.getElementById('gv-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='gv-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  const ICONS={Dipolog:'🏙',Dapitan:'🌊',Sindangan:'🏝',Polanco:'🌿',Roxas:'🌺'};
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:12px;">
+      <div style="font-size:22px;">${ICONS[grp]||'📍'}</div>
+      <div><div style="font-size:18px;font-weight:800;">${grp}</div><div style="font-size:11px;opacity:.85;">Vendos · Spawn Share (this month)</div></div>
+      <span style="flex:1"></span>
+      <button onclick="document.getElementById('gv-modal').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+    </div>
+    <div style="padding:8px 14px;border-bottom:1px solid #f1f5f9;background:#fbfcff;">
+      <input id="gv-search" oninput="_gvFilter(this.value)" placeholder="🔍 Search vendo…" style="width:100%;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;font-family:inherit;outline:none;">
+    </div>
+    <div id="gv-body" style="overflow-y:auto;flex:1;padding:6px 14px 14px;background:#fbfcff;"><div style="padding:24px;text-align:center;color:#6b7280;font-size:13px;">Loading…</div></div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  try{
+    const base=(typeof _SB!=='undefined'?_SB:SB_URL);
+    const hdr=(typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
+    const routes=_GRP_ROUTES[grp]||[];
+    // build route_code filter (in.(GRP-A1,GRP-A2,...))
+    const inList = routes.length ? `&route_code=in.(${routes.join(',')})` : '';
+    // this month start
+    const now=new Date(); const mStart=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+    const r=await fetch(`${base}/rest/v1/harvests?harvest_date=gte.${mStart}${inList}&select=sheet_name,tg_name,vendo_name,coins_total,spawn_share,harvest_date,collector&order=spawn_share.desc&limit=1000`,{headers:hdr});
+    const rows=await r.json();
+    const body=document.getElementById('gv-body');
+    if(!Array.isArray(rows)||!rows.length){ body.innerHTML='<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px;">No harvests this month for '+grp+'.</div>'; return; }
+    // aggregate by vendo (a vendo may be harvested multiple times in the month)
+    const agg={};
+    rows.forEach(h=>{ const nm=h.sheet_name||h.tg_name||h.vendo_name||'(unnamed)';
+      if(!agg[nm]) agg[nm]={name:nm,spawn:0,coins:0,count:0,last:h.harvest_date};
+      agg[nm].spawn+=Number(h.spawn_share||0); agg[nm].coins+=Number(h.coins_total||0); agg[nm].count++;
+      if(h.harvest_date>agg[nm].last) agg[nm].last=h.harvest_date;
+    });
+    window._gvRows=Object.values(agg).sort((a,b)=>b.spawn-a.spawn);
+    _gvRender(window._gvRows, grp);
+  }catch(e){ const body=document.getElementById('gv-body'); if(body) body.innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px;">Error: '+(e&&e.message||e)+'</div>'; }
+}
+function _gvRender(list, grp){
+  const body=document.getElementById('gv-body'); if(!body) return;
+  const total=list.reduce((s,v)=>s+v.spawn,0);
+  let H=`<div style="display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 10px;padding:9px 12px;background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:10px;">
+    <span style="font-size:12px;font-weight:600;">${list.length} vendos</span>
+    <span style="font-size:19px;font-weight:800;">${_php(total)}</span></div>`;
+  H+=list.map((v,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f1f5f9;">
+      <div style="width:20px;text-align:center;font-weight:800;font-size:12px;color:#94a3b8;">${i+1}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.name}</div>
+        <div style="font-size:9px;color:#9ca3af;">${v.count} harvest${v.count!==1?'s':''} · last ${v.last||'—'}</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap;">
+        <div style="font-weight:800;font-size:13px;color:#028867;">${_php(v.spawn)}</div>
+        <div style="font-size:9px;color:#6b7280;">coins ${_php(v.coins)}</div>
+      </div>
+    </div>`).join('');
+  body.innerHTML=H;
+}
+function _gvFilter(q){
+  q=(q||'').toLowerCase();
+  const list=(window._gvRows||[]).filter(v=>v.name.toLowerCase().includes(q));
+  _gvRender(list);
 }
