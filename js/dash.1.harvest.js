@@ -2130,12 +2130,17 @@ function klLoad(){
   // default date to today
   const dEl = document.getElementById('kl-date');
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
-  // populate collector dropdown (once)
+  // populate collector dropdown (rebuild each load to avoid duplicates)
   const sel = document.getElementById('kl-name');
-  if(sel && sel.options.length<=1){
+  if(sel){
+    const cur = sel.value;
     fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR})
       .then(r=>r.json())
-      .then(cs=>{ if(Array.isArray(cs)){ cs.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; sel.appendChild(o); }); } })
+      .then(cs=>{
+        sel.innerHTML = '<option value="">— Select Collector —</option>';
+        if(Array.isArray(cs)){ cs.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; sel.appendChild(o); }); }
+        if(cur) sel.value = cur;
+      })
       .catch(()=>{});
   }
   fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR})
