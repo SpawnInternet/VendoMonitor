@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spawn Command Center</title>
+<style>
+  :root{
+    --blue:#025AC6; --gold:#FFB725; --teal:#028867;
+    --magenta:#C01176; --red:#DF1A35; --purple:#311A8E;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+  #desktop{
+    position:fixed; inset:0;
+    background:linear-gradient(135deg,var(--blue) 0%,var(--purple) 100%);
+    overflow:hidden; user-select:none;
+  }
+
+  /* ---- icons ---- */
+  #icons{position:absolute; top:20px; left:20px;
+    display:grid; grid-template-columns:repeat(2,84px); gap:20px 12px; z-index:1;}
+  .ic{display:flex; flex-direction:column; align-items:center; gap:6px; width:84px; cursor:pointer;}
+  .ic .glyph{width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 3px 8px rgba(0,0,0,.3); transition:transform .1s;}
+  .ic:active .glyph{transform:scale(.94);}
+  .ic .glyph svg{width:28px; height:28px; fill:#fff;}
+  .ic .lbl{color:#fff; font-size:12px; text-align:center; text-shadow:0 1px 2px rgba(0,0,0,.45); line-height:1.2;}
+
+  /* ---- windows ---- */
+  .win{position:absolute; background:#f4f4f0; border-radius:12px;
+    box-shadow:0 18px 50px rgba(0,0,0,.45); overflow:hidden; display:flex; flex-direction:column;
+    min-width:340px; min-height:220px; border:0.5px solid rgba(0,0,0,.15);}
+  .win.max{border-radius:0;}
+  .titlebar{display:flex; align-items:center; gap:9px; padding:9px 11px;
+    background:#fff; border-bottom:0.5px solid #e2e2dc; cursor:move; flex-shrink:0;}
+  .titlebar .tglyph{width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center;}
+  .titlebar .tglyph svg{width:14px; height:14px; fill:#fff;}
+  .titlebar .ttl{font-size:13px; font-weight:500; color:#1a1a1a; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .wbtn{width:26px; height:26px; border:none; background:transparent; border-radius:6px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:#666;}
+  .wbtn:hover{background:#eee;}
+  .wbtn.close:hover{background:var(--red); color:#fff;}
+  .wbtn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:2;}
+  .win iframe{flex:1; width:100%; border:none; background:#fff;}
+  .resizer{position:absolute; right:0; bottom:0; width:16px; height:16px; cursor:nwse-resize; z-index:5;}
+  .resizer::after{content:""; position:absolute; right:3px; bottom:3px; width:8px; height:8px;
+    border-right:2px solid #bbb; border-bottom:2px solid #bbb;}
+
+  /* ---- taskbar ---- */
+  #taskbar{position:absolute; bottom:0; left:0; right:0; height:44px;
+    background:rgba(0,0,0,.42); backdrop-filter:blur(10px);
+    display:flex; align-items:center; padding:0 10px; gap:8px; z-index:500;}
+  #startbtn{display:flex; align-items:center; gap:8px; cursor:pointer; padding:5px 11px; border-radius:8px;}
+  #startbtn:hover{background:rgba(255,255,255,.13);}
+  #startbtn .logo{width:26px; height:26px; border-radius:7px; background:var(--gold);
+    display:flex; align-items:center; justify-content:center;}
+  #startbtn .logo svg{width:15px; height:15px; fill:var(--blue);}
+  #startbtn span{color:#fff; font-size:13px; font-weight:500;}
+  #tasks{display:flex; gap:6px; margin-left:6px; flex:1; overflow:hidden;}
+  .task{display:flex; align-items:center; gap:6px; padding:5px 11px; border-radius:7px;
+    background:rgba(255,255,255,.14); cursor:pointer; color:#fff; font-size:12px; white-space:nowrap;}
+  .task:hover{background:rgba(255,255,255,.24);}
+  .task.active{background:rgba(255,255,255,.3);}
+  .task svg{width:14px; height:14px; fill:#fff;}
+  #clock{color:rgba(255,255,255,.9); font-size:12px; margin-left:auto; text-align:right; line-height:1.2;}
+
+  /* ---- start menu ---- */
+  #startmenu{position:absolute; bottom:50px; left:8px; width:340px;
+    background:rgba(22,12,58,.94); backdrop-filter:blur(18px);
+    border:0.5px solid rgba(255,255,255,.16); border-radius:14px; padding:16px; z-index:600; display:none;}
+  #startmenu.open{display:block;}
+  #startmenu h4{color:rgba(255,255,255,.55); font-size:11px; font-weight:500; letter-spacing:.6px; margin-bottom:12px;}
+  #startgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:12px;}
+  .sitem{display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; padding:8px 4px; border-radius:9px;}
+  .sitem:hover{background:rgba(255,255,255,.1);}
+  .sitem .sglyph{width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center;}
+  .sitem .sglyph svg{width:22px; height:22px; fill:#fff;}
+  .sitem span{color:#fff; font-size:11px; text-align:center; line-height:1.2;}
+
+  /* ---- login ---- */
+  #login{position:fixed; inset:0; z-index:2000;
+    background:linear-gradient(135deg,var(--blue),var(--purple));
+    display:flex; align-items:center; justify-content:center;}
+  .login-card{background:#fff; border-radius:18px; padding:34px 30px; width:320px; text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .login-card .brandlogo{width:60px; height:60px; border-radius:16px; background:var(--blue);
+    display:flex; align-items:center; justify-content:center; margin:0 auto 16px;}
+  .login-card .brandlogo svg{width:34px; height:34px; fill:var(--gold);}
+  .login-card h1{font-size:19px; color:#1a1a1a; margin-bottom:4px;}
+  .login-card p{font-size:13px; color:#888; margin-bottom:22px;}
+  .login-card select,.login-card input{width:100%; height:44px; border:1px solid #ddd; border-radius:10px;
+    padding:0 14px; font-size:15px; margin-bottom:12px; outline:none;}
+  .login-card select:focus,.login-card input:focus{border-color:var(--blue);}
+  .login-card button{width:100%; height:46px; border:none; border-radius:10px; background:var(--blue);
+    color:#fff; font-size:15px; font-weight:500; cursor:pointer;}
+  .login-card button:hover{background:#0148a0;}
+  .login-err{color:var(--red); font-size:13px; min-height:18px; margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <div class="login-card">
+    <div class="brandlogo">
+      <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 2c1.6 0 3 3.6 3 8s-1.4 8-3 8-3-3.6-3-8 1.4-8 3-8zM4.6 8h14.8a8 8 0 010 8H4.6a8 8 0 010-8z"/></svg>
+    </div>
+    <h1>Spawn Command</h1>
+    <p id="login-sub">Enter admin password to sign in</p>
+    <div class="login-err" id="login-err"></div>
+    <input id="pw" type="password" placeholder="Admin password" autocomplete="current-password" autofocus>
+    <button id="login-continue">Sign in</button>
+  </div>
+</div>
+
+<!-- ============ DESKTOP ============ -->
+<div id="desktop" style="display:none;">
+  <div id="icons"></div>
+
+  <div id="startmenu">
+    <h4>ALL APPS</h4>
+    <div id="startgrid"></div>
+  </div>
+
+  <div id="taskbar">
+    <div id="startbtn">
+      <div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 2c1.6 0 3 3.6 3 8s-1.4 8-3 8-3-3.6-3-8 1.4-8 3-8zM4.6 8h14.8a8 8 0 010 8H4.6a8 8 0 010-8z"/></svg></div>
+      <span id="who">Spawn Command</span>
+    </div>
+    <div id="tasks"></div>
+    <div id="clock"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SPAWN COMMAND CENTER
+   - Shell only. Holds NO Supabase keys.
+   - Loads your real apps + dashboard pages inside sandboxed iframes.
+   - Login: PIN check against office_accounts (admin roles only).
+     NOTE: this is client-side, same level as office.html today.
+     It upgrades to real server-side auth once RLS/edge-auth is done.
+   ============================================================ */
+
+const SB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+
+/* AUTH — server-side. The command center holds NO password and NO
+   service_role key. It POSTs the typed password to spawn-admin-login,
+   which validates it server-side (ADMIN_PASSWORD env var) and returns
+   ADMIN_GW_TOKEN. That token is kept in memory only and sent as
+   x-gw-token to spawn-gw-admin for any DB work. Nothing secret is ever
+   stored in this file. */
+const LOGIN_URL = SB + '/functions/v1/spawn-admin-login';
+const GW_URL    = SB + '/functions/v1/spawn-gw-admin';
+
+/* Token lives in memory for the session only. */
+let GW_TOKEN = null;
+
+/* Thin helper so embedded tools / future panels can reach the gateway. */
+async function gw(payload){
+  if(!GW_TOKEN) throw new Error('not authenticated');
+  const r = await fetch(GW_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+    body:JSON.stringify(payload)
+  });
+  return r;
+}
+window.spawnGW = gw; /* available to iframes via window.parent if same-origin */
+
+/* Base path — apps live in the same repo/folder as this file. */
+const BASE = './';
+
+/* ---- SVG icon paths (inline, no external deps) ---- */
+const I = {
+  router:'M4 14h16v6H4zm2 2v2h2v-2zm4 0v2h2v-2zM4 4h16v6H4zm2 2v2h2V6zm4 0v2h2V6z',
+  calc:'M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm0 4v3h12V6zm1 5v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zm-8 4v2h2v-2zm4 0v2h2v-2zm4 0v4h2v-4z',
+  coin:'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-1.2c-1.3-.2-2.3-1-2.3-2.3h1.8c0 .6.5 1 1.5 1s1.4-.4 1.4-.9c0-.6-.5-.8-1.7-1.1-1.5-.4-3-.9-3-2.6 0-1.2 1-2 2.3-2.2V6.5h2v1.3c1.3.2 2.2 1 2.2 2.2h-1.8c0-.5-.4-.9-1.3-.9s-1.3.4-1.3.8c0 .5.6.7 1.7 1 1.5.4 3 .9 3 2.7 0 1.3-1 2.1-2.4 2.3z',
+  dash:'M3 3h8v8H3zm10 0h8v5h-8zm0 7h8v11h-8zM3 13h8v8H3z',
+  map:'M9 2L3 5v17l6-3 6 3 6-3V2l-6 3zM9 4.3v13.4M15 6.6V20',
+  alert:'M12 2l10 18H2zm0 6v6h0v-6zm-1 8h2v2h-2z',
+  cash:'M2 6h20v12H2zm2 2v8h16V8zm8 1a3 3 0 100 6 3 3 0 000-6zM5 9v6M19 9v6',
+  devices:'M3 4h13v10H3zm0 12h10v2H3zM17 8h4v10h-4z',
+  chart:'M3 21V3h2v16h16v2zm4-4V9h3v8zm5 0V5h3v12zm5 0v-6h3v6z',
+  upload:'M12 3l5 5h-3v6h-4V8H7zm-7 15h14v3H5z',
+  server:'M3 3h18v6H3zm0 8h18v6H3zm3-11v2h2V4zm0 8v2h2v-2z',
+  skip:'M4 5l8 7-8 7zm10 0h3v14h-3z'
+};
+function glyphSVG(key){
+  const strokeKeys=['map','cash'];
+  const p=I[key];
+  if(strokeKeys.includes(key))
+    return '<svg viewBox="0 0 24 24"><path d="'+p+'" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>';
+  return '<svg viewBox="0 0 24 24"><path d="'+p+'"/></svg>';
+}
+
+/* ---- app registry ----
+   kind:'live'  -> loads a real app file
+   kind:'page'  -> loads dashboard.html?p=<id> (deep link)
+   pin:true     -> shown on desktop; all show in start menu
+*/
+const APPS = [
+  {id:'dicayas',   label:'Dicayas',     icon:'router', color:'var(--teal)',    kind:'live', src:'dicayas.html',            pin:true,  w:900,h:600},
+  {id:'count',     label:'Spawn Count', icon:'calc',   color:'var(--magenta)', kind:'live', src:'office.html',             pin:true,  w:480,h:640},
+  {id:'harvest3',  label:'Harvest v3',  icon:'coin',   color:'var(--gold)',    kind:'live', src:'harvest_v3.html',         pin:true,  w:480,h:680},
+  {id:'dash',      label:'Dashboard',   icon:'dash',   color:'var(--blue)',    kind:'page', src:'dashboard.html?p=dash',   pin:true,  w:1000,h:640},
+  {id:'vmap',      label:'Vendo Map',   icon:'map',    color:'var(--red)',     kind:'page', src:'dashboard.html?p=vmap-top',pin:true, w:980,h:620},
+  {id:'suspicious',label:'Suspicious',  icon:'alert',  color:'var(--red)',     kind:'page', src:'dashboard.html?p=suspicious',pin:true,w:900,h:600},
+  {id:'joborders', label:'Collections', icon:'cash',   color:'var(--purple)',  kind:'page', src:'dashboard.html?p=joborders',pin:true, w:900,h:600},
+  {id:'vendos',    label:'Vendos',      icon:'devices',color:'var(--blue)',    kind:'page', src:'dashboard.html?p=vendos', pin:false, w:960,h:620},
+  {id:'analytics', label:'Analytics',   icon:'chart',  color:'var(--teal)',    kind:'page', src:'dashboard.html?p=analytics',pin:false,w:960,h:620},
+  {id:'import',    label:'Import',      icon:'upload', color:'var(--gold)',    kind:'page', src:'dashboard.html?p=import',  pin:false, w:900,h:600},
+  {id:'status',    label:'System',      icon:'server', color:'var(--purple)',  kind:'page', src:'dashboard.html?p=status',  pin:false, w:820,h:560},
+  {id:'skipped',   label:'Skipped',     icon:'skip',   color:'var(--magenta)', kind:'page', src:'dashboard.html?p=skipped', pin:false, w:900,h:600},
+];
+
+/* ============ LOGIN LOGIC (gateway) ============ */
+const pwInput   = document.getElementById('pw');
+const loginBtn  = document.getElementById('login-continue');
+const loginErr  = document.getElementById('login-err');
+
+async function tryLogin(){
+  const pass = pwInput.value;
+  loginErr.textContent = '';
+  if(!pass){ loginErr.textContent='Enter the admin password.'; return; }
+  loginBtn.disabled = true; loginBtn.textContent = 'Signing in…';
+  try{
+    const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),12000);
+    const r = await fetch(LOGIN_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:pass}),
+      signal:ctrl.signal
+    });
+    clearTimeout(t);
+    const data = await r.json().catch(()=>({}));
+    if(r.ok && data.ok && data.token){
+      GW_TOKEN = data.token;
+      pwInput.value = '';            /* don't leave it in the DOM */
+      enterDesktop('Admin');
+    }else if(r.status===401){
+      loginErr.textContent = 'Wrong password.';
+    }else{
+      loginErr.textContent = 'Login failed ('+(r.status||'network')+'). Try again.';
+    }
+  }catch(e){
+    loginErr.textContent = 'Can’t reach the server. Check connection.';
+  }finally{
+    loginBtn.disabled = false; loginBtn.textContent = 'Sign in';
+  }
+}
+
+loginBtn.addEventListener('click', tryLogin);
+pwInput.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+
+/* ============ DESKTOP LOGIC ============ */
+let zTop=10;
+const openWins={};
+
+function enterDesktop(name){
+  document.getElementById('login').style.display='none';
+  document.getElementById('desktop').style.display='block';
+  document.getElementById('who').textContent='Spawn Command';
+  buildIcons();
+  buildStartMenu();
+  startClock();
+  // open a couple by default
+  openApp('dicayas'); openApp('dash');
+}
+
+function buildIcons(){
+  const wrap=document.getElementById('icons'); wrap.innerHTML='';
+  APPS.filter(a=>a.pin).forEach(a=>{
+    const el=document.createElement('div'); el.className='ic';
+    el.innerHTML=`<div class="glyph" style="background:${a.color}">${glyphSVG(a.icon)}</div><div class="lbl">${a.label}</div>`;
+    el.ondblclick=()=>openApp(a.id);
+    // single tap also opens (touch friendliness) with small delay guard
+    let last=0;
+    el.onclick=()=>{const now=Date.now(); if(now-last<400){openApp(a.id);} last=now;};
+    wrap.appendChild(el);
+  });
+}
+
+function buildStartMenu(){
+  const g=document.getElementById('startgrid'); g.innerHTML='';
+  APPS.forEach(a=>{
+    const el=document.createElement('div'); el.className='sitem sitem-wrap';
+    el.classList.add('sitem');
+    el.innerHTML=`<div class="sglyph" style="background:${a.color}">${glyphSVG(a.icon)}</div><span>${a.label}</span>`;
+    el.onclick=()=>{ openApp(a.id); toggleStart(false); };
+    g.appendChild(el);
+  });
+}
+
+const startmenu=document.getElementById('startmenu');
+document.getElementById('startbtn').onclick=()=>toggleStart();
+function toggleStart(force){
+  const open = force!==undefined ? force : !startmenu.classList.contains('open');
+  startmenu.classList.toggle('open', open);
+}
+document.getElementById('desktop').addEventListener('mousedown',e=>{
+  if(!e.target.closest('#startmenu') && !e.target.closest('#startbtn')) toggleStart(false);
+});
+
+function openApp(id){
+  if(openWins[id]){ focusWin(openWins[id].win); return; }
+  const app=APPS.find(a=>a.id===id); if(!app) return;
+
+  const win=document.createElement('div'); win.className='win';
+  const n=Object.keys(openWins).length;
+  const dw=Math.min(app.w, window.innerWidth-80);
+  const dh=Math.min(app.h, window.innerHeight-120);
+  win.style.width=dw+'px'; win.style.height=dh+'px';
+  win.style.left=Math.min(120+n*28, window.innerWidth-dw-20)+'px';
+  win.style.top =Math.min(30+n*26, window.innerHeight-dh-70)+'px';
+  win.style.zIndex=++zTop;
+
+  win.innerHTML=`
+    <div class="titlebar">
+      <div class="tglyph" style="background:${app.color}">${glyphSVG(app.icon)}</div>
+      <div class="ttl">${app.label}</div>
+      <button class="wbtn min"  title="Minimize"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+      <button class="wbtn maxb" title="Maximize"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/></svg></button>
+      <button class="wbtn close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <iframe sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+            src="${BASE}${app.src}" title="${app.label}"></iframe>
+    <div class="resizer"></div>`;
+  document.getElementById('desktop').appendChild(win);
+
+  // taskbar entry
+  const task=document.createElement('div'); task.className='task active';
+  task.innerHTML=`${glyphSVG(app.icon)}<span>${app.label}</span>`;
+  document.getElementById('tasks').appendChild(task);
+  task.onclick=()=>{
+    if(win.style.display==='none'){ win.style.display='flex'; focusWin(win); }
+    else if(win.dataset.focused==='1'){ win.style.display='none'; }
+    else focusWin(win);
+  };
+
+  openWins[id]={win,task,app};
+
+  win.addEventListener('mousedown',()=>focusWin(win));
+  win.querySelector('.close').onclick=()=>closeWin(id);
+  win.querySelector('.min').onclick=(e)=>{ e.stopPropagation(); win.style.display='none'; markFocus(null); };
+  win.querySelector('.maxb').onclick=(e)=>{ e.stopPropagation(); toggleMax(win); };
+  makeDraggable(win, win.querySelector('.titlebar'));
+  makeResizable(win, win.querySelector('.resizer'));
+  focusWin(win);
+}
+
+function closeWin(id){
+  const o=openWins[id]; if(!o) return;
+  o.win.remove(); o.task.remove(); delete openWins[id];
+}
+function focusWin(win){
+  win.style.zIndex=++zTop; win.style.display='flex';
+  markFocus(win);
+}
+function markFocus(win){
+  Object.values(openWins).forEach(o=>{
+    const on = o.win===win;
+    o.win.dataset.focused = on?'1':'0';
+    o.task.classList.toggle('active', on);
+  });
+}
+function toggleMax(win){
+  if(win.classList.contains('max')){
+    win.classList.remove('max');
+    win.style.left=win.dataset.px; win.style.top=win.dataset.py;
+    win.style.width=win.dataset.pw; win.style.height=win.dataset.ph;
+  }else{
+    win.dataset.px=win.style.left; win.dataset.py=win.style.top;
+    win.dataset.pw=win.style.width; win.dataset.ph=win.style.height;
+    win.classList.add('max');
+    win.style.left='0'; win.style.top='0';
+    win.style.width='100%'; win.style.height=(window.innerHeight-44)+'px';
+  }
+}
+
+function makeDraggable(win, handle){
+  let sx,sy,ox,oy,drag=false;
+  handle.addEventListener('mousedown',e=>{
+    if(e.target.closest('.wbtn')) return;
+    if(win.classList.contains('max')) return;
+    drag=true; sx=e.clientX; sy=e.clientY; ox=win.offsetLeft; oy=win.offsetTop;
+    document.body.style.userSelect='none';
+    // block iframe from swallowing mouse
+    win.querySelector('iframe').style.pointerEvents='none';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!drag) return;
+    let nx=ox+e.clientX-sx, ny=oy+e.clientY-sy;
+    nx=Math.max(0,Math.min(nx, window.innerWidth-win.offsetWidth));
+    ny=Math.max(0,Math.min(ny, window.innerHeight-win.offsetHeight-44));
+    win.style.left=nx+'px'; win.style.top=ny+'px';
+  });
+  document.addEventListener('mouseup',()=>{
+    if(drag){ win.querySelector('iframe').style.pointerEvents='auto'; }
+    drag=false; document.body.style.userSelect='';
+  });
+}
+
+function makeResizable(win, grip){
+  let sx,sy,sw,sh,rz=false;
+  grip.addEventListener('mousedown',e=>{
+    rz=true; sx=e.clientX; sy=e.clientY; sw=win.offsetWidth; sh=win.offsetHeight;
+    win.querySelector('iframe').style.pointerEvents='none';
+    e.preventDefault(); e.stopPropagation();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!rz) return;
+    win.style.width=Math.max(340, sw+e.clientX-sx)+'px';
+    win.style.height=Math.max(220, sh+e.clientY-sy)+'px';
+  });
+  document.addEventListener('mouseup',()=>{
+    if(rz){ win.querySelector('iframe').style.pointerEvents='auto'; }
+    rz=false;
+  });
+}
+
+function startClock(){
+  const el=document.getElementById('clock');
+  function t(){
+    const d=new Date();
+    const time=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const date=d.toLocaleDateString([], {month:'short',day:'numeric'});
+    el.innerHTML=time+'<br>'+date;
+  }
+  t(); setInterval(t,20000);
+}
+
+/* boot */
+pwInput.focus();
+</script>
+</body>
+</html>
