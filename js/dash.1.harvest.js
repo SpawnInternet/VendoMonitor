@@ -2138,8 +2138,10 @@ function klAdd(){
   const area = document.getElementById('kl-area').value;
   const count = parseInt(document.getElementById('kl-count').value,10)||0;
   const notes = document.getElementById('kl-notes').value.trim();
+  const lineman = document.getElementById('kl-lineman').value.trim();
+  const wifikey = document.getElementById('kl-wifikey').value.trim();
   if(!name){ alert('Enter collector name'); return; }
-  const body = { collector_name:name, area:area||null, keys_taken:count, notes:notes||null, returned:false };
+  const body = { collector_name:name, area:area||null, keys_taken:count, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
       if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
@@ -2147,6 +2149,8 @@ function klAdd(){
       document.getElementById('kl-notes').value='';
       document.getElementById('kl-count').value='1';
       document.getElementById('kl-area').value='';
+      document.getElementById('kl-lineman').value='';
+      document.getElementById('kl-wifikey').value='';
       klLoad();
     })
     .catch(e=>alert('Save failed: '+e.message));
@@ -2185,7 +2189,7 @@ function klRender(){
   let rows = _klRows.slice();
   if(filt==='out')      rows = rows.filter(r=>!r.returned);
   else if(filt==='returned') rows = rows.filter(r=>r.returned);
-  if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')).toLowerCase().includes(q));
+  if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')).toLowerCase().includes(q));
 
   const out = _klRows.filter(r=>!r.returned).length;
   const outKeys = _klRows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||0),0);
@@ -2210,6 +2214,7 @@ function klRender(){
       +       '📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+' key(s)'
       +     '</div>'
       +     (r.notes?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
+      +     ((r.lineman||r.wifi_key)?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman||'—')+(r.wifi_key?(' · 📶 WiFi key: '+klEsc(r.wifi_key)):'')+'</div>':'')
       +     '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Taken: '+_fmt(r.taken_at)
       +       (returned?(' · Returned: '+_fmt(r.returned_at)):'')+'</div>'
       +     (returned&&r.returned_notes?'<div style="font-size:10px;color:#028867;margin-top:2px;">↩ '+klEsc(r.returned_notes)+'</div>':'')
