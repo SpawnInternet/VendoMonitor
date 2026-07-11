@@ -165,7 +165,7 @@ function overviewRender(ov, data) {
   // ── Top 10 strongest / weakest by this month's spawn share ──
   const top = ov.top_spawn || [], bot = ov.bottom_spawn || [];
   const mkRow = (v,i,low) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px 6px 4px;border-bottom:1px solid #f1f5f9;">
       <div style="width:20px;text-align:center;font-weight:800;font-size:12px;color:${low?BRAND.red:BRAND.gold};">${i+1}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.vendo||'—'}</div>
