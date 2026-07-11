@@ -23,7 +23,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps'].forEach(t=>{
+  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps','keys'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
@@ -44,6 +44,7 @@ function hvNewTab(id, btn){
   if(id==='progress'){ loadProgress(); }
   if(id==='ledger'){ elLoad(); }
   if(id==='gps'){ gpsTraceLoad(); }
+  if(id==='keys'){ klLoad(); }
   if(id!=='progress'&&id!=='ledger'){ if(_progressMap){ _progressMap.remove(); _progressMap=null; } }
   if(id!=='gps'){ if(typeof _gpsMap!=='undefined'&&_gpsMap){ _gpsMap.remove(); _gpsMap=null; } }
 }
@@ -2116,4 +2117,107 @@ function rcptOpenModal(hdr){
     <div style="padding:16px;">${detail.innerHTML}</div>
   </div>`;
   document.body.appendChild(ov);
+}
+
+/* ══ KEYS — Key Monitoring (taken / returned) ══ */
+let _klRows = [];
+
+function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function klLoad(){
+  const list = document.getElementById('kl-list');
+  if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR})
+    .then(r=>r.json())
+    .then(rows=>{ _klRows = Array.isArray(rows)?rows:[]; klRender(); })
+    .catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+function klAdd(){
+  const name = document.getElementById('kl-name').value.trim();
+  const area = document.getElementById('kl-area').value;
+  const count = parseInt(document.getElementById('kl-count').value,10)||0;
+  const notes = document.getElementById('kl-notes').value.trim();
+  if(!name){ alert('Enter collector name'); return; }
+  const body = { collector_name:name, area:area||null, keys_taken:count, notes:notes||null, returned:false };
+  fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{
+      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
+      document.getElementById('kl-name').value='';
+      document.getElementById('kl-notes').value='';
+      document.getElementById('kl-count').value='1';
+      document.getElementById('kl-area').value='';
+      klLoad();
+    })
+    .catch(e=>alert('Save failed: '+e.message));
+}
+
+function klMarkReturned(id){
+  const note = prompt('Return notes (optional):','');
+  if(note===null) return; // cancelled
+  const body = { returned:true, returned_at:new Date().toISOString(), returned_notes:note||null };
+  fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function klUndoReturn(id){
+  if(!confirm('Mark this key as NOT returned again?')) return;
+  const body = { returned:false, returned_at:null, returned_notes:null };
+  fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function klDelete(id){
+  if(!confirm('Delete this key record permanently?')) return;
+  fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'DELETE', headers:_HDR})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .catch(e=>alert('Delete failed: '+e.message));
+}
+
+function klRender(){
+  const list = document.getElementById('kl-list');
+  const lbl  = document.getElementById('kl-count-lbl');
+  if(!list) return;
+  const filt = (document.getElementById('kl-filter')||{}).value || 'out';
+  const q = ((document.getElementById('kl-search')||{}).value||'').toLowerCase().trim();
+  let rows = _klRows.slice();
+  if(filt==='out')      rows = rows.filter(r=>!r.returned);
+  else if(filt==='returned') rows = rows.filter(r=>r.returned);
+  if(q) rows = rows.filter(r=>((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')).toLowerCase().includes(q));
+
+  const out = _klRows.filter(r=>!r.returned).length;
+  const outKeys = _klRows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||0),0);
+  if(lbl) lbl.textContent = rows.length+' record(s) shown · '+out+' out ('+outKeys+' keys not yet returned)';
+
+  if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
+
+  list.innerHTML = rows.map(r=>{
+    const returned = !!r.returned;
+    const bd = returned ? '#028867' : '#DF1A35';
+    const badge = returned
+      ? '<span style="background:#028867;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;">✅ RETURNED</span>'
+      : '<span style="background:#DF1A35;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
+    const actions = returned
+      ? '<button onclick="klUndoReturn('+r.id+')" style="padding:6px 12px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
+      : '<button onclick="klMarkReturned('+r.id+')" style="padding:6px 14px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Mark Returned</button>';
+    return '<div style="background:#fff;border-left:4px solid '+bd+';border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:12px 14px;margin-bottom:9px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
+      +   '<div style="flex:1;min-width:160px;">'
+      +     '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.collector_name)+' '+badge+'</div>'
+      +     '<div style="font-size:12px;color:#374151;margin-top:3px;">'
+      +       '📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+' key(s)'
+      +     '</div>'
+      +     (r.notes?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
+      +     '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Taken: '+_fmt(r.taken_at)
+      +       (returned?(' · Returned: '+_fmt(r.returned_at)):'')+'</div>'
+      +     (returned&&r.returned_notes?'<div style="font-size:10px;color:#028867;margin-top:2px;">↩ '+klEsc(r.returned_notes)+'</div>':'')
+      +   '</div>'
+      +   '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+actions
+      +     '<button onclick="klDelete('+r.id+')" style="padding:6px 10px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+      +   '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
 }
