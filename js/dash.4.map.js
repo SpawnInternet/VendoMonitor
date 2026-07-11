@@ -2767,7 +2767,28 @@ refreshRecentTxns();
 
 /* ─── ANALYTICS (fast+cached) ─── */
 let _anlC=null;
+// ── Analytics view toggle: Harvested Spawn Share (default) vs Telegram Sales ──
+let _anlView = 'harvest';
+let _anlHarvestLoaded = false;
+function anlSetView(v){
+  _anlView = v;
+  const hv=document.getElementById('anv-harvest'), tv=document.getElementById('anv-tg');
+  const hb=document.getElementById('anv-harvest-btn'), tb=document.getElementById('anv-tg-btn');
+  if(hv) hv.style.display = v==='harvest' ? 'block':'none';
+  if(tv) tv.style.display = v==='tg' ? 'block':'none';
+  if(hb){ hb.style.background = v==='harvest'?'#028867':'#fff'; hb.style.color = v==='harvest'?'#fff':'#025AC6'; }
+  if(tb){ tb.style.background = v==='tg'?'#025AC6':'#fff'; tb.style.color = v==='tg'?'#fff':'#025AC6'; }
+  if(v==='harvest'){ anlLoadHarvest(); }
+  else { loadAnalyticsTg(); }
+}
+
 async function loadAnalytics(){
+  // entry point when the Analytics panel opens — default to harvested view
+  anlSetView(_anlView || 'harvest');
+}
+
+// Telegram-sales analytics (the original content)
+async function loadAnalyticsTg(){
   if(_anlC){_anlR(_anlC);return;}
   try{
     const [ms,aD]=await Promise.all([
@@ -2777,7 +2798,102 @@ async function loadAnalytics(){
     const mm={};
     (ms||[]).forEach(r=>{ if(r.month) mm[r.month]=(mm[r.month]||0)+parseFloat(r.total_sales||0); });
     _anlC={mm,aD};_anlR(_anlC);
-  }catch(e){console.error('loadAnalytics:',e);}
+  }catch(e){console.error('loadAnalyticsTg:',e);}
+}
+
+// Harvested Spawn Share analytics — group × month (reuses _hstGroupOf)
+let _anlHChart = null;
+const _ANL_MONTHS = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'};
+const _ANL_COLORS = ['#025AC6','#FFB725','#028867','#C01176','#DF1A35','#311A8E','#0EA5E9','#F97316'];
+function _anlGroupOf(route){
+  const rc=(route||'').toUpperCase();
+  if(rc==='GRP-A1'||rc==='GRP-A2'||rc==='GRP-A3') return 'Dipolog';
+  if(rc==='GRP-B1'||rc==='GRP-B2'||rc==='GRP-B3') return 'Dapitan';
+  if(rc==='GRP-A4') return 'Sindangan';
+  if(rc==='GRP-A5') return 'Polanco';
+  if(rc==='GRP-A6') return 'Roxas';
+  return 'Pre-v3 / Admin';
+}
+async function anlLoadHarvest(){
+  const load=document.getElementById('anv-h-loading');
+  if(_anlHarvestLoaded){ return; }  // already rendered
+  if(load){ load.style.display='block'; load.textContent='Loading harvested analytics…'; }
+  try{
+    const year=new Date().getFullYear();
+    const rows=[]; let off=0;
+    while(true){
+      const r=await fetch(`${SB_URL}/rest/v1/harvests?harvest_date=gte.${year}-01-01&select=route_code,harvest_date,spawn_share&limit=1000&offset=${off}`,{headers:HDR});
+      if(!r.ok) throw new Error('harvests '+r.status);
+      const d=await r.json();
+      if(!Array.isArray(d)||!d.length) break;
+      rows.push(...d);
+      if(d.length<1000) break;
+      off+=1000;
+    }
+    const agg={};
+    rows.forEach(h=>{
+      const g=_anlGroupOf(h.route_code);
+      const ym=(h.harvest_date||'').slice(0,7);
+      if(!ym) return;
+      const k=g+'|'+ym;
+      if(!agg[k]) agg[k]={grp:g, ym, spawn:0};
+      agg[k].spawn += Number(h.spawn_share||0);
+    });
+    _anlHData = Object.values(agg);
+    _anlHarvestLoaded = true;
+    if(load) load.style.display='none';
+    anlRenderHarvest();
+  }catch(e){ if(load){ load.style.display='block'; load.textContent='Error: '+e.message; } }
+}
+let _anlHData = null;
+function anlRenderHarvest(){
+  if(!_anlHData) return;
+  const months=[...new Set(_anlHData.map(d=>d.ym))].sort();
+  const groups=[...new Set(_anlHData.map(d=>d.grp))].sort();
+  const val=(g,m)=>{ const d=_anlHData.find(x=>x.grp===g&&x.ym===m); return d?Number(d.spawn||0):0; };
+  const php=v=>'₱'+Math.round(Number(v||0)).toLocaleString();
+
+  // summary cards (total spawn per group)
+  const totals=groups.map(g=>({grp:g,total:months.reduce((s,m)=>s+val(g,m),0)})).sort((a,b)=>b.total-a.total);
+  const grand=totals.reduce((s,t)=>s+t.total,0);
+  const sumEl=document.getElementById('anv-h-summary');
+  if(sumEl){
+    sumEl.innerHTML=`<div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:10px;padding:12px;">
+        <div style="font-size:19px;font-weight:800;">${php(grand)}</div>
+        <div style="font-size:10px;opacity:.9;margin-top:2px;">Total Spawn (${months.length} mo)</div></div>`
+      + totals.map((t,i)=>`<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;border-left:3px solid ${_ANL_COLORS[i%_ANL_COLORS.length]};">
+        <div style="font-size:16px;font-weight:800;color:#111827;">${php(t.total)}</div>
+        <div style="font-size:10px;color:var(--mu);margin-top:2px;">${t.grp}</div></div>`).join('');
+  }
+
+  // grouped bar chart
+  const ctx=document.getElementById('anv-h-chart');
+  if(ctx && window.Chart){
+    if(_anlHChart){ _anlHChart.destroy(); _anlHChart=null; }
+    Chart.getChart(ctx)?.destroy();
+    _anlHChart=new Chart(ctx,{ type:'bar',
+      data:{ labels: months.map(m=>{const[y,mm]=m.split('-');return (_ANL_MONTHS[mm]||mm)+' '+y.slice(2);}),
+        datasets: groups.map((g,i)=>({label:g,data:months.map(m=>val(g,m)),backgroundColor:_ANL_COLORS[i%_ANL_COLORS.length],borderRadius:4})) },
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}},tooltip:{callbacks:{label:c=>c.dataset.label+': '+php(c.parsed.y)}}},
+        scales:{x:{grid:{display:false}},y:{beginAtZero:true,ticks:{callback:v=>'₱'+(v/1000)+'k'}}} }
+    });
+  }
+
+  // pivot table
+  let H='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#028867;color:#fff;"><th style="padding:8px 12px;text-align:left;">Group</th>'
+    + months.map(m=>{const[y,mm]=m.split('-');return `<th style="padding:8px 12px;text-align:right;">${_ANL_MONTHS[mm]||mm} ${y.slice(2)}</th>`;}).join('')
+    + '<th style="padding:8px 12px;text-align:right;background:#016b51;">TOTAL</th></tr></thead><tbody>';
+  const colT={}; months.forEach(m=>colT[m]=0);
+  totals.forEach((t,idx)=>{ const g=t.grp;
+    H+=`<tr style="background:${idx%2?'#f6fdfb':'#fff'};"><td style="padding:7px 12px;font-weight:700;">${g}</td>`;
+    months.forEach(m=>{const v=val(g,m);colT[m]+=v;H+=`<td style="padding:7px 12px;text-align:right;color:${v?'#111827':'#d1d5db'};">${v?php(v):'—'}</td>`;});
+    H+=`<td style="padding:7px 12px;text-align:right;font-weight:800;color:#028867;">${php(t.total)}</td></tr>`;
+  });
+  H+='<tr style="background:#e7f6f1;font-weight:800;border-top:2px solid #028867;"><td style="padding:8px 12px;">TOTAL</td>'
+    + months.map(m=>`<td style="padding:8px 12px;text-align:right;color:#028867;">${php(colT[m])}</td>`).join('')
+    + `<td style="padding:8px 12px;text-align:right;color:#016b51;">${php(grand)}</td></tr></tbody></table>`;
+  const tEl=document.getElementById('anv-h-table'); if(tEl) tEl.innerHTML=H;
 }
 function _anlR({mm,aD}){
   const labels=Object.keys(mm).sort(),data=labels.map(m=>mm[m]),colors=labels.map(l=>l.startsWith('2026')?'#16a34a':'#1565c0');
