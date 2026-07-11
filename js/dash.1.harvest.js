@@ -1961,15 +1961,26 @@ let _hstChart = null;
 const _HST_MONTHS = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'};
 const _HST_COLORS = ['#025AC6','#FFB725','#028867','#C01176','#DF1A35','#311A8E','#0EA5E9','#F97316','#84CC16','#EC4899'];
 
+// map a harvest's route_code to a combined group name (v3 groups; G1-3 merged)
+function _hstGroupOf(route){
+  const rc=(route||'').toUpperCase();
+  if(rc==='GRP-A1'||rc==='GRP-A2'||rc==='GRP-A3') return 'Dipolog';
+  if(rc==='GRP-B1'||rc==='GRP-B2'||rc==='GRP-B3') return 'Dapitan';
+  if(rc==='GRP-A4') return 'Sindangan';
+  if(rc==='GRP-A5') return 'Polanco';
+  if(rc==='GRP-A6') return 'Roxas';
+  return 'Pre-v3 / Admin';
+}
+
 async function hstLoad(){
   const load=document.getElementById('hst-loading');
   if(load){ load.style.display='block'; load.textContent='Loading harvest stats…'; }
   try{
-    // pull all harvests this year (area, date, coins, spawn) via gateway
+    // pull all harvests this year (route_code, date, coins, spawn) via gateway
     const year=new Date().getFullYear();
     const rows=[]; let off=0;
     while(true){
-      const r=await fetch(`${_SB}/rest/v1/harvests?harvest_date=gte.${year}-01-01&select=area,harvest_date,coins_total,spawn_share&limit=1000&offset=${off}`,{headers:_HDR});
+      const r=await fetch(`${_SB}/rest/v1/harvests?harvest_date=gte.${year}-01-01&select=route_code,harvest_date,coins_total,spawn_share&limit=1000&offset=${off}`,{headers:_HDR});
       if(!r.ok) throw new Error('harvests '+r.status);
       const d=await r.json();
       if(!Array.isArray(d)||!d.length) break;
@@ -1977,10 +1988,10 @@ async function hstLoad(){
       if(d.length<1000) break;
       off+=1000;
     }
-    // aggregate area × month
+    // aggregate GROUP (from route_code) × month
     const agg={};
     rows.forEach(h=>{
-      const area=h.area||'(no area)';
+      const area=_hstGroupOf(h.route_code);   // 'area' key reused as the group name
       const ym=(h.harvest_date||'').slice(0,7);
       if(!ym) return;
       const k=area+'|'+ym;
@@ -2014,7 +2025,7 @@ function hstRender(){
   const metricLabel = metric==='spawn'?'Spawn Share':metric==='coins'?'Coins':'Harvests';
   const isMoney = metric!=='harvests';
   const titleEl=document.getElementById('hst-chart-title');
-  if(titleEl) titleEl.textContent=metricLabel+' by Area · per Month';
+  if(titleEl) titleEl.textContent=metricLabel+' by Group · per Month';
 
   // axes
   const months=[...new Set(_hstData.map(d=>d.ym))].sort();
@@ -2070,7 +2081,7 @@ function hstRender(){
 
   // ── pivot table: rows=area, cols=month, with totals ──
   let H='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#025AC6;color:#fff;">'
-    +'<th style="padding:8px 12px;text-align:left;">Area</th>'
+    +'<th style="padding:8px 12px;text-align:left;">Group</th>'
     + months.map(m=>{ const [y,mm]=m.split('-'); return `<th style="padding:8px 12px;text-align:right;">${_HST_MONTHS[mm]||mm} ${y.slice(2)}</th>`; }).join('')
     +'<th style="padding:8px 12px;text-align:right;background:#0d47a1;">TOTAL</th></tr></thead><tbody>';
   const colTotals={}; months.forEach(m=>colTotals[m]=0);
