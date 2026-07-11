@@ -67,7 +67,7 @@ setInterval(()=>{if(document.getElementById('panel-vmap-top')?.classList.contain
 
 // Config — var (not const) so shared.js can also declare without conflict
 var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek";
+var SB_KEY = "gw";
 
 // ── COLLECTOR PHOTOS (bucket: collector-photos) ──
 window._collectorPhotos = {};  // name(lowercase) -> photo_url
