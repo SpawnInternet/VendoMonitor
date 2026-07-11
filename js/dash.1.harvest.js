@@ -1030,19 +1030,27 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
 
   if(window._lfGroupByCollector){
     // collapsed collector cards — tap opens a popup with that collector's harvests
+    const feed = (elId==='lf-hist-list') ? 'hist' : 'today';
     const groups={};
     filtered.forEach(it=>{ const k=it.collector||'— No collector —'; (groups[k]=groups[k]||[]).push(it); });
-    const order=Object.keys(groups).sort((a,b)=>
-      groups[b].reduce((s,i)=>s+Number(i.spawn_share||0),0) - groups[a].reduce((s,i)=>s+Number(i.spawn_share||0),0));
-    window._lfGroups = groups;
-    window._lfGroupSource = (elId==='lf-hist-list') ? 'hist' : 'today';
+    // keep only collectors that actually have harvests in THIS view
+    const order=Object.keys(groups)
+      .filter(name=>groups[name] && groups[name].length>0)
+      .sort((a,b)=>
+        groups[b].reduce((s,i)=>s+Number(i.spawn_share||0),0) - groups[a].reduce((s,i)=>s+Number(i.spawn_share||0),0));
+    // store per-feed so Today and History don't overwrite each other
+    if(feed==='hist'){ window._lfGroupsHist = groups; } else { window._lfGroupsToday = groups; }
+    if(!order.length){
+      el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);font-size:12px;">No harvests to group in this view.</div>';
+      return;
+    }
     el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:10px;">' + order.map(name=>{
       const rows=groups[name];
       const gSpawn=rows.reduce((s,i)=>s+Number(i.spawn_share||0),0);
       const gCoins=rows.reduce((s,i)=>s+Number(i.coins_total||0),0);
       const areas=[...new Set(rows.map(r=>r.area).filter(Boolean))].join(', ');
       const initial=(name||'?').trim().charAt(0).toUpperCase();
-      return `<div onclick="lfShowCollector('${name.replace(/'/g,"\\'")}')" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='#e5e7eb';">
+      return `<div onclick="lfShowCollector('${name.replace(/'/g,"\\'")}','${feed}')" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='#e5e7eb';">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
           <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6d28d9,#025AC6);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0;">${initial}</div>
           <div style="min-width:0;">
@@ -1068,10 +1076,11 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
   }
 }
 
-function lfShowCollector(name){
-  const groups = window._lfGroups||{};
+function lfShowCollector(name, feed){
+  const groups = (feed==='hist' ? window._lfGroupsHist : window._lfGroupsToday) || {};
   const rows = groups[name]||[];
-  const src = window._lfGroupSource==='hist' ? lfHistItems : lfItems;
+  const src = feed==='hist' ? lfHistItems : lfItems;
+  if(!rows.length){ toast('No harvests for '+name+' in this view'); return; }
   const gSpawn=rows.reduce((s,i)=>s+Number(i.spawn_share||0),0);
   const gCoins=rows.reduce((s,i)=>s+Number(i.coins_total||0),0);
   const gNet=rows.reduce((s,i)=>s+Number(i.net_collectible||0),0);
@@ -1760,29 +1769,19 @@ function rcFilter(){
   };
 
   let html='';
+  window._rcDetail = {};  // collector -> full detail HTML for popup
+  const cardData = [];
   Object.entries(byCollector).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([collector,cd])=>{
     const colCoins=cd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
     const colTG=cd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
     const colGap=cd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
     const colAlerts=cd.rows.filter(r=>r.flag==='alert').length;
     const colWarns=cd.rows.filter(r=>r.flag==='warn').length;
+    const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
     const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
 
-    html+=`<div style="background:#fff;border:1.5px solid #c7d2fe;border-radius:12px;margin-bottom:14px;overflow:hidden;">
-      <!-- Collector header -->
-      <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <div style="font-size:15px;font-weight:700;">👤 ${collector}</div>
-        <div style="font-size:12px;opacity:.85;">${cd.rows.length} harvests</div>
-        ${colAlerts?`<span style="background:rgba(220,38,38,.9);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">${colAlerts} ALERT</span>`:''}
-        ${colWarns?`<span style="background:rgba(217,119,6,.9);padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700;">${colWarns} SURPLUS</span>`:''}
-        <div style="margin-left:auto;display:flex;gap:16px;text-align:right;">
-          <div><div style="font-size:11px;opacity:.7;">Coins Total</div><div style="font-size:14px;font-weight:700;">${fmtP(colCoins)}</div></div>
-          <div><div style="font-size:11px;opacity:.7;">TG Income</div><div style="font-size:14px;font-weight:700;">${fmtP(colTG)}</div></div>
-          <div><div style="font-size:11px;opacity:.7;">True Gap</div><div style="font-size:14px;font-weight:700;color:${colGapColor==='#15803d'?'#86efac':colGapColor==='#d97706'?'#fde68a':'#fca5a5'};">${colGap>=0?'+':''}${fmtP(colGap)}</div></div>
-        </div>
-      </div>
-      <!-- Date blocks -->
-      <div style="padding:10px 12px;display:flex;flex-direction:column;gap:10px;">`;
+    // ---- build the FULL detail (dates→routes→vendos) into a string for the popup ----
+    let detail=`<div style="padding:10px 12px;display:flex;flex-direction:column;gap:10px;">`;
 
     Object.entries(cd.dates).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([dt,dd])=>{
       const dtCoins=dd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
@@ -1792,7 +1791,7 @@ function rcFilter(){
       const dtWarns=dd.rows.filter(r=>r.flag==='warn').length;
       const dtGapColor=dtGap>500?'#dc2626':dtGap>100?'#d97706':'#15803d';
 
-      html+=`<div style="border:1px solid #e0e7ff;border-radius:8px;overflow:hidden;">
+      detail+=`<div style="border:1px solid #e0e7ff;border-radius:8px;overflow:hidden;">
         <div style="background:#eef2ff;padding:7px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #e0e7ff;">
           <span style="font-size:12px;font-weight:700;color:#3730a3;">📅 ${dt}</span>
           <span style="font-size:11px;color:#6b7280;">${dd.rows.length} vendos</span>
@@ -1817,7 +1816,7 @@ function rcFilter(){
         ?'<span style="background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">🔧 Admin</span>'
         :'<span style="background:#eff6ff;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">📱 PWA</span>';
 
-      html+=`<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+      detail+=`<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
         <!-- Route header -->
         <div style="background:#f8faff;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e5e7eb;">
           <span style="font-family:monospace;font-size:12px;font-weight:700;color:#1565c0;">🧾 ${rc}</span>
@@ -1883,13 +1882,74 @@ function rcFilter(){
       </div>`;
     });
 
-        html+='</div></div>'; // end date block
+        detail+='</div></div>'; // end route wrapper, end date block inner
       }); // end dates loop
-    html+='</div></div></div></div>'; // close date inner, date container, routes wrapper, collector
+    detail+='</div>'; // close detail container
+
+    // stash the detail HTML for the popup
+    window._rcDetail[collector] = {
+      html: detail,
+      coins: colCoins, tg: colTG, gap: colGap,
+      count: cd.rows.length, alerts: colAlerts, warns: colWarns, confirmed: colConfirmed
+    };
+
+    // build the collapsed card
+    const initial=(collector||'?').trim().charAt(0).toUpperCase();
+    const gapTxt=(colGap>=0?'+':'')+fmtP(colGap);
+    const gapChipColor=Math.abs(colGap)<100?'#15803d':colGap>0?'#b45309':'#dc2626';
+    const gapChipBg=Math.abs(colGap)<100?'#dcfce7':colGap>0?'#fef9c3':'#fee2e2';
+    cardData.push({collector, sortKey:collector, html:`
+      <div onclick="rcShowCollector('${collector.replace(/'/g,"\\'")}')" style="background:#fff;border:1.5px solid #c7d2fe;border-radius:12px;padding:14px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='#c7d2fe';">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0;">${initial}</div>
+          <div style="min-width:0;flex:1;">
+            <div style="font-weight:800;font-size:15px;color:#1e3a8a;">${collector}</div>
+            <div style="font-size:10px;color:var(--mu);">${cd.rows.length} harvests${colConfirmed?` · ${colConfirmed} confirmed`:''}</div>
+          </div>
+          ${colAlerts?`<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${colAlerts} SHORT</span>`:''}
+          ${colWarns?`<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${colWarns} SURPLUS</span>`:''}
+          ${(!colAlerts&&!colWarns)?`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">✅ OK</span>`:''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+          <div style="background:#eff6ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#1565c0;">${fmtP(colCoins)}</div><div style="font-size:8px;color:var(--mu);">Coins</div></div>
+          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#15803d;">${fmtP(colTG)}</div><div style="font-size:8px;color:var(--mu);">TG Income</div></div>
+          <div style="background:${gapChipBg};border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:${gapChipColor};">${gapTxt}</div><div style="font-size:8px;color:var(--mu);">True Gap</div></div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:#6d28d9;font-weight:700;text-align:center;border-top:1px solid #f1f5f9;padding-top:8px;">Tap to reconcile ›</div>
+      </div>`});
   });
 
-  el.innerHTML=html;
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">'
+    + cardData.map(c=>c.html).join('') + '</div>';
 }
+
+// Recon detail popup — full dates/routes/vendos with working confirm+note buttons
+function rcShowCollector(collector){
+  const d=(window._rcDetail||{})[collector];
+  if(!d) return;
+  const old=document.getElementById('rc-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='rc-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  const initial=(collector||'?').trim().charAt(0).toUpperCase();
+  const gapTxt=(d.gap>=0?'+':'')+_php(d.gap);
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:980px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:16px 20px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">${initial}</div>
+      <div><div style="font-size:18px;font-weight:800;">${collector}</div><div style="font-size:11px;opacity:.85;">${d.count} harvests${d.confirmed?` · ${d.confirmed} confirmed`:''}</div></div>
+      <div style="margin-left:auto;display:flex;gap:14px;text-align:right;align-items:center;">
+        <div><div style="font-size:10px;opacity:.7;">Coins</div><div style="font-size:14px;font-weight:700;">${_php(d.coins)}</div></div>
+        <div><div style="font-size:10px;opacity:.7;">TG Income</div><div style="font-size:14px;font-weight:700;">${_php(d.tg)}</div></div>
+        <div><div style="font-size:10px;opacity:.7;">True Gap</div><div style="font-size:14px;font-weight:700;">${gapTxt}</div></div>
+        <button onclick="rcCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1;background:#fbfcff;">${d.html}</div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
+  document.body.appendChild(ov);
+}
+function rcCloseCollector(){ const o=document.getElementById('rc-modal'); if(o) o.remove(); }
 
 /* ── AUTO-LOAD on panel activation ── */
 (function(){
