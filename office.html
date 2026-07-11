@@ -399,8 +399,42 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
-const HDR = {apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json'};
+const KEY = 'gw';
+const HDR = {apikey:KEY, Authorization:'Bearer '+KEY, 'Content-Type':'application/json', 'x-spawn-gw':'1'};
+const OFFICE_LOGIN_URL = SB + '/functions/v1/spawn-office-login';
+const OFFICE_GW_URL    = SB + '/functions/v1/spawn-gw-office';
+window.__OFFICE_GW_TOKEN = null;
+
+// ── Transparent fetch interceptor: reroute REST via office gateway ──
+(function installOfficeGatewayInterceptor(){
+  const _origFetch = window.fetch.bind(window);
+  const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  window.fetch = async function(input, init){
+    try{
+      const url = (typeof input==='string')?input:(input&&input.url)||'';
+      const opts = init||{};
+      const hdrs = opts.headers||{};
+      const isGw = (hdrs['x-spawn-gw']==='1')||(hdrs.apikey==='gw');
+      if(url.indexOf(SB)===0 && isGw){
+        const TOKEN = window.__OFFICE_GW_TOKEN;
+        if(!TOKEN){ return new Response(JSON.stringify({error:'not authenticated'}),{status:401}); }
+        const method=(opts.method||'GET').toUpperCase();
+        const m=url.match(REST_RE);
+        if(m){
+          const table=m[1], query=m[3]||'';
+          const prefer=hdrs['Prefer']||hdrs['prefer']||'';
+          const body=opts.body?JSON.parse(opts.body):undefined;
+          return _origFetch(OFFICE_GW_URL,{
+            method:'POST',
+            headers:{'Content-Type':'application/json','x-gw-token':TOKEN},
+            body:JSON.stringify({kind:'rest',table,method,query,body,prefer})
+          });
+        }
+      }
+    }catch(e){ console.warn('[OFFICE-GW] fallthrough:', e&&e.message); }
+    return _origFetch(input, init);
+  };
+})();
 const EXP_CATS = ['Fuel','Food','Parking','Repair','Load','Other'];
 
 let ACCOUNTS    = [];
@@ -437,15 +471,23 @@ async function sbDelete(path){
 
 // ── PIN ──────────────────────────────────────────────────
 async function loadAccounts(){
+  // Names only — PINs are never sent to the browser; validation happens
+  // server-side in spawn-office-login. Roster fetched via the login fn.
   try{
     const ctrl=new AbortController(), t=setTimeout(()=>ctrl.abort(),12000);
-    const r=await fetch(`${SB}/rest/v1/office_accounts?active=eq.true&select=id,name,pin,role&order=name.asc`,{headers:HDR,signal:ctrl.signal});
+    const r=await fetch(OFFICE_LOGIN_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roster:true}),
+      signal:ctrl.signal
+    });
     clearTimeout(t);
-    const rows=await r.json();
-    if(!Array.isArray(rows)) throw new Error();
-    ACCOUNTS=rows.filter(a=>a.name!=='Gilbert').map(a=>({id:String(a.id),name:a.name,pin:a.pin||'0000',role:a.role||'Staff'}));
+    const d=await r.json().catch(()=>({}));
+    if(d && Array.isArray(d.accounts) && d.accounts.length){
+      ACCOUNTS=d.accounts.filter(a=>a.name!=='Gilbert').map(a=>({id:String(a.id),name:a.name,role:a.role||'Staff'}));
+    } else { throw new Error(); }
   }catch{
-    ACCOUNTS=[{id:'2',name:'Ailyn',pin:'2274'},{id:'3',name:'Joi',pin:'3361'}];
+    ACCOUNTS=[{id:'2',name:'Ailyn',role:'Staff'},{id:'3',name:'Joi',role:'Staff'}];
   }
   document.getElementById('pin-accs').innerHTML=ACCOUNTS.map(a=>
     `<button class="acc-btn" data-id="${a.id}" onclick="selectAcc('${a.id}')">${a.name}</button>`
@@ -473,17 +515,31 @@ function updateDots(){
   for(let i=0;i<4;i++) document.getElementById('d'+i).classList.toggle('filled',i<pinBuffer.length);
 }
 
-function checkPin(){
-  if(pinBuffer===selectedAcc.pin){
-    currentUser=selectedAcc;
-    document.getElementById('user-chip').textContent='👤 '+currentUser.name;
-    document.getElementById('user-chip').style.display='block';
-    document.getElementById('btn-logout').style.display='block';
-    document.getElementById('topbar-sub').textContent='Pack Counter · Office';
-    showScreen('home');
-    currentDate=today();
-    loadHome();
-  } else {
+async function checkPin(){
+  const entered = pinBuffer;
+  document.getElementById('pin-err').textContent='Checking…';
+  try{
+    const r=await fetch(OFFICE_LOGIN_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pin:entered})
+    });
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.ok && d.token && d.name===selectedAcc.name){
+      window.__OFFICE_GW_TOKEN=d.token;
+      currentUser={id:String(d.id),name:d.name,role:d.role||'Staff'};
+      document.getElementById('pin-err').textContent='';
+      document.getElementById('user-chip').textContent='👤 '+currentUser.name;
+      document.getElementById('user-chip').style.display='block';
+      document.getElementById('btn-logout').style.display='block';
+      document.getElementById('topbar-sub').textContent='Pack Counter · Office';
+      showScreen('home');
+      currentDate=today();
+      loadHome();
+    } else {
+      throw new Error('wrong');
+    }
+  }catch(e){
     document.getElementById('pin-err').textContent='Wrong PIN — try again';
     pinBuffer=''; updateDots();
   }
@@ -491,6 +547,7 @@ function checkPin(){
 
 function doLogout(){
   currentUser=null; selectedAcc=null; pinBuffer='';
+  window.__OFFICE_GW_TOKEN=null;
   allHarvests=[]; packState={}; expState={}; savedSet=new Set(); activeCollector=null;
   document.getElementById('user-chip').style.display='none';
   document.getElementById('btn-logout').style.display='none';
