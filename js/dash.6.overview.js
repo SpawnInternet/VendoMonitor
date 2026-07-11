@@ -16,19 +16,38 @@ async function overviewLoad() {
   // fetch the combined overview (TG sales + harvest spawn) via gateway RPC
   let ov = null;
   try {
-    const r = await fetch(`${_SB||SB_URL}/rest/v1/rpc/dashboard_overview_v2`, {
-      method:'POST',
-      headers: (typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'}),
-      body: '{}'
-    });
-    ov = await r.json();
-  } catch(e){ console.warn('overview rpc failed', e && e.message); }
-  // suspicious count still from the existing summary
-  const data = await apiLoad().catch(()=>null);
-  overviewRender(ov||{}, data||{});
+    const base = (typeof _SB!=='undefined'?_SB:(typeof SB_URL!=='undefined'?SB_URL:'https://cviraqfhphhsonjmrtvu.supabase.co'));
+    const hdr = (typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
+    const r = await fetch(`${base}/rest/v1/rpc/dashboard_overview_v2`, { method:'POST', headers:hdr, body:'{}' });
+    let j = await r.json();
+    // PostgREST may return the object directly, or wrapped as [obj], or as {dashboard_overview_v2:obj}
+    if (Array.isArray(j)) j = j[0];
+    if (j && j.dashboard_overview_v2) j = j.dashboard_overview_v2;
+    ov = j || {};
+  } catch(e){ console.warn('overview rpc failed', e && e.message); ov = {}; }
+
+  // Render the main overview immediately from the RPC (never blocks on apiLoad)
+  let data = {};
+  try {
+    if (typeof apiLoad === 'function') {
+      const p = apiLoad();
+      if (p && typeof p.then === 'function') { data = await Promise.race([p, new Promise(res=>setTimeout(()=>res({}), 4000))]) || {}; }
+    }
+  } catch(e){ console.warn('apiLoad failed', e && e.message); data = {}; }
+
+  try { overviewRender(ov||{}, data||{}); }
+  catch(e){
+    console.error('overviewRender error', e);
+    document.getElementById("dash-stats").innerHTML =
+      '<div style="padding:20px;color:#dc2626;font-size:12px">Overview error: '+(e&&e.message||e)+'</div>';
+  }
 }
 
 function _php(v){ return '₱'+Math.round(Number(v||0)).toLocaleString(); }
+// safe fallbacks in case fmt helpers load later or are missing
+const _fmtNum = (v)=> (typeof fmtNum==='function'? fmtNum(v) : Number(v||0).toLocaleString());
+const _fmtDateShort = (d)=>{ try{ return (typeof fmtDateShort==='function')? fmtDateShort(d) : String(d).slice(5); }catch(e){ return String(d); } };
+const _fmtTime = (t)=>{ try{ return (typeof fmtTime==='function')? fmtTime(t) : ''; }catch(e){ return ''; } };
 
 function overviewRender(ov, data) {
   const stats = (data && data.stats) || {};
@@ -54,7 +73,7 @@ function overviewRender(ov, data) {
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15)" onclick="showP('suspicious')">
       <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
-      <div class="sv" style="color:${BRAND.red}">${fmtNum(hackedCnt)}</div>
+      <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
     </div>`;
 
   // nav badge + alert
@@ -71,7 +90,7 @@ function overviewRender(ov, data) {
 
   // ── 7-day trend: Telegram sales only ──
   const trend = ov.tg_trend || [];
-  const tLabels = trend.map(r => fmtDateShort(r.date));
+  const tLabels = trend.map(r => _fmtDateShort(r.date));
   const tData = trend.map(r => parseFloat(r.tg_sales || 0));
   const tEl = document.getElementById("trend-chart");
   if (tEl) {
@@ -147,7 +166,7 @@ function overviewRender(ov, data) {
   if(ssb) ssb.innerHTML = susp.slice(0, 10).map(h => `
     <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #fee2e2">
       <span style="color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">${h.vendo||"—"}</span>
-      <span style="color:${BRAND.red};font-weight:600;white-space:nowrap">${fmtNum(h.txn_count)} skip</span>
+      <span style="color:${BRAND.red};font-weight:600;white-space:nowrap">${_fmtNum(h.txn_count)} skip</span>
     </div>`).join("") || '<div style="font-size:11px;color:var(--mu);padding:8px">No suspicious transactions</div>';
 }
 
@@ -162,7 +181,7 @@ function overviewRenderRecent(recent) {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #e8eeff;font-size:11px">
       <div style="overflow:hidden">
         <div style="font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">${r.vendo||"—"}</div>
-        <div style="color:var(--mu);font-size:9px">${r.area||""} · ${r.time||fmtTime(r.created_at)}</div>
+        <div style="color:var(--mu);font-size:9px">${r.area||""} · ${r.time||_fmtTime(r.created_at)}</div>
       </div>
       <div style="font-weight:600;color:${BRAND.blue};white-space:nowrap">₱${r.amount||0}</div>
     </div>`).join("");
