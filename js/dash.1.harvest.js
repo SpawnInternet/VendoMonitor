@@ -25,7 +25,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps','keys'].forEach(t=>{
+  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps','keys','harveststats'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
@@ -49,6 +49,7 @@ function hvNewTab(id, btn){
   if(id==='ledger'){ elLoad(); }
   if(id==='gps'){ gpsTraceLoad(); }
   if(id==='keys'){ klLoad(); }
+  if(id==='harveststats'){ hstLoad(); }
   if(id!=='progress'&&id!=='ledger'){ if(_progressMap){ _progressMap.remove(); _progressMap=null; } }
   if(id!=='gps'){ if(typeof _gpsMap!=='undefined'&&_gpsMap){ _gpsMap.remove(); _gpsMap=null; } }
 }
@@ -1950,6 +1951,141 @@ function rcShowCollector(collector){
   document.body.appendChild(ov);
 }
 function rcCloseCollector(){ const o=document.getElementById('rc-modal'); if(o) o.remove(); }
+
+// ══════════════════════════════════════════════════════════
+// HARVEST STATS — per-area, per-month comparison (analytics-style)
+// ══════════════════════════════════════════════════════════
+let _hstData = null;        // [{area, ym, harvests, coins, spawn}]
+let _hstMetric = 'spawn';
+let _hstChart = null;
+const _HST_MONTHS = {'01':'Jan','02':'Feb','03':'Mar','04':'Apr','05':'May','06':'Jun','07':'Jul','08':'Aug','09':'Sep','10':'Oct','11':'Nov','12':'Dec'};
+const _HST_COLORS = ['#025AC6','#FFB725','#028867','#C01176','#DF1A35','#311A8E','#0EA5E9','#F97316','#84CC16','#EC4899'];
+
+async function hstLoad(){
+  const load=document.getElementById('hst-loading');
+  if(load){ load.style.display='block'; load.textContent='Loading harvest stats…'; }
+  try{
+    // pull all harvests this year (area, date, coins, spawn) via gateway
+    const year=new Date().getFullYear();
+    const rows=[]; let off=0;
+    while(true){
+      const r=await fetch(`${_SB}/rest/v1/harvests?harvest_date=gte.${year}-01-01&select=area,harvest_date,coins_total,spawn_share&limit=1000&offset=${off}`,{headers:_HDR});
+      if(!r.ok) throw new Error('harvests '+r.status);
+      const d=await r.json();
+      if(!Array.isArray(d)||!d.length) break;
+      rows.push(...d);
+      if(d.length<1000) break;
+      off+=1000;
+    }
+    // aggregate area × month
+    const agg={};
+    rows.forEach(h=>{
+      const area=h.area||'(no area)';
+      const ym=(h.harvest_date||'').slice(0,7);
+      if(!ym) return;
+      const k=area+'|'+ym;
+      if(!agg[k]) agg[k]={area, ym, harvests:0, coins:0, spawn:0};
+      agg[k].harvests++;
+      agg[k].coins += Number(h.coins_total||0);
+      agg[k].spawn += Number(h.spawn_share||0);
+    });
+    _hstData = Object.values(agg);
+    if(load) load.style.display='none';
+    hstRender();
+  }catch(e){
+    if(load){ load.style.display='block'; load.textContent='Error: '+e.message; }
+  }
+}
+
+function hstSetMetric(m, btn){
+  _hstMetric=m;
+  document.querySelectorAll('.hst-mbtn').forEach(b=>{
+    const on=b.dataset.m===m;
+    b.classList.toggle('on',on);
+    b.style.background=on?'#025AC6':'#fff';
+    b.style.color=on?'#fff':'#025AC6';
+  });
+  hstRender();
+}
+
+function hstRender(){
+  if(!_hstData) return;
+  const metric=_hstMetric;
+  const metricLabel = metric==='spawn'?'Spawn Share':metric==='coins'?'Coins':'Harvests';
+  const isMoney = metric!=='harvests';
+  const titleEl=document.getElementById('hst-chart-title');
+  if(titleEl) titleEl.textContent=metricLabel+' by Area · per Month';
+
+  // axes
+  const months=[...new Set(_hstData.map(d=>d.ym))].sort();
+  const areas=[...new Set(_hstData.map(d=>d.area))].sort();
+  // lookup
+  const val=(area,ym)=>{ const d=_hstData.find(x=>x.area===area&&x.ym===ym); return d?Number(d[metric]||0):0; };
+  const fmtV=v=> isMoney ? _php(v) : v.toLocaleString();
+
+  // ── summary cards: total per area (across all months) ──
+  const areaTotals=areas.map(a=>({area:a, total:months.reduce((s,m)=>s+val(a,m),0)})).sort((a,b)=>b.total-a.total);
+  const grand=areaTotals.reduce((s,a)=>s+a.total,0);
+  const sumEl=document.getElementById('hst-summary');
+  if(sumEl){
+    sumEl.innerHTML =
+      `<div style="background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;border-radius:10px;padding:12px;">
+        <div style="font-size:20px;font-weight:800;">${fmtV(grand)}</div>
+        <div style="font-size:10px;opacity:.9;margin-top:2px;">Total ${metricLabel} (${months.length} mo)</div>
+      </div>` +
+      areaTotals.slice(0,7).map((a,i)=>`<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px;border-left:3px solid ${_HST_COLORS[i%_HST_COLORS.length]};">
+        <div style="font-size:17px;font-weight:800;color:#111827;">${fmtV(a.total)}</div>
+        <div style="font-size:10px;color:var(--mu);margin-top:2px;">${a.area}</div>
+      </div>`).join('');
+  }
+
+  // ── grouped bar chart: months on X, one bar-series per area ──
+  const ctx=document.getElementById('hst-chart');
+  if(ctx && window.Chart){
+    if(_hstChart){ _hstChart.destroy(); _hstChart=null; }
+    _hstChart=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels: months.map(m=>{ const [y,mm]=m.split('-'); return (_HST_MONTHS[mm]||mm)+' '+y.slice(2); }),
+        datasets: areas.map((a,i)=>({
+          label:a,
+          data: months.map(m=>val(a,m)),
+          backgroundColor:_HST_COLORS[i%_HST_COLORS.length],
+          borderRadius:4,
+        }))
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{position:'bottom', labels:{boxWidth:12, font:{size:11}}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtV(c.parsed.y)}}
+        },
+        scales:{
+          x:{grid:{display:false}},
+          y:{beginAtZero:true, ticks:{callback:v=> isMoney ? '₱'+(v/1000)+'k' : v}}
+        }
+      }
+    });
+  }
+
+  // ── pivot table: rows=area, cols=month, with totals ──
+  let H='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#025AC6;color:#fff;">'
+    +'<th style="padding:8px 12px;text-align:left;">Area</th>'
+    + months.map(m=>{ const [y,mm]=m.split('-'); return `<th style="padding:8px 12px;text-align:right;">${_HST_MONTHS[mm]||mm} ${y.slice(2)}</th>`; }).join('')
+    +'<th style="padding:8px 12px;text-align:right;background:#0d47a1;">TOTAL</th></tr></thead><tbody>';
+  const colTotals={}; months.forEach(m=>colTotals[m]=0);
+  areaTotals.forEach((at,idx)=>{
+    const a=at.area;
+    H+=`<tr style="background:${idx%2?'#f8faff':'#fff'};"><td style="padding:7px 12px;font-weight:700;">${a}</td>`;
+    months.forEach(m=>{ const v=val(a,m); colTotals[m]+=v; H+=`<td style="padding:7px 12px;text-align:right;color:${v?'#111827':'#d1d5db'};">${v?fmtV(v):'—'}</td>`; });
+    H+=`<td style="padding:7px 12px;text-align:right;font-weight:800;color:#025AC6;">${fmtV(at.total)}</td></tr>`;
+  });
+  H+='<tr style="background:#e8f0fe;font-weight:800;border-top:2px solid #025AC6;"><td style="padding:8px 12px;">TOTAL</td>'
+    + months.map(m=>`<td style="padding:8px 12px;text-align:right;color:#025AC6;">${fmtV(colTotals[m])}</td>`).join('')
+    + `<td style="padding:8px 12px;text-align:right;color:#0d47a1;">${fmtV(grand)}</td></tr>`;
+  H+='</tbody></table>';
+  const tEl=document.getElementById('hst-table'); if(tEl) tEl.innerHTML=H;
+}
 
 /* ── AUTO-LOAD on panel activation ── */
 (function(){
