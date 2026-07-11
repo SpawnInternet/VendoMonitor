@@ -35,6 +35,8 @@ function hvNewTab(id, btn){
   }
   btn.classList.add('on');
   hvNewActiveTab = id;
+  // close any open Keys modals when leaving the keys sub-tab
+  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
   if(id==='htable'){ htLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
