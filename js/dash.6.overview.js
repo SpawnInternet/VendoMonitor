@@ -55,23 +55,23 @@ function overviewRender(ov, data) {
 
   // ── Stat cards: TG month · Harvest month · TG today · Harvest today · Suspicious ──
   document.getElementById("dash-stats").innerHTML = `
-    <div class="stat" style="border-bottom-color:${BRAND.blue}">
+    <div class="stat" style="border-bottom-color:${BRAND.blue};cursor:pointer" onclick="anlGoto('tg')" title="View Telegram analytics">
       <div class="sl">Telegram Sales · This Month</div>
       <div class="sv" style="color:${BRAND.blue}">${_php(ov.tg_month)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.teal}">
+    <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="anlGoto('harvest')" title="View harvested spawn analytics">
       <div class="sl">Harvested Spawn Share · Month</div>
       <div class="sv" style="color:${BRAND.teal}">${_php(ov.harvest_month)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.gold}">
+    <div class="stat" style="border-bottom-color:${BRAND.gold};cursor:pointer" onclick="anlGoto('tg')" title="View Telegram analytics">
       <div class="sl">Telegram Sales · Today</div>
       <div class="sv" style="color:#B47F00">${_php(ov.tg_today)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.magenta}">
+    <div class="stat" style="border-bottom-color:${BRAND.magenta};cursor:pointer" onclick="showTodayHarvestPopup()" title="Today's harvest breakdown">
       <div class="sl">Harvest Spawn · Today</div>
       <div class="sv" style="color:${BRAND.magenta}">${_php(ov.harvest_today)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15)" onclick="showP('suspicious')">
+    <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15);cursor:pointer" onclick="showP('suspicious')">
       <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
     </div>`;
@@ -190,3 +190,67 @@ function overviewRender(ov, data) {
 
 // Retained as a harmless stub — live feed is owned by refreshRecentTxns() in map.js.
 function overviewRenderRecent(recent) { /* no-op: do not overwrite the live feed */ }
+
+// ── Navigate to Analytics with a specific view (tg | harvest) ──
+function anlGoto(view){
+  try { _anlView = view; } catch(e){ window._anlView = view; }
+  showP('analytics', document.querySelector('[data-panel=analytics]'));
+}
+
+// ── Popup: today's harvests with spawn share, grouped by group ──
+async function showTodayHarvestPopup(){
+  const old=document.getElementById('th-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='th-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#C01176,#311A8E);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:12px;">
+      <div style="font-size:17px;font-weight:800;">💰 Today's Harvest — Spawn Share</div>
+      <span style="flex:1"></span>
+      <button onclick="document.getElementById('th-modal').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+    </div>
+    <div id="th-body" style="overflow-y:auto;flex:1;padding:14px 16px;background:#fbfcff;"><div style="padding:24px;text-align:center;color:#6b7280;font-size:13px;">Loading…</div></div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  try{
+    const base=(typeof _SB!=='undefined'?_SB:SB_URL);
+    const hdr=(typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
+    const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}); // YYYY-MM-DD Manila
+    const r=await fetch(`${base}/rest/v1/harvests?harvest_date=eq.${today}&select=sheet_name,tg_name,vendo_name,area,route_code,coins_total,spawn_share,collector&order=spawn_share.desc`,{headers:hdr});
+    const rows=await r.json();
+    const body=document.getElementById('th-body');
+    if(!Array.isArray(rows)||!rows.length){ body.innerHTML='<div style="padding:24px;text-align:center;color:#6b7280;font-size:13px;">No harvests recorded today.</div>'; return; }
+    const grp=(rc)=>{ rc=(rc||'').toUpperCase();
+      if(['GRP-A1','GRP-A2','GRP-A3'].includes(rc)) return 'Dipolog';
+      if(['GRP-B1','GRP-B2','GRP-B3'].includes(rc)) return 'Dapitan';
+      if(rc==='GRP-A4') return 'Sindangan'; if(rc==='GRP-A5') return 'Polanco'; if(rc==='GRP-A6') return 'Roxas';
+      return 'Other'; };
+    const groups={};
+    rows.forEach(h=>{ const g=grp(h.route_code); (groups[g]=groups[g]||[]).push(h); });
+    const grand=rows.reduce((s,h)=>s+Number(h.spawn_share||0),0);
+    const order=Object.keys(groups).sort((a,b)=>groups[b].reduce((s,h)=>s+Number(h.spawn_share||0),0)-groups[a].reduce((s,h)=>s+Number(h.spawn_share||0),0));
+    let H=`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding:10px 14px;background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:10px;">
+      <span style="font-size:12px;font-weight:600;">${rows.length} harvests today</span>
+      <span style="font-size:20px;font-weight:800;">${_php(grand)}</span></div>`;
+    order.forEach(g=>{
+      const items=groups[g];
+      const gt=items.reduce((s,h)=>s+Number(h.spawn_share||0),0);
+      H+=`<div style="margin-bottom:12px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+        <div style="background:#eef2ff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:800;color:#311A8E;font-size:13px;">${g}</span>
+          <span style="font-weight:800;color:#028867;font-size:13px;">${_php(gt)}</span>
+        </div>
+        <div>` + items.map(h=>{
+          const nm=h.sheet_name||h.tg_name||h.vendo_name||'(unnamed)';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-top:1px solid #f1f5f9;font-size:12px;">
+            <div style="min-width:0;"><div style="font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${nm}</div>
+              <div style="font-size:9px;color:#9ca3af;">${h.area||''}${h.collector?' · '+h.collector:''}</div></div>
+            <div style="text-align:right;white-space:nowrap;margin-left:10px;">
+              <div style="font-weight:800;color:#028867;">${_php(h.spawn_share)}</div>
+              <div style="font-size:9px;color:#6b7280;">coins ${_php(h.coins_total)}</div></div>
+          </div>`; }).join('') + `</div></div>`;
+    });
+    body.innerHTML=H;
+  }catch(e){ const body=document.getElementById('th-body'); if(body) body.innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px;">Error: '+(e&&e.message||e)+'</div>'; }
+}
