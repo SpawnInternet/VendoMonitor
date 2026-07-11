@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#025AC6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spawn">
+<link rel="manifest" href="spawn-mobile.webmanifest">
+<title>Spawn Internet</title>
+<style>
+  :root{
+    --blue:#025AC6; --gold:#FFB725; --teal:#028867;
+    --magenta:#C01176; --red:#DF1A35; --purple:#311A8E;
+    --bg:#f4f5f7; --card:#ffffff; --line:#e6e7ea;
+    --tx:#1a1a1a; --tx2:#6b7280; --tx3:#9ca3af;
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--tx); overscroll-behavior:none;}
+  body{display:flex; flex-direction:column; height:100dvh;}
+
+  /* ---------- LOGIN ---------- */
+  #login{position:fixed; inset:0; z-index:1000; background:linear-gradient(135deg,var(--blue),var(--purple)); display:flex; align-items:center; justify-content:center; padding:24px;}
+  .login-card{background:#fff; border-radius:22px; padding:34px 26px; width:100%; max-width:340px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .login-card .lg{width:62px;height:62px;border-radius:17px;background:var(--blue);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+  .login-card .lg svg{width:36px;height:36px;fill:var(--gold);}
+  .login-card h1{font-size:20px;margin-bottom:4px;}
+  .login-card p{font-size:13px;color:var(--tx2);margin-bottom:22px;}
+  .login-card input{width:100%;height:50px;border:1.5px solid var(--line);border-radius:13px;padding:0 15px;font-size:16px;outline:none;margin-bottom:12px;}
+  .login-card input:focus{border-color:var(--blue);}
+  .login-card button{width:100%;height:50px;border:none;border-radius:13px;background:var(--blue);color:#fff;font-size:16px;font-weight:500;}
+  .login-card button:active{transform:scale(.98);}
+  .err{color:var(--red);font-size:13px;min-height:18px;margin-bottom:8px;}
+
+  /* ---------- HOME ---------- */
+  #home{flex:1; overflow-y:auto; display:flex; flex-direction:column; -webkit-overflow-scrolling:touch;}
+  .header{background:linear-gradient(135deg,var(--blue),var(--purple)); padding:calc(env(safe-area-inset-top) + 16px) 18px 22px; color:#fff; flex-shrink:0;}
+  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+  .brand{display:flex;align-items:center;gap:9px;}
+  .brand .b-lg{width:30px;height:30px;border-radius:9px;background:var(--gold);display:flex;align-items:center;justify-content:center;}
+  .brand .b-lg svg{width:18px;height:18px;fill:var(--blue);}
+  .brand .b-t1{font-size:15px;font-weight:500;line-height:1.1;}
+  .brand .b-t2{font-size:11px;color:rgba(255,255,255,.7);}
+  .hdr-lbl{font-size:12px;color:rgba(255,255,255,.7);margin-bottom:2px;}
+  .hdr-num{font-size:30px;font-weight:500;}
+  .hdr-sub{font-size:12px;color:#9FE1CB;margin-top:4px;}
+  .refresh-btn{background:transparent;border:none;color:rgba(255,255,255,.85);padding:6px;}
+  .refresh-btn svg{width:20px;height:20px;fill:currentColor;}
+  .refresh-btn.spin svg{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .body{padding:14px; flex:1;}
+  .stat-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .stat{background:var(--card);border-radius:14px;padding:13px;}
+  .stat .s-l{font-size:12px;color:var(--tx2);}
+  .stat .s-n{font-size:22px;font-weight:500;margin-top:3px;}
+
+  .alert-card{background:#FCEBEB;border-radius:14px;padding:13px 15px;margin-bottom:18px;}
+  .alert-card.clear{background:#E1F5EE;}
+  .alert-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .alert-head svg{width:16px;height:16px;}
+  .alert-head span{font-size:13px;font-weight:500;}
+  .alert-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;}
+  .alert-row .v{font-weight:500;}
+
+  .apps-lbl{font-size:11px;letter-spacing:.5px;color:var(--tx3);margin-bottom:12px;}
+  .grp-card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:18px;}
+  .grp-head{font-size:13px;font-weight:500;margin-bottom:12px;}
+  .grp-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .grp-row:last-child{margin-bottom:0;}
+  .grp-n{width:64px;font-size:12px;color:var(--tx2);}
+  .grp-bar{flex:1;background:var(--bg);border-radius:4px;height:14px;overflow:hidden;}
+  .grp-bar>div{height:100%;border-radius:4px;}
+  .grp-v{width:72px;text-align:right;font-size:12px;font-weight:500;}
+  .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 6px;}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  .app .a-i{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.12);}
+  .app .a-i svg{width:28px;height:28px;fill:#fff;}
+  .app:active .a-i{transform:scale(.92);}
+  .app span{font-size:11px;color:var(--tx);text-align:center;line-height:1.15;}
+
+  /* ---------- APP VIEW (full screen) ---------- */
+  #appview{position:fixed;inset:0;z-index:900;background:#fff;display:none;flex-direction:column;}
+  #appview.open{display:flex;}
+  .av-bar{display:flex;align-items:center;gap:12px;padding:calc(env(safe-area-inset-top) + 10px) 14px 10px;flex-shrink:0;}
+  .av-back{display:flex;align-items:center;gap:5px;}
+  .av-back svg{width:22px;height:22px;}
+  .av-back span{font-size:14px;font-weight:500;}
+  .av-title{display:flex;align-items:center;gap:7px;margin-left:auto;}
+  .av-title svg{width:18px;height:18px;}
+  .av-title span{font-size:15px;font-weight:500;}
+  #appframe{flex:1;width:100%;border:none;background:#fff;}
+
+  /* ---------- BOTTOM NAV ---------- */
+  .botnav{display:flex;justify-content:space-around;padding:8px 0 calc(env(safe-area-inset-bottom) + 8px);background:var(--card);border-top:0.5px solid var(--line);flex-shrink:0;}
+  .botnav .bn{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--tx3);padding:2px 18px;}
+  .botnav .bn.active{color:var(--blue);}
+  .botnav .bn svg{width:23px;height:23px;fill:currentColor;}
+  .botnav .bn span{font-size:10px;}
+
+  .loading{opacity:.45;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-card">
+    <div class="lg"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 2c1.6 0 3 3.6 3 8s-1.4 8-3 8-3-3.6-3-8 1.4-8 3-8zM4.6 8h14.8a8 8 0 010 8H4.6a8 8 0 010-8z"/></svg></div>
+    <h1>Spawn Internet</h1>
+    <p>Owner sign in</p>
+    <div class="err" id="err"></div>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" inputmode="text">
+    <button id="signin">Sign in</button>
+  </div>
+</div>
+
+<div id="home">
+  <div class="header">
+    <div class="header-top">
+      <div class="brand">
+        <div class="b-lg"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 2c1.6 0 3 3.6 3 8s-1.4 8-3 8-3-3.6-3-8 1.4-8 3-8zM4.6 8h14.8a8 8 0 010 8H4.6a8 8 0 010-8z"/></svg></div>
+        <div><div class="b-t1">Spawn Internet</div><div class="b-t2">Owner overview</div></div>
+      </div>
+      <button class="refresh-btn" id="refresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
+    </div>
+    <div class="hdr-lbl">Telegram sales · this month</div>
+    <div class="hdr-num" id="net-sales">₱—</div>
+    <div class="hdr-sub" id="net-sub">loading…</div>
+  </div>
+
+  <div class="body">
+    <div class="stat-row">
+      <div class="stat"><div class="s-l">Spawn share · month</div><div class="s-n" id="st-spawn-month" style="color:#028867;">₱—</div></div>
+      <div class="stat"><div class="s-l">Telegram · today</div><div class="s-n" id="st-tg-today" style="color:#025AC6;">₱—</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="s-l">Harvest spawn · today</div><div class="s-n" id="st-spawn-today" style="color:#C01176;">₱—</div></div>
+      <div class="stat" id="sus-stat" style="cursor:pointer;"><div class="s-l">Suspicious txns</div><div class="s-n" id="al-sus" style="color:#DF1A35;">—</div></div>
+    </div>
+
+    <div class="grp-card">
+      <div class="grp-head">Spawn by group · month</div>
+      <div id="groups"></div>
+    </div>
+
+    <div class="apps-lbl">APPS</div>
+    <div class="apps" id="apps"></div>
+  </div>
+</div>
+
+<div id="appview">
+  <div class="av-bar" id="av-bar">
+    <div class="av-back" id="av-back"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 5l-7 7 7 7-1.5 1.5L5 12l8.5-8.5z"/></svg><span>Home</span></div>
+    <div class="av-title"><span id="av-name"></span></div>
+  </div>
+  <iframe id="appframe" title="app"></iframe>
+</div>
+
+<div class="botnav" id="botnav">
+  <div class="bn active" data-nav="home"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3z"/></svg><span>Home</span></div>
+  <div class="bn" data-nav="alerts"><svg viewBox="0 0 24 24"><path d="M12 2a6 6 0 00-6 6v4l-2 3v1h16v-1l-2-3V8a6 6 0 00-6-6zm0 20a2.5 2.5 0 002.4-2h-4.8a2.5 2.5 0 002.4 2z"/></svg><span>Alerts</span></div>
+  <div class="bn" data-nav="refresh"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg><span>Refresh</span></div>
+</div>
+
+<script>
+const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+const LOGIN_URL=SB+'/functions/v1/spawn-admin-login';
+const GW_URL=SB+'/functions/v1/spawn-gw-admin';
+let GW_TOKEN=null;
+
+const peso=n=>'₱'+Math.round(Number(n||0)).toLocaleString();
+
+async function gw(payload){
+  const r=await fetch(GW_URL,{method:'POST',headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},body:JSON.stringify(payload)});
+  return r;
+}
+
+/* ---- SVG icons ---- */
+const IC={
+  coin:'M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-1.2c-1.3-.2-2.3-1-2.3-2.3h1.8c0 .6.5 1 1.5 1s1.4-.4 1.4-.9c0-.6-.5-.8-1.7-1.1-1.5-.4-3-.9-3-2.6 0-1.2 1-2 2.3-2.2V6.5h2v1.3c1.3.2 2.2 1 2.2 2.2h-1.8c0-.5-.4-.9-1.3-.9s-1.3.4-1.3.8c0 .5.6.7 1.7 1 1.5.4 3 .9 3 2.7 0 1.3-1 2.1-2.4 2.3z',
+  calc:'M6 2h12a2 2 0 012 2v16a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2zm0 4v3h12V6zm1 5v2h2v-2zm4 0v2h2v-2zm4 0v2h2v-2zm-8 4v2h2v-2zm4 0v2h2v-2zm4 0v4h2v-4z',
+  map:'M9 2L3 5v17l6-3 6 3 6-3V2l-6 3z',
+  alert:'M12 2l10 18H2zm0 6v6h-.01v-6zM11 16h2v2h-2z',
+  router:'M4 14h16v6H4zm2 2v2h2v-2zm4 0v2h2v-2zM4 4h16v6H4zm2 2v2h2V6zm4 0v2h2V6z',
+  cash:'M2 6h20v12H2zm10 2a4 4 0 100 8 4 4 0 000-8z',
+  jobs:'M9 3h6v2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h4zm2 2v2h2V5z',
+  dash:'M3 3h8v8H3zm10 0h8v5h-8zm0 7h8v11h-8zM3 13h8v8H3z'
+};
+
+/* ---- apps: which real screens open full-screen ---- */
+const APPS=[
+  {label:'Harvest',    icon:'coin',  color:'#FFB725', src:'harvest_v3.html'},
+  {label:'Count',      icon:'calc',  color:'#C01176', src:'office.html'},
+  {label:'Map',        icon:'map',   color:'#DF1A35', src:'dashboard.html?p=vmap-top'},
+  {label:'Suspicious', icon:'alert', color:'#DF1A35', src:'dashboard.html?p=suspicious'},
+  {label:'Dicayas',    icon:'router',color:'#028867', src:'dicayas.html'},
+  {label:'Collections',icon:'cash',  color:'#311A8E', src:'dashboard.html?p=joborders'},
+  {label:'Jobs',       icon:'jobs',  color:'#028867', src:'spawn-jobs.html'},
+  {label:'Dashboard',  icon:'dash',  color:'#025AC6', src:'dashboard.html?p=dash'},
+];
+
+function buildApps(){
+  const wrap=document.getElementById('apps');
+  wrap.innerHTML=APPS.map((a,i)=>`
+    <div class="app" data-i="${i}">
+      <div class="a-i" style="background:${a.color}"><svg viewBox="0 0 24 24"><path d="${IC[a.icon]}"/></svg></div>
+      <span>${a.label}</span>
+    </div>`).join('');
+  wrap.querySelectorAll('.app').forEach(el=>{
+    el.addEventListener('click',()=>openApp(APPS[+el.dataset.i]));
+  });
+}
+
+/* ---- app view navigation ---- */
+function openApp(app){
+  const av=document.getElementById('appview');
+  document.getElementById('av-name').textContent=app.label;
+  document.getElementById('av-bar').style.background=app.color;
+  const dark = app.color==='#FFB725';
+  document.getElementById('av-bar').style.color = dark ? '#412402' : '#ffffff';
+  document.getElementById('appframe').src=app.src;
+  av.classList.add('open');
+  history.pushState({app:app.label},'', '#'+app.label.toLowerCase());
+}
+function closeApp(){
+  const av=document.getElementById('appview');
+  av.classList.remove('open');
+  document.getElementById('appframe').src='about:blank';
+}
+document.getElementById('av-back').addEventListener('click',()=>{ history.back(); });
+window.addEventListener('popstate',()=>{
+  if(document.getElementById('appview').classList.contains('open')) closeApp();
+});
+
+/* ---- bottom nav ---- */
+document.getElementById('botnav').addEventListener('click',e=>{
+  const b=e.target.closest('.bn'); if(!b) return;
+  const nav=b.dataset.nav;
+  if(nav==='home'){ if(document.getElementById('appview').classList.contains('open')) history.back(); }
+  else if(nav==='refresh'){ loadOverview(); }
+  else if(nav==='alerts'){ openApp({label:'Suspicious',color:'#DF1A35',src:'dashboard.html?p=suspicious'}); }
+});
+
+/* ---- overview data (same RPC the dashboard uses) ---- */
+let LAST_OV=null;
+async function loadOverview(){
+  const rbtn=document.getElementById('refresh'); rbtn.classList.add('spin');
+  document.querySelector('.body').classList.add('loading');
+  try{
+    const r=await gw({kind:'rpc',fn:'dashboard_overview_v2',body:{}});
+    let ov=await r.json();
+    if(Array.isArray(ov)) ov=ov[0];
+    if(ov && ov.dashboard_overview_v2) ov=ov.dashboard_overview_v2;
+    ov=ov||{};
+    LAST_OV=ov;
+
+    // header: Telegram sales this month
+    document.getElementById('net-sales').textContent=peso(ov.tg_month);
+    // stat cards
+    document.getElementById('st-spawn-month').textContent=peso(ov.harvest_month);
+    document.getElementById('st-tg-today').textContent=peso(ov.tg_today);
+    document.getElementById('st-spawn-today').textContent=peso(ov.harvest_today);
+
+    // suspicious count (separate quick count via gateway)
+    try{
+      const rs=await gw({kind:'rest',table:'skipped_by_vendo_mat',method:'GET',query:'select=vendo&limit=1',prefer:'count=exact'});
+      const cr=rs.headers.get('content-range');
+      if(cr && cr.includes('/')) document.getElementById('al-sus').textContent=Number(cr.split('/')[1]).toLocaleString();
+    }catch(_){}
+
+    // spawn by group list
+    const groups=ov.harvest_by_group||[];
+    const gwrap=document.getElementById('groups');
+    if(gwrap){
+      const max=Math.max(...groups.map(g=>Number(g.spawn||0)),1);
+      const colors={Dipolog:'#025AC6',Dapitan:'#FFB725',Polanco:'#028867',Roxas:'#C01176'};
+      gwrap.innerHTML=groups.map(g=>`
+        <div class="grp-row">
+          <span class="grp-n">${g.grp}</span>
+          <div class="grp-bar"><div style="width:${Math.round(Number(g.spawn||0)/max*100)}%;background:${colors[g.grp]||'#025AC6'}"></div></div>
+          <span class="grp-v">${peso(g.spawn)}</span>
+        </div>`).join('');
+    }
+
+    const now=new Date();
+    document.getElementById('net-sub').textContent='Telegram sales this month · '+now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  }catch(e){
+    console.warn('overview load failed', e);
+    document.getElementById('net-sub').textContent='Couldn’t load — tap refresh';
+  }finally{
+    rbtn.classList.remove('spin');
+    document.querySelector('.body').classList.remove('loading');
+  }
+}
+
+/* ---- login ---- */
+const pw=document.getElementById('pw'), err=document.getElementById('err'), signin=document.getElementById('signin');
+async function doLogin(){
+  const pass=pw.value; err.textContent='';
+  if(!pass){ err.textContent='Enter your password.'; return; }
+  signin.disabled=true; signin.textContent='Signing in…';
+  try{
+    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.ok && d.token){
+      GW_TOKEN=d.token; pw.value='';
+      document.getElementById('login').style.display='none';
+      buildApps(); loadOverview();
+    }else if(r.status===401){ err.textContent='Wrong password.'; }
+    else{ err.textContent='Login failed. Try again.'; }
+  }catch(e){ err.textContent='Can’t reach server. Check connection.'; }
+  finally{ signin.disabled=false; signin.textContent='Sign in'; }
+}
+signin.addEventListener('click',doLogin);
+pw.addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+
+document.getElementById('sus-stat').addEventListener('click',()=>{
+  openApp({label:'Suspicious',color:'#DF1A35',src:'dashboard.html?p=suspicious'});
+});
+
+/* service worker */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw-spawn-mobile.js').catch(()=>{});
+}
+pw.focus();
+</script>
+</body>
+</html>
