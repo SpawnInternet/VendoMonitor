@@ -185,7 +185,19 @@ const I = {
   chart:'M3 21V3h2v16h16v2zm4-4V9h3v8zm5 0V5h3v12zm5 0v-6h3v6z',
   upload:'M12 3l5 5h-3v6h-4V8H7zm-7 15h14v3H5z',
   server:'M3 3h18v6H3zm0 8h18v6H3zm3-11v2h2V4zm0 8v2h2v-2z',
-  skip:'M4 5l8 7-8 7zm10 0h3v14h-3z'
+  skip:'M4 5l8 7-8 7zm10 0h3v14h-3z',
+  chrome:'M12 2a10 10 0 018.66 5H12a5 5 0 00-4.9 4L3.5 6.4A10 10 0 0112 2zm-9.3 6.2L7 15.5a5 5 0 004.5 3.4l-3 5.1A10 10 0 012.7 8.2zM12 8a4 4 0 110 8 4 4 0 010-8zm4.9 1H23a10 10 0 01-9.6 13l3.6-6.2A5 5 0 0016.9 9z',
+  records:'M4 3h16v18H4zm3 4h10v2H7zm0 4h10v2H7zm0 4h7v2H7z',
+  recon:'M11 4a7 7 0 105.2 11.7l4 4 1.5-1.5-4-4A7 7 0 0011 4zm0 2a5 5 0 110 10 5 5 0 010-10z',
+  receipt:'M5 2h14v20l-3-2-2 2-2-2-2 2-2-2-3 2zm3 5h8v2H8zm0 4h8v2H8zm0 4h5v2H8z',
+  progress:'M7 2h10a2 2 0 012 2v16a2 2 0 01-2 2H7a2 2 0 01-2-2V4a2 2 0 012-2zm2 3v2h6V5zm0 5l2 2 4-4-1.4-1.4L11 9.2l-.6-.6z',
+  names:'M8 7a4 4 0 118 0 4 4 0 01-8 0zm-4 13a8 8 0 0116 0v1H4z',
+  settings:'M12 8a4 4 0 100 8 4 4 0 000-8zm9 4l-2-1.5.3-2.5-2.4-.9-1.3-2.2L13 3.5 12 2l-1 1.5-2.3-.1L7.4 5.6 5 6.5l.3 2.5L3 12l2.3 1.5L5 16l2.4.9L8.7 19 11 18.5l1 1.5 1-1.5 2.3.1 1.3-2.2 2.4-.9-.3-2.5z',
+  perf:'M6 20V10h3v10zm5 0V4h3v16zm5 0v-6h3v6z',
+  ledger:'M4 3h13l3 3v15H4zm3 4h9v2H7zm0 4h9v2H7zm0 4h6v2H7z',
+  gps:'M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7zm0 4a3 3 0 100 6 3 3 0 000-6z',
+  jobs:'M9 3h6v2h4a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h4zm2 2v2h2V5zM4 12h16',
+  notsus:'M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a6 6 0 015 9.3l-8.3-8.3A6 6 0 0112 6zm0 12a6 6 0 01-5-9.3l8.3 8.3A6 6 0 0112 18z'
 };
 function glyphSVG(key){
   const strokeKeys=['map','cash'];
@@ -196,23 +208,44 @@ function glyphSVG(key){
 }
 
 /* ---- app registry ----
-   kind:'live'  -> loads a real app file
-   kind:'page'  -> loads dashboard.html?p=<id> (deep link)
-   pin:true     -> shown on desktop; all show in start menu
+   kind:'live'     -> loads a real app file in an iframe
+   kind:'page'     -> loads dashboard.html?p=<id> (top-level tab, deep link)
+   kind:'subtab'   -> loads dashboard.html?p=harvest&t=<id> (Harvest inner tab)
+   kind:'launcher' -> new-tab launcher (Chrome)
+   pin:true        -> shown on desktop; all show in start menu
 */
+const HV = 'dashboard.html?p=harvest&t=';   /* harvest sub-tab base */
 const APPS = [
-  {id:'dicayas',   label:'Dicayas',     icon:'router', color:'var(--teal)',    kind:'live', src:'dicayas.html',            pin:true,  w:900,h:600},
-  {id:'count',     label:'Spawn Count', icon:'calc',   color:'var(--magenta)', kind:'live', src:'office.html',             pin:true,  w:480,h:640},
-  {id:'harvest3',  label:'Harvest v3',  icon:'coin',   color:'var(--gold)',    kind:'live', src:'harvest_v3.html',         pin:true,  w:480,h:680},
-  {id:'dash',      label:'Dashboard',   icon:'dash',   color:'var(--blue)',    kind:'page', src:'dashboard.html?p=dash',   pin:true,  w:1000,h:640},
-  {id:'vmap',      label:'Vendo Map',   icon:'map',    color:'var(--red)',     kind:'page', src:'dashboard.html?p=vmap-top',pin:true, w:980,h:620},
-  {id:'suspicious',label:'Suspicious',  icon:'alert',  color:'var(--red)',     kind:'page', src:'dashboard.html?p=suspicious',pin:true,w:900,h:600},
-  {id:'joborders', label:'Collections', icon:'cash',   color:'var(--purple)',  kind:'page', src:'dashboard.html?p=joborders',pin:true, w:900,h:600},
-  {id:'vendos',    label:'Vendos',      icon:'devices',color:'var(--blue)',    kind:'page', src:'dashboard.html?p=vendos', pin:false, w:960,h:620},
-  {id:'analytics', label:'Analytics',   icon:'chart',  color:'var(--teal)',    kind:'page', src:'dashboard.html?p=analytics',pin:false,w:960,h:620},
-  {id:'import',    label:'Import',      icon:'upload', color:'var(--gold)',    kind:'page', src:'dashboard.html?p=import',  pin:false, w:900,h:600},
-  {id:'status',    label:'System',      icon:'server', color:'var(--purple)',  kind:'page', src:'dashboard.html?p=status',  pin:false, w:820,h:560},
-  {id:'skipped',   label:'Skipped',     icon:'skip',   color:'var(--magenta)', kind:'page', src:'dashboard.html?p=skipped', pin:false, w:900,h:600},
+  /* live apps */
+  {id:'dicayas',  label:'Dicayas',     icon:'router', color:'var(--teal)',    kind:'live', src:'dicayas.html',     pin:true, w:940,h:620},
+  {id:'count',    label:'Spawn Count', icon:'calc',   color:'var(--magenta)', kind:'live', src:'office.html',       pin:true, w:480,h:640},
+  {id:'harvest3', label:'Harvest v3',  icon:'coin',   color:'var(--gold)',    kind:'live', src:'harvest_v3.html',  pin:true, w:480,h:680},
+  {id:'spawnjobs',label:'Spawn Jobs',  icon:'jobs',   color:'var(--teal)',    kind:'live', src:'spawn-jobs.html',  pin:true, w:940,h:620},
+
+  /* dashboard top-level pages */
+  {id:'dash',     label:'Dashboard',   icon:'dash',   color:'var(--blue)',    kind:'page', src:'dashboard.html?p=dash',      pin:true, w:1000,h:640},
+  {id:'vendos',   label:'Vendos',      icon:'devices',color:'var(--blue)',    kind:'page', src:'dashboard.html?p=vendos',    pin:true, w:980,h:620},
+  {id:'vmap',     label:'Vendo Map',   icon:'map',    color:'var(--red)',     kind:'page', src:'dashboard.html?p=vmap-top',  pin:true, w:980,h:620},
+  {id:'suspicious',label:'Suspicious', icon:'alert',  color:'var(--red)',     kind:'page', src:'dashboard.html?p=suspicious',pin:true, w:920,h:600},
+  {id:'notsus',   label:'Not Sus',     icon:'notsus', color:'var(--teal)',    kind:'page', src:'dashboard.html?p=notsus',    pin:true, w:920,h:600},
+  {id:'joborders',label:'Collections', icon:'cash',   color:'var(--purple)',  kind:'page', src:'dashboard.html?p=joborders', pin:true, w:920,h:600},
+  {id:'analytics',label:'Analytics',   icon:'chart',  color:'var(--teal)',    kind:'page', src:'dashboard.html?p=analytics', pin:true, w:980,h:620},
+  {id:'skipped',  label:'Skipped',     icon:'skip',   color:'var(--magenta)', kind:'page', src:'dashboard.html?p=skipped',   pin:true, w:920,h:600},
+
+  /* harvest sub-tabs */
+  {id:'hv_vendos', label:'HV Vendos',  icon:'devices',color:'var(--gold)',    kind:'subtab', src:HV+'htable',   pin:true, w:1000,h:640},
+  {id:'hv_records',label:'Records',    icon:'records',color:'var(--gold)',    kind:'subtab', src:HV+'livefeed', pin:true, w:1000,h:640},
+  {id:'hv_recon',  label:'Recon',      icon:'recon',  color:'var(--gold)',    kind:'subtab', src:HV+'recon',    pin:true, w:1000,h:640},
+  {id:'hv_receipt',label:'Receipt',    icon:'receipt',color:'var(--gold)',    kind:'subtab', src:HV+'receipt',  pin:true, w:820,h:640},
+  {id:'hv_progress',label:'Progress',  icon:'progress',color:'var(--gold)',   kind:'subtab', src:HV+'progress', pin:true, w:920,h:640},
+  {id:'hv_names',  label:'Names',      icon:'names',  color:'var(--gold)',    kind:'subtab', src:HV+'names',    pin:false, w:1000,h:640},
+  {id:'hv_settings',label:'Settings',  icon:'settings',color:'var(--gold)',   kind:'subtab', src:HV+'settings', pin:false, w:820,h:600},
+  {id:'hv_perf',   label:'Perf',       icon:'perf',   color:'var(--gold)',    kind:'subtab', src:HV+'perf',     pin:false, w:980,h:640},
+  {id:'hv_ledger', label:'Ledger',     icon:'ledger', color:'var(--gold)',    kind:'subtab', src:HV+'ledger',   pin:false, w:1000,h:640},
+  {id:'hv_gps',    label:'GPS',        icon:'gps',    color:'var(--gold)',    kind:'subtab', src:HV+'gps',      pin:false, w:980,h:640},
+
+  /* launcher */
+  {id:'chrome',   label:'Chrome',      icon:'chrome', color:'var(--blue)',    kind:'launcher', pin:true, w:460,h:360},
 ];
 
 /* ============ LOGIN LOGIC (gateway) ============ */
@@ -316,6 +349,21 @@ function openApp(id){
   win.style.top =Math.min(30+n*26, window.innerHeight-dh-70)+'px';
   win.style.zIndex=++zTop;
 
+  const isLauncher = app.kind==='launcher';
+  const bodyHTML = isLauncher
+    ? `<div class="launcher-body" style="flex:1; padding:18px; overflow:auto; background:#fff;">
+         <p style="font-size:13px; color:#666; margin-bottom:10px;">Open a website in a new browser tab</p>
+         <div style="display:flex; gap:8px; margin-bottom:16px;">
+           <input class="url-in" type="text" placeholder="Type a URL or search…" autocomplete="off"
+             style="flex:1; height:40px; border:1px solid #ddd; border-radius:9px; padding:0 12px; font-size:14px; outline:none;">
+           <button class="url-go" style="height:40px; padding:0 16px; border:none; border-radius:9px; background:${app.color}; color:#fff; font-size:14px; font-weight:500; cursor:pointer;">Open</button>
+         </div>
+         <p style="font-size:11px; color:#999; letter-spacing:.4px; margin-bottom:8px;">QUICK LINKS</p>
+         <div class="quick" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;"></div>
+       </div>`
+    : `<iframe sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
+            src="${BASE}${app.src}" title="${app.label}"></iframe>`;
+
   win.innerHTML=`
     <div class="titlebar">
       <div class="tglyph" style="background:${app.color}">${glyphSVG(app.icon)}</div>
@@ -324,10 +372,11 @@ function openApp(id){
       <button class="wbtn maxb" title="Maximize"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5z"/></svg></button>
       <button class="wbtn close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <iframe sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
-            src="${BASE}${app.src}" title="${app.label}"></iframe>
+    ${bodyHTML}
     <div class="resizer"></div>`;
   document.getElementById('desktop').appendChild(win);
+
+  if(isLauncher) wireLauncher(win);
 
   // taskbar entry
   const task=document.createElement('div'); task.className='task active';
@@ -348,6 +397,41 @@ function openApp(id){
   makeDraggable(win, win.querySelector('.titlebar'));
   makeResizable(win, win.querySelector('.resizer'));
   focusWin(win);
+}
+
+function wireLauncher(win){
+  const input = win.querySelector('.url-in');
+  const goBtn = win.querySelector('.url-go');
+  const quick = win.querySelector('.quick');
+
+  const LINKS = [
+    {name:'Google',   url:'https://www.google.com'},
+    {name:'Gmail',    url:'https://mail.google.com'},
+    {name:'Drive',    url:'https://drive.google.com'},
+    {name:'GitHub',   url:'https://github.com/SpawnInternet'},
+    {name:'Supabase', url:'https://supabase.com/dashboard/project/cviraqfhphhsonjmrtvu'},
+    {name:'Railway',  url:'https://railway.app'},
+  ];
+  quick.innerHTML = LINKS.map(l=>
+    `<button data-url="${l.url}" style="height:38px; border:1px solid #eee; border-radius:9px; background:#fafafa; font-size:13px; color:#333; cursor:pointer;">${l.name}</button>`
+  ).join('');
+  quick.querySelectorAll('button').forEach(b=>{
+    b.onclick=()=>window.open(b.dataset.url,'_blank','noopener');
+  });
+
+  function go(){
+    let v=(input.value||'').trim();
+    if(!v) return;
+    let target;
+    if(/^https?:\/\//i.test(v)) target=v;
+    else if(/^[\w-]+(\.[\w-]+)+([\/?#].*)?$/.test(v)) target='https://'+v;   // looks like a domain
+    else target='https://www.google.com/search?q='+encodeURIComponent(v);     // otherwise search
+    window.open(target,'_blank','noopener');
+    input.value='';
+  }
+  goBtn.onclick=go;
+  input.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  setTimeout(()=>input.focus(),50);
 }
 
 function closeWin(id){
@@ -387,7 +471,7 @@ function makeDraggable(win, handle){
     drag=true; sx=e.clientX; sy=e.clientY; ox=win.offsetLeft; oy=win.offsetTop;
     document.body.style.userSelect='none';
     // block iframe from swallowing mouse
-    win.querySelector('iframe').style.pointerEvents='none';
+    var _if=win.querySelector('iframe'); if(_if) _if.style.pointerEvents='none';
     e.preventDefault();
   });
   document.addEventListener('mousemove',e=>{
@@ -398,7 +482,7 @@ function makeDraggable(win, handle){
     win.style.left=nx+'px'; win.style.top=ny+'px';
   });
   document.addEventListener('mouseup',()=>{
-    if(drag){ win.querySelector('iframe').style.pointerEvents='auto'; }
+    if(drag){ var _if=win.querySelector('iframe'); if(_if) _if.style.pointerEvents='auto'; }
     drag=false; document.body.style.userSelect='';
   });
 }
@@ -407,7 +491,7 @@ function makeResizable(win, grip){
   let sx,sy,sw,sh,rz=false;
   grip.addEventListener('mousedown',e=>{
     rz=true; sx=e.clientX; sy=e.clientY; sw=win.offsetWidth; sh=win.offsetHeight;
-    win.querySelector('iframe').style.pointerEvents='none';
+    var _if=win.querySelector('iframe'); if(_if) _if.style.pointerEvents='none';
     e.preventDefault(); e.stopPropagation();
   });
   document.addEventListener('mousemove',e=>{
@@ -416,7 +500,7 @@ function makeResizable(win, grip){
     win.style.height=Math.max(220, sh+e.clientY-sy)+'px';
   });
   document.addEventListener('mouseup',()=>{
-    if(rz){ win.querySelector('iframe').style.pointerEvents='auto'; }
+    if(rz){ var _if=win.querySelector('iframe'); if(_if) _if.style.pointerEvents='auto'; }
     rz=false;
   });
 }
