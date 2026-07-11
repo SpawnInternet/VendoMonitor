@@ -2252,14 +2252,14 @@ function klUndoReturn(id){
   if(!confirm('Mark this key as NOT returned again?')) return;
   const body = { returned:false, returned_at:null, returned_notes:null };
   fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
-    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseDetail(); klLoad(); })
     .catch(e=>alert('Update failed: '+e.message));
 }
 
 function klDelete(id){
   if(!confirm('Delete this key record permanently?')) return;
   fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'DELETE', headers:_HDR})
-    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klLoad(); })
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseDetail(); klLoad(); })
     .catch(e=>alert('Delete failed: '+e.message));
 }
 
@@ -2284,30 +2284,57 @@ function klRender(){
     const returned = !!r.returned;
     const bd = returned ? '#028867' : '#DF1A35';
     const badge = returned
-      ? '<span style="background:#028867;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;">✅ RETURNED</span>'
-      : '<span style="background:#DF1A35;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
-    const actions = returned
-      ? '<button onclick="klUndoReturn('+r.id+')" style="padding:6px 12px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
-      : '<button onclick="klMarkReturned('+r.id+')" style="padding:6px 14px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Mark Returned</button>';
-    return '<div style="background:#fff;border-left:4px solid '+bd+';border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:12px 14px;margin-bottom:9px;">'
-      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
-      +   '<div style="flex:1;min-width:160px;">'
-      +     '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.collector_name)+' '+badge+'</div>'
-      +     '<div style="font-size:12px;color:#374151;margin-top:3px;">'
-      +       '📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+' key(s)'
-      +       (r.key_date?(' · 📅 '+klEsc(r.key_date)):'')
-      +     '</div>'
-      +     (r.notes?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
-      +     ((r.lineman||r.wifi_key)?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman||'—')+(r.wifi_key?(' · 📶 WiFi key: '+klEsc(r.wifi_key)):'')+'</div>':'')
-      +     (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">💬 Reason: '+klEsc(r.lineman_reason)+'</div>':'')
-      +     '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Taken: '+_fmt(r.taken_at)
-      +       (returned?(' · Returned: '+_fmt(r.returned_at)):'')+'</div>'
-      +     (returned&&r.returned_notes?'<div style="font-size:10px;color:#028867;margin-top:2px;">↩ '+klEsc(r.returned_notes)+'</div>':'')
-      +   '</div>'
-      +   '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+actions
-      +     '<button onclick="klDelete('+r.id+')" style="padding:6px 10px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
-      +   '</div>'
+      ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅</span>'
+      : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
+    return '<div onclick="klDetail('+r.id+')" style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:.1s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(0,0,0,.10)\';this.style.borderColor=\'#025AC6\';this.style.borderLeftColor=\''+bd+'\';" onmouseout="this.style.boxShadow=\'none\';this.style.borderColor=\'#e5e7eb\';this.style.borderLeftColor=\''+bd+'\';">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.collector_name)+'</div>'
+      +   badge
       + '</div>'
+      + '<div style="font-size:12px;color:#374151;margin-top:3px;">📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>'
+      + (r.lineman?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman)+(r.wifi_key?(' · 📶 '+klEsc(r.wifi_key)):'')+'</div>':'')
+      + '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Tap for details ›</div>'
       + '</div>';
   }).join('');
 }
+
+function klDetail(id){
+  const r = _klRows.find(x=>x.id===id); if(!r) return;
+  const returned = !!r.returned;
+  const bd = returned ? '#028867' : '#DF1A35';
+  const old = document.getElementById('kl-detail-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kl-detail-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const row = (icon,label,val)=> val ? '<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9;"><div style="width:120px;font-size:12px;color:#6b7280;font-weight:700;flex-shrink:0;">'+icon+' '+label+'</div><div style="font-size:13px;color:#111827;font-weight:600;flex:1;">'+klEsc(val)+'</div></div>' : '';
+  const actions = returned
+    ? '<button onclick="klUndoReturn('+r.id+')" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo Return</button>'
+    : '<button onclick="klCloseDetail();klMarkReturned('+r.id+')" style="flex:2;padding:11px;background:#028867;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Mark Returned</button>';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,'+bd+',#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:flex-start;">'
+    +   '<div><div style="font-size:19px;font-weight:800;">'+klEsc(r.collector_name)+'</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:2px;">'+(returned?'✅ Returned':'🔴 Keys Out')+'</div></div>'
+    +   '<button onclick="klCloseDetail()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
+    + '</div>'
+    + '<div style="padding:16px 22px;">'
+    +   row('📍','Areas',r.area||'—')
+    +   row('🔑','No. of Keys',String(r.keys_taken||0))
+    +   row('📅','Date',r.key_date||'—')
+    +   row('📝','Notes',r.notes)
+    +   row('🛠️','Lineman',r.lineman)
+    +   row('📶','WiFi Key',r.wifi_key)
+    +   row('💬','Reason',r.lineman_reason)
+    +   row('🕐','Logged',_fmt(r.taken_at))
+    +   (returned?row('↩','Returned At',_fmt(r.returned_at)):'')
+    +   (returned&&r.returned_notes?row('🗒️','Return Notes',r.returned_notes):'')
+    +   '<div style="display:flex;gap:8px;margin-top:18px;">'+actions
+    +     '<button onclick="klCloseDetail();klDelete('+r.id+')" style="padding:11px 14px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) klCloseDetail(); });
+  document.body.appendChild(ov);
+}
+
+function klCloseDetail(){ const ov=document.getElementById('kl-detail-modal'); if(ov) ov.remove(); }
