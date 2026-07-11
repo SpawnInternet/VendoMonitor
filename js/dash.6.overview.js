@@ -176,8 +176,9 @@ function overviewRender(ov, data) {
   const th=document.getElementById("top10-high"); if(th) th.innerHTML = top.map((v,i)=>mkRow(v,i,false)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
   const tl=document.getElementById("top10-low");  if(tl) tl.innerHTML = bot.map((v,i)=>mkRow(v,i,true)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
 
-  // ── Recent + suspicious sidebar (unchanged data source) ──
-  overviewRenderRecent((data && data.recent) || []);
+  // ── Live feed is owned by refreshRecentTxns() (map.js, own 10s poller) ──
+  // Do NOT render recent-txns here — kick the dedicated live-feed refresh instead.
+  if (typeof refreshRecentTxns === 'function') { try { refreshRecentTxns(); } catch(e){} }
   const susp = (data && data.suspicious) || [];
   const ssb=document.getElementById("suspicious-sidebar");
   if(ssb) ssb.innerHTML = susp.slice(0, 10).map(h => `
@@ -187,19 +188,5 @@ function overviewRender(ov, data) {
     </div>`).join("") || '<div style="font-size:11px;color:var(--mu);padding:8px">No suspicious transactions</div>';
 }
 
-function overviewRenderRecent(recent) {
-  const el = document.getElementById("recent-txns");
-  if (!el) return;
-  if (!recent || !recent.length) {
-    el.innerHTML = '<div style="font-size:11px;color:var(--mu);padding:8px">No transactions today</div>';
-    return;
-  }
-  el.innerHTML = recent.map(r => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #e8eeff;font-size:11px">
-      <div style="overflow:hidden">
-        <div style="font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px">${r.vendo||"—"}</div>
-        <div style="color:var(--mu);font-size:9px">${r.area||""} · ${r.time||_fmtTime(r.created_at)}</div>
-      </div>
-      <div style="font-weight:600;color:${BRAND.blue};white-space:nowrap">₱${r.amount||0}</div>
-    </div>`).join("");
-}
+// Retained as a harmless stub — live feed is owned by refreshRecentTxns() in map.js.
+function overviewRenderRecent(recent) { /* no-op: do not overwrite the live feed */ }
