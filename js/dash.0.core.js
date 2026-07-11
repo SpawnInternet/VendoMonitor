@@ -18,6 +18,38 @@ window.toast = window.toast || function(msg, ms){
   }, ms);
 };
 
+// Pretty admin-password prompt — returns a Promise<string|null> (null = cancelled)
+window.askAdminPw = function(message){
+  return new Promise(function(resolve){
+    var old=document.getElementById('spawn-pw-modal'); if(old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='spawn-pw-modal';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;';
+    ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;">'
+      +'<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px;">🔒 Admin confirmation</div>'
+      +'<div style="padding:20px 22px;">'
+      +'<div style="font-size:13px;color:#374151;margin-bottom:12px;">'+(message||'Enter admin password to continue.')+'</div>'
+      +'<input id="spawn-pw-input" type="password" inputmode="numeric" placeholder="Admin password" style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;box-sizing:border-box;outline:none;font-family:inherit;">'
+      +'<div id="spawn-pw-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+      +'<div style="display:flex;gap:8px;margin-top:18px;">'
+      +'<button id="spawn-pw-cancel" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+      +'<button id="spawn-pw-ok" style="flex:2;padding:11px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm</button>'
+      +'</div></div></div>';
+    document.body.appendChild(ov);
+    var input=document.getElementById('spawn-pw-input');
+    function close(val){ ov.remove(); resolve(val); }
+    document.getElementById('spawn-pw-cancel').onclick=function(){ close(null); };
+    document.getElementById('spawn-pw-ok').onclick=function(){ close(input.value); };
+    input.onkeydown=function(e){ if(e.key==='Enter') close(input.value); if(e.key==='Escape') close(null); };
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(null); });
+    setTimeout(function(){ input.focus(); }, 60);
+  });
+};
+// Show the "wrong password" state on the open modal (call after a failed check)
+window.markAdminPwWrong = function(){
+  var err=document.getElementById('spawn-pw-err'); if(err) err.style.display='block';
+  var inp=document.getElementById('spawn-pw-input'); if(inp){ inp.value=''; inp.focus(); }
+};
 
 // ============================================================
 // SECURITY: no service_role key in any dashboard file.
