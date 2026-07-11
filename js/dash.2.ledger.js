@@ -12,11 +12,45 @@ async function elLoad(){
     if(!r.ok)throw new Error('HTTP '+r.status);
     const d=await r.json();
     _elData=Array.isArray(d)?d:(d.records||[]);
+    // Auto-add the current month (July+) live from actual harvests by collectors
+    try{ await elMergeLiveMonth(); }catch(e){ console.warn('live month merge failed',e&&e.message); }
     if(loadEl) loadEl.style.display='none';
     elFilter();
   }catch(e){
     if(loadEl){loadEl.style.display='block';loadEl.textContent='Error: '+e.message;}
   }
+}
+
+// Pull this month's harvests from the DB and fold them into the ledger as a live column
+async function elMergeLiveMonth(){
+  const now=new Date();
+  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); // e.g. 2026-07
+  const start=ym+'-01';
+  const endD=new Date(now.getFullYear(), now.getMonth()+1, 1);
+  const end=endD.getFullYear()+'-'+String(endD.getMonth()+1).padStart(2,'0')+'-01';
+  // fetch harvests for the month (gateway-routed via _HDR)
+  const sb=(typeof _SB!=='undefined')?_SB:'https://cviraqfhphhsonjmrtvu.supabase.co';
+  const hdr=(typeof _HDR!=='undefined')?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'};
+  const q=`harvests?harvest_date=gte.${start}&harvest_date=lt.${end}&select=sheet_name,tg_name,area,spawn_share,collector&limit=5000`;
+  const r=await fetch(`${sb}/rest/v1/${q}`,{headers:hdr});
+  if(!r.ok) throw new Error('harvests '+r.status);
+  const rows=await r.json();
+  if(!Array.isArray(rows)||!rows.length) return;
+  // aggregate per vendo (sheet_name||area) and append as synthetic ledger records
+  const agg={};
+  rows.forEach(h=>{
+    const label=h.sheet_name||h.tg_name||'(unnamed)';
+    const area=h.area||'';
+    const key=label+'||'+area;
+    if(!agg[key]) agg[key]={sheet_name:label,area:area,spawn:0};
+    agg[key].spawn += Number(h.spawn_share||0);
+  });
+  // remove any prior live rows for this month (avoid double count on re-load)
+  _elData=_elData.filter(r=>!(r._live===true && (r.collection_date||'').startsWith(ym)));
+  Object.values(agg).forEach(a=>{
+    _elData.push({ sheet_name:a.sheet_name, area:a.area, collection_date:start, spawn_share:Math.round(a.spawn), _live:true });
+  });
+  window._elLiveMonth=ym;
 }
 function elFilter(){
   if(!_elData)return;
@@ -40,7 +74,7 @@ function elRender(){
   var monthSet=new Set();
   _elFiltered.forEach(function(r){var m=r.collection_date.substring(0,7);if(m!=='2026-12')monthSet.add(m);});
   var months=Array.from(monthSet).sort();
-  var mName={'2026-01':'Jan','2026-02':'Feb','2026-03':'Mar','2026-04':'Apr','2026-05':'May','2026-06':'Jun','2025-01':'Jan','2025-02':'Feb','2025-03':'Mar','2025-04':'Apr','2025-05':'May','2025-06':'Jun','2025-07':'Jul','2025-08':'Aug','2025-09':'Sep','2025-10':'Oct','2025-11':'Nov','2025-12':'Dec'};
+  var mName={'2026-01':'Jan','2026-02':'Feb','2026-03':'Mar','2026-04':'Apr','2026-05':'May','2026-06':'Jun','2026-07':'Jul','2026-08':'Aug','2026-09':'Sep','2026-10':'Oct','2026-11':'Nov','2025-01':'Jan','2025-02':'Feb','2025-03':'Mar','2025-04':'Apr','2025-05':'May','2025-06':'Jun','2025-07':'Jul','2025-08':'Aug','2025-09':'Sep','2025-10':'Oct','2025-11':'Nov','2025-12':'Dec'};
   var groups={};
   _elFiltered.forEach(function(r){
     var m=r.collection_date.substring(0,7);
