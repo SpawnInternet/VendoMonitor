@@ -2127,6 +2127,17 @@ function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&am
 function klLoad(){
   const list = document.getElementById('kl-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  // default date to today
+  const dEl = document.getElementById('kl-date');
+  if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+  // populate collector dropdown (once)
+  const sel = document.getElementById('kl-name');
+  if(sel && sel.options.length<=1){
+    fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR})
+      .then(r=>r.json())
+      .then(cs=>{ if(Array.isArray(cs)){ cs.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; sel.appendChild(o); }); } })
+      .catch(()=>{});
+  }
   fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR})
     .then(r=>r.json())
     .then(rows=>{ _klRows = Array.isArray(rows)?rows:[]; klRender(); })
@@ -2137,11 +2148,12 @@ function klAdd(){
   const name = document.getElementById('kl-name').value.trim();
   const area = document.getElementById('kl-area').value;
   const count = parseInt(document.getElementById('kl-count').value,10)||0;
+  const kdate = document.getElementById('kl-date').value || null;
   const notes = document.getElementById('kl-notes').value.trim();
   const lineman = document.getElementById('kl-lineman').value.trim();
   const wifikey = document.getElementById('kl-wifikey').value.trim();
-  if(!name){ alert('Enter collector name'); return; }
-  const body = { collector_name:name, area:area||null, keys_taken:count, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, returned:false };
+  if(!name){ alert('Select collector name'); return; }
+  const body = { collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, lineman:lineman||null, wifi_key:wifikey||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
       if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
@@ -2212,6 +2224,7 @@ function klRender(){
       +     '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.collector_name)+' '+badge+'</div>'
       +     '<div style="font-size:12px;color:#374151;margin-top:3px;">'
       +       '📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+' key(s)'
+      +       (r.key_date?(' · 📅 '+klEsc(r.key_date)):'')
       +     '</div>'
       +     (r.notes?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
       +     ((r.lineman||r.wifi_key)?'<div style="font-size:11px;color:#025AC6;margin-top:2px;font-weight:700;">🛠️ '+klEsc(r.lineman||'—')+(r.wifi_key?(' · 📶 WiFi key: '+klEsc(r.wifi_key)):'')+'</div>':'')
