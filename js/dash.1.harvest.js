@@ -208,8 +208,10 @@ async function vpRenderRecon(){
       while(true){
         const r=await fetch(`${SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(v.tg_name)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off}`,
           {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
+        if(!r.ok){ throw new Error('TG income fetch failed ('+r.status+') — cannot reconcile'); }
         const td=await r.json();
-        if(!Array.isArray(td)||!td.length) break;
+        if(!Array.isArray(td)){ throw new Error('TG income unreadable — cannot reconcile'); }
+        if(!td.length) break;
         tgInc+=td.reduce((s,t)=>s+Number(t.amount||0),0);
         if(td.length<1000) break;
         off+=1000;
@@ -346,7 +348,7 @@ async function vpRenderNames(){
 
 async function vpQuickLink(tgName){
   const v=window._vpVendo; if(!v)return;
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const u={tg_name:tgName, tg_match_confirmed:true};
   try{
     const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
@@ -394,7 +396,7 @@ function vpTgPick(i){
 
 async function vpSaveNames(){
   const v=window._vpVendo; if(!v)return;
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('vn-sheet')||{}).value||'';
   const tg=(document.getElementById('vn-tg')||{}).value||'';
   const u={sheet_name:sheet||null, tg_name:tg||null};
@@ -425,7 +427,7 @@ async function vpSaveHarvestWindow(){
   const ws=(document.getElementById('vn-window-start')||{}).value||'';
   const hd=(document.getElementById('vn-harvest-date')||{}).value||'';
   if(!ws&&!hd){toast('Enter at least one date to update');return;}
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd){ u.harvest_date=hd; }
@@ -538,7 +540,7 @@ async function vpRemovePhoto(){
 
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
-  const pw=prompt('Admin password:');if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
@@ -1027,34 +1029,97 @@ function lfRenderRows(items, elId, statsId, countId, searchId){
   };
 
   if(window._lfGroupByCollector){
-    // group records under collector headers with per-collector totals
+    // collapsed collector cards — tap opens a popup with that collector's harvests
     const groups={};
     filtered.forEach(it=>{ const k=it.collector||'— No collector —'; (groups[k]=groups[k]||[]).push(it); });
     const order=Object.keys(groups).sort((a,b)=>
       groups[b].reduce((s,i)=>s+Number(i.spawn_share||0),0) - groups[a].reduce((s,i)=>s+Number(i.spawn_share||0),0));
-    el.innerHTML = order.map(name=>{
+    window._lfGroups = groups;
+    window._lfGroupSource = (elId==='lf-hist-list') ? 'hist' : 'today';
+    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;padding:10px;">' + order.map(name=>{
       const rows=groups[name];
       const gSpawn=rows.reduce((s,i)=>s+Number(i.spawn_share||0),0);
       const gCoins=rows.reduce((s,i)=>s+Number(i.coins_total||0),0);
       const areas=[...new Set(rows.map(r=>r.area).filter(Boolean))].join(', ');
-      return `<div style="margin-bottom:4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;background:#f0f4ff;border-left:3px solid #6d28d9;padding:8px 12px;position:sticky;top:0;z-index:1;">
-          <div>
-            <span style="font-weight:800;font-size:13px;color:#4c1d95;">${name}</span>
-            <span style="font-size:10px;color:var(--mu);margin-left:6px;">${rows.length} vendo${rows.length!==1?'s':''}${areas?' · '+areas:''}</span>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:14px;font-weight:800;color:#15803d;">${_php(gSpawn)}</div>
-            <div style="font-size:9px;color:var(--mu);">coins ${_php(gCoins)}</div>
+      const initial=(name||'?').trim().charAt(0).toUpperCase();
+      return `<div onclick="lfShowCollector('${name.replace(/'/g,"\\'")}')" style="background:#fff;border:1.5px solid #e5e7eb;border-radius:12px;padding:14px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='#e5e7eb';">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#6d28d9,#025AC6);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0;">${initial}</div>
+          <div style="min-width:0;">
+            <div style="font-weight:800;font-size:14px;color:#4c1d95;">${name}</div>
+            <div style="font-size:10px;color:var(--mu);">${rows.length} vendo${rows.length!==1?'s':''}${areas?' · '+areas:''}</div>
           </div>
         </div>
-        ${rows.map((it,i)=>rowHtml(it,i)).join('')}
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+          <div>
+            <div style="font-size:20px;font-weight:800;color:#15803d;line-height:1;">${_php(gSpawn)}</div>
+            <div style="font-size:9px;color:var(--mu);margin-top:2px;">spawn share</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:12px;font-weight:700;color:#1565c0;">${_php(gCoins)}</div>
+            <div style="font-size:9px;color:var(--mu);">coins</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;color:#6d28d9;font-weight:700;text-align:center;border-top:1px solid #f1f5f9;padding-top:8px;">Tap to view harvests ›</div>
       </div>`;
-    }).join('');
+    }).join('') + '</div>';
   } else {
     el.innerHTML=filtered.slice(0,500).map((item,i)=>rowHtml(item,i)).join('');
   }
 }
+
+function lfShowCollector(name){
+  const groups = window._lfGroups||{};
+  const rows = groups[name]||[];
+  const src = window._lfGroupSource==='hist' ? lfHistItems : lfItems;
+  const gSpawn=rows.reduce((s,i)=>s+Number(i.spawn_share||0),0);
+  const gCoins=rows.reduce((s,i)=>s+Number(i.coins_total||0),0);
+  const gNet=rows.reduce((s,i)=>s+Number(i.net_collectible||0),0);
+  const areas=[...new Set(rows.map(r=>r.area).filter(Boolean))].join(', ');
+  const old=document.getElementById('lf-collector-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='lf-collector-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const rowsHtml = rows.map(it=>{
+    const t=it.harvested_at?new Date(it.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}):'';
+    const idx=src.indexOf(it);
+    return `<div onclick="lfCloseCollector();lfShowDetail(${idx})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid #f3f4f6;cursor:pointer;" onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+      <div style="font-size:10px;color:var(--mu);min-width:48px;">${t}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:13px;">${it.sheet_name||'<span style="color:#9ca3af;font-style:italic;">unmatched</span>'}</div>
+        <div style="font-size:10px;color:var(--mu);">${it.area||''}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:14px;font-weight:800;color:#15803d;">${_php(it.spawn_share)}</div>
+        <div style="font-size:9px;color:var(--mu);">net ${_php(it.net_collectible)}</div>
+      </div>
+    </div>`;
+  }).join('');
+  const initial=(name||'?').trim().charAt(0).toUpperCase();
+  ov.innerHTML=`<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#6d28d9,#025AC6);padding:18px 22px;color:#fff;flex-shrink:0;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;">${initial}</div>
+          <div>
+            <div style="font-size:19px;font-weight:800;">${name}</div>
+            <div style="font-size:11px;opacity:.9;">${rows.length} harvest${rows.length!==1?'s':''}${areas?' · '+areas:''}</div>
+          </div>
+        </div>
+        <button onclick="lfCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:14px;">
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:16px;font-weight:800;">${_php(gSpawn)}</div><div style="font-size:9px;opacity:.85;">spawn</div></div>
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:16px;font-weight:800;">${_php(gCoins)}</div><div style="font-size:9px;opacity:.85;">coins</div></div>
+        <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px;text-align:center;"><div style="font-size:16px;font-weight:800;">${_php(gNet)}</div><div style="font-size:9px;opacity:.85;">net</div></div>
+      </div>
+    </div>
+    <div style="overflow-y:auto;flex:1;">${rowsHtml}</div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) lfCloseCollector(); });
+  document.body.appendChild(ov);
+}
+function lfCloseCollector(){ const o=document.getElementById('lf-collector-modal'); if(o) o.remove(); }
 
 function lfFlyToCollector(collector){
   // Try progress map (has GPS from today's harvest_group_items)
@@ -1556,7 +1621,7 @@ function rcnTgPick(i){
 }
 
 async function rcnSaveNames(vendoName){
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('rcn-sheet')?.value||'').trim();
   const tg=(document.getElementById('rcn-tg')?.value||'').trim();
   const msg=document.getElementById('rcn-msg');
@@ -1596,7 +1661,7 @@ async function rcnSaveHarvestWindow(){
   const ws=(document.getElementById('rcn-window-start')?.value||'').trim();
   const hd=(document.getElementById('rcn-harvest-date')?.value||'').trim();
   if(!ws&&!hd){ if(msg){msg.textContent='Enter at least one date';msg.style.color='#dc2626';} return; }
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd) u.harvest_date=hd;
@@ -1625,7 +1690,7 @@ async function rcnSaveHarvestWindow(){
 }
 
 async function rcnQuickLink(vendoName, tgName){
-  const pw=prompt('Admin password:'); if(pw!=='101510'){toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
     const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
     const rows=await r.json();
