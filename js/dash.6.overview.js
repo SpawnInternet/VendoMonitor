@@ -145,6 +145,23 @@ function overviewRender(ov, data) {
       </div>`).join("");
   }
 
+  // ── telegram-sales-by-group list ──
+  const tgGroups = ov.tg_by_group || [];
+  const tgStrip = document.getElementById("tg-group-strip");
+  if (tgStrip) {
+    const tTot = tgGroups.reduce((s,g)=>s+Number(g.tg_sales||0),0)||1;
+    tgStrip.innerHTML = tgGroups.map((g,i)=>`
+      <div style="padding:4px 0;border-bottom:1px solid #f0f4ff;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;">
+          <span style="color:var(--tx);font-weight:600;">${g.grp}</span>
+          <span style="font-weight:700;color:${BRAND.blue};">${_php(g.tg_sales)}</span>
+        </div>
+        <div style="height:5px;background:#eef2ff;border-radius:3px;margin-top:3px;overflow:hidden;">
+          <div style="height:100%;width:${Math.round(Number(g.tg_sales||0)/tTot*100)}%;background:${BRAND_SERIES[i%BRAND_SERIES.length]};"></div>
+        </div>
+      </div>`).join("");
+  }
+
   // ── Top 10 strongest / weakest by this month's spawn share ──
   const top = ov.top_spawn || [], bot = ov.bottom_spawn || [];
   const mkRow = (v,i,low) => `
