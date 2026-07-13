@@ -1441,7 +1441,7 @@ async function rcRun(){
     const tgInc=rowKey!=null?(tgRowIncomeMap[rowKey]??null):null;
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
-    const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
+    const gap=tgInc!=null?tgInc-coins:null; // positive=DEFICIT (TG>coins, missing), negative=SURPLUS (coins>TG)
     const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
     const overAmt=gap!=null&&Math.abs(gap)>500;
     const overPct=gapPct!=null&&gapPct>20;
@@ -1752,7 +1752,7 @@ function rcFilter(){
 
   const fmtP=v=>_php(v);
   const flagBadge=f=>f==='alert'
-    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Short</span>'
+    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Deficit</span>'
     :f==='warn'
     ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🟡 Surplus</span>'
     :f==='nodata'
@@ -1760,9 +1760,9 @@ function rcFilter(){
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
-    // gap = TG income - coins_total
-    // positive = surplus (TG > coins) = yellow
-    // negative = short (coins > TG) = red
+    // gap = TG income - coins
+    // positive = DEFICIT (TG > coins, money missing) = red
+    // negative = SURPLUS (coins > TG, extra coins) = yellow
     const c=gap>100?'#dc2626':gap<-100?'#b45309':'#15803d';
     const bg=gap>100?'#fee2e2':gap<-100?'#fefce8':'#dcfce7';
     const sign=gap>=0?'+':'';
@@ -1781,14 +1781,14 @@ function rcFilter(){
     const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
     const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
 
-    // ---- per-vendo reconciliation breakdown (gap = TG income - coins; +surplus / -deficit; |gap|<100 = exact) ----
+    // ---- per-vendo reconciliation breakdown (gap = TG income - coins; +deficit / -surplus; |gap|<100 = exact) ----
     const rcRows=cd.rows.filter(r=>r.gap!=null);
     let exactN=0, surplusN=0, deficitN=0, surplusAmt=0, deficitAmt=0;
     rcRows.forEach(r=>{
       const g=Number(r.gap);
       if(Math.abs(g)<100){ exactN++; }
-      else if(g>0){ surplusN++; surplusAmt+=g; }
-      else { deficitN++; deficitAmt+=Math.abs(g); }
+      else if(g>0){ deficitN++; deficitAmt+=g; }        // TG > coins = money missing = deficit
+      else { surplusN++; surplusAmt+=Math.abs(g); }     // coins > TG = extra coins = surplus
     });
 
     // ---- build the FULL detail (dates→routes→vendos) into a string for the popup ----
