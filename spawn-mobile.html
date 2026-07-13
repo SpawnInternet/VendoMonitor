@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Spawn">
 <link rel="manifest" href="spawn-mobile.webmanifest">
-<link rel="apple-touch-icon" href="spawn-mobile-192.png">
+<link rel="apple-touch-icon" href="spawn-touch-180.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,7 +26,8 @@
 
   #login{position:fixed;inset:0;z-index:1000;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;padding:24px;}
   .login-card{background:#fff;border-radius:22px;padding:32px 26px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-  .login-card img{width:190px;height:190px;object-fit:contain;margin:0 auto 14px;display:block;filter:drop-shadow(0 3px 10px rgba(0,0,0,.16));}
+  .login-card img{width:190px;height:190px;object-fit:contain;margin:0 auto 14px;display:block;filter:drop-shadow(0 3px 10px rgba(0,0,0,.16));animation:logoFloat 3.5s ease-in-out infinite;}
+  @keyframes logoFloat{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-6px) scale(1.02);}}
   .login-card h1{font-size:22px;font-weight:800;margin-bottom:4px;letter-spacing:-0.02em;}
   .login-card p{font-size:13px;color:var(--tx2);margin-bottom:22px;font-weight:500;}
   .login-card input{width:100%;height:50px;border:1.5px solid var(--line);border-radius:13px;padding:0 15px;font-size:16px;outline:none;margin-bottom:12px;}
@@ -138,7 +139,7 @@
 
 <div id="login">
   <div class="login-card">
-    <img src="spawn-globe.png?v=2" alt="Spawn Internet">
+    <img src="spawn-globe.png?v=3" alt="Spawn Internet">
     <h1>Spawn Internet</h1>
     <p>Owner sign in</p>
     <div class="err" id="err"></div>
@@ -152,7 +153,7 @@
   <div class="header">
     <div class="header-top">
       <div class="brand">
-        <img src="spawn-globe.png?v=2" alt="">
+        <img src="spawn-globe.png?v=3" alt="">
         <div><div class="b1">Spawn Internet</div><div class="b2">Owner overview</div></div>
       </div>
       <div style="display:flex;align-items:center;gap:4px;">
@@ -351,48 +352,91 @@ window.openTool=openTool;
 // ---- TOOL: Harvest (today breakdown, per collector, month perf, recon) ----
 async function toolHarvest(color){
   showToolBar('Harvest',color);
-  const t=toolPanel(); t.innerHTML='<div style="font-size:12px;color:var(--tx2);">Loading harvest\u2026</div>';
+  const t=toolPanel(); t.innerHTML='<div style="font-size:12px;color:var(--tx2);padding:14px;">Loading harvest\u2026</div>';
   try{
     const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
     const monthStart=today.slice(0,7)+'-01';
-    const rt=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,coins_total,net_collectible,spawn_share&harvest_date=eq.'+today});
+    // today's per-vendo rows (for drill-down) + month rollup — fetched in parallel
+    const [rt,rm]=await Promise.all([
+      gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,sheet_name,tg_name,coins_total,net_collectible,spawn_share,harvested_at&harvest_date=eq.'+today+'&order=collector,spawn_share.desc&limit=3000'}),
+      gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,coins_total,spawn_share&harvest_date=gte.'+monthStart+'&limit=5000'})
+    ]);
     const trows=await rt.json();
-    const rm=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,coins_total,spawn_share&harvest_date=gte.'+monthStart+'&limit=5000'});
     const mrows=await rm.json();
     const agg={};
-    (Array.isArray(trows)?trows:[]).forEach(r=>{ const c=r.collector||'\u2014'; agg[c]=agg[c]||{tv:0,tc:0,tn:0,ts:0,mv:0,mc:0,ms:0}; agg[c].tv++; agg[c].tc+=+r.coins_total||0; agg[c].tn+=+r.net_collectible||0; agg[c].ts+=+r.spawn_share||0; });
-    (Array.isArray(mrows)?mrows:[]).forEach(r=>{ const c=r.collector||'\u2014'; agg[c]=agg[c]||{tv:0,tc:0,tn:0,ts:0,mv:0,mc:0,ms:0}; agg[c].mv++; agg[c].mc+=+r.coins_total||0; agg[c].ms+=+r.spawn_share||0; });
+    (Array.isArray(trows)?trows:[]).forEach(r=>{ const c=r.collector||'\u2014'; agg[c]=agg[c]||{tv:0,tc:0,tn:0,ts:0,mv:0,mc:0,ms:0,rows:[]}; agg[c].tv++; agg[c].tc+=+r.coins_total||0; agg[c].tn+=+r.net_collectible||0; agg[c].ts+=+r.spawn_share||0; agg[c].rows.push(r); });
+    (Array.isArray(mrows)?mrows:[]).forEach(r=>{ const c=r.collector||'\u2014'; agg[c]=agg[c]||{tv:0,tc:0,tn:0,ts:0,mv:0,mc:0,ms:0,rows:[]}; agg[c].mv++; agg[c].mc+=+r.coins_total||0; agg[c].ms+=+r.spawn_share||0; });
     const list=Object.keys(agg).map(k=>[k,agg[k]]).sort((a,b)=>b[1].ts-a[1].ts||b[1].ms-a[1].ms);
+    window._hvAgg=agg;
     const totToday=list.reduce((s,e)=>s+e[1].ts,0);
     const totVen=list.reduce((s,e)=>s+e[1].tv,0);
-    let html='<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:14px;">'+
-      '<div style="font-size:13px;font-weight:500;margin-bottom:10px;">Today\u2019s harvest</div>'+
+    // colorful summary
+    let html='<div style="background:#fff;border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.05);">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:11px;color:var(--tx2);letter-spacing:.3px;text-transform:uppercase;">Today\u2019s harvest</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-        '<div style="background:var(--bg);border-radius:10px;padding:10px;"><div style="font-size:11px;color:var(--tx2);">Spawn today</div><div style="font-size:20px;font-weight:500;color:#028867;">'+peso(totToday)+'</div></div>'+
-        '<div style="background:var(--bg);border-radius:10px;padding:10px;"><div style="font-size:11px;color:var(--tx2);">Vendos today</div><div style="font-size:20px;font-weight:500;">'+totVen+'</div></div>'+
+        '<div style="background:linear-gradient(135deg,#028867,#03a37c);border-radius:13px;padding:13px;color:#fff;"><div style="font-size:10px;opacity:.9;font-weight:600;">SPAWN TODAY</div><div style="font-size:24px;font-weight:800;line-height:1.1;margin-top:3px;">'+peso(totToday)+'</div></div>'+
+        '<div style="background:linear-gradient(135deg,#025AC6,#0472e8);border-radius:13px;padding:13px;color:#fff;"><div style="font-size:10px;opacity:.9;font-weight:600;">VENDOS TODAY</div><div style="font-size:24px;font-weight:800;line-height:1.1;margin-top:3px;">'+totVen+'</div></div>'+
       '</div></div>';
-    if(!list.length){ html+='<div style="font-size:13px;color:var(--tx2);">No harvests today.</div>'; }
-    else html+=list.map(function(e){
+    if(!list.length){ html+='<div style="font-size:13px;color:var(--tx2);padding:8px 2px;">No harvests today.</div>'; }
+    else html+='<div style="font-size:11px;color:var(--tx3);margin:0 2px 8px;">Tap a collector to see harvested vendos</div>'+list.map(function(e){
       var name=e[0], d=e[1];
       var pct=d.tc>0?Math.round((d.ts/d.tc)*100):0;
       var gap=d.tc-d.tn;
-      return '<div style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:12px;">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-left:4px solid '+color+';"><span style="font-size:15px;font-weight:500;">'+name+'</span><span style="font-size:14px;font-weight:500;color:#028867;">'+peso(d.ts)+' today</span></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);">'+
-          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Vendos</div><div style="font-size:14px;font-weight:500;">'+d.tv+'</div></div>'+
-          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Month spawn</div><div style="font-size:14px;font-weight:500;">'+peso(d.ms)+'</div></div>'+
-          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Month vendos</div><div style="font-size:14px;font-weight:500;">'+d.mv+'</div></div>'+
+      var initial=(name.charAt(0)||'?').toUpperCase();
+      var safe=String(name).replace(/'/g,"\\'");
+      return '<div style="background:#fff;border-radius:18px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 12px rgba(2,136,103,.10);">'+
+        '<div class="hv-head" data-c="'+encodeURIComponent(name)+'" style="cursor:pointer;background:linear-gradient(135deg,#028867,#03a37c);padding:16px 18px 15px;color:#fff;">'+
+          '<div style="display:flex;align-items:center;gap:11px;">'+
+            '<div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">'+initial+'</div>'+
+            '<div style="font-size:17px;font-weight:700;flex:1;">'+name+'</div>'+
+            '<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:rgba(255,255,255,.85);"><path d="M7 10l5 5 5-5z"/></svg>'+
+          '</div>'+
+          '<div style="display:flex;align-items:baseline;gap:8px;margin-top:12px;">'+
+            '<div style="font-size:33px;font-weight:800;line-height:1;letter-spacing:-0.02em;">'+peso(d.ts)+'</div>'+
+            '<div style="font-size:12px;opacity:.9;font-weight:600;">spawn today \u00b7 '+pct+'%</div>'+
+          '</div>'+
         '</div>'+
-        '<div style="padding:11px 14px;border-top:0.5px solid var(--line);">'+
-          '<div style="font-size:12px;font-weight:500;margin-bottom:6px;">Reconciliation \u00B7 today</div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Coins collected</span><span style="font-weight:500;">'+peso(d.tc)+'</span></div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Net collectible</span><span style="font-weight:500;">'+peso(d.tn)+'</span></div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Free/old/saloy gap</span><span style="font-weight:500;color:'+(gap>0?'#B47F00':'#028867')+'">'+peso(gap)+'</span></div>'+
-          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Spawn share</span><span style="font-weight:500;">'+peso(d.ts)+' ('+pct+'%)</span></div>'+
-        '</div></div>';
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px;">'+
+          '<div style="background:#eef5ff;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:19px;font-weight:800;color:#025AC6;line-height:1;">'+d.tv+'</div><div style="font-size:9px;color:#025AC6;font-weight:700;margin-top:4px;">VENDOS</div></div>'+
+          '<div style="background:#eafaf1;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#028867;line-height:1;">'+peso(d.ms)+'</div><div style="font-size:9px;color:#028867;font-weight:700;margin-top:4px;">MONTH SPAWN</div></div>'+
+          '<div style="background:#faf3ff;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:19px;font-weight:800;color:#7c3aed;line-height:1;">'+d.mv+'</div><div style="font-size:9px;color:#7c3aed;font-weight:700;margin-top:4px;">MO. VENDOS</div></div>'+
+        '</div>'+
+        '<div style="padding:0 18px 12px;display:flex;justify-content:space-between;font-size:12px;color:var(--tx2);">'+
+          '<span>Coins <b style="color:var(--tx);font-weight:700;">'+peso(d.tc)+'</b></span>'+
+          '<span>Net <b style="color:var(--tx);font-weight:700;">'+peso(d.tn)+'</b></span>'+
+          '<span>Deductions <b style="color:'+(gap>0?'#B47F00':'#028867')+';font-weight:700;">'+peso(gap)+'</b></span>'+
+        '</div>'+
+        '<div class="hv-vendos" data-c="'+encodeURIComponent(name)+'" style="display:none;border-top:0.5px solid var(--line);background:#fafbfc;padding:6px 12px 12px;"></div>'+
+      '</div>';
     }).join('');
     t.innerHTML=html;
-  }catch(e){ console.warn('harvest tool failed',e); t.innerHTML='<div style="font-size:13px;color:var(--red);">Couldn\u2019t load harvest.</div>'; }
+    // wire expand
+    t.querySelectorAll('.hv-head').forEach(function(h){
+      h.addEventListener('click',function(){
+        var key=h.getAttribute('data-c');
+        var panel=t.querySelector('.hv-vendos[data-c="'+key+'"]');
+        if(!panel) return;
+        if(panel.style.display==='none'){
+          if(!panel.dataset.built){ panel.innerHTML=hvVendoRows(decodeURIComponent(key)); panel.dataset.built='1'; }
+          panel.style.display='block';
+        } else { panel.style.display='none'; }
+      });
+    });
+  }catch(e){ console.warn('harvest tool failed',e); t.innerHTML='<div style="font-size:13px;color:var(--red);padding:14px;">Couldn\u2019t load harvest.</div>'; }
+}
+function hvVendoRows(name){
+  var d=(window._hvAgg||{})[name]; if(!d||!d.rows||!d.rows.length) return '<div style="font-size:12px;color:var(--tx2);padding:8px 4px;">No vendo detail.</div>';
+  var rows=d.rows.slice().sort(function(a,b){return (+b.spawn_share||0)-(+a.spawn_share||0);});
+  return '<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:.3px;padding:8px 4px 6px;">HARVESTED VENDOS \u00b7 '+rows.length+'</div>'+
+    rows.map(function(r){
+      var nm=r.sheet_name||r.tg_name||'Vendo';
+      var t=r.harvested_at?new Date(r.harvested_at).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'}):'';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:0.5px solid var(--line);">'+
+        '<div style="min-width:0;padding-right:10px;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+nm+'</div>'+
+        '<div style="font-size:10px;color:var(--tx3);">coins '+peso(r.coins_total)+(t?' \u00b7 \ud83d\udd52 '+t:'')+'</div></div>'+
+        '<div style="font-size:14px;font-weight:800;color:#028867;flex-shrink:0;">'+peso(r.spawn_share)+'</div>'+
+      '</div>';
+    }).join('');
 }
 window.toolHarvest=toolHarvest;
 
@@ -625,23 +669,24 @@ function reconCollectorCards(rows){
   var by={};
   rows.forEach(function(v){
     var c=v.collector||'\u2014';
-    by[c]=by[c]||{coins:0,tg:0,exN:0,suN:0,deN:0,suAmt:0,deAmt:0,auN:0,auDeN:0,n:0};
+    by[c]=by[c]||{coins:0,tg:0,exN:0,suN:0,deN:0,suAmt:0,deAmt:0,auN:0,auDeN:0,n:0,rows:[]};
     var g=+v.gap||0, st=reconStatus(g);
-    by[c].coins+=+v.coins||0; by[c].tg+=+v.tg_income||0; by[c].n++;
+    by[c].coins+=+v.coins||0; by[c].tg+=+v.tg_income||0; by[c].n++; by[c].rows.push(v);
     if(v.audited){
-      // explained/confirmed row — pull out of deficit/surplus into Audited
       by[c].auN++;
-      if(st.key==='deficit') by[c].auDeN++;  // remember it WAS a deficit
+      if(st.key==='deficit') by[c].auDeN++;
       return;
     }
     if(st.key==='exact') by[c].exN++;
     else if(st.key==='surplus'){ by[c].suN++; by[c].suAmt+=Math.abs(g); }
     else { by[c].deN++; by[c].deAmt+=g; }
   });
+  window._reconBy=by;
   var list=Object.keys(by).map(function(k){return [k,by[k]];})
     .sort(function(a,b){return b[1].tg-a[1].tg;});
   if(!list.length) return '';
-  var out='<div style="font-size:13px;font-weight:700;margin:0 2px 8px;">Recent harvests &middot; per collector</div>';
+  var out='<div style="font-size:13px;font-weight:700;margin:0 2px 8px;">Recent harvests &middot; per collector</div>'+
+    '<div style="font-size:11px;color:var(--tx3);margin:0 2px 8px;">Tap a collector to see per-vendo gaps</div>';
   out+=list.map(function(e){
     var name=e[0], d=e[1];
     var initial=(name.charAt(0)||'?').toUpperCase();
@@ -650,10 +695,10 @@ function reconCollectorCards(rows){
     if(d.suN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#b45309;background:#fef9c3;margin-left:5px;">'+d.suN+' SURPLUS</span>';
     if(d.auN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#1d4ed8;background:#dbeafe;margin-left:5px;">'+d.auN+' AUDITED</span>';
     return '<div style="background:#fff;border-radius:16px;padding:14px;margin-bottom:11px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
-      '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">'+
+      '<div class="rcc-head" data-c="'+encodeURIComponent(name)+'" style="cursor:pointer;display:flex;align-items:center;gap:11px;margin-bottom:12px;">'+
         '<div style="width:42px;height:42px;border-radius:50%;background:#025AC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">'+initial+'</div>'+
         '<div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+name+'</div>'+
-        '<div style="font-size:11px;color:var(--tx2);">'+d.n+' harvest'+(d.n===1?'':'s')+'</div></div>'+
+        '<div style="font-size:11px;color:var(--tx2);">'+d.n+' harvest'+(d.n===1?'':'s')+' \u00b7 tap to expand</div></div>'+
         '<div style="text-align:right;flex-shrink:0;line-height:1.9;">'+(flags||'')+'</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'+
@@ -661,7 +706,7 @@ function reconCollectorCards(rows){
         '<div style="background:#eafaf1;border-radius:11px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#028867;">'+peso(d.tg)+'</div><div style="font-size:9px;color:var(--tx2);font-weight:600;margin-top:1px;">TG INCOME</div></div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'+
-        '<div style="background:#dcfce7;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#15803d;">'+d.exN+'</div><div style="font-size:9px;font-weight:700;color:#15803d;">\u2705 EXACT</div></div>'+
+        '<div style="background:#dcfce7;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#15803d;">'+d.exN+'</div><div style="font-size:9px;font-weight:700;color:#15803d;">\u2705 OK</div></div>'+
         '<div style="background:#fef9c3;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#b45309;">'+d.suN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(d.suN?peso(d.suAmt):'\u2014')+'</div></div>'+
         '<div style="background:#fee2e2;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#dc2626;">'+d.deN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 SHORT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(d.deN?peso(d.deAmt):'\u2014')+'</div></div>'+
       '</div>'+
@@ -670,9 +715,28 @@ function reconCollectorCards(rows){
         '<div style="font-size:11px;color:#1d4ed8;font-weight:700;">'+d.auN+' audited &amp; explained'+
         (d.auDeN?('<span style="font-weight:600;color:#6b7280;"> \u00b7 '+d.auDeN+' was flagged deficit</span>'):'')+
         '</div></div>'):'')+
+      '<div class="rcc-vendos" data-c="'+encodeURIComponent(name)+'" style="display:none;margin-top:10px;border-top:0.5px solid var(--line);padding-top:6px;"></div>'+
     '</div>';
   }).join('');
   return out;
+}
+function reconVendoRows(name){
+  var d=(window._reconBy||{})[name]; if(!d||!d.rows||!d.rows.length) return '<div style="font-size:12px;color:var(--tx2);padding:8px 4px;">No vendo detail.</div>';
+  var rows=d.rows.slice().sort(function(a,b){return (+b.gap||0)-(+a.gap||0);});
+  return '<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:.3px;padding:6px 4px;">PER-VENDO \u00b7 '+rows.length+'</div>'+
+    rows.map(function(v){
+      var nm=v.sheet_name||v.tg_name||'Vendo';
+      var g=+v.gap||0; var amt=Math.abs(g);
+      var st=v.audited?{label:'Audited',color:'#1d4ed8',bg:'#dbeafe'}:reconStatus(g);
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 4px;border-top:0.5px solid var(--line);gap:8px;">'+
+        '<div style="min-width:0;flex:1;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+nm+'</div>'+
+        '<div style="font-size:10px;color:var(--tx3);">coins '+peso(v.coins)+' \u00b7 TG '+peso(v.tg_income)+'</div></div>'+
+        '<div style="text-align:right;flex-shrink:0;">'+
+          '<div style="font-size:14px;font-weight:800;color:'+st.color+';">'+peso(amt)+'</div>'+
+          '<span style="display:inline-block;font-size:8px;font-weight:800;padding:2px 7px;border-radius:9px;color:'+st.color+';background:'+st.bg+';">'+(st.label||'').toUpperCase()+'</span>'+
+        '</div>'+
+      '</div>';
+    }).join('');
 }
 function chip(k,label,active){
   return '<button class="rc-chip" data-k="'+k+'" style="flex-shrink:0;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--blue)':'var(--line)')+';background:'+(active?'var(--blue)':'#fff')+';color:'+(active?'#fff':'var(--tx2)')+';white-space:nowrap;">'+label+'</button>';
@@ -708,6 +772,19 @@ function wireReconCards(){
     card.addEventListener('click',function(){
       const d=card.querySelector('.recon-detail');
       if(d) d.style.display = d.style.display==='none' ? 'block' : 'none';
+    });
+  });
+  // per-collector expand -> per-vendo gap breakdown
+  document.querySelectorAll('.rcc-head').forEach(function(h){
+    if(h.dataset.wired) return; h.dataset.wired='1';
+    h.addEventListener('click',function(){
+      var key=h.getAttribute('data-c');
+      var panel=document.querySelector('.rcc-vendos[data-c="'+key+'"]');
+      if(!panel) return;
+      if(panel.style.display==='none'){
+        if(!panel.dataset.built){ panel.innerHTML=reconVendoRows(decodeURIComponent(key)); panel.dataset.built='1'; }
+        panel.style.display='block';
+      } else { panel.style.display='none'; }
     });
   });
 }
