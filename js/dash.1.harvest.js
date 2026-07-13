@@ -1555,7 +1555,7 @@ async function rcRun(){
       rpc_audited:rpcAudited,
       rpc_window_start:rpcWinStart,
       rpc_submitted_at:rpcSubmit,
-      window_estimated:(byId? !rpcHasChain : false),
+      window_estimated:false,
       route_code:rc,is_admin:isAdmin
     };
   });
