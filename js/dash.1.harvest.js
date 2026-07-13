@@ -1456,6 +1456,7 @@ async function rcRun(){
   const rpcTgByName={};
   const rpcAuditByName={};
   const rpcSubmitByName={};
+  const rpcWinStartByName={};
   try{
     const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{
       method:'POST', headers:{..._HDR}, body:JSON.stringify({})
@@ -1467,6 +1468,7 @@ async function rcRun(){
           rpcTgByName[o.tg_name]=Number(o.tg_income||0);
           rpcAuditByName[o.tg_name]=!!o.audited;
           if(o.submitted_at) rpcSubmitByName[o.tg_name]=o.submitted_at;
+          if(o.window_start) rpcWinStartByName[o.tg_name]=o.window_start;
         }
       });
     }
@@ -1524,6 +1526,8 @@ async function rcRun(){
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg,tg_income:tgInc,gap,gap_pct:gapPct,flag,
       rpc_audited:rpcAudited,
+      rpc_window_start:(tg?rpcWinStartByName[tg]:null)||null,
+      rpc_submitted_at:(tg?rpcSubmitByName[tg]:null)||null,
       route_code:rc,is_admin:isAdmin
     };
   });
@@ -1985,8 +1989,8 @@ function rcFilter(){
                 ${h.tg_name?`<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}</div>`:`<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked</div>`}
               </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${h.harvest_window_start||'—'} → ${h.harvest_date||'—'}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}${h.rpc_submitted_at?`<br><span style="font-weight:400;color:var(--mu);font-size:9px;">\ud83d\udd52 ${h.rpc_submitted_at.split(' ').slice(1).join(' ')}</span>`:''}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${(h.rpc_window_start && h.rpc_submitted_at) ? `${h.rpc_window_start}<br>\u2192 ${h.rpc_submitted_at}` : `${h.harvest_window_start||'—'} \u2192 ${h.harvest_date||'—'}`}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtP(h.coins_total)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
