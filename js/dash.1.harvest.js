@@ -1781,6 +1781,16 @@ function rcFilter(){
     const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
     const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
 
+    // ---- per-vendo reconciliation breakdown (gap = TG income - coins; +surplus / -deficit; |gap|<100 = exact) ----
+    const rcRows=cd.rows.filter(r=>r.gap!=null);
+    let exactN=0, surplusN=0, deficitN=0, surplusAmt=0, deficitAmt=0;
+    rcRows.forEach(r=>{
+      const g=Number(r.gap);
+      if(Math.abs(g)<100){ exactN++; }
+      else if(g>0){ surplusN++; surplusAmt+=g; }
+      else { deficitN++; deficitAmt+=Math.abs(g); }
+    });
+
     // ---- build the FULL detail (dates→routes→vendos) into a string for the popup ----
     let detail=`<div style="padding:10px 12px;display:flex;flex-direction:column;gap:10px;">`;
 
@@ -1853,9 +1863,10 @@ function rcFilter(){
             return `<tr style="${rowBg}">
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">
                 <div style="display:flex;align-items:center;gap:4px;">
-                  <span>${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
+                  <span style="font-weight:600;">${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
                   <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="View/Edit TG Name">🔗</button>
                 </div>
+                ${h.tg_name?`<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}</div>`:`<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked</div>`}
               </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}</td>
@@ -1891,6 +1902,7 @@ function rcFilter(){
     window._rcDetail[collector] = {
       html: detail,
       coins: colCoins, tg: colTG, gap: colGap,
+      exactN, surplusN, deficitN, surplusAmt, deficitAmt,
       count: cd.rows.length, alerts: colAlerts, warns: colWarns, confirmed: colConfirmed
     };
 
@@ -1911,10 +1923,14 @@ function rcFilter(){
           ${colWarns?`<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${colWarns} SURPLUS</span>`:''}
           ${(!colAlerts&&!colWarns)?`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">✅ OK</span>`:''}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
           <div style="background:#eff6ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#1565c0;">${fmtP(colCoins)}</div><div style="font-size:8px;color:var(--mu);">Coins</div></div>
           <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#15803d;">${fmtP(colTG)}</div><div style="font-size:8px;color:var(--mu);">TG Income</div></div>
-          <div style="background:${gapChipBg};border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:${gapChipColor};">${gapTxt}</div><div style="font-size:8px;color:var(--mu);">True Gap</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
+          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#15803d;">${exactN}</div><div style="font-size:8px;color:var(--mu);font-weight:700;">✅ EXACT</div></div>
+          <div style="background:#fef9c3;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#b45309;">${surplusN}</div><div style="font-size:8px;color:#b45309;font-weight:700;">🟡 SURPLUS</div><div style="font-size:9px;font-weight:800;color:#b45309;margin-top:1px;">${surplusN?'+'+fmtP(surplusAmt):'—'}</div></div>
+          <div style="background:#fee2e2;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#dc2626;">${deficitN}</div><div style="font-size:8px;color:#dc2626;font-weight:700;">🔴 DEFICIT</div><div style="font-size:9px;font-weight:800;color:#dc2626;margin-top:1px;">${deficitN?'−'+fmtP(deficitAmt):'—'}</div></div>
         </div>
         <div style="margin-top:10px;font-size:10px;color:#6d28d9;font-weight:700;text-align:center;border-top:1px solid #f1f5f9;padding-top:8px;">Tap to reconcile ›</div>
       </div>`});
@@ -1941,7 +1957,9 @@ function rcShowCollector(collector){
       <div style="margin-left:auto;display:flex;gap:14px;text-align:right;align-items:center;">
         <div><div style="font-size:10px;opacity:.7;">Coins</div><div style="font-size:14px;font-weight:700;">${_php(d.coins)}</div></div>
         <div><div style="font-size:10px;opacity:.7;">TG Income</div><div style="font-size:14px;font-weight:700;">${_php(d.tg)}</div></div>
-        <div><div style="font-size:10px;opacity:.7;">True Gap</div><div style="font-size:14px;font-weight:700;">${gapTxt}</div></div>
+        <div><div style="font-size:10px;opacity:.7;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${d.exactN??0}</div></div>
+        <div><div style="font-size:10px;opacity:.7;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${d.surplusN??0}${d.surplusN?` · +${_php(d.surplusAmt)}`:''}</div></div>
+        <div><div style="font-size:10px;opacity:.7;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${d.deficitN??0}${d.deficitN?` · −${_php(d.deficitAmt)}`:''}</div></div>
         <button onclick="rcCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
       </div>
     </div>
