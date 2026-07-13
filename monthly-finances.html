@@ -58,6 +58,7 @@
   <div class="sub">Spawn share income, expenses &amp; net</div>
   <div class="month-row">
     <select id="month-sel"></select>
+    <button id="report-btn" style="padding:9px 14px;border-radius:10px;border:none;background:#FFB725;color:#412402;font-size:13px;font-weight:700;white-space:nowrap;">📄 Report</button>
   </div>
 </div>
 
@@ -119,6 +120,7 @@ async function loadMonth(month){
   try{
     const r=await gw({kind:'rpc',fn:'spawn_monthly_finances',body:{p_month:month}});
     let f=await r.json(); if(Array.isArray(f))f=f[0]; if(f&&f.spawn_monthly_finances)f=f.spawn_monthly_finances; f=f||{};
+    _lastFin=f; _lastMonth=month;
     const byCol=f.by_collector||[]; const daily=f.daily||[]; const expCat=f.expenses_by_category||[];
     const COLC=['#025AC6','#028867','#FFB725','#C01176','#311A8E','#DF1A35'];
     let html=
@@ -147,6 +149,72 @@ async function loadMonth(month){
     try{ _charts.push(new Chart(document.getElementById('ch-col'),{type:'bar',data:{labels:byCol.map(c=>c.collector),datasets:[{data:byCol.map(c=>c.spawn),backgroundColor:byCol.map((c,i)=>COLC[i%COLC.length]),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:11}}}}}})); }catch(_){}
   }catch(e){ wrap.innerHTML='<div class="muted" style="color:var(--red);">Couldn\u2019t load finances.</div>'; }
 }
+
+// ---- Printable monthly statement (SPAWN report style) ----
+let _lastFin=null, _lastMonth=null;
+function openReport(){
+  const f=_lastFin; if(!f){ alert('Load a month first.'); return; }
+  const monthLbl=new Date((_lastMonth||f.month)+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const byCol=f.by_collector||[]; const expCat=f.expenses_by_category||[];
+  const P=n=>'\u20B1'+Math.round(+n||0).toLocaleString();
+  const rowsCol=byCol.map(c=>'<tr><td>'+c.collector+'</td><td class="r">'+(c.harvests||0)+'</td><td class="r">'+P(c.coins)+'</td><td class="r"><b>'+P(c.spawn)+'</b></td></tr>').join('');
+  const rowsExp=expCat.length?expCat.map(e=>'<tr><td>'+e.category+'</td><td class="r">'+P(e.amount)+'</td></tr>').join(''):'<tr><td colspan="2" style="color:#888;">No expenses recorded.</td></tr>';
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>SPAWN · ${monthLbl} Statement</title>
+  <style>
+    @page{margin:14mm;} *{box-sizing:border-box;} body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;margin:0;padding:24px;max-width:760px;margin:0 auto;}
+    .top{display:flex;align-items:center;gap:14px;border-bottom:4px solid #025AC6;padding-bottom:14px;}
+    .globe{width:52px;height:52px;border-radius:50%;background:conic-gradient(#FFB725,#028867,#025AC6,#311A8E,#C01176,#DF1A35,#FFB725);flex-shrink:0;}
+    h1{margin:0;font-size:24px;color:#311A8E;} .sub{color:#6b7280;font-size:14px;}
+    .strip{height:5px;background:linear-gradient(90deg,#025AC6,#028867,#FFB725,#C01176,#DF1A35);margin:0 0 18px;}
+    .meta{display:flex;gap:24px;margin:14px 0 20px;flex-wrap:wrap;}
+    .meta div span{display:block;} .ml{font-size:11px;color:#6b7280;text-transform:uppercase;} .mv{font-size:16px;font-weight:700;}
+    h2{font-size:15px;color:#025AC6;border-bottom:1px solid #e5e7eb;padding-bottom:5px;margin:24px 0 10px;}
+    table{width:100%;border-collapse:collapse;font-size:14px;} th{text-align:left;color:#6b7280;font-size:12px;font-weight:600;padding:6px 4px;border-bottom:1px solid #e5e7eb;}
+    td{padding:7px 4px;border-bottom:1px solid #f3f4f6;} .r{text-align:right;}
+    .stmt td{border:none;padding:5px 4px;font-size:15px;} .stmt .lbl{color:#374151;} .stmt .amt{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;}
+    .stmt .indent{padding-left:18px;color:#6b7280;} .stmt .line td{border-top:2px solid #1a1a1a;padding-top:8px;}
+    .net{background:#028867;color:#fff;border-radius:12px;padding:16px 18px;margin:22px 0;display:flex;justify-content:space-between;align-items:center;}
+    .net .l{font-size:13px;opacity:.85;} .net .v{font-size:30px;font-weight:800;}
+    .foot{margin-top:28px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#6b7280;line-height:1.6;}
+    .pbtn{position:fixed;bottom:20px;right:20px;background:#025AC6;color:#fff;border:none;padding:12px 20px;border-radius:30px;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;}
+    @media print{.pbtn{display:none;}}
+  </style></head><body>
+  <div class="top"><div class="globe"></div><div><h1>SPAWN INTERNET</h1><div class="sub">Monthly Financial Statement</div></div></div>
+  <div class="strip"></div>
+  <div class="meta">
+    <div><span class="ml">Period</span><span class="mv">${monthLbl}</span></div>
+    <div><span class="ml">Vendos harvested</span><span class="mv">${f.vendos||0}</span></div>
+    <div><span class="ml">Harvests</span><span class="mv">${f.harvests||0}</span></div>
+  </div>
+  <h2>Statement of Collections &amp; Distribution</h2>
+  <table class="stmt">
+    <tr><td class="lbl">Total Coins (Gross)</td><td class="amt">${P(f.coins_total)}</td></tr>
+    <tr><td class="lbl indent">Less: Customer Share (25%)</td><td class="amt" style="color:#C01176;">(${P(f.customer_share)})</td></tr>
+    <tr class="line"><td class="lbl"><b>SPAWN Share (75%)</b></td><td class="amt" style="color:#028867;">${P(f.spawn_share)}</td></tr>
+    <tr><td class="lbl indent">Less: Expenses</td><td class="amt" style="color:#DF1A35;">(${P(f.expenses)})</td></tr>
+    <tr class="line"><td class="lbl"><b>NET (after expenses)</b></td><td class="amt" style="color:#028867;">${P(f.net)}</td></tr>
+  </table>
+  <div class="net"><div><div class="l">SPAWN NET SHARE — ${monthLbl}</div></div><div class="v">${P(f.net)}</div></div>
+  <h2>Reference Figures</h2>
+  <table><tbody>
+    <tr><td>Telegram income (system sales)</td><td class="r"><b>${P(f.tg_income)}</b></td></tr>
+    <tr><td>Coins collected</td><td class="r">${P(f.coins_total)}</td></tr>
+    <tr><td>Customer share (owner 25%)</td><td class="r">${P(f.customer_share)}</td></tr>
+  </tbody></table>
+  <h2>Collector Performance</h2>
+  <table><thead><tr><th>Collector</th><th class="r">Harvests</th><th class="r">Coins</th><th class="r">Spawn Share</th></tr></thead><tbody>${rowsCol}</tbody></table>
+  <h2>Expenses Breakdown</h2>
+  <table><thead><tr><th>Category</th><th class="r">Amount</th></tr></thead><tbody>${rowsExp}
+    <tr><td><b>Total</b></td><td class="r"><b>${P(f.expenses)}</b></td></tr></tbody></table>
+  <div class="foot">Net = Total Coins − Customer Share − Expenses &nbsp;|&nbsp; Spawn 75% / Owner 25%<br>
+  SPAWN Internet · Lalawan, Dicayas, Dipolog City · spawnremote@gmail.com · Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
+  <button class="pbtn" onclick="window.print()">🖨 Print / Save PDF</button>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(w){ w.document.write(html); w.document.close(); }
+  else { alert('Allow pop-ups to view the report.'); }
+}
+document.getElementById('report-btn').addEventListener('click',openReport);
 
 function init(){
   buildMonthOptions();
