@@ -514,7 +514,8 @@ window.toolLive=toolLive;
 
 // ---- TOOL: Telegram Reconciliation (per vendo, this month) ----
 function reconStatus(gap){
-  // gap = TG income - coins. >0 deficit, <0 surplus, ~0 exact
+  // gap = TG income - coins.  gap>0 => TG more than coins => DEFICIT (coins short)
+  // gap<0 => coins more than TG => SURPLUS.  |gap|<=100 => EXACT.
   if(Math.abs(gap)<=100) return {key:'exact',label:'Exact',color:'#15803d',bg:'#dcfce7'};
   if(gap>0) return {key:'deficit',label:'Deficit',color:'#dc2626',bg:'#fee2e2'};
   return {key:'surplus',label:'Surplus',color:'#b45309',bg:'#fef9c3'};
@@ -526,57 +527,83 @@ async function toolRecon(color){
   try{
     const r=await gw({kind:'rpc',fn:'spawn_tg_recon',body:{}});
     let rows=await r.json(); if(!Array.isArray(rows)) rows=[];
+    // sort worst-first: biggest absolute gap on top
+    rows.sort((a,b)=>Math.abs(+b.gap||0)-Math.abs(+a.gap||0));
     const tgTot=rows.reduce((s,v)=>s+(+v.tg_income||0),0);
     const coinTot=rows.reduce((s,v)=>s+(+v.coins||0),0);
-    const gapTot=tgTot-coinTot;
-    let deficitN=0,surplusN=0,exactN=0;
-    rows.forEach(v=>{ const st=reconStatus(+v.gap||0); if(st.key==='deficit')deficitN++; else if(st.key==='surplus')surplusN++; else exactN++; });
-    let html='<div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
-      '<div style="font-size:14px;font-weight:700;margin-bottom:2px;">Telegram vs coins &middot; this month</div>'+
-      '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;">TG income minus coins. Deficit = coins may be missing.</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'+
-        '<div style="background:#eef5ff;border-radius:11px;padding:10px;"><div style="font-size:10px;color:var(--tx2);">TG income</div><div style="font-size:16px;font-weight:800;color:#025AC6;">'+peso(tgTot)+'</div></div>'+
-        '<div style="background:var(--bg);border-radius:11px;padding:10px;"><div style="font-size:10px;color:var(--tx2);">Coins</div><div style="font-size:16px;font-weight:800;">'+peso(coinTot)+'</div></div>'+
-        '<div style="background:'+(gapTot>0?'#fef2f2':'#f0fdf4')+';border-radius:11px;padding:10px;"><div style="font-size:10px;color:var(--tx2);">Net gap</div><div style="font-size:16px;font-weight:800;color:'+(gapTot>0?'#DF1A35':'#028867')+'">'+peso(gapTot)+'</div></div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'+
-        '<div style="background:#fee2e2;border-radius:10px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#dc2626;">'+deficitN+'</div><div style="font-size:9px;color:#dc2626;">DEFICIT</div></div>'+
-        '<div style="background:#fef9c3;border-radius:10px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#b45309;">'+surplusN+'</div><div style="font-size:9px;color:#b45309;">SURPLUS</div></div>'+
-        '<div style="background:#dcfce7;border-radius:10px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#15803d;">'+exactN+'</div><div style="font-size:9px;color:#15803d;">EXACT</div></div>'+
-      '</div>'+
-      '<input id="recon-search" placeholder="Search vendo or TG name\u2026" style="width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;font-size:13px;box-sizing:border-box;">'+
-    '</div>';
+    let deficitN=0,surplusN=0,exactN=0,deficitAmt=0,surplusAmt=0;
+    rows.forEach(v=>{ const g=+v.gap||0; const st=reconStatus(g);
+      if(st.key==='deficit'){deficitN++; deficitAmt+=g;}
+      else if(st.key==='surplus'){surplusN++; surplusAmt+=Math.abs(g);}
+      else exactN++; });
+    let html=''+
+      '<div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+        '<div style="font-size:14px;font-weight:700;margin-bottom:2px;">Telegram vs coins &middot; this month</div>'+
+        '<div style="font-size:11px;color:var(--tx2);margin-bottom:13px;">Deficit = coins less than Telegram sales. Surplus = coins more.</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px;">'+
+          '<div style="background:#eef5ff;border-radius:11px;padding:11px;"><div style="font-size:10px;color:var(--tx2);">TG income</div><div style="font-size:17px;font-weight:800;color:#025AC6;">'+peso(tgTot)+'</div></div>'+
+          '<div style="background:var(--bg);border-radius:11px;padding:11px;"><div style="font-size:10px;color:var(--tx2);">Coins collected</div><div style="font-size:17px;font-weight:800;">'+peso(coinTot)+'</div></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'+
+          '<div style="background:#dcfce7;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#15803d;">'+exactN+'</div><div style="font-size:9px;font-weight:700;color:#15803d;">\u2705 EXACT</div></div>'+
+          '<div style="background:#fef9c3;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#b45309;">'+surplusN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(surplusN?peso(surplusAmt):'\u2014')+'</div></div>'+
+          '<div style="background:#fee2e2;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#dc2626;">'+deficitN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 DEFICIT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(deficitN?peso(deficitAmt):'\u2014')+'</div></div>'+
+        '</div>'+
+        '<input id="recon-search" placeholder="Search vendo or TG name\u2026" style="width:100%;margin-top:13px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font-size:14px;box-sizing:border-box;-webkit-appearance:none;">'+
+      '</div>';
+    // area filter chips
+    const areas=Array.from(new Set(rows.map(v=>v.area||'\u2014'))).sort();
+    html+='<div id="recon-chips" style="display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;-webkit-overflow-scrolling:touch;">'+
+      chip('all','All',true)+['deficit','surplus','exact'].map(k=>chip('st:'+k,k.charAt(0).toUpperCase()+k.slice(1),false)).join('')+
+      areas.map(a=>chip('ar:'+a,a,false)).join('')+'</div>';
     html+='<div id="recon-list">'+reconRows(rows)+'</div>';
     t.innerHTML=html;
     window._reconRows=rows;
-    const sb=document.getElementById('recon-search');
-    if(sb) sb.addEventListener('input',()=>{
-      const q=sb.value.toLowerCase().trim();
-      const f=q?rows.filter(v=>((v.sheet_name||'')+' '+(v.tg_name||'')).toLowerCase().includes(q)):rows;
-      document.getElementById('recon-list').innerHTML=reconRows(f);
+    window._reconFilter={q:'',chip:'all'};
+    const applyFilter=()=>{
+      const f=window._reconFilter; let out=rows;
+      if(f.chip && f.chip!=='all'){
+        if(f.chip.startsWith('st:')){ const k=f.chip.slice(3); out=out.filter(v=>reconStatus(+v.gap||0).key===k); }
+        else if(f.chip.startsWith('ar:')){ const a=f.chip.slice(3); out=out.filter(v=>(v.area||'\u2014')===a); }
+      }
+      if(f.q){ out=out.filter(v=>((v.sheet_name||'')+' '+(v.tg_name||'')).toLowerCase().includes(f.q)); }
+      document.getElementById('recon-list').innerHTML=reconRows(out);
       wireReconCards();
+    };
+    const sb=document.getElementById('recon-search');
+    if(sb) sb.addEventListener('input',()=>{ window._reconFilter.q=sb.value.toLowerCase().trim(); applyFilter(); });
+    document.querySelectorAll('#recon-chips .rc-chip').forEach(function(c){
+      c.addEventListener('click',function(){
+        window._reconFilter.chip=c.getAttribute('data-k');
+        document.querySelectorAll('#recon-chips .rc-chip').forEach(x=>{x.style.background='#fff';x.style.color='var(--tx2)';x.style.borderColor='var(--line)';});
+        c.style.background='var(--blue)';c.style.color='#fff';c.style.borderColor='var(--blue)';
+        applyFilter();
+      });
     });
     wireReconCards();
   }catch(e){ console.warn('recon failed',e); t.innerHTML='<div style="font-size:13px;color:var(--red);">Couldn\u2019t load reconciliation.</div>'; }
 }
+function chip(k,label,active){
+  return '<button class="rc-chip" data-k="'+k+'" style="flex-shrink:0;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--blue)':'var(--line)')+';background:'+(active?'var(--blue)':'#fff')+';color:'+(active?'#fff':'var(--tx2)')+';white-space:nowrap;">'+label+'</button>';
+}
 function reconRows(rows){
-  if(!rows.length) return '<div style="font-size:13px;color:var(--tx2);padding:10px;">No matching vendos.</div>';
-  return rows.slice(0,300).map(function(v,idx){
-    var gap=+v.gap||0; var st=reconStatus(gap);
-    return '<div class="recon-card" data-idx="'+idx+'" style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:9px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;border-left:4px solid '+st.color+';">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;">'+
+  if(!rows.length) return '<div style="font-size:13px;color:var(--tx2);padding:18px;text-align:center;">No matching vendos.</div>';
+  return rows.slice(0,400).map(function(v,idx){
+    var gap=+v.gap||0; var st=reconStatus(gap); var amt=Math.abs(gap);
+    return '<div class="recon-card" data-idx="'+idx+'" style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:9px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid '+st.color+';">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;min-height:52px;">'+
         '<div style="min-width:0;padding-right:10px;"><div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(v.sheet_name||v.tg_name||'Vendo')+'</div>'+
-        '<div style="font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(v.area||'')+' \u00B7 TG: '+(v.tg_name||'\u2014')+'</div></div>'+
-        '<div style="text-align:right;flex-shrink:0;"><span style="display:inline-block;font-size:10px;font-weight:800;padding:2px 9px;border-radius:12px;color:'+st.color+';background:'+st.bg+';">'+st.label+'</span>'+
-        '<div style="font-weight:800;color:'+st.color+';margin-top:3px;">'+(gap>0?'+':'')+peso(gap)+'</div></div>'+
+        '<div style="font-size:11px;color:#15803d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">\ud83d\udd17 '+(v.tg_name||'\u2014')+'</div>'+
+        '<div style="font-size:10px;color:var(--tx3);margin-top:1px;">'+(v.area||'')+'</div></div>'+
+        '<div style="text-align:right;flex-shrink:0;"><span style="display:inline-block;font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;color:'+st.color+';background:'+st.bg+';">'+st.label+'</span>'+
+        '<div style="font-weight:800;color:'+st.color+';margin-top:4px;font-size:15px;">'+peso(amt)+'</div></div>'+
       '</div>'+
-      '<div class="recon-detail" style="display:none;padding:0 14px 13px;border-top:0.5px solid var(--line);">'+
-        '<div style="font-size:11px;color:var(--tx2);margin:11px 0 8px;">Reconciliation this month</div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:var(--tx2);">Telegram income</span><span style="font-weight:700;color:#025AC6;">'+peso(v.tg_income)+'</span></div>'+
+      '<div class="recon-detail" style="display:none;padding:0 14px 14px;border-top:0.5px solid var(--line);background:#fafbfc;">'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0 4px;"><span style="color:var(--tx2);">Telegram income</span><span style="font-weight:700;color:#025AC6;">'+peso(v.tg_income)+'</span></div>'+
         '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:var(--tx2);">Coins collected</span><span style="font-weight:700;">'+peso(v.coins)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:0.5px solid var(--line);margin-top:4px;padding-top:8px;"><span style="color:var(--tx2);">Gap (TG \u2212 coins)</span><span style="font-weight:800;color:'+st.color+';">'+(gap>0?'+':'')+peso(gap)+' \u00B7 '+st.label+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0 4px;border-top:0.5px solid var(--line);margin-top:4px;"><span style="color:var(--tx2);">'+(st.key==='deficit'?'Coins short by':st.key==='surplus'?'Extra coins':'Difference')+'</span><span style="font-weight:800;color:'+st.color+';">'+peso(amt)+' \u00B7 '+st.label+'</span></div>'+
         '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:var(--tx2);">Spawn share</span><span style="font-weight:700;color:#028867;">'+peso(v.spawn)+'</span></div>'+
-        '<div style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.4;">'+(st.key==='deficit'?'\u26a0 Telegram recorded more sales than coins turned in \u2014 coins may be missing.':st.key==='surplus'?'Coins exceed Telegram sales \u2014 extra coins collected.':'Coins match Telegram sales within \u20b1100.')+'</div>'+
+        '<div style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.4;">'+(st.key==='deficit'?'\u26a0 Telegram recorded more sales than coins turned in \u2014 coins may be missing.':st.key==='surplus'?'Coins exceed Telegram sales \u2014 more coins collected than TG shows.':'Coins match Telegram sales within \u20b1100.')+'</div>'+
       '</div></div>';
   }).join('');
 }
