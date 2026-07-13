@@ -127,6 +127,7 @@
     <h1>Spawn Internet</h1>
     <p>Owner sign in</p>
     <div class="err" id="err"></div>
+    <input id="uname" type="text" placeholder="Username" autocomplete="username">
     <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
     <button id="signin">Sign in</button>
   </div>
@@ -606,21 +607,22 @@ async function loadKeys(){
   }catch(e){ console.warn('keys failed',e); wrap.innerHTML='<div style="font-size:12px;color:var(--red);padding:6px 0;">Couldn\u2019t load keys.</div>'; }
 }
 
-const pw=document.getElementById('pw'),err=document.getElementById('err'),signin=document.getElementById('signin');
+const pw=document.getElementById('pw'),uname=document.getElementById('uname'),err=document.getElementById('err'),signin=document.getElementById('signin');
 async function doLogin(){
-  const p=pw.value; err.textContent='';
-  if(!p){ err.textContent='Enter your password.'; return; }
+  const p=pw.value; const u=(uname.value||'').trim(); err.textContent='';
+  if(!u||!p){ err.textContent='Enter your username and password.'; return; }
   signin.disabled=true; signin.textContent='Signing in\u2026';
   try{
-    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});
+    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
     const d=await r.json().catch(()=>({}));
     if(r.ok&&d.ok&&d.token){ GW_TOKEN=d.token; pw.value=''; document.getElementById('login').style.display='none'; buildApps(); loadOverview(); loadCollectors(); loadKeys(); }
-    else if(r.status===401){ err.textContent='Wrong password.'; }
+    else if(r.status===401){ err.textContent='Wrong username or password.'; }
     else{ err.textContent='Login failed. Try again.'; }
   }catch(e){ err.textContent='Can\u2019t reach server. Check connection.'; }
   finally{ signin.disabled=false; signin.textContent='Sign in'; }
 }
 signin.addEventListener('click',doLogin);
+uname.addEventListener('keydown',e=>{ if(e.key==='Enter') pw.focus(); });
 pw.addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
 
 /* ---- Web Push subscribe ---- */
