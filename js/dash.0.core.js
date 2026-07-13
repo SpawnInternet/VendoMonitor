@@ -24,7 +24,7 @@ window.askAdminPw = function(message){
     var old=document.getElementById('spawn-pw-modal'); if(old) old.remove();
     var ov=document.createElement('div');
     ov.id='spawn-pw-modal';
-    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100010;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;';
     ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;">'
       +'<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px;">🔒 Admin confirmation</div>'
       +'<div style="padding:20px 22px;">'
