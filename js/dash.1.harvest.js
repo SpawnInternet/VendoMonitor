@@ -1441,7 +1441,7 @@ async function rcRun(){
     const tgInc=rowKey!=null?(tgRowIncomeMap[rowKey]??null):null;
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
-    const gap=tgInc!=null?tgInc-coins:null; // positive=DEFICIT (TG>coins, missing), negative=SURPLUS (coins>TG)
+    const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
     const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
     const overAmt=gap!=null&&Math.abs(gap)>500;
     const overPct=gapPct!=null&&gapPct>20;
@@ -1655,7 +1655,13 @@ async function rcnSaveNames(vendoName){
       htAllRows=[];
       // update local cache row so reopening shows fresh values
       if(row){ if(sheet) row.sheet_name=sheet; if(tg) row.tg_name=tg; }
+      // reflect the change in the loaded recon rows and re-render immediately
+      if(tg && Array.isArray(rcAllRows)){
+        rcAllRows.forEach(rr=>{ if(rr.vendo_id && row && rr.vendo_id===row.vendo_id){ rr.tg_name=tg; } });
+      }
       if(msg){msg.textContent='Saved';msg.style.color='#15803d';}
+      const ov=document.getElementById('rc-names-overlay'); if(ov) ov.remove();
+      if(typeof rcFilter==='function') rcFilter();  // re-render table + recompute counts
     }else{
       const errText=await r2.text();
       if(msg){msg.textContent='Save failed: '+errText.slice(0,40);msg.style.color='#dc2626';}
@@ -1752,7 +1758,7 @@ function rcFilter(){
 
   const fmtP=v=>_php(v);
   const flagBadge=f=>f==='alert'
-    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Deficit</span>'
+    ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Short</span>'
     :f==='warn'
     ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🟡 Surplus</span>'
     :f==='nodata'
@@ -1760,9 +1766,9 @@ function rcFilter(){
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
-    // gap = TG income - coins
-    // positive = DEFICIT (TG > coins, money missing) = red
-    // negative = SURPLUS (coins > TG, extra coins) = yellow
+    // gap = TG income - coins_total
+    // positive = surplus (TG > coins) = yellow
+    // negative = short (coins > TG) = red
     const c=gap>100?'#dc2626':gap<-100?'#b45309':'#15803d';
     const bg=gap>100?'#fee2e2':gap<-100?'#fefce8':'#dcfce7';
     const sign=gap>=0?'+':'';
@@ -1781,14 +1787,16 @@ function rcFilter(){
     const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
     const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
 
-    // ---- per-vendo reconciliation breakdown (gap = TG income - coins; +deficit / -surplus; |gap|<100 = exact) ----
-    const rcRows=cd.rows.filter(r=>r.gap!=null);
+    // ---- per-vendo reconciliation breakdown (gap = TG income - coins; +surplus / -deficit; |gap|<100 = exact) ----
+    // Use live gap when available, else fall back to saved recon_gap from DB.
+    const effGap=r=>{ const g=(r.gap!=null)?r.gap:(r.recon_gap!=null?Number(r.recon_gap):null); return g; };
+    const rcRows=cd.rows.filter(r=>effGap(r)!=null);
     let exactN=0, surplusN=0, deficitN=0, surplusAmt=0, deficitAmt=0;
     rcRows.forEach(r=>{
-      const g=Number(r.gap);
+      const g=Number(effGap(r));
       if(Math.abs(g)<100){ exactN++; }
-      else if(g>0){ deficitN++; deficitAmt+=g; }        // TG > coins = money missing = deficit
-      else { surplusN++; surplusAmt+=Math.abs(g); }     // coins > TG = extra coins = surplus
+      else if(g>0){ surplusN++; surplusAmt+=g; }
+      else { deficitN++; deficitAmt+=Math.abs(g); }
     });
 
     // ---- build the FULL detail (dates→routes→vendos) into a string for the popup ----
