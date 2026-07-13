@@ -1,4 +1,4 @@
-const CACHE = 'spawn-mobile-v3';
+const CACHE = 'spawn-mobile-v4';
 const SHELL = ['spawn-mobile.html', 'spawn-mobile.webmanifest'];
 
 self.addEventListener('install', e => {
