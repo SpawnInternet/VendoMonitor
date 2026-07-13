@@ -265,11 +265,11 @@ async function vpRenderRecon(){
     let html='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">'
       +'<div style="background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:#1565c0;">'+_php(totC)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">Coins total</div></div>'
       +'<div style="background:#f0fdf4;border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:#15803d;">'+_php(totTg)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">TG income</div></div>'
-      +'<div style="background:'+(Math.abs(totGap)<100?'#f0fdf4':totGap>0?'#fef2f2':'#fefce8')+';border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:'+gc+';">'+(totGap>=0?'+':'')+_php(totGap)+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">'+(totGap>100?'🔴 Short':totGap<-100?'🟡 Surplus':'✅ OK')+'</div></div>'
+      +'<div style="background:'+(Math.abs(totGap)<100?'#f0fdf4':totGap>0?'#fef2f2':'#fefce8')+';border-radius:8px;padding:12px;"><div style="font-size:18px;font-weight:700;color:'+gc+';">'+_php(Math.abs(totGap))+'</div><div style="font-size:11px;color:#6b7280;margin-top:2px;">'+(totGap>100?'🔴 Short':totGap<-100?'🟡 Surplus':'✅ OK')+'</div></div>'
       +'</div><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f8faff;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Harvest date</th><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Window</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Coins total</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">TG income</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Gap</th></tr></thead><tbody>';
     rows.forEach(({hr,ws,we,tgInc,coins,gap,gc,bg})=>{
       const gapLabel=gap>100?'🔴 Short':gap<-100?'🟡 Surplus':'✅ OK';
-      html+=`<tr style="background:${bg}"><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${hr.harvest_date}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;">${ws} → ${we}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#1565c0;">${_php(coins)}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#15803d;">${_php(tgInc)}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:${gc};font-weight:600;">${gapLabel} ${gap>=0?'+':''}${_php(gap)}</td></tr>`;
+      html+=`<tr style="background:${bg}"><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${hr.harvest_date}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;">${ws} → ${we}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#1565c0;">${_php(coins)}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#15803d;">${_php(tgInc)}</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:${gc};font-weight:600;">${gapLabel} ${_php(Math.abs(gap))}</td></tr>`;
     });
     html+='</tbody></table>';
     document.getElementById('vp-body').innerHTML=html;
@@ -1846,8 +1846,7 @@ function rcFilter(){
     // negative = short (coins > TG) = red
     const c=gap>100?'#dc2626':gap<-100?'#b45309':'#15803d';
     const bg=gap>100?'#fee2e2':gap<-100?'#fefce8':'#dcfce7';
-    const sign=gap>=0?'+':'';
-    return `<span style="color:${c};font-weight:700;background:${bg};padding:1px 6px;border-radius:4px;">${sign}${fmtP(gap)}</span>`;
+    return `<span style="color:${c};font-weight:700;background:${bg};padding:1px 6px;border-radius:4px;">${fmtP(Math.abs(gap))}</span>`;
   };
 
   let html='';
@@ -1901,7 +1900,7 @@ function rcFilter(){
           <div style="margin-left:auto;font-size:11px;display:flex;gap:10px;">
             <span>Coins: <b>${fmtP(dtCoins)}</b></span>
             <span>TG: <b>${fmtP(dtTG)}</b></span>
-            <span>Gap: <b style="color:${dtGapColor};">${dtGap>=0?'+':''}${fmtP(dtGap)}</b></span>
+            <span>Gap: <b style="color:${dtGapColor};">${fmtP(Math.abs(dtGap))}</b></span>
           </div>
         </div>
         <div style="padding:6px 8px;display:flex;flex-direction:column;gap:6px;">`;
@@ -1928,7 +1927,7 @@ function rcFilter(){
           <div style="margin-left:auto;display:flex;gap:12px;font-size:11px;">
             <span>Coins: <b>${fmtP(rcCoins)}</b></span>
             <span>TG: <b>${fmtP(rcTG)}</b></span>
-            <span>Gap: <b style="color:${rcGapColor};">${rcGap>=0?'+':''}${fmtP(rcGap)}</b></span>
+            <span>Gap: <b style="color:${rcGapColor};">${fmtP(Math.abs(rcGap))}</b></span>
           </div>
         </div>
         <!-- Vendo table -->
@@ -1998,7 +1997,7 @@ function rcFilter(){
 
     // build the collapsed card
     const initial=(collector||'?').trim().charAt(0).toUpperCase();
-    const gapTxt=(colGap>=0?'+':'')+fmtP(colGap);
+    const gapTxt=fmtP(Math.abs(colGap));
     const gapChipColor=Math.abs(colGap)<100?'#15803d':colGap>0?'#b45309':'#dc2626';
     const gapChipBg=Math.abs(colGap)<100?'#dcfce7':colGap>0?'#fef9c3':'#fee2e2';
     cardData.push({collector, sortKey:collector, html:`
@@ -2039,7 +2038,7 @@ function rcShowCollector(collector){
   ov.id='rc-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
   const initial=(collector||'?').trim().charAt(0).toUpperCase();
-  const gapTxt=(d.gap>=0?'+':'')+_php(d.gap);
+  const gapTxt=_php(Math.abs(d.gap));
   ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:980px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
     <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:16px 20px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
       <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">${initial}</div>
