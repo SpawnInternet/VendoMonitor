@@ -23,7 +23,7 @@
 
   #login{position:fixed;inset:0;z-index:1000;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;padding:24px;}
   .login-card{background:#fff;border-radius:22px;padding:32px 26px;width:100%;max-width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3);}
-  .login-card img{width:88px;height:88px;object-fit:contain;margin:0 auto 8px;display:block;}
+  .login-card img{width:108px;height:108px;object-fit:contain;margin:0 auto 10px;display:block;filter:drop-shadow(0 2px 6px rgba(0,0,0,.14));}
   .login-card h1{font-size:20px;margin-bottom:4px;}
   .login-card p{font-size:13px;color:var(--tx2);margin-bottom:22px;}
   .login-card input{width:100%;height:50px;border:1.5px solid var(--line);border-radius:13px;padding:0 15px;font-size:16px;outline:none;margin-bottom:12px;}
@@ -36,7 +36,7 @@
   .header{background:linear-gradient(135deg,var(--blue),var(--purple));padding:calc(env(safe-area-inset-top) + 16px) 18px 22px;color:#fff;}
   .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
   .brand{display:flex;align-items:center;gap:10px;}
-  .brand img{width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 1px 3px rgba(0,0,0,.18));}
+  .brand img{width:52px;height:52px;object-fit:contain;filter:drop-shadow(0 2px 5px rgba(0,0,0,.22));}
   .brand .b1{font-size:15px;font-weight:500;line-height:1.1;}
   .brand .b2{font-size:11px;color:rgba(255,255,255,.7);}
   .refresh-btn{background:transparent;border:none;color:rgba(255,255,255,.85);padding:6px;}
@@ -239,7 +239,8 @@ const IC={
   router:'M4 14h16v6H4zm2 2v2h2v-2zm4 0v2h2v-2zM4 4h16v6H4zm2 2v2h2V6zm4 0v2h2V6z',
   overdue:'M12 2a10 10 0 100 20 10 10 0 000-20zm1 5v6l4 2-.8 1.6L11 13V7z',
   live:'M12 8a4 4 0 100 8 4 4 0 000-8zm0-6a10 10 0 00-7 17l1.4-1.4A8 8 0 1112 4V2zm0 4a6 6 0 00-4.2 10.2l1.4-1.4A4 4 0 1112 8V6z',
-  recon:'M3 6h18v2H3zm2 5h14v2H5zm-2 5h18v2H3zm14-9l3 3-3 3v-2h-4V9h4zM7 13v2H3l3 3 3-3H7v-2z'
+  recon:'M3 6h18v2H3zm2 5h14v2H5zm-2 5h18v2H3zm14-9l3 3-3 3v-2h-4V9h4zM7 13v2H3l3 3 3-3H7v-2z',
+  keys:'M12.65 10A5.99 5.99 0 006.5 6 6 6 0 006.5 18a5.99 5.99 0 005.65-4H17v4h4v-4h2v-4H12.65zM6.5 14A2 2 0 116.5 10a2 2 0 010 4z'
 };
 
 const SPAWN_APPS=[
@@ -247,6 +248,7 @@ const SPAWN_APPS=[
   {label:'Spawn Count',  icon:'count',   color:'#C01176', src:'office.html'},
   {label:'Spawn Jobs',   icon:'jobs',    color:'#028867', src:'spawn-jobs.html'},
   {label:'Dashboard',    icon:'dash',    color:'#025AC6', src:'dashboard.html?p=dash'},
+  {label:'Dicayas',      icon:'router',  color:'#028867', src:'dicayas.html'},
 ];
 // Native mobile tools — built in-app, no dashboard embedding
 const TOOLS=[
@@ -256,7 +258,7 @@ const TOOLS=[
   {label:'Maps',      icon:'map',        color:'#DF1A35', tool:'map'},
   {label:'Live Feed', icon:'live',       color:'#025AC6', tool:'live'},
   {label:'TG Recon',  icon:'recon',      color:'#311A8E', tool:'recon'},
-  {label:'Dicayas',   icon:'router',     color:'#028867', src:'dicayas.html'},
+  {label:'Passwords', icon:'keys',       color:'#B47F00', tool:'passwords'},
 ];
 
 function appEl(a){
@@ -314,6 +316,7 @@ function openTool(a){
   if(a.tool==='map') return openMap();
   if(a.tool==='live') return toolLive(a.color);
   if(a.tool==='recon') return toolRecon(a.color);
+  if(a.tool==='passwords') return toolPasswords(a.color);
 }
 window.openTool=openTool;
 
@@ -369,21 +372,28 @@ window.toolHarvest=toolHarvest;
 async function toolAnalytics(color){
   showToolBar('Analytics',color);
   const t=toolPanel();
-  t.innerHTML='<div class="card" style="margin:0 0 14px;"><div style="font-size:13px;font-weight:500;margin-bottom:10px;">Telegram sales \u00B7 7 days</div><canvas id="an-trend" height="180"></canvas></div>'+
-    '<div class="card" style="margin:0 0 14px;"><div style="font-size:13px;font-weight:500;margin-bottom:10px;">Spawn share by group</div><canvas id="an-spawn" height="200"></canvas></div>'+
-    '<div class="card" style="margin:0;"><div style="font-size:13px;font-weight:500;margin-bottom:10px;">Telegram sales by group</div><canvas id="an-tg" height="220"></canvas></div>';
-  const ov=LAST_OV||{};
-  function ensureChart(cb){
-    if(window.Chart) return cb();
-    const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'; s.onload=cb; document.head.appendChild(s);
+  t.innerHTML='<div class="card" style="margin:0 0 14px;"><div style="font-size:14px;font-weight:700;margin-bottom:2px;">Harvest collected by group</div><div style="font-size:11px;color:var(--tx2);margin-bottom:12px;">Spawn share harvested this month, per group.</div><canvas id="an-spawn" height="220"></canvas></div>'+
+    '<div class="card" style="margin:0 0 14px;"><div style="font-size:14px;font-weight:700;margin-bottom:12px;">Breakdown by group</div><div id="an-table"></div></div>'+
+    '<div class="card" style="margin:0;"><div style="font-size:14px;font-weight:700;margin-bottom:2px;">Telegram sales \u00B7 7 days</div><div style="font-size:11px;color:var(--tx2);margin-bottom:12px;">Daily Telegram income trend.</div><canvas id="an-trend" height="170"></canvas></div>';
+  // Prefer owner RPC group data (by-group distribution). Fall back to overview.
+  let byGroup=(window.LAST_OWNER&&window.LAST_OWNER.harvest_by_group)||[];
+  if(!byGroup.length){
+    try{ const r=await gw({kind:'rpc',fn:'spawn_owner_overview',body:{}}); let od=await r.json(); if(Array.isArray(od))od=od[0]; if(od&&od.spawn_owner_overview)od=od.spawn_owner_overview; window.LAST_OWNER=od; byGroup=(od&&od.harvest_by_group)||[]; }catch(_){}
   }
-  ensureChart(()=>{
-    const trend=ov.tg_trend||[];
-    new Chart(document.getElementById('an-trend'),{type:'line',data:{labels:trend.map(d=>d.date.slice(5)),datasets:[{data:trend.map(d=>d.tg_sales),borderColor:'#025AC6',backgroundColor:'rgba(2,90,198,.12)',fill:true,tension:.3,pointRadius:3}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:10}}}}}});
-    const sg=ov.harvest_by_group||[];
-    new Chart(document.getElementById('an-spawn'),{type:'bar',data:{labels:sg.map(g=>g.grp),datasets:[{data:sg.map(g=>g.spawn),backgroundColor:['#025AC6','#FFB725','#028867','#C01176','#311A8E','#DF1A35']}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:10}}}}}});
-    const tg=ov.tg_by_group||[];
-    new Chart(document.getElementById('an-tg'),{type:'bar',data:{labels:tg.map(g=>g.grp),datasets:[{data:tg.map(g=>g.tg_sales),backgroundColor:'#025AC6'}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},y:{ticks:{font:{size:10}}}}}});
+  byGroup=byGroup.filter(g=>(+g.spawn||0)>0).sort((a,b)=>(+b.spawn||0)-(+a.spawn||0));
+  const AC={DIPOLOG:'#025AC6',DAPITAN:'#FFB725',SINDANGAN:'#028867','MIX AREAS':'#311A8E',POLANCO:'#C01176',ROXAS:'#DF1A35',SINAMAN:'#028867',MINAOG:'#6b7280'};
+  // table
+  const totalSpawn=byGroup.reduce((s,g)=>s+(+g.spawn||0),0);
+  document.getElementById('an-table').innerHTML=
+    '<table style="width:100%;border-collapse:collapse;font-size:12px;">'+
+    '<thead><tr style="color:var(--tx2);text-align:left;"><th style="padding:5px 4px;font-weight:600;">Group</th><th style="padding:5px 4px;text-align:right;font-weight:600;">Spawn</th><th style="padding:5px 4px;text-align:right;font-weight:600;">Vendos</th></tr></thead><tbody>'+
+    byGroup.map(g=>'<tr style="border-top:0.5px solid var(--line);"><td style="padding:7px 4px;"><div style="font-weight:600;">'+g.group_label+'</div><div style="font-size:10px;color:var(--tx3);">'+(g.barangays||g.area||'')+'</div></td><td style="padding:7px 4px;text-align:right;font-weight:700;color:#028867;">'+peso(g.spawn)+'</td><td style="padding:7px 4px;text-align:right;color:var(--tx2);">'+(g.vendos||0)+'</td></tr>').join('')+
+    '<tr style="border-top:1.5px solid var(--line);"><td style="padding:8px 4px;font-weight:700;">Total</td><td style="padding:8px 4px;text-align:right;font-weight:800;color:#028867;">'+peso(totalSpawn)+'</td><td></td></tr>'+
+    '</tbody></table>';
+  const ov=LAST_OV||{};
+  ensureChartLib(()=>{
+    try{ new Chart(document.getElementById('an-spawn'),{type:'bar',data:{labels:byGroup.map(g=>g.group_label.replace(/ \u2014 /g,' ')),datasets:[{data:byGroup.map(g=>+g.spawn||0),backgroundColor:byGroup.map(g=>AC[g.area]||'#025AC6'),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:9},maxRotation:55,minRotation:30}}}}}); }catch(_){}
+    try{ const trend=ov.tg_trend||[]; new Chart(document.getElementById('an-trend'),{type:'line',data:{labels:trend.map(d=>d.date.slice(5)),datasets:[{data:trend.map(d=>d.tg_sales),borderColor:'#025AC6',backgroundColor:'rgba(2,90,198,.12)',fill:true,tension:.3,pointRadius:3}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:10}}}}}}); }catch(_){}
   });
 }
 window.toolAnalytics=toolAnalytics;
@@ -391,68 +401,73 @@ window.toolAnalytics=toolAnalytics;
 // ---- TOOL: Live Feed (collector GPS trail from harvested vendos today) ----
 async function toolLive(color){
   showToolBar('Live Feed',color);
-  const mv=document.getElementById('mapview'); mv.style.display='block';
-  document.getElementById('toolview').style.display='none';
-  document.getElementById('appview').classList.add('open');
-  setTimeout(async()=>{
-    if(window._map){ window._map.remove(); window._map=null; }
-    const map=L.map('mapview',{zoomControl:true}).setView([8.58,123.34],11); window._map=map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'\u00A9 OSM'}).addTo(map);
-    const COLS=['#025AC6','#DF1A35','#028867','#C01176','#FFB725','#311A8E'];
-    const fmt=t=>new Date(t).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
-    const layers={}; // per-collector layerGroup
-    let byCol={};
-    try{
-      const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-      const rh=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,harvested_at,sheet_name,vendo_id&harvest_date=eq.'+today+'&order=collector,harvested_at&limit=3000'});
-      const hs=await rh.json();
-      const rv=await gw({kind:'rest',table:'vendos',method:'GET',query:'select=id,lat,lng&lat=not.is.null&lng=not.is.null&limit=3000'});
-      const vs=await rv.json(); const gps={}; (Array.isArray(vs)?vs:[]).forEach(v=>{gps[v.id]=[v.lat,v.lng];});
-      (Array.isArray(hs)?hs:[]).forEach(h=>{const g=gps[h.vendo_id]; if(!g)return; (byCol[h.collector||'\u2014']=byCol[h.collector||'\u2014']||[]).push({p:g,t:h.harvested_at,n:h.sheet_name});});
-    }catch(e){ console.warn('live feed failed',e); }
-    window._liveByCol=byCol; window._liveCols=COLS;
-    const allPts=[];
-    let ci=0; const colColor={};
-    Object.keys(byCol).forEach(col=>{
-      const c=COLS[ci%COLS.length]; colColor[col]=c; ci++;
-      const stops=byCol[col];
-      const lg=L.layerGroup().addTo(map); layers[col]=lg;
-      if(stops.length>1) L.polyline(stops.map(s=>s.p),{color:c,weight:3,opacity:.7}).addTo(lg);
-      stops.forEach((s,i)=>{const last=i===stops.length-1;
-        const m=L.circleMarker(s.p,{radius:last?9:6,color:'#fff',weight:2,fillColor:c,fillOpacity:1});
-        m.bindPopup('<b>'+col+'</b>'+(last?' \u2014 latest':'')+'<br>'+(s.n||'')+'<br>'+fmt(s.t)); m.addTo(lg); allPts.push(s.p);});
-    });
-    window._liveColColor=colColor; window._liveLayers=layers;
-    if(allPts.length) map.fitBounds(allPts,{padding:[40,40]});
-    // Collector table control (tap a collector to isolate their track)
-    const tc=L.control({position:'bottomleft'});
-    tc.onAdd=function(){
-      const d=L.DomUtil.create('div');
-      d.style.cssText='background:#fff;padding:8px 9px;border-radius:10px;font-size:12px;box-shadow:0 1px 6px rgba(0,0,0,.25);max-width:190px;max-height:44vh;overflow-y:auto;';
-      const cols=Object.keys(byCol);
-      d.innerHTML='<div style="font-weight:700;margin-bottom:6px;">Collectors today</div>'+
-        (cols.length?cols.map(col=>'<div class="live-row" data-col="'+col.replace(/"/g,'&quot;')+'" style="display:flex;align-items:center;gap:7px;padding:5px 3px;cursor:pointer;border-radius:6px;">'+
-          '<span style="width:11px;height:11px;border-radius:50%;background:'+colColor[col]+';flex-shrink:0;"></span>'+
-          '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+col+'</span>'+
-          '<span style="color:var(--tx2);font-size:11px;">'+byCol[col].length+'</span></div>').join(''):'<div style="color:var(--tx2);">No harvests yet today.</div>')+
-        (cols.length?'<div class="live-row" data-col="__ALL__" style="margin-top:6px;padding:5px 3px;cursor:pointer;color:#025AC6;font-weight:600;">Show all</div>':'');
-      L.DomEvent.disableClickPropagation(d);
-      return d;
-    };
-    tc.addTo(map);
-    setTimeout(()=>{
-      document.querySelectorAll('.live-row').forEach(row=>{
-        row.addEventListener('click',()=>{
-          const col=row.dataset.col;
-          Object.keys(layers).forEach(k=>{ map.removeLayer(layers[k]); });
-          if(col==='__ALL__'){ Object.keys(layers).forEach(k=>map.addLayer(layers[k])); if(allPts.length)map.fitBounds(allPts,{padding:[40,40]}); }
-          else { map.addLayer(layers[col]); const pts=byCol[col].map(s=>s.p); if(pts.length)map.fitBounds(pts,{padding:[60,60]}); }
-        });
-      });
-    },50);
-  },120);
+  const t=toolPanel();
+  t.innerHTML='<div style="font-size:12px;color:var(--tx2);">Loading live feed\u2026</div>';
+  const COLS=['#025AC6','#DF1A35','#028867','#C01176','#FFB725','#311A8E'];
+  const fmt=x=>new Date(x).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
+  let byCol={}; let gps={};
+  try{
+    const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    const rh=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,harvested_at,sheet_name,tg_name,vendo_id,coins_total,spawn_share&harvest_date=eq.'+today+'&order=collector,harvested_at&limit=3000'});
+    const hs=await rh.json();
+    const rv=await gw({kind:'rest',table:'vendos',method:'GET',query:'select=id,lat,lng&lat=not.is.null&lng=not.is.null&limit=3000'});
+    const vs=await rv.json(); (Array.isArray(vs)?vs:[]).forEach(v=>{gps[v.id]=[v.lat,v.lng];});
+    (Array.isArray(hs)?hs:[]).forEach(h=>{ (byCol[h.collector||'\u2014']=byCol[h.collector||'\u2014']||[]).push(h); });
+  }catch(e){ console.warn('live feed failed',e); }
+  window._liveByCol=byCol; window._liveGps=gps; window._liveCols=COLS;
+  const cols=Object.keys(byCol);
+  if(!cols.length){ t.innerHTML='<div style="font-size:13px;color:var(--tx2);padding:8px;">No harvests recorded yet today.</div>'; return; }
+  let ci=0;
+  t.innerHTML=cols.map(function(col){
+    const c=COLS[ci%COLS.length]; ci++;
+    const stops=byCol[col];
+    const spawn=stops.reduce((s,h)=>s+(+h.spawn_share||0),0);
+    const last=stops[stops.length-1];
+    const withGps=stops.filter(h=>gps[h.vendo_id]).length;
+    const rows=stops.slice().reverse().map(function(h){
+      const hasG=!!gps[h.vendo_id];
+      return '<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:0.5px solid var(--line);">'+
+        '<span style="width:8px;height:8px;border-radius:50%;background:'+(hasG?c:'#cbd5e1')+';flex-shrink:0;"></span>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(h.sheet_name||h.tg_name||'Vendo')+'</div>'+
+        '<div style="font-size:11px;color:var(--tx3);">'+fmt(h.harvested_at)+(hasG?' \u00B7 \ud83d\udccd GPS':' \u00B7 no GPS')+'</div></div>'+
+        '<span style="font-size:12px;font-weight:600;color:#028867;white-space:nowrap;">'+peso(h.spawn_share)+'</span></div>';
+    }).join('');
+    return '<div style="background:#fff;border-radius:16px;overflow:hidden;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-left:5px solid '+c+';">'+
+        '<div><div style="font-size:16px;font-weight:700;">'+col+'</div><div style="font-size:11px;color:var(--tx3);margin-top:2px;">'+stops.length+' stops \u00B7 '+withGps+' with GPS \u00B7 last '+fmt(last.harvested_at)+'</div></div>'+
+        '<div style="text-align:right;"><div style="font-size:16px;font-weight:800;color:#028867;">'+peso(spawn)+'</div><div style="font-size:10px;color:var(--tx3);">spawn today</div></div>'+
+      '</div>'+
+      '<div style="padding:2px 15px 12px;">'+rows+'</div>'+
+      '<div style="padding:0 15px 14px;"><button class="live-map-btn" data-col="'+col.replace(/"/g,'&quot;')+'" style="width:100%;padding:10px;border:1px solid '+c+';background:#fff;color:'+c+';border-radius:11px;font-size:13px;font-weight:600;">View '+col+'\u2019s route on map</button></div>'+
+    '</div>';
+  }).join('');
+  t.querySelectorAll('.live-map-btn').forEach(function(b){ b.addEventListener('click',function(){ liveMapForCollector(b.dataset.col); }); });
 }
 window.toolLive=toolLive;
+
+function liveMapForCollector(col){
+  const byCol=window._liveByCol||{}; const gps=window._liveGps||{}; const COLS=window._liveCols||['#025AC6'];
+  const stops=(byCol[col]||[]).filter(h=>gps[h.vendo_id]).map(h=>({p:gps[h.vendo_id],t:h.harvested_at,n:h.sheet_name||h.tg_name}));
+  showToolBar('Live Feed','#025AC6');
+  const mv=document.getElementById('mapview'); mv.style.display='block';
+  document.getElementById('toolview').style.display='none';
+  document.getElementById('av-name').textContent=col+' \u00B7 route';
+  setTimeout(()=>{
+    if(window._map){ window._map.remove(); window._map=null; }
+    const map=L.map('mapview',{zoomControl:true}).setView([8.58,123.34],12); window._map=map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'\u00A9 OSM'}).addTo(map);
+    const fmt=x=>new Date(x).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
+    if(stops.length>1) L.polyline(stops.map(s=>s.p),{color:'#025AC6',weight:3,opacity:.7}).addTo(map);
+    stops.forEach((s,i)=>{const last=i===stops.length-1; const m=L.circleMarker(s.p,{radius:last?9:6,color:'#fff',weight:2,fillColor:'#025AC6',fillOpacity:1}); m.bindPopup('<b>'+(s.n||'')+'</b><br>'+fmt(s.t)+(last?' \u2014 latest':'')); m.addTo(map);});
+    if(stops.length) map.fitBounds(stops.map(s=>s.p),{padding:[50,50]});
+    else { const d=L.control(); d.onAdd=function(){const el=L.DomUtil.create('div'); el.style.cssText='background:#fff;padding:8px 10px;border-radius:8px;font-size:12px;'; el.textContent='No GPS points captured for '+col+' today.'; return el;}; d.addTo(map); }
+    // back to list
+    const bc=L.control({position:'topleft'});
+    bc.onAdd=function(){const el=L.DomUtil.create('div'); el.style.cssText='background:#fff;padding:7px 11px;border-radius:8px;font-size:13px;font-weight:600;color:#025AC6;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);margin-top:6px;'; el.textContent='\u2039 Back to collectors'; L.DomEvent.disableClickPropagation(el); el.addEventListener('click',()=>{ if(window._map){window._map.remove();window._map=null;} toolLive('#025AC6'); }); return el;};
+    bc.addTo(map);
+  },120);
+}
+window.liveMapForCollector=liveMapForCollector;
 
 // ---- TOOL: Telegram Reconciliation (per vendo, this month) ----
 async function toolRecon(color){
@@ -508,6 +523,60 @@ function reconRows(rows){
 }
 window.toolRecon=toolRecon;
 
+// ---- TOOL: Passwords & PINs (all apps + collectors + admin) ----
+async function toolPasswords(color){
+  showToolBar('Passwords',color);
+  const t=toolPanel();
+  t.innerHTML='<div style="font-size:12px;color:var(--tx2);">Loading credentials\u2026</div>';
+  function card(title, sub, rows){
+    return '<div style="background:#fff;border-radius:16px;overflow:hidden;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+      '<div style="padding:13px 15px 4px;"><div style="font-size:15px;font-weight:700;">'+title+'</div>'+(sub?'<div style="font-size:11px;color:var(--tx3);margin-top:2px;">'+sub+'</div>':'')+'</div>'+
+      '<div style="padding:6px 15px 12px;">'+rows+'</div></div>';
+  }
+  function row(label, value){
+    var v=(value==null||value==='')?'\u2014':String(value);
+    return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:0.5px solid var(--line);">'+
+      '<span style="font-size:13px;color:var(--tx2);">'+label+'</span>'+
+      '<span class="pw-val" style="font-size:14px;font-weight:700;font-family:ui-monospace,Menlo,monospace;background:var(--bg);padding:3px 10px;border-radius:8px;cursor:pointer;" title="tap to copy">'+v+'</span></div>';
+  }
+  // App logins (fixed)
+  let html=card('App logins','Tap a value to copy',
+    row('Owner PWA \u00B7 user','admin')+row('Owner PWA \u00B7 pass','spawn2026')+
+    row('Dashboard \u00B7 user','admin')+row('Dashboard \u00B7 pass','spawn2026')+
+    row('Dashboard URL','spawninternet.github.io/VendoMonitor/dashboard.html'));
+  // Collector PINs (live)
+  try{
+    const rc=await gw({kind:'rest',table:'collectors',method:'GET',query:'select=name,area,pin,area_pin,active&order=name'});
+    let cs=await rc.json(); if(!Array.isArray(cs)) cs=[];
+    cs=cs.filter(c=>c.active!==false);
+    html+=card('Collector PINs','Spawn Harvest app \u00B7 '+cs.length+' collectors',
+      cs.map(c=>row(c.name+' ('+(c.area||'')+')', c.pin)).join('')+
+      // area pins (deduped)
+      Array.from(new Set(cs.map(c=>c.area+'|'+c.area_pin))).map(k=>{var p=k.split('|');return row('Area PIN \u00B7 '+p[0], p[1]);}).join(''));
+  }catch(e){ html+=card('Collector PINs','Couldn\u2019t load','<div style="font-size:12px;color:var(--red);padding:8px 0;">Failed to fetch.</div>'); }
+  // Office PINs (live)
+  try{
+    const ro=await gw({kind:'rest',table:'office_accounts',method:'GET',query:'select=name,pin,role,active&order=name'});
+    let os=await ro.json(); if(!Array.isArray(os)) os=[];
+    os=os.filter(o=>o.active!==false);
+    html+=card('Spawn Count (office) PINs','office.html \u00B7 '+os.length+' accounts',
+      os.map(o=>row(o.name+' ('+(o.role||'')+')', o.pin)).join(''));
+  }catch(e){ html+=card('Spawn Count PINs','Couldn\u2019t load','<div style="font-size:12px;color:var(--red);padding:8px 0;">Failed to fetch.</div>'); }
+  // Router / vendo master (from ops notes)
+  html+=card('Vendo master router','OpenWrt SSH',
+    row('SSH','root@10.0.0.1')+row('Note','See spawn-vendo-openwrt skill'));
+  html+='<div style="font-size:11px;color:var(--tx3);text-align:center;padding:4px 0 20px;">Keep this screen private. Tap any value to copy.</div>';
+  t.innerHTML=html;
+  // copy-to-clipboard
+  t.querySelectorAll('.pw-val').forEach(function(el){
+    el.addEventListener('click',function(){
+      var txt=el.textContent;
+      if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(()=>{ var o=el.textContent; el.textContent='copied!'; setTimeout(()=>{el.textContent=o;},900); }).catch(()=>{}); }
+    });
+  });
+}
+window.toolPasswords=toolPasswords;
+
 const AREA_COLORS={DIPOLOG:'#025AC6',DAPITAN:'#FFB725',SINDANGAN:'#028867','MIX AREAS':'#311A8E',POLANCO:'#C01176',ROXAS:'#DF1A35',SINAMAN:'#028867',MINAOG:'#6b7280'};
 function ovdTier(n){ return n>=100?'#DF1A35':(n>=50?'#C01176':(n>=20?'#B47F00':'#028867')); }
 
@@ -542,11 +611,11 @@ async function openOverdue(){
     if(!byGroup.length){ html+='<div style="font-size:13px;color:var(--tx2);">No overdue vendos. All caught up.</div>'; }
     else html+=byGroup.map(function(g){
       var color=AREA_COLORS[g.area]||'#6b7280';
-      return '<div class="ovd-grp" data-gid="'+g.group_run_id+'" data-glabel="'+(g.group_label||'').replace(/"/g,'&quot;')+'" style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:12px;cursor:pointer;">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;border-left:4px solid '+color+';">'+
-          '<div><div style="font-size:15px;font-weight:600;">'+(g.group_label||'\u2014')+'</div>'+
-          '<div style="font-size:11px;color:var(--tx3);margin-top:2px;">'+g.area+' \u00B7 '+g.collector+(g.oldest<9999?' \u00B7 oldest '+g.oldest+'d':'')+'</div></div>'+
-          '<div style="display:flex;align-items:center;gap:8px;"><span style="min-width:34px;height:30px;padding:0 10px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;background:'+ovdTier(g.overdue)+'">'+g.overdue+'</span>'+
+      return '<div class="ovd-grp" data-gid="'+g.group_run_id+'" data-glabel="'+(g.group_label||'').replace(/"/g,'&quot;')+'" style="background:#fff;border-radius:16px;overflow:hidden;margin-bottom:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-left:5px solid '+color+';">'+
+          '<div style="min-width:0;padding-right:10px;"><div style="font-size:15px;font-weight:700;">'+(g.group_label||'\u2014')+'</div>'+
+          '<div style="font-size:11px;color:var(--tx3);margin-top:3px;line-height:1.35;">'+(g.barangays||g.area)+(g.oldest<9999?' \u00B7 oldest '+g.oldest+'d':'')+'</div></div>'+
+          '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span style="min-width:36px;height:32px;padding:0 11px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;background:'+ovdTier(g.overdue)+'">'+g.overdue+'</span>'+
           '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:var(--tx3);"><path d="M9 6l6 6-6 6"/></svg></div>'+
         '</div></div>';
     }).join('');
@@ -623,8 +692,10 @@ async function openMap(){
         if(_mapAreaFilter!=='ALL' && (p.area||'\u2014')!==_mapAreaFilter) return;
         const overdue=p.days_since>30;
         const color=p.is_online?'#028867':(overdue?'#DF1A35':'#025AC6');
-        const m=L.circleMarker([p.lat,p.lng],{radius:5,color:'#fff',weight:1.5,fillColor:color,fillOpacity:.95});
-        m.bindPopup('<b>'+(p.name||'Vendo')+'</b><br>'+(p.area||'')+'<br>'+(p.is_online?'online':'offline')+(overdue?' \u00B7 overdue '+p.days_since+'d':'')); 
+        const m=L.circleMarker([p.lat,p.lng],{radius:6,color:'#fff',weight:2,fillColor:color,fillOpacity:.95});
+        m.bindPopup('<div style="font-size:13px;"><b>'+(p.name||'Vendo')+'</b><br><span style="color:#6b7280;">'+(p.area||'')+'</span><br>'+
+          '<span style="color:'+(p.is_online?'#028867':'#6b7280')+';">\u25CF '+(p.is_online?'online':'offline')+'</span>'+
+          (overdue?'<br><span style="color:#DF1A35;">overdue '+(p.days_since>=9999?'never harvested':p.days_since+'d')+'</span>':'')+'</div>');
         m.addTo(layer); bounds.push([p.lat,p.lng]);
       });
       if(bounds.length) map.fitBounds(bounds,{padding:[40,40]});
@@ -680,10 +751,10 @@ async function openNoGps(){
       '</tbody></table></div>';
     html+='<div style="font-size:11px;letter-spacing:.5px;color:var(--tx3);margin:2px 0 10px;">BY GROUP \u00B7 TAP TO SEE VENDOS</div>';
     html+=byGroup.map(function(g){var color=AREA_COLORS[g.area]||'#6b7280';
-      return '<div class="nogps-grp" data-gid="'+g.group_run_id+'" data-glabel="'+(g.group_label||'').replace(/"/g,'&quot;')+'" style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:12px;cursor:pointer;">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px;border-left:4px solid '+color+';">'+
-        '<div><div style="font-size:15px;font-weight:600;">'+(g.group_label||'\u2014')+'</div><div style="font-size:11px;color:var(--tx3);margin-top:2px;">'+g.area+'</div></div>'+
-        '<div style="display:flex;align-items:center;gap:8px;"><span style="min-width:34px;height:30px;padding:0 10px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;background:#B47F00;">'+g.nogps+'</span>'+
+      return '<div class="nogps-grp" data-gid="'+g.group_run_id+'" data-glabel="'+(g.group_label||'').replace(/"/g,'&quot;')+'" style="background:#fff;border-radius:16px;overflow:hidden;margin-bottom:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 15px;border-left:5px solid '+color+';">'+
+        '<div style="min-width:0;padding-right:10px;"><div style="font-size:15px;font-weight:700;">'+(g.group_label||'\u2014')+'</div><div style="font-size:11px;color:var(--tx3);margin-top:3px;line-height:1.35;">'+(g.barangays||g.area)+'</div></div>'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span style="min-width:36px;height:32px;padding:0 11px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;background:#B47F00;">'+g.nogps+'</span>'+
         '<svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:var(--tx3);"><path d="M9 6l6 6-6 6"/></svg></div></div></div>';
     }).join('')||'<div style="font-size:13px;color:var(--tx2);">All vendos have GPS.</div>';
     ov.innerHTML=html;
