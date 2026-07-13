@@ -1348,8 +1348,6 @@ async function rcRun(){
   rcAllRows=[];
   // Try bucket cache first
   const _RC_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
-  // recon_cache version bumped for time-aware window (submission-time cutoff) — invalidate v3.rc.timeaware
-  if (window._RC_CACHE_VER !== 'timeaware1') window._RC_CACHE_VER = 'timeaware1';
   if (!rcBypassCache) try {
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
@@ -1447,30 +1445,23 @@ async function rcRun(){
     if(!tg) continue;
     const ws=row.harvest_window_start||from;
     const we=row.harvest_date||to;
-    // window END = submission timestamp (Manila) if present, else end of harvest_date
-    const submitLocal=_rcSubmitLocalMs(row.harvested_at, we);
-    const key=tg+'|'+ws+'|'+we+'|'+submitLocal;
+    const key=tg+'|'+ws+'|'+we;
     if(seenKeys.has(key)) continue;
     seenKeys.add(key);
-    uniqueWindows.push({tg,ws,we,key,submitLocal});
+    uniqueWindows.push({tg,ws,we,key});
   }
-  // Fetch one window's total (handles pagination). Time-aware: only count
-  // transactions whose local (date+time) is at or before the submission time.
+  // Fetch one window's total (handles pagination)
   async function fetchWindowTotal(w){
     let total=0,off2=0;
     while(true){
       try{
         const rt=await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount,date,time&limit=1000&offset=${off2}`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount&limit=1000&offset=${off2}`,
           {headers:_HDR}
         );
         const td=await rt.json();
         if(!Array.isArray(td)||!td.length) break;
-        total+=td.reduce((s,t)=>{
-          const ts=_rcTxnLocalMs(t.date,t.time);
-          if(ts!=null && w.submitLocal!=null && ts>w.submitLocal) return s; // after submission -> next cycle
-          return s+Number(t.amount||0);
-        },0);
+        total+=td.reduce((s,t)=>s+Number(t.amount||0),0);
         if(td.length<1000) break;
         off2+=1000;
       }catch(e){break;}
