@@ -38,10 +38,10 @@
   #home{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .header{background:linear-gradient(135deg,var(--blue),var(--purple));padding:calc(env(safe-area-inset-top) + 16px) 18px 22px;color:#fff;}
   .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-  .brand{display:flex;align-items:center;gap:10px;}
-  .brand img{width:76px;height:76px;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.24));}
-  .brand .b1{font-size:17px;font-weight:700;line-height:1.1;letter-spacing:-0.02em;}
-  .brand .b2{font-size:11px;color:rgba(255,255,255,.72);font-weight:500;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand img{width:100px;height:100px;object-fit:contain;filter:drop-shadow(0 2px 8px rgba(0,0,0,.28));flex-shrink:0;}
+  .brand .b1{font-size:19px;font-weight:800;line-height:1.1;letter-spacing:-0.02em;}
+  .brand .b2{font-size:11px;color:rgba(255,255,255,.75);font-weight:500;}
   .refresh-btn{background:transparent;border:none;color:rgba(255,255,255,.85);padding:6px;}
   .refresh-btn svg{width:20px;height:20px;fill:currentColor;}
   .refresh-btn.spin svg{animation:spin 1s linear infinite;}
@@ -52,8 +52,7 @@
   .hl-sub{font-size:12px;color:#9FE1CB;margin-top:4px;}
 
   .body{padding:14px;}
-  .sec-lbl{font-size:11px;font-weight:800;letter-spacing:.6px;color:var(--blue);margin:4px 0 12px;display:flex;align-items:center;gap:7px;}
-  .sec-lbl::before{content:"";width:14px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--blue),var(--teal));}
+  .sec-lbl{font-size:11px;letter-spacing:.5px;color:var(--tx3);margin:4px 0 12px;}
   .stat-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
   .stat{background:var(--card);border-radius:14px;padding:13px;position:relative;border-left:4px solid var(--blue);}
   .stat.st-teal{border-left-color:var(--teal);}
@@ -67,8 +66,8 @@
 
   .card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:16px;}
   .card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-  .card-h .t{font-size:13px;font-weight:700;letter-spacing:-0.01em;}
-  .card-h .a{font-size:12px;color:var(--blue);font-weight:600;}
+  .card-h .t{font-size:13px;font-weight:500;}
+  .card-h .a{font-size:12px;color:var(--blue);}
 
   .grp-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
   .grp-row:last-child{margin-bottom:0;}
@@ -95,10 +94,10 @@
 
   .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 6px;}
   .app{display:flex;flex-direction:column;align-items:center;gap:6px;}
-  .app .a-i{width:58px;height:58px;border-radius:17px;display:flex;align-items:center;justify-content:center;transition:transform .12s ease;}
-  .app .a-i svg{width:29px;height:29px;fill:#fff;}
-  .app:active .a-i{transform:scale(.9);}
-  .app span{font-size:11px;text-align:center;line-height:1.15;font-weight:600;color:var(--tx);}
+  .app .a-i{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.12);}
+  .app .a-i svg{width:28px;height:28px;fill:#fff;}
+  .app:active .a-i{transform:scale(.92);}
+  .app span{font-size:11px;text-align:center;line-height:1.15;}
 
   #appview{position:fixed;inset:0;z-index:900;background:#fff;display:none;flex-direction:column;}
   #appview.open{display:flex;}
@@ -274,23 +273,9 @@ const TOOLS=[
 
 function appEl(a){
   const d=document.createElement('div'); d.className='app';
-  // gradient tint + colored glow from each app's base color
-  var grad='linear-gradient(135deg,'+a.color+', '+shade(a.color,-18)+')';
-  d.innerHTML='<div class="a-i" style="background:'+grad+';box-shadow:0 4px 12px '+hexA(a.color,.35)+';"><svg viewBox="0 0 24 24"><path d="'+IC[a.icon]+'"/></svg></div><span>'+a.label+'</span>';
+  d.innerHTML='<div class="a-i" style="background:'+a.color+'"><svg viewBox="0 0 24 24"><path d="'+IC[a.icon]+'"/></svg></div><span>'+a.label+'</span>';
   d.addEventListener('click',()=>{ if(a.tool){openTool(a);} else {openApp(a);} });
   return d;
-}
-// darken a hex color by pct (negative = darker)
-function shade(hex,pct){
-  var n=parseInt(hex.slice(1),16), r=(n>>16)&255, g=(n>>8)&255, b=n&255, f=(pct)/100;
-  r=Math.round(Math.min(255,Math.max(0,r+r*f)));
-  g=Math.round(Math.min(255,Math.max(0,g+g*f)));
-  b=Math.round(Math.min(255,Math.max(0,b+b*f)));
-  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
-}
-function hexA(hex,a){
-  var n=parseInt(hex.slice(1),16);
-  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
 }
 function buildApps(){
   const s=document.getElementById('apps-spawn'); s.innerHTML=''; SPAWN_APPS.forEach(a=>s.appendChild(appEl(a)));
@@ -363,41 +348,30 @@ async function toolHarvest(color){
     const list=Object.keys(agg).map(k=>[k,agg[k]]).sort((a,b)=>b[1].ts-a[1].ts||b[1].ms-a[1].ms);
     const totToday=list.reduce((s,e)=>s+e[1].ts,0);
     const totVen=list.reduce((s,e)=>s+e[1].tv,0);
-    let html='<div style="background:#fff;border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 2px 10px rgba(0,0,0,.05);">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:11px;color:var(--tx2);letter-spacing:.3px;text-transform:uppercase;">Today\u2019s harvest</div>'+
+    let html='<div style="background:#fff;border-radius:14px;padding:14px;margin-bottom:14px;">'+
+      '<div style="font-size:13px;font-weight:500;margin-bottom:10px;">Today\u2019s harvest</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-        '<div style="background:linear-gradient(135deg,#028867,#03a37c);border-radius:13px;padding:13px;color:#fff;"><div style="font-size:10px;opacity:.9;font-weight:600;">SPAWN TODAY</div><div style="font-size:24px;font-weight:800;line-height:1.1;margin-top:3px;">'+peso(totToday)+'</div></div>'+
-        '<div style="background:linear-gradient(135deg,#025AC6,#0472e8);border-radius:13px;padding:13px;color:#fff;"><div style="font-size:10px;opacity:.9;font-weight:600;">VENDOS TODAY</div><div style="font-size:24px;font-weight:800;line-height:1.1;margin-top:3px;">'+totVen+'</div></div>'+
+        '<div style="background:var(--bg);border-radius:10px;padding:10px;"><div style="font-size:11px;color:var(--tx2);">Spawn today</div><div style="font-size:20px;font-weight:500;color:#028867;">'+peso(totToday)+'</div></div>'+
+        '<div style="background:var(--bg);border-radius:10px;padding:10px;"><div style="font-size:11px;color:var(--tx2);">Vendos today</div><div style="font-size:20px;font-weight:500;">'+totVen+'</div></div>'+
       '</div></div>';
     if(!list.length){ html+='<div style="font-size:13px;color:var(--tx2);">No harvests today.</div>'; }
     else html+=list.map(function(e){
       var name=e[0], d=e[1];
       var pct=d.tc>0?Math.round((d.ts/d.tc)*100):0;
       var gap=d.tc-d.tn;
-      var initial=(name.charAt(0)||'?').toUpperCase();
-      return '<div style="background:#fff;border-radius:18px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 12px rgba(2,136,103,.10);">'+
-        // colored header: teal gradient, avatar, spawn share hero
-        '<div style="background:linear-gradient(135deg,#028867,#03a37c);padding:16px 18px 15px;color:#fff;">'+
-          '<div style="display:flex;align-items:center;gap:11px;">'+
-            '<div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">'+initial+'</div>'+
-            '<div style="font-size:17px;font-weight:700;letter-spacing:-0.01em;">'+name+'</div>'+
-          '</div>'+
-          '<div style="display:flex;align-items:baseline;gap:8px;margin-top:12px;">'+
-            '<div style="font-size:33px;font-weight:800;line-height:1;letter-spacing:-0.02em;">'+peso(d.ts)+'</div>'+
-            '<div style="font-size:12px;opacity:.9;font-weight:600;">spawn today \u00b7 '+pct+'%</div>'+
-          '</div>'+
+      return '<div style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:12px;">'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-left:4px solid '+color+';"><span style="font-size:15px;font-weight:500;">'+name+'</span><span style="font-size:14px;font-weight:500;color:#028867;">'+peso(d.ts)+' today</span></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);">'+
+          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Vendos</div><div style="font-size:14px;font-weight:500;">'+d.tv+'</div></div>'+
+          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Month spawn</div><div style="font-size:14px;font-weight:500;">'+peso(d.ms)+'</div></div>'+
+          '<div style="background:#fff;padding:9px 6px;text-align:center;"><div style="font-size:10px;color:var(--tx2);">Month vendos</div><div style="font-size:14px;font-weight:500;">'+d.mv+'</div></div>'+
         '</div>'+
-        // colored stat tiles
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px;">'+
-          '<div style="background:#eef5ff;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:19px;font-weight:800;color:#025AC6;line-height:1;">'+d.tv+'</div><div style="font-size:9px;color:#025AC6;font-weight:700;margin-top:4px;letter-spacing:.2px;">VENDOS</div></div>'+
-          '<div style="background:#eafaf1;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#028867;line-height:1;">'+peso(d.ms)+'</div><div style="font-size:9px;color:#028867;font-weight:700;margin-top:4px;letter-spacing:.2px;">MONTH SPAWN</div></div>'+
-          '<div style="background:#faf3ff;border-radius:12px;padding:11px 6px;text-align:center;"><div style="font-size:19px;font-weight:800;color:#7c3aed;line-height:1;">'+d.mv+'</div><div style="font-size:9px;color:#7c3aed;font-weight:700;margin-top:4px;letter-spacing:.2px;">MO. VENDOS</div></div>'+
-        '</div>'+
-        // compact one-line breakdown
-        '<div style="padding:2px 18px 14px;display:flex;justify-content:space-between;font-size:12px;color:var(--tx2);">'+
-          '<span>Coins <b style="color:var(--tx);font-weight:700;">'+peso(d.tc)+'</b></span>'+
-          '<span>Net <b style="color:var(--tx);font-weight:700;">'+peso(d.tn)+'</b></span>'+
-          '<span>Deductions <b style="color:'+(gap>0?'#B47F00':'#028867')+';font-weight:700;">'+peso(gap)+'</b></span>'+
+        '<div style="padding:11px 14px;border-top:0.5px solid var(--line);">'+
+          '<div style="font-size:12px;font-weight:500;margin-bottom:6px;">Reconciliation \u00B7 today</div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Coins collected</span><span style="font-weight:500;">'+peso(d.tc)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Net collectible</span><span style="font-weight:500;">'+peso(d.tn)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Free/old/saloy gap</span><span style="font-weight:500;color:'+(gap>0?'#B47F00':'#028867')+'">'+peso(gap)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--tx2);">Spawn share</span><span style="font-weight:500;">'+peso(d.ts)+' ('+pct+'%)</span></div>'+
         '</div></div>';
     }).join('');
     t.innerHTML=html;
