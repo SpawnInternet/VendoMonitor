@@ -407,6 +407,17 @@ async function vpSaveNames(){
       headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
+      // recon reads harvests — sync tg_name/sheet_name there too, else it reverts
+      const hu={};
+      if(sheet) hu.sheet_name=sheet;
+      if(tg) hu.tg_name=tg;
+      if(Object.keys(hu).length){
+        try{
+          await fetch(SB+'/rest/v1/harvests?vendo_id=eq.'+v.id,{method:'PATCH',
+            headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+            body:JSON.stringify(hu)});
+        }catch(e){ console.error('harvests sync failed:',e); }
+      }
       Object.assign(window._vpVendo,u);
       document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name||u.tg_name||'—';
       htAllRows=[];
@@ -1651,17 +1662,34 @@ async function rcnSaveNames(vendoName){
     if(tg){ u.tg_name=tg; u.tg_match_confirmed=true; }
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
     if(r2.ok){
+      // ALSO update the harvests rows for this vendo — the recon table & TG-income
+      // matching read from harvests, so without this the change reverts on reload.
+      const hu={};
+      if(sheet) hu.sheet_name=sheet;
+      if(tg) hu.tg_name=tg;
+      if(Object.keys(hu).length){
+        try{
+          await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}`,{method:'PATCH',
+            headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+            body:JSON.stringify(hu)});
+        }catch(e){ console.error('harvests tg_name sync failed:',e); }
+      }
       toast('✅ Names saved!');
       htAllRows=[];
       // update local cache row so reopening shows fresh values
       if(row){ if(sheet) row.sheet_name=sheet; if(tg) row.tg_name=tg; }
       // reflect the change in the loaded recon rows and re-render immediately
-      if(tg && Array.isArray(rcAllRows)){
-        rcAllRows.forEach(rr=>{ if(rr.vendo_id && row && rr.vendo_id===row.vendo_id){ rr.tg_name=tg; } });
+      if(Array.isArray(rcAllRows)){
+        rcAllRows.forEach(rr=>{ if(rr.vendo_id && row && rr.vendo_id===row.vendo_id){ if(tg) rr.tg_name=tg; if(sheet) rr.sheet_name=sheet; } });
       }
       if(msg){msg.textContent='Saved';msg.style.color='#15803d';}
       const ov=document.getElementById('rc-names-overlay'); if(ov) ov.remove();
-      if(typeof rcFilter==='function') rcFilter();  // re-render table + recompute counts
+      // Re-run reconciliation fresh so TG income re-matches the new name (skip cache).
+      if(typeof rcRun==='function'){
+        try{ rcBypassCache=true; await rcRun(); }
+        catch(e){ if(typeof rcFilter==='function') rcFilter(); }
+        finally{ rcBypassCache=false; }
+      } else if(typeof rcFilter==='function'){ rcFilter(); }
     }else{
       const errText=await r2.text();
       if(msg){msg.textContent='Save failed: '+errText.slice(0,40);msg.style.color='#dc2626';}
@@ -1714,9 +1742,21 @@ async function rcnQuickLink(vendoName, tgName){
     const id=rows[0].id;
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({tg_name:tgName,tg_match_confirmed:true})});
     if(r2.ok){
+      // sync harvests too — recon reads from harvests, else change reverts on reload
+      try{
+        await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}`,{method:'PATCH',
+          headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+          body:JSON.stringify({tg_name:tgName})});
+      }catch(e){ console.error('harvests tg sync failed:',e); }
+      if(Array.isArray(rcAllRows)) rcAllRows.forEach(rr=>{ if(rr.vendo_id===id) rr.tg_name=tgName; });
       toast('✅ Linked! TG name saved.');
       htAllRows=[];
       document.getElementById('rc-names-overlay')?.remove();
+      if(typeof rcRun==='function'){
+        try{ rcBypassCache=true; await rcRun(); }
+        catch(e){ if(typeof rcFilter==='function') rcFilter(); }
+        finally{ rcBypassCache=false; }
+      }
     }else toast('Save failed');
   }catch(e){toast('Error: '+e.message);}
 }
