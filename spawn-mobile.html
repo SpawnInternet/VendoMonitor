@@ -422,6 +422,10 @@ window.toolAnalytics=toolAnalytics;
 
 // ---- TOOL: Live Feed (collector GPS trail from harvested vendos today) ----
 let _liveColFilter='ALL';
+function pinIcon(color){
+  return L.divIcon({className:'',iconSize:[26,36],iconAnchor:[13,36],popupAnchor:[0,-32],
+    html:'<svg width="26" height="36" viewBox="0 0 26 36" xmlns="http://www.w3.org/2000/svg"><path d="M13 0C5.8 0 0 5.8 0 13c0 9.7 13 23 13 23s13-13.3 13-23C26 5.8 20.2 0 13 0z" fill="'+color+'"/><circle cx="13" cy="13" r="5.5" fill="#fff"/></svg>'});
+}
 async function toolLive(color){
   const av=document.getElementById('appview');
   document.getElementById('appframe').style.display='none';
@@ -438,10 +442,17 @@ async function toolLive(color){
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'\u00A9 OSM'}).addTo(map);
     const COLS=['#025AC6','#DF1A35','#028867','#C01176','#FFB725','#311A8E'];
     const fmt=x=>new Date(x).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit'});
-    let byCol={}; let gps={}; let vmeta={};
+    let byCol={}; let gps={}; let vmeta={}; let feedDate='';
+    // load a status banner control right away
+    const info=L.control({position:'topleft'});
+    info.onAdd=function(){ const d=L.DomUtil.create('div'); d.style.cssText='background:#fff;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:600;box-shadow:0 1px 5px rgba(0,0,0,.2);margin-top:6px;'; d.textContent='Loading\u2026'; info._box=d; return d; };
+    info.addTo(map);
     try{
-      const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-      const rh=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,harvested_at,sheet_name,tg_name,vendo_id,coins_total,spawn_share,area&harvest_date=eq.'+today+'&order=collector,harvested_at&limit=3000'});
+      // Find the most recent harvest day (so the map is never empty)
+      const rday=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=harvest_date&order=harvest_date.desc&limit=1'});
+      const dd=await rday.json();
+      feedDate=(Array.isArray(dd)&&dd[0]&&dd[0].harvest_date)||new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+      const rh=await gw({kind:'rest',table:'harvests',method:'GET',query:'select=collector,harvested_at,sheet_name,tg_name,vendo_id,coins_total,spawn_share,area&harvest_date=eq.'+feedDate+'&order=collector,harvested_at&limit=3000'});
       const hs=await rh.json();
       const rv=await gw({kind:'rest',table:'vendos',method:'GET',query:'select=id,lat,lng,vlan,area,sheet_name&lat=not.is.null&lng=not.is.null&limit=3000'});
       const vs=await rv.json(); (Array.isArray(vs)?vs:[]).forEach(v=>{gps[v.id]=[v.lat,v.lng]; vmeta[v.id]=v;});
@@ -452,38 +463,42 @@ async function toolLive(color){
     window._liveByCol=byCol; window._liveGps=gps; window._liveVmeta=vmeta; window._liveColColor=colColor;
     let layer=L.layerGroup().addTo(map);
     function draw(){
-      layer.clearLayers(); const bounds=[];
+      layer.clearLayers(); const bounds=[]; let plotted=0, noGpsCount=0;
       cols.forEach(col=>{
         if(_liveColFilter!=='ALL' && col!==_liveColFilter) return;
         const c=colColor[col];
-        const stops=byCol[col].filter(h=>gps[h.vendo_id]).map(h=>({h,p:gps[h.vendo_id]}));
-        if(stops.length>1 && _liveColFilter!=='ALL') L.polyline(stops.map(s=>s.p),{color:c,weight:3,opacity:.65}).addTo(layer);
+        const stops=byCol[col].filter(h=>{ if(gps[h.vendo_id])return true; noGpsCount++; return false; }).map(h=>({h,p:gps[h.vendo_id]}));
+        if(stops.length>1 && _liveColFilter!=='ALL') L.polyline(stops.map(s=>s.p),{color:c,weight:3,opacity:.6,dashArray:'6,6'}).addTo(layer);
         stops.forEach((s,i)=>{
-          const last=i===stops.length-1; const vm=vmeta[s.h.vendo_id]||{};
-          const m=L.circleMarker(s.p,{radius:last?8:6,color:'#fff',weight:2,fillColor:c,fillOpacity:.95});
-          m.bindPopup('<div style="font-size:13px;min-width:150px;"><b>'+(s.h.sheet_name||s.h.tg_name||'Vendo')+'</b>'+(last&&_liveColFilter!=='ALL'?' <span style="color:'+c+';">\u2014 latest</span>':'')+
-            '<br><span style="color:#6b7280;">'+col+' \u00B7 '+(s.h.area||vm.area||'')+'</span>'+
+          const vm=vmeta[s.h.vendo_id]||{};
+          const m=L.marker(s.p,{icon:pinIcon(c)});
+          m.bindPopup('<div style="font-size:13px;min-width:160px;"><b>'+(s.h.sheet_name||s.h.tg_name||'Vendo')+'</b>'+
+            '<br><span style="color:'+c+';font-weight:600;">'+col+'</span> \u00B7 '+(s.h.area||vm.area||'')+
             '<br>VLAN '+(vm.vlan||'?')+' \u00B7 '+fmt(s.h.harvested_at)+
             '<br>Spawn: <b style="color:#028867;">'+peso(s.h.spawn_share)+'</b> \u00B7 Coins: '+peso(s.h.coins_total)+
             '<br><span style="color:#6b7280;font-size:11px;">\ud83d\udccd '+s.p[0].toFixed(5)+', '+s.p[1].toFixed(5)+'</span></div>');
-          m.addTo(layer); bounds.push(s.p);
+          m.addTo(layer); bounds.push(s.p); plotted++;
         });
       });
-      if(bounds.length) map.fitBounds(bounds,{padding:[45,45]});
+      if(bounds.length) map.fitBounds(bounds,{padding:[50,50]});
+      // update banner
+      const dateLbl=new Date(feedDate+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+      const isToday=feedDate===new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+      if(info._box) info._box.innerHTML=(isToday?'\ud83d\udfe2 Today':'\ud83d\udcc5 '+dateLbl)+' \u00B7 '+plotted+' pins'+(noGpsCount?' \u00B7 '+noGpsCount+' no GPS':'');
     }
     draw();
-    // Collector filter control (like the area filter on Maps, but collectors)
+    // Collector filter control
     const fc=L.control({position:'topright'});
     fc.onAdd=function(){
       const d=L.DomUtil.create('div');
-      d.style.cssText='background:#fff;padding:8px 9px;border-radius:10px;font-size:12px;box-shadow:0 1px 6px rgba(0,0,0,.25);max-width:170px;';
+      d.style.cssText='background:#fff;padding:9px 10px;border-radius:10px;font-size:12px;box-shadow:0 1px 6px rgba(0,0,0,.25);max-width:180px;';
       d.innerHTML='<div style="font-weight:700;margin-bottom:6px;">Collector</div>'+
-        '<select id="live-col-sel" style="width:100%;font-size:12px;padding:4px;border:1px solid #ddd;border-radius:6px;">'+
-        '<option value="ALL">All collectors</option>'+
+        '<select id="live-col-sel" style="width:100%;font-size:13px;padding:6px;border:1px solid #ddd;border-radius:7px;">'+
+        '<option value="ALL">All collectors ('+cols.reduce((s,c)=>s+byCol[c].length,0)+')</option>'+
         cols.map(c=>'<option value="'+c.replace(/"/g,'&quot;')+'">'+c+' ('+byCol[c].length+')</option>').join('')+
         '</select>'+
-        '<div style="margin-top:8px;font-size:11px;line-height:1.7;max-height:26vh;overflow-y:auto;">'+
-        (cols.length?cols.map(c=>'<div style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:'+colColor[c]+';"></span>'+c+'</div>').join(''):'<span style="color:#9ca3af;">No harvests today.</span>')+
+        '<div style="margin-top:9px;font-size:12px;line-height:1.9;">'+
+        (cols.length?cols.map(c=>'<div style="display:flex;align-items:center;gap:7px;"><span style="width:12px;height:12px;border-radius:50%;background:'+colColor[c]+';flex-shrink:0;box-shadow:0 0 0 2px #fff,0 0 0 3px '+colColor[c]+';"></span>'+c+' <span style="color:#9ca3af;margin-left:auto;">'+byCol[c].length+'</span></div>').join(''):'<span style="color:#9ca3af;">No harvests found.</span>')+
         '</div>';
       L.DomEvent.disableClickPropagation(d);
       return d;
@@ -491,7 +506,7 @@ async function toolLive(color){
     fc.addTo(map);
     setTimeout(()=>{ const sel=document.getElementById('live-col-sel'); if(sel) sel.addEventListener('change',()=>{ _liveColFilter=sel.value; draw(); }); },50);
     if(!cols.length){
-      const nd=L.control(); nd.onAdd=function(){const el=L.DomUtil.create('div'); el.style.cssText='background:#fff;padding:10px 12px;border-radius:8px;font-size:12px;'; el.textContent='No harvests recorded yet today.'; return el;}; nd.addTo(map);
+      const nd=L.control({position:'bottomright'}); nd.onAdd=function(){const el=L.DomUtil.create('div'); el.style.cssText='background:#fff;padding:10px 12px;border-radius:8px;font-size:12px;'; el.textContent='No harvests recorded recently.'; return el;}; nd.addTo(map);
     }
   },120);
 }
@@ -655,8 +670,6 @@ async function openOverdue(){
       '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;">'+total.toLocaleString()+' vendos not harvested in 30+ days</div>'+
       '<div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px;">BY AREA</div>'+
       '<canvas id="ovd-chart-area" height="150"></canvas>'+
-      '<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:16px 0 6px;">BY COLLECTOR</div>'+
-      '<canvas id="ovd-chart-col" height="150"></canvas>'+
       '<div style="font-size:11px;font-weight:700;color:var(--tx2);margin:16px 0 6px;">BY HOW OVERDUE (DATE)</div>'+
       '<canvas id="ovd-chart-bucket" height="150"></canvas>'+
       '<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:12px;">'+
@@ -683,7 +696,6 @@ async function openOverdue(){
     const COLC=['#025AC6','#028867','#FFB725','#C01176','#311A8E','#DF1A35','#6b7280'];
     ensureChartLib(function(){
       try{ new Chart(document.getElementById('ovd-chart-area'),{type:'bar',data:{labels:byArea.map(a=>a.area),datasets:[{data:byArea.map(a=>a.overdue),backgroundColor:byArea.map(a=>AREA_COLORS[a.area]||'#6b7280'),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}}); }catch(_){}
-      try{ const bc=brk.by_collector||[]; new Chart(document.getElementById('ovd-chart-col'),{type:'bar',data:{labels:bc.map(c=>c.collector),datasets:[{data:bc.map(c=>c.overdue),backgroundColor:bc.map((c,i)=>COLC[i%COLC.length]),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}}); }catch(_){}
       try{ const bb=brk.by_bucket||[]; new Chart(document.getElementById('ovd-chart-bucket'),{type:'bar',data:{labels:bb.map(b=>b.bucket),datasets:[{data:bb.map(b=>b.overdue),backgroundColor:['#B47F00','#C01176','#DF1A35','#7a1020','#6b7280'],borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}}); }catch(_){}
     });
     // wire drill-down
