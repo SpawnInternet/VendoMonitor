@@ -1391,15 +1391,24 @@ async function rcRun(){
   // Check if all rows already have saved recon data
   const allSaved = harvestRows.length > 0 && harvestRows.every(r=>r.recon_at && r.tg_income!=null);
   if(allSaved && !rcBypassCache){
-    rcAllRows=harvestRows.map(row=>({
-      ...row,
-      collector:row.actual_collector||row.collector||'Unknown',
-      tg_income:Number(row.tg_income),
-      gap:Number(row.recon_gap),
-      gap_pct:row.coins_total>0?Math.abs(row.recon_gap)/row.coins_total*100:null,
-      flag:row.recon_flag||'nodata',
-      is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
-    }));
+    rcAllRows=harvestRows.map(row=>{
+      const tgInc=(row.tg_income!=null)?Number(row.tg_income):null;
+      const coins=Number(row.coins_total||0);
+      // recompute gap fresh (saved recon_gap may be null/stale)
+      const gap=tgInc!=null?tgInc-coins:(row.recon_gap!=null?Number(row.recon_gap):null);
+      const gap_pct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
+      // recompute flag with current ±20 rule (do NOT trust saved recon_flag)
+      const flag = gap==null ? 'nodata'
+                 : Math.abs(gap)<=20 ? 'ok'
+                 : gap>20 ? 'alert'
+                 : 'warn';
+      return {
+        ...row,
+        collector:row.actual_collector||row.collector||'Unknown',
+        tg_income:tgInc, gap, gap_pct, flag,
+        is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
+      };
+    });
     document.getElementById('rc-count').textContent=rcAllRows.length+' harvests · saved '+Math.round((Date.now()-new Date(harvestRows[0].recon_at).getTime())/60000)+'min ago';
     rcFilter();
     return;
@@ -1527,11 +1536,15 @@ async function rcRun(){
     }
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
-    const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
+    const gap=tgInc!=null?tgInc-coins:null; // gap = TG - coins. positive=TG>coins, negative=coins>TG (surplus of coins)
     const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-    const overAmt=gap!=null&&Math.abs(gap)>500;
-    const overPct=gapPct!=null&&gapPct>20;
-    const flag=gap==null?'nodata':gap>0&&(overAmt||overPct)?'alert':gap<0&&(overAmt||overPct)?'warn':'ok';
+    // OK only within ±20 pesos. Beyond that: flag by direction.
+    //   gap >  20  => TG more than coins   => SHORT (coins may be missing) => 'alert'
+    //   gap < -20  => coins more than TG    => SURPLUS (extra coins)         => 'warn'
+    const flag = gap==null ? 'nodata'
+               : Math.abs(gap)<=20 ? 'ok'
+               : gap>20 ? 'alert'
+               : 'warn';
     const rc=row.route_code||'ADMIN';
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
     return {...row,
@@ -1884,11 +1897,9 @@ function rcFilter(){
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
-    // gap = TG income - coins_total
-    // positive = surplus (TG > coins) = yellow
-    // negative = short (coins > TG) = red
-    const c=gap>100?'#dc2626':gap<-100?'#b45309':'#15803d';
-    const bg=gap>100?'#fee2e2':gap<-100?'#fefce8':'#dcfce7';
+    // gap = TG income - coins_total.  >20 TG>coins (short, red); <-20 coins>TG (surplus, amber); else OK green
+    const c=gap>20?'#dc2626':gap<-20?'#b45309':'#15803d';
+    const bg=gap>20?'#fee2e2':gap<-20?'#fefce8':'#dcfce7';
     return `<span style="color:${c};font-weight:700;background:${bg};padding:1px 6px;border-radius:4px;">${fmtP(Math.abs(gap))}</span>`;
   };
 
