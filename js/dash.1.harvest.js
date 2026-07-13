@@ -1453,10 +1453,8 @@ async function rcRun(){
   // TIME-AWARE TG income via server RPC (spawn_tg_recon) — does submission-time
   // cutoff server-side, so post-harvest transactions fall to next cycle.
   // Keyed by tg_name (RPC returns one row per harvest this month).
-  const rpcTgByName={};
-  const rpcAuditByName={};
-  const rpcSubmitByName={};
-  const rpcWinStartByName={};
+  const rpcById={};      // harvest_id -> {tg_income, audited, submitted_at, window_start}
+  const rpcTgByName={};  // fallback: tg_name -> tg_income (for rows the id-map misses)
   try{
     const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{
       method:'POST', headers:{..._HDR}, body:JSON.stringify({})
@@ -1464,11 +1462,16 @@ async function rcRun(){
     const rj=await rr.json();
     if(Array.isArray(rj)){
       rj.forEach(o=>{
-        if(o && o.tg_name){
+        if(o && o.harvest_id!=null){
+          rpcById[o.harvest_id]={
+            tg_income:Number(o.tg_income||0),
+            audited:!!o.audited,
+            submitted_at:o.submitted_at||null,
+            window_start:o.window_start||null
+          };
+        }
+        if(o && o.tg_name && rpcTgByName[o.tg_name]===undefined){
           rpcTgByName[o.tg_name]=Number(o.tg_income||0);
-          rpcAuditByName[o.tg_name]=!!o.audited;
-          if(o.submitted_at) rpcSubmitByName[o.tg_name]=o.submitted_at;
-          if(o.window_start) rpcWinStartByName[o.tg_name]=o.window_start;
         }
       });
     }
@@ -1492,8 +1495,9 @@ async function rcRun(){
     }
     return {key:w.key,total};
   }
-  // Only fetch windows whose tg_name is NOT already covered by the RPC.
-  const needFetch=uniqueWindows.filter(w=>rpcTgByName[w.tg]===undefined);
+  // Only fetch windows whose harvests are NOT covered by the RPC id-map.
+  const coveredTg=new Set(harvestRows.filter(r=>rpcById[r.id]).map(r=>tgMap[r.id]).filter(Boolean));
+  const needFetch=uniqueWindows.filter(w=>!coveredTg.has(w.tg) && rpcTgByName[w.tg]===undefined);
   for(let i=0;i<needFetch.length;i+=10){
     const chunk=needFetch.slice(i,i+10);
     const results=await Promise.all(chunk.map(fetchWindowTotal));
@@ -1509,10 +1513,18 @@ async function rcRun(){
     const ws=row.harvest_window_start||from;
     const we=row.harvest_date||to;
     const rowKey=tg ? tg+'|'+ws+'|'+we : null;
-    // Prefer time-aware RPC income (by tg_name); fall back to date-only fetch.
-    let tgInc=null, rpcAudited=false;
-    if(tg && rpcTgByName[tg]!==undefined){ tgInc=rpcTgByName[tg]; rpcAudited=!!rpcAuditByName[tg]; }
-    else if(rowKey!=null){ tgInc=(tgRowIncomeMap[rowKey]??null); }
+    // Prefer per-harvest RPC data (by harvest id — no tg_name collision);
+    // then tg_name fallback; then date-only fetch.
+    let tgInc=null, rpcAudited=false, rpcWinStart=null, rpcSubmit=null;
+    const byId=rpcById[row.id];
+    if(byId){
+      tgInc=byId.tg_income; rpcAudited=byId.audited;
+      rpcWinStart=byId.window_start; rpcSubmit=byId.submitted_at;
+    } else if(tg && rpcTgByName[tg]!==undefined){
+      tgInc=rpcTgByName[tg];
+    } else if(rowKey!=null){
+      tgInc=(tgRowIncomeMap[rowKey]??null);
+    }
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
     const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
@@ -1526,8 +1538,8 @@ async function rcRun(){
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg,tg_income:tgInc,gap,gap_pct:gapPct,flag,
       rpc_audited:rpcAudited,
-      rpc_window_start:(tg?rpcWinStartByName[tg]:null)||null,
-      rpc_submitted_at:(tg?rpcSubmitByName[tg]:null)||null,
+      rpc_window_start:rpcWinStart,
+      rpc_submitted_at:rpcSubmit,
       route_code:rc,is_admin:isAdmin
     };
   });
