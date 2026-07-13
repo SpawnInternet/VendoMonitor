@@ -1450,7 +1450,29 @@ async function rcRun(){
     seenKeys.add(key);
     uniqueWindows.push({tg,ws,we,key});
   }
-  // Fetch one window's total (handles pagination)
+  // TIME-AWARE TG income via server RPC (spawn_tg_recon) — does submission-time
+  // cutoff server-side, so post-harvest transactions fall to next cycle.
+  // Keyed by tg_name (RPC returns one row per harvest this month).
+  const rpcTgByName={};
+  const rpcAuditByName={};
+  const rpcSubmitByName={};
+  try{
+    const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{
+      method:'POST', headers:{..._HDR}, body:JSON.stringify({})
+    });
+    const rj=await rr.json();
+    if(Array.isArray(rj)){
+      rj.forEach(o=>{
+        if(o && o.tg_name){
+          rpcTgByName[o.tg_name]=Number(o.tg_income||0);
+          rpcAuditByName[o.tg_name]=!!o.audited;
+          if(o.submitted_at) rpcSubmitByName[o.tg_name]=o.submitted_at;
+        }
+      });
+    }
+  }catch(e){ console.warn('[rcRun] time-aware RPC failed, falling back to date-only fetch',e); }
+
+  // Fallback fetch (date-only) — used only for windows the RPC didn't cover.
   async function fetchWindowTotal(w){
     let total=0,off2=0;
     while(true){
@@ -1468,12 +1490,13 @@ async function rcRun(){
     }
     return {key:w.key,total};
   }
-  // Run in parallel batches of 10 (avoid overwhelming the API)
-  for(let i=0;i<uniqueWindows.length;i+=10){
-    const chunk=uniqueWindows.slice(i,i+10);
+  // Only fetch windows whose tg_name is NOT already covered by the RPC.
+  const needFetch=uniqueWindows.filter(w=>rpcTgByName[w.tg]===undefined);
+  for(let i=0;i<needFetch.length;i+=10){
+    const chunk=needFetch.slice(i,i+10);
     const results=await Promise.all(chunk.map(fetchWindowTotal));
     results.forEach(r=>{ tgRowIncomeMap[r.key]=r.total; });
-    if(el) el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income… ${Math.min(i+10,uniqueWindows.length)}/${uniqueWindows.length}</div>`;
+    if(el) el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income… ${Math.min(i+10,needFetch.length)}/${needFetch.length}</div>`;
   }
   const tgIncomeMap={}; // legacy compat placeholder
 
@@ -1484,7 +1507,10 @@ async function rcRun(){
     const ws=row.harvest_window_start||from;
     const we=row.harvest_date||to;
     const rowKey=tg ? tg+'|'+ws+'|'+we : null;
-    const tgInc=rowKey!=null?(tgRowIncomeMap[rowKey]??null):null;
+    // Prefer time-aware RPC income (by tg_name); fall back to date-only fetch.
+    let tgInc=null, rpcAudited=false;
+    if(tg && rpcTgByName[tg]!==undefined){ tgInc=rpcTgByName[tg]; rpcAudited=!!rpcAuditByName[tg]; }
+    else if(rowKey!=null){ tgInc=(tgRowIncomeMap[rowKey]??null); }
     const coins=Number(row.coins_total||0);
     // coins_total already includes saloy — compare directly with TG income
     const gap=tgInc!=null?tgInc-coins:null; // positive=surplus TG, negative=deficit
@@ -1497,6 +1523,7 @@ async function rcRun(){
     return {...row,
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg,tg_income:tgInc,gap,gap_pct:gapPct,flag,
+      rpc_audited:rpcAudited,
       route_code:rc,is_admin:isAdmin
     };
   });
