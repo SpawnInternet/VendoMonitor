@@ -531,8 +531,9 @@ async function toolRecon(color){
     rows.sort((a,b)=>Math.abs(+b.gap||0)-Math.abs(+a.gap||0));
     const tgTot=rows.reduce((s,v)=>s+(+v.tg_income||0),0);
     const coinTot=rows.reduce((s,v)=>s+(+v.coins||0),0);
-    let deficitN=0,surplusN=0,exactN=0,deficitAmt=0,surplusAmt=0;
+    let deficitN=0,surplusN=0,exactN=0,auditedN=0,deficitAmt=0,surplusAmt=0;
     rows.forEach(v=>{ const g=+v.gap||0; const st=reconStatus(g);
+      if(v.audited){ auditedN++; return; }
       if(st.key==='deficit'){deficitN++; deficitAmt+=g;}
       else if(st.key==='surplus'){surplusN++; surplusAmt+=Math.abs(g);}
       else exactN++; });
@@ -549,6 +550,7 @@ async function toolRecon(color){
           '<div style="background:#fef9c3;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#b45309;">'+surplusN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(surplusN?peso(surplusAmt):'\u2014')+'</div></div>'+
           '<div style="background:#fee2e2;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#dc2626;">'+deficitN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 DEFICIT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(deficitN?peso(deficitAmt):'\u2014')+'</div></div>'+
         '</div>'+
+        (auditedN?('<div style="margin-top:9px;background:#eff6ff;border:1px solid #dbeafe;border-radius:11px;padding:9px 11px;display:flex;align-items:center;gap:8px;"><span style="font-size:14px;">\u2705</span><div style="font-size:11px;color:#1d4ed8;font-weight:700;">'+auditedN+' audited &amp; explained \u2014 checked and cleared, not counted as deficit/surplus</div></div>'):'')+
       '</div>';
     // ---- per-collector reconciliation cards (like dashboard Recent Harvests) ----
     html+=reconCollectorCards(rows);
@@ -558,7 +560,7 @@ async function toolRecon(color){
     // area filter chips
     const areas=Array.from(new Set(rows.map(v=>v.area||'\u2014'))).sort();
     html+='<div id="recon-chips" style="display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;-webkit-overflow-scrolling:touch;">'+
-      chip('all','All',true)+['deficit','surplus','exact'].map(k=>chip('st:'+k,k.charAt(0).toUpperCase()+k.slice(1),false)).join('')+
+      chip('all','All',true)+['deficit','surplus','exact','audited'].map(k=>chip('st:'+k,k.charAt(0).toUpperCase()+k.slice(1),false)).join('')+
       areas.map(a=>chip('ar:'+a,a,false)).join('')+'</div>';
     html+='<div id="recon-list">'+reconRows(rows)+'</div>';
     t.innerHTML=html;
@@ -567,7 +569,10 @@ async function toolRecon(color){
     const applyFilter=()=>{
       const f=window._reconFilter; let out=rows;
       if(f.chip && f.chip!=='all'){
-        if(f.chip.startsWith('st:')){ const k=f.chip.slice(3); out=out.filter(v=>reconStatus(+v.gap||0).key===k); }
+        if(f.chip.startsWith('st:')){ const k=f.chip.slice(3);
+          if(k==='audited'){ out=out.filter(v=>!!v.audited); }
+          else { out=out.filter(v=>!v.audited && reconStatus(+v.gap||0).key===k); }
+        }
         else if(f.chip.startsWith('ar:')){ const a=f.chip.slice(3); out=out.filter(v=>(v.area||'\u2014')===a); }
       }
       if(f.q){ out=out.filter(v=>((v.sheet_name||'')+' '+(v.tg_name||'')).toLowerCase().includes(f.q)); }
@@ -591,9 +596,15 @@ function reconCollectorCards(rows){
   var by={};
   rows.forEach(function(v){
     var c=v.collector||'\u2014';
-    by[c]=by[c]||{coins:0,tg:0,exN:0,suN:0,deN:0,suAmt:0,deAmt:0,n:0};
+    by[c]=by[c]||{coins:0,tg:0,exN:0,suN:0,deN:0,suAmt:0,deAmt:0,auN:0,auDeN:0,n:0};
     var g=+v.gap||0, st=reconStatus(g);
     by[c].coins+=+v.coins||0; by[c].tg+=+v.tg_income||0; by[c].n++;
+    if(v.audited){
+      // explained/confirmed row — pull out of deficit/surplus into Audited
+      by[c].auN++;
+      if(st.key==='deficit') by[c].auDeN++;  // remember it WAS a deficit
+      return;
+    }
     if(st.key==='exact') by[c].exN++;
     else if(st.key==='surplus'){ by[c].suN++; by[c].suAmt+=Math.abs(g); }
     else { by[c].deN++; by[c].deAmt+=g; }
@@ -608,6 +619,7 @@ function reconCollectorCards(rows){
     var flags='';
     if(d.deN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#dc2626;background:#fee2e2;margin-left:5px;">'+d.deN+' DEFICIT</span>';
     if(d.suN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#b45309;background:#fef9c3;margin-left:5px;">'+d.suN+' SURPLUS</span>';
+    if(d.auN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#1d4ed8;background:#dbeafe;margin-left:5px;">'+d.auN+' AUDITED</span>';
     return '<div style="background:#fff;border-radius:16px;padding:14px;margin-bottom:11px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
       '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">'+
         '<div style="width:42px;height:42px;border-radius:50%;background:#025AC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">'+initial+'</div>'+
@@ -624,6 +636,11 @@ function reconCollectorCards(rows){
         '<div style="background:#fef9c3;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#b45309;">'+d.suN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(d.suN?peso(d.suAmt):'\u2014')+'</div></div>'+
         '<div style="background:#fee2e2;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#dc2626;">'+d.deN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 DEFICIT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(d.deN?peso(d.deAmt):'\u2014')+'</div></div>'+
       '</div>'+
+      (d.auN?('<div style="margin-top:8px;background:#eff6ff;border:1px solid #dbeafe;border-radius:11px;padding:9px 11px;display:flex;align-items:center;gap:8px;">'+
+        '<span style="font-size:14px;">\u2705</span>'+
+        '<div style="font-size:11px;color:#1d4ed8;font-weight:700;">'+d.auN+' audited &amp; explained'+
+        (d.auDeN?('<span style="font-weight:600;color:#6b7280;"> \u00b7 '+d.auDeN+' was flagged deficit</span>'):'')+
+        '</div></div>'):'')+
     '</div>';
   }).join('');
   return out;
@@ -634,21 +651,26 @@ function chip(k,label,active){
 function reconRows(rows){
   if(!rows.length) return '<div style="font-size:13px;color:var(--tx2);padding:18px;text-align:center;">No matching vendos.</div>';
   return rows.slice(0,400).map(function(v,idx){
-    var gap=+v.gap||0; var st=reconStatus(gap); var amt=Math.abs(gap);
+    var gap=+v.gap||0; var stRaw=reconStatus(gap); var amt=Math.abs(gap);
+    var st = v.audited ? {key:'audited',label:'Audited',color:'#1d4ed8',bg:'#dbeafe'} : stRaw;
+    var wasFlag = v.audited && stRaw.key!=='exact' ? stRaw.label : null;
     return '<div class="recon-card" data-idx="'+idx+'" style="background:#fff;border-radius:14px;overflow:hidden;margin-bottom:9px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid '+st.color+';">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;min-height:52px;">'+
         '<div style="min-width:0;padding-right:10px;"><div style="font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(v.sheet_name||v.tg_name||'Vendo')+'</div>'+
         '<div style="font-size:11px;color:#15803d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">\ud83d\udd17 '+(v.tg_name||'\u2014')+'</div>'+
-        '<div style="font-size:10px;color:var(--tx3);margin-top:1px;">'+(v.area||'')+'</div></div>'+
-        '<div style="text-align:right;flex-shrink:0;"><span style="display:inline-block;font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;color:'+st.color+';background:'+st.bg+';">'+st.label+'</span>'+
+        '<div style="font-size:10px;color:var(--tx3);margin-top:1px;">'+(v.area||'')+(v.submitted_at?' \u00b7 \ud83d\udd52 '+v.submitted_at:'')+'</div></div>'+
+        '<div style="text-align:right;flex-shrink:0;"><span style="display:inline-block;font-size:10px;font-weight:800;padding:3px 10px;border-radius:12px;color:'+st.color+';background:'+st.bg+';">'+(st.key==='audited'?'\u2705 ':'')+st.label+'</span>'+
+        (wasFlag?'<div style="font-size:9px;color:var(--tx3);margin-top:2px;">was '+wasFlag+'</div>':'')+
         '<div style="font-weight:800;color:'+st.color+';margin-top:4px;font-size:15px;">'+peso(amt)+'</div></div>'+
       '</div>'+
       '<div class="recon-detail" style="display:none;padding:0 14px 14px;border-top:0.5px solid var(--line);background:#fafbfc;">'+
-        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0 4px;"><span style="color:var(--tx2);">Telegram income</span><span style="font-weight:700;color:#025AC6;">'+peso(v.tg_income)+'</span></div>'+
+        (v.submitted_at?'<div style="display:flex;justify-content:space-between;font-size:13px;padding:9px 0 4px;"><span style="color:var(--tx2);">Harvest submitted</span><span style="font-weight:700;">'+v.submitted_at+'</span></div>':'')+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:'+(v.submitted_at?'4px':'9px')+' 0 4px;"><span style="color:var(--tx2);">Telegram income</span><span style="font-weight:700;color:#025AC6;">'+peso(v.tg_income)+'</span></div>'+
         '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:var(--tx2);">Coins collected</span><span style="font-weight:700;">'+peso(v.coins)+'</span></div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0 4px;border-top:0.5px solid var(--line);margin-top:4px;"><span style="color:var(--tx2);">'+(st.key==='deficit'?'Coins short by':st.key==='surplus'?'Extra coins':'Difference')+'</span><span style="font-weight:800;color:'+st.color+';">'+peso(amt)+' \u00B7 '+st.label+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0 4px;border-top:0.5px solid var(--line);margin-top:4px;"><span style="color:var(--tx2);">'+(stRaw.key==='deficit'?'Coins short by':stRaw.key==='surplus'?'Extra coins':'Difference')+'</span><span style="font-weight:800;color:'+stRaw.color+';">'+peso(amt)+' \u00B7 '+stRaw.label+'</span></div>'+
         '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span style="color:var(--tx2);">Spawn share</span><span style="font-weight:700;color:#028867;">'+peso(v.spawn)+'</span></div>'+
-        '<div style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.4;">'+(st.key==='deficit'?'\u26a0 Telegram recorded more sales than coins turned in \u2014 coins may be missing.':st.key==='surplus'?'Coins exceed Telegram sales \u2014 more coins collected than TG shows.':'Coins match Telegram sales within \u20b1100.')+'</div>'+
+        (v.audited&&v.admin_notes?('<div style="margin-top:8px;background:#eff6ff;border:1px solid #dbeafe;border-radius:9px;padding:9px 11px;font-size:11px;color:#1d4ed8;line-height:1.5;"><b>\u2705 Audited note:</b> '+String(v.admin_notes).replace(/</g,'&lt;')+'</div>'):
+          '<div style="font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.4;">'+(stRaw.key==='deficit'?'\u26a0 Telegram recorded more sales than coins turned in \u2014 coins may be missing.':stRaw.key==='surplus'?'Coins exceed Telegram sales \u2014 more coins collected than TG shows.':'Coins match Telegram sales within \u20b1100.')+'</div>')+
       '</div></div>';
   }).join('');
 }
