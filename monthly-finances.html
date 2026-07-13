@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spawn · Monthly Finances</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --blue:#025AC6; --gold:#FFB725; --teal:#028867; --magenta:#C01176; --red:#DF1A35; --purple:#311A8E;
+    --bg:#f4f5f7; --card:#fff; --line:#e6e7ea; --tx:#1a1a1a; --tx2:#6b7280; --tx3:#9ca3af;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--tx);}
+  .head{background:linear-gradient(135deg,var(--purple),var(--blue));color:#fff;padding:calc(env(safe-area-inset-top) + 16px) 16px 18px;}
+  .head h1{margin:0;font-size:18px;font-weight:700;}
+  .head .sub{font-size:12px;color:rgba(255,255,255,.75);margin-top:2px;}
+  .month-row{display:flex;align-items:center;gap:10px;margin-top:14px;}
+  .month-row select{flex:1;padding:9px 12px;border-radius:10px;border:none;font-size:14px;font-weight:600;color:var(--tx);}
+  .wrap{padding:14px;max-width:640px;margin:0 auto;}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .kpi{background:var(--card);border-radius:14px;padding:13px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid var(--blue);}
+  .kpi.k-teal{border-left-color:var(--teal);} .kpi.k-blue{border-left-color:var(--blue);}
+  .kpi.k-red{border-left-color:var(--red);} .kpi.k-gold{border-left-color:var(--gold);}
+  .kpi .l{font-size:11px;color:var(--tx2);} .kpi .v{font-size:20px;font-weight:800;margin-top:3px;}
+  .card{background:var(--card);border-radius:16px;padding:15px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .card h3{margin:0 0 4px;font-size:14px;font-weight:700;}
+  .card .cs{font-size:11px;color:var(--tx2);margin-bottom:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;color:var(--tx2);font-weight:600;padding:5px 4px;font-size:12px;}
+  td{padding:7px 4px;border-top:0.5px solid var(--line);}
+  .r{text-align:right;}
+  .net-card{background:linear-gradient(135deg,var(--teal),#01684f);color:#fff;border:none;}
+  .net-card .l{color:rgba(255,255,255,.8);} .net-card .v{font-size:28px;}
+  #login{position:fixed;inset:0;background:linear-gradient(135deg,#0f1f6e,#2563eb);display:flex;align-items:center;justify-content:center;padding:20px;z-index:99;}
+  #login .box{background:#fff;border-radius:20px;padding:28px 24px;width:100%;max-width:320px;text-align:center;}
+  #login input{width:100%;height:48px;border:1.5px solid var(--line);border-radius:12px;padding:0 14px;font-size:16px;margin-bottom:10px;}
+  #login button{width:100%;height:48px;border:none;border-radius:12px;background:var(--blue);color:#fff;font-size:16px;font-weight:600;}
+  .err{color:var(--red);font-size:13px;min-height:18px;margin-bottom:6px;}
+  .muted{color:var(--tx2);font-size:12px;padding:8px 0;}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="box">
+    <h1 style="margin:0 0 4px;font-size:19px;">Monthly Finances</h1>
+    <p style="color:var(--tx2);font-size:13px;margin:0 0 18px;">Owner sign in</p>
+    <div class="err" id="lerr"></div>
+    <input id="lu" placeholder="Username" autocomplete="username">
+    <input id="lp" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="lb">Sign in</button>
+  </div>
+</div>
+
+<div class="head">
+  <h1>Monthly Finances</h1>
+  <div class="sub">Spawn share income, expenses &amp; net</div>
+  <div class="month-row">
+    <select id="month-sel"></select>
+  </div>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="muted">Loading…</div>
+</div>
+
+<script>
+const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+const LOGIN_URL=SB+'/functions/v1/spawn-admin-login';
+const GW_URL=SB+'/functions/v1/spawn-gw-admin';
+const SESSION_KEY='spawn_owner_session';
+let GW_TOKEN=null;
+function peso(n){ n=Math.round(+n||0); return '\u20B1'+n.toLocaleString(); }
+async function gw(p){ return fetch(GW_URL,{method:'POST',headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},body:JSON.stringify(p)}); }
+
+// Reuse the owner PWA session if present (same 10PM expiry)
+function tryStoredSession(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem(SESSION_KEY)||'null'); }catch(_){}
+  if(s&&s.token&&s.exp&&Date.now()<s.exp){ GW_TOKEN=s.token; return true; }
+  return false;
+}
+async function doLogin(){
+  const u=(document.getElementById('lu').value||'').trim();
+  const p=document.getElementById('lp').value||'';
+  const err=document.getElementById('lerr'); err.textContent='';
+  if(!u||!p){ err.textContent='Enter username and password.'; return; }
+  try{
+    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok&&d.ok&&d.token){ GW_TOKEN=d.token; document.getElementById('login').style.display='none'; init(); }
+    else err.textContent='Wrong username or password.';
+  }catch(e){ err.textContent='Can\u2019t reach server.'; }
+}
+document.getElementById('lb').addEventListener('click',doLogin);
+document.getElementById('lp').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+
+function buildMonthOptions(){
+  const sel=document.getElementById('month-sel');
+  const now=new Date();
+  let opts='';
+  for(let i=0;i<12;i++){
+    const d=new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const val=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const lbl=d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    opts+='<option value="'+val+'">'+lbl+'</option>';
+  }
+  sel.innerHTML=opts;
+  sel.addEventListener('change',()=>loadMonth(sel.value));
+}
+
+let _charts=[];
+function destroyCharts(){ _charts.forEach(c=>{try{c.destroy();}catch(_){}}); _charts=[]; }
+
+async function loadMonth(month){
+  const wrap=document.getElementById('wrap');
+  wrap.innerHTML='<div class="muted">Loading '+month+'\u2026</div>';
+  destroyCharts();
+  try{
+    const r=await gw({kind:'rpc',fn:'spawn_monthly_finances',body:{p_month:month}});
+    let f=await r.json(); if(Array.isArray(f))f=f[0]; if(f&&f.spawn_monthly_finances)f=f.spawn_monthly_finances; f=f||{};
+    const byCol=f.by_collector||[]; const daily=f.daily||[]; const expCat=f.expenses_by_category||[];
+    const COLC=['#025AC6','#028867','#FFB725','#C01176','#311A8E','#DF1A35'];
+    let html=
+      '<div class="card net-card"><div class="l">Net (spawn share \u2212 expenses)</div><div class="v">'+peso(f.net)+'</div>'+
+        '<div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:4px;">'+(f.vendos||0)+' vendos harvested \u00B7 '+(f.harvests||0)+' harvests</div></div>'+
+      '<div class="kpis">'+
+        '<div class="kpi k-teal"><div class="l">Spawn share</div><div class="v" style="color:var(--teal);">'+peso(f.spawn_share)+'</div></div>'+
+        '<div class="kpi k-blue"><div class="l">Telegram income</div><div class="v" style="color:var(--blue);">'+peso(f.tg_income)+'</div></div>'+
+        '<div class="kpi k-gold"><div class="l">Coins collected</div><div class="v">'+peso(f.coins_total)+'</div></div>'+
+        '<div class="kpi k-red"><div class="l">Expenses</div><div class="v" style="color:var(--red);">'+peso(f.expenses)+'</div></div>'+
+      '</div>'+
+      '<div class="card"><h3>Daily spawn share</h3><div class="cs">Harvested per day this month.</div><canvas id="ch-daily" height="170"></canvas></div>'+
+      '<div class="card"><h3>By collector</h3><div class="cs">Spawn share harvested per collector.</div><canvas id="ch-col" height="160"></canvas>'+
+        '<table style="margin-top:12px;"><thead><tr><th>Collector</th><th class="r">Spawn</th><th class="r">Coins</th><th class="r">Harvests</th></tr></thead><tbody>'+
+        byCol.map(c=>'<tr><td>'+c.collector+'</td><td class="r" style="font-weight:700;color:var(--teal);">'+peso(c.spawn)+'</td><td class="r">'+peso(c.coins)+'</td><td class="r">'+(c.harvests||0)+'</td></tr>').join('')+
+        '</tbody></table></div>'+
+      '<div class="card"><h3>Expenses breakdown</h3><div class="cs">Collector expenses by category.</div>'+
+        (expCat.length?'<table><thead><tr><th>Category</th><th class="r">Amount</th></tr></thead><tbody>'+
+          expCat.map(e=>'<tr><td>'+e.category+'</td><td class="r" style="font-weight:700;color:var(--red);">'+peso(e.amount)+'</td></tr>').join('')+
+          '<tr><td style="font-weight:700;">Total</td><td class="r" style="font-weight:800;color:var(--red);">'+peso(f.expenses)+'</td></tr>'+
+        '</tbody></table>':'<div class="muted">No expenses recorded this month.</div>')+
+      '</div>';
+    wrap.innerHTML=html;
+    // charts
+    try{ _charts.push(new Chart(document.getElementById('ch-daily'),{type:'line',data:{labels:daily.map(d=>d.date.slice(8)),datasets:[{data:daily.map(d=>d.spawn),borderColor:'#028867',backgroundColor:'rgba(2,136,103,.14)',fill:true,tension:.3,pointRadius:2}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:9}}}}}})); }catch(_){}
+    try{ _charts.push(new Chart(document.getElementById('ch-col'),{type:'bar',data:{labels:byCol.map(c=>c.collector),datasets:[{data:byCol.map(c=>c.spawn),backgroundColor:byCol.map((c,i)=>COLC[i%COLC.length]),borderRadius:6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'\u20B1'+(v>=1000?(v/1000).toFixed(0)+'k':v),font:{size:10}}},x:{ticks:{font:{size:11}}}}}})); }catch(_){}
+  }catch(e){ wrap.innerHTML='<div class="muted" style="color:var(--red);">Couldn\u2019t load finances.</div>'; }
+}
+
+function init(){
+  buildMonthOptions();
+  loadMonth(document.getElementById('month-sel').value);
+}
+
+// Boot
+if(tryStoredSession()){ document.getElementById('login').style.display='none'; init(); }
+</script>
+</body>
+</html>
