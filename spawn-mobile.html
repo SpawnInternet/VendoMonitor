@@ -539,7 +539,7 @@ async function toolRecon(color){
     let html=''+
       '<div style="background:#fff;border-radius:16px;padding:15px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
         '<div style="font-size:14px;font-weight:700;margin-bottom:2px;">Telegram vs coins &middot; this month</div>'+
-        '<div style="font-size:11px;color:var(--tx2);margin-bottom:13px;">Deficit = coins less than Telegram sales. Surplus = coins more.</div>'+
+        '<div style="font-size:11px;color:var(--tx2);line-height:1.5;margin-bottom:13px;">Formula: TG income \u2212 coins total. \ud83d\udd34 Deficit = coins less than TG (money may be missing) &middot; \ud83d\udfe1 Surplus = coins more than TG &middot; \u2705 OK</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:9px;">'+
           '<div style="background:#eef5ff;border-radius:11px;padding:11px;"><div style="font-size:10px;color:var(--tx2);">TG income</div><div style="font-size:17px;font-weight:800;color:#025AC6;">'+peso(tgTot)+'</div></div>'+
           '<div style="background:var(--bg);border-radius:11px;padding:11px;"><div style="font-size:10px;color:var(--tx2);">Coins collected</div><div style="font-size:17px;font-weight:800;">'+peso(coinTot)+'</div></div>'+
@@ -549,8 +549,12 @@ async function toolRecon(color){
           '<div style="background:#fef9c3;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#b45309;">'+surplusN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(surplusN?peso(surplusAmt):'\u2014')+'</div></div>'+
           '<div style="background:#fee2e2;border-radius:11px;padding:10px 6px;text-align:center;"><div style="font-size:18px;font-weight:800;color:#dc2626;">'+deficitN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 DEFICIT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(deficitN?peso(deficitAmt):'\u2014')+'</div></div>'+
         '</div>'+
-        '<input id="recon-search" placeholder="Search vendo or TG name\u2026" style="width:100%;margin-top:13px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font-size:14px;box-sizing:border-box;-webkit-appearance:none;">'+
       '</div>';
+    // ---- per-collector reconciliation cards (like dashboard Recent Harvests) ----
+    html+=reconCollectorCards(rows);
+    // ---- per-vendo detail section ----
+    html+='<div style="font-size:13px;font-weight:700;margin:16px 2px 8px;">Per-vendo detail</div>'+
+      '<input id="recon-search" placeholder="Search vendo or TG name\u2026" style="width:100%;margin-bottom:10px;padding:11px 12px;border:1px solid var(--line);border-radius:11px;font-size:14px;box-sizing:border-box;-webkit-appearance:none;">';
     // area filter chips
     const areas=Array.from(new Set(rows.map(v=>v.area||'\u2014'))).sort();
     html+='<div id="recon-chips" style="display:flex;gap:7px;overflow-x:auto;padding:2px 2px 10px;-webkit-overflow-scrolling:touch;">'+
@@ -582,6 +586,47 @@ async function toolRecon(color){
     });
     wireReconCards();
   }catch(e){ console.warn('recon failed',e); t.innerHTML='<div style="font-size:13px;color:var(--red);">Couldn\u2019t load reconciliation.</div>'; }
+}
+function reconCollectorCards(rows){
+  var by={};
+  rows.forEach(function(v){
+    var c=v.collector||'\u2014';
+    by[c]=by[c]||{coins:0,tg:0,exN:0,suN:0,deN:0,suAmt:0,deAmt:0,n:0};
+    var g=+v.gap||0, st=reconStatus(g);
+    by[c].coins+=+v.coins||0; by[c].tg+=+v.tg_income||0; by[c].n++;
+    if(st.key==='exact') by[c].exN++;
+    else if(st.key==='surplus'){ by[c].suN++; by[c].suAmt+=Math.abs(g); }
+    else { by[c].deN++; by[c].deAmt+=g; }
+  });
+  var list=Object.keys(by).map(function(k){return [k,by[k]];})
+    .sort(function(a,b){return b[1].tg-a[1].tg;});
+  if(!list.length) return '';
+  var out='<div style="font-size:13px;font-weight:700;margin:0 2px 8px;">Recent harvests &middot; per collector</div>';
+  out+=list.map(function(e){
+    var name=e[0], d=e[1];
+    var initial=(name.charAt(0)||'?').toUpperCase();
+    var flags='';
+    if(d.deN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#dc2626;background:#fee2e2;margin-left:5px;">'+d.deN+' DEFICIT</span>';
+    if(d.suN) flags+='<span style="display:inline-block;font-size:9px;font-weight:800;padding:3px 9px;border-radius:11px;color:#b45309;background:#fef9c3;margin-left:5px;">'+d.suN+' SURPLUS</span>';
+    return '<div style="background:#fff;border-radius:16px;padding:14px;margin-bottom:11px;box-shadow:0 1px 3px rgba(0,0,0,.06);">'+
+      '<div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">'+
+        '<div style="width:42px;height:42px;border-radius:50%;background:#025AC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0;">'+initial+'</div>'+
+        '<div style="min-width:0;flex:1;"><div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+name+'</div>'+
+        '<div style="font-size:11px;color:var(--tx2);">'+d.n+' harvest'+(d.n===1?'':'s')+'</div></div>'+
+        '<div style="text-align:right;flex-shrink:0;line-height:1.9;">'+(flags||'')+'</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'+
+        '<div style="background:#eef5ff;border-radius:11px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#025AC6;">'+peso(d.coins)+'</div><div style="font-size:9px;color:var(--tx2);font-weight:600;margin-top:1px;">COINS</div></div>'+
+        '<div style="background:#eafaf1;border-radius:11px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#028867;">'+peso(d.tg)+'</div><div style="font-size:9px;color:var(--tx2);font-weight:600;margin-top:1px;">TG INCOME</div></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'+
+        '<div style="background:#dcfce7;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#15803d;">'+d.exN+'</div><div style="font-size:9px;font-weight:700;color:#15803d;">\u2705 EXACT</div></div>'+
+        '<div style="background:#fef9c3;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#b45309;">'+d.suN+'</div><div style="font-size:9px;font-weight:700;color:#b45309;">\ud83d\udfe1 SURPLUS</div><div style="font-size:10px;font-weight:800;color:#b45309;margin-top:1px;">'+(d.suN?peso(d.suAmt):'\u2014')+'</div></div>'+
+        '<div style="background:#fee2e2;border-radius:11px;padding:9px 4px;text-align:center;"><div style="font-size:16px;font-weight:800;color:#dc2626;">'+d.deN+'</div><div style="font-size:9px;font-weight:700;color:#dc2626;">\ud83d\udd34 DEFICIT</div><div style="font-size:10px;font-weight:800;color:#dc2626;margin-top:1px;">'+(d.deN?peso(d.deAmt):'\u2014')+'</div></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  return out;
 }
 function chip(k,label,active){
   return '<button class="rc-chip" data-k="'+k+'" style="flex-shrink:0;font-size:12px;font-weight:600;padding:7px 14px;border-radius:20px;border:1px solid '+(active?'var(--blue)':'var(--line)')+';background:'+(active?'var(--blue)':'#fff')+';color:'+(active?'#fff':'var(--tx2)')+';white-space:nowrap;">'+label+'</button>';
