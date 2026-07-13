@@ -163,6 +163,7 @@ window.markAdminPwWrong = function(){
 
   window.slLogin=async function(){
     const p=(document.getElementById('sl-pass').value||'').trim();
+    const u=(document.getElementById('sl-user').value||'').trim();
     const err=document.getElementById('sl-error');
     const btn=document.querySelector('#sl-login-view .sl-btn');
     if(btn){ btn.disabled=true; btn.textContent='Signing in…'; }
@@ -170,7 +171,7 @@ window.markAdminPwWrong = function(){
       const r = await fetch(LOGIN_URL, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ password: p })
+        body: JSON.stringify({ username: u, password: p })
       });
       const d = await r.json().catch(()=>({}));
       if(r.ok && d.ok && d.token){
@@ -183,7 +184,7 @@ window.markAdminPwWrong = function(){
       }
       throw new Error('invalid');
     }catch(e){
-      if(err){ err.textContent='Incorrect password'; err.classList.add('show'); }
+      if(err){ err.textContent='Incorrect username or password'; err.classList.add('show'); }
       const pass=document.getElementById('sl-pass'); if(pass){ pass.value=''; pass.focus(); }
       const card=document.getElementById('sl-login-view');
       if(card){ card.style.transform='translateX(-8px)'; setTimeout(()=>{card.style.transform='translateX(8px)';},80); setTimeout(()=>{card.style.transform='';},160); }
