@@ -1476,7 +1476,8 @@ async function rcRun(){
             tg_income:Number(o.tg_income||0),
             audited:!!o.audited,
             submitted_at:o.submitted_at||null,
-            window_start:o.window_start||null
+            window_start:o.window_start||null,
+            has_chain:!!o.has_chain
           };
         }
         if(o && o.tg_name && rpcTgByName[o.tg_name]===undefined){
@@ -1524,11 +1525,12 @@ async function rcRun(){
     const rowKey=tg ? tg+'|'+ws+'|'+we : null;
     // Prefer per-harvest RPC data (by harvest id — no tg_name collision);
     // then tg_name fallback; then date-only fetch.
-    let tgInc=null, rpcAudited=false, rpcWinStart=null, rpcSubmit=null;
+    let tgInc=null, rpcAudited=false, rpcWinStart=null, rpcSubmit=null, rpcHasChain=true;
     const byId=rpcById[row.id];
     if(byId){
       tgInc=byId.tg_income; rpcAudited=byId.audited;
       rpcWinStart=byId.window_start; rpcSubmit=byId.submitted_at;
+      rpcHasChain=byId.has_chain;
     } else if(tg && rpcTgByName[tg]!==undefined){
       tgInc=rpcTgByName[tg];
     } else if(rowKey!=null){
@@ -1553,6 +1555,7 @@ async function rcRun(){
       rpc_audited:rpcAudited,
       rpc_window_start:rpcWinStart,
       rpc_submitted_at:rpcSubmit,
+      window_estimated:(byId? !rpcHasChain : false),
       route_code:rc,is_admin:isAdmin
     };
   });
@@ -1888,13 +1891,21 @@ function rcFilter(){
   });
 
   const fmtP=v=>_php(v);
-  const flagBadge=f=>f==='alert'
+  const flagBadge=(f,est)=>{
+    // Muted style for estimated (first-harvest) rows — don't present a guess as a verdict.
+    if(est){
+      const lbl = f==='alert'?'🔴 Short?' : f==='warn'?'🟡 Surplus?' : f==='nodata'?'🔗 needs match' : '✅ OK';
+      if(f==='nodata') return '<span style="background:#e8eef7;color:#3b5b8c;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔗 needs match</span>';
+      return `<span style="background:#f1f3f5;color:#868e96;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:600;">${lbl}</span>`;
+    }
+    return f==='alert'
     ?'<span style="background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔴 Short</span>'
     :f==='warn'
     ?'<span style="background:#fef9c3;color:#b45309;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🟡 Surplus</span>'
     :f==='nodata'
     ?'<span style="background:#e8eef7;color:#3b5b8c;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">🔗 needs match</span>'
     :'<span style="background:#dcfce7;color:#15803d;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">✅ OK</span>';
+  };
   const diffStr=(gap,pct)=>{
     if(gap==null) return '<span style="color:#9ca3af">—</span>';
     // gap = TG income - coins_total.  >20 TG>coins (short, red); <-20 coins>TG (surplus, amber); else OK green
@@ -2017,7 +2028,7 @@ function rcFilter(){
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtP(h.coins_total)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag,h.window_estimated)}${h.window_estimated?`<div style="font-size:8px;color:#9ca3af;margin-top:2px;line-height:1.1;" title="First harvest for this vendo — no previous submission to chain from, so the window is a 30-day estimate. Reconciles exactly once it has a second harvest.">\u26a0 est. window</div>`:''}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;min-width:180px;">
                 ${h.reconcile_status==='ok'
                   ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ Confirmed</span>
