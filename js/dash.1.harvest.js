@@ -13,6 +13,41 @@ const DASH_VERSION = '2026-06-15-v1';
 // Aliases — var to avoid redeclaration errors
 var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
 var _KEY = "gw";
+
+// ── Time-aware reconciliation helpers ──────────────────────────────
+// Transactions store date (date) + time (text like "02:08:32 PM"), Manila local.
+// Harvest submission (harvested_at) is UTC. We compare both as Manila-local ms.
+function _rcParseAmpm(timeStr){
+  // "02:08:32 PM" -> {h,m,s} in 24h; returns null if unparseable
+  if(!timeStr) return null;
+  var m=/^\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?\s*$/i.exec(timeStr);
+  if(!m) return null;
+  var h=parseInt(m[1],10), min=parseInt(m[2],10), s=m[3]?parseInt(m[3],10):0;
+  var ap=(m[4]||'').toUpperCase();
+  if(ap==='PM' && h<12) h+=12;
+  if(ap==='AM' && h===12) h=0;
+  return {h:h,m:min,s:s};
+}
+// Local (Manila) ms for a transaction row's date+time, treated as wall-clock.
+function _rcTxnLocalMs(dateStr, timeStr){
+  if(!dateStr) return null;
+  var t=_rcParseAmpm(timeStr);
+  var d=/^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr);
+  if(!d) return null;
+  // Use Date.UTC so it's a stable wall-clock number (no local-TZ drift on the viewer's machine)
+  return Date.UTC(+d[1], +d[2]-1, +d[3], t?t.h:23, t?t.m:59, t?t.s:59);
+}
+// Submission cutoff as Manila wall-clock ms. harvested_at is UTC ISO; +8h -> Manila.
+function _rcSubmitLocalMs(harvestedAt, harvestDate){
+  if(harvestedAt){
+    var utc=new Date(harvestedAt).getTime();
+    if(!isNaN(utc)) return utc + 8*3600*1000; // shift to Manila wall-clock, comparable to _rcTxnLocalMs
+  }
+  // fallback: end of harvest_date
+  var d=/^(\d{4})-(\d{2})-(\d{2})/.exec(harvestDate||'');
+  if(d) return Date.UTC(+d[1], +d[2]-1, +d[3], 23,59,59);
+  return null;
+}
 var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
 // anon key — used ONLY for the realtime websocket (read-only live feed; cannot write data)
 var _ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM0MDQ4MDIsImV4cCI6MjA1ODk4MDgwMn0.1Nf1cVMSnFkFMDFRzDFUsxbvZy2vBFJnFOdOthHxq9k";
@@ -1313,6 +1348,8 @@ async function rcRun(){
   rcAllRows=[];
   // Try bucket cache first
   const _RC_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
+  // recon_cache version bumped for time-aware window (submission-time cutoff) — invalidate v3.rc.timeaware
+  if (window._RC_CACHE_VER !== 'timeaware1') window._RC_CACHE_VER = 'timeaware1';
   if (!rcBypassCache) try {
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
@@ -1410,23 +1447,30 @@ async function rcRun(){
     if(!tg) continue;
     const ws=row.harvest_window_start||from;
     const we=row.harvest_date||to;
-    const key=tg+'|'+ws+'|'+we;
+    // window END = submission timestamp (Manila) if present, else end of harvest_date
+    const submitLocal=_rcSubmitLocalMs(row.harvested_at, we);
+    const key=tg+'|'+ws+'|'+we+'|'+submitLocal;
     if(seenKeys.has(key)) continue;
     seenKeys.add(key);
-    uniqueWindows.push({tg,ws,we,key});
+    uniqueWindows.push({tg,ws,we,key,submitLocal});
   }
-  // Fetch one window's total (handles pagination)
+  // Fetch one window's total (handles pagination). Time-aware: only count
+  // transactions whose local (date+time) is at or before the submission time.
   async function fetchWindowTotal(w){
     let total=0,off2=0;
     while(true){
       try{
         const rt=await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount&limit=1000&offset=${off2}`,
+          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount,date,time&limit=1000&offset=${off2}`,
           {headers:_HDR}
         );
         const td=await rt.json();
         if(!Array.isArray(td)||!td.length) break;
-        total+=td.reduce((s,t)=>s+Number(t.amount||0),0);
+        total+=td.reduce((s,t)=>{
+          const ts=_rcTxnLocalMs(t.date,t.time);
+          if(ts!=null && w.submitLocal!=null && ts>w.submitLocal) return s; // after submission -> next cycle
+          return s+Number(t.amount||0);
+        },0);
         if(td.length<1000) break;
         off2+=1000;
       }catch(e){break;}
