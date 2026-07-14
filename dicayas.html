@@ -567,10 +567,18 @@ function _popupCandidatesRaw(m){
   const rc=cleanComment(m);
   const rcToks=rcTokens(rc);
 
+  // HIGHEST PRIORITY: a record EXPLICITLY linked to this exact VLAN (same server area).
+  // An explicit VLAN link is a deliberate human action and must beat fuzzy name matches
+  // from OTHER VLANs (e.g. router says "BADEY'S EATERY" on VLAN 93, but "Jean Eatery" on
+  // VLAN 108 fuzzy-matches "Eatery" — the VLAN-93-linked record must win).
+  if(onVlan.length===1){
+    const out=[onVlan[0]]; out._mode='dupes'; return out;
+  }
+
+  let primary=null, best=0;
   // NAME IS GROUND TRUTH. First look for an EXACT name match anywhere on this server —
   // not just on this VLAN, because VLAN numbers are reused across areas. If the router
   // comment equals a record's sheet_name or tg_name, that record IS the machine.
-  let primary=null, best=0;
   const rcNorm=normName(rc);
   if(rcNorm){
     // was: VENDOS.filter(...) — a full scan with 2 normName() calls per row, per card.
