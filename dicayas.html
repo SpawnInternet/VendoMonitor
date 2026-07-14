@@ -604,13 +604,16 @@ function _popupCandidatesRaw(m){
     return [];
   }
 
-  // Show ONLY this one machine + its EXACT-name duplicates (true dupes to clean).
+  // Show ONLY this one machine + its EXACT-name duplicates IN THE SAME SERVER AREA
+  // (true dupes to clean). A same-named record in a different area is a separate machine,
+  // not a duplicate — VLAN/area is a namespace, so we must not pull it in here.
   const sheets=new Set(), tgs=new Set();
   if(primary.sheet_name) sheets.add(primary.sheet_name);
   if(primary.tg_name) tgs.add(primary.tg_name);
   const out=VENDOS.filter(v=>{
     if(v.id===primary.id) return true;
     if(!(v.sheet_name||v.tg_name)) return false;
+    if(!inServerArea(v)) return false;
     return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
   });
   out._mode='dupes';
