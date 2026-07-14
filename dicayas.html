@@ -484,6 +484,9 @@ function ago(ts){
 }
 function agoHrs(ts){ if(!ts)return 1e9; return (Date.now()-new Date(ts).getTime())/3600000; }
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+// Safe JSON value for embedding inside a single-quoted HTML attribute (onclick='...').
+// Apostrophes in data (e.g. "BADEY'S EATERY") would otherwise close the attribute early.
+function attrJS(v){ return JSON.stringify(v).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;'); }
 
 // Candidates to show in the popup Names tab:
 // match by the router name, and hide records that have NO name left (fully unlinked).
@@ -915,7 +918,7 @@ function renderModal(m, cands){
     <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no DHCP lease'}</span></div>
     ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}
     <div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>
-    <button class="pullbtn" onclick='pullOut("vendo",${JSON.stringify(String(m.vlan))},${JSON.stringify(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
+    <button class="pullbtn" onclick='pullOut("vendo",${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
   } else {
     // NAMES & GROUP tab
     html+=`<div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">📡 Router says</span><span class="v gold">${esc(cleanComment(m))||'(blank)'}</span></div>`;
@@ -965,17 +968,17 @@ function renderModal(m, cands){
           html+=`<div class="candbox" style="text-align:left;padding:10px 12px;margin:6px 0">
             <b>${esc(v.sheet_name||v.tg_name)}</b> <span style="font-size:10px;color:#1c6b54">· ${sc} word match</span><br>
             <span style="font-size:11px;color:var(--dim)">${esc(v.area||'—')} · ${where}</span>
-            <button class="btn gold" style="float:right;padding:5px 12px;font-size:12px" onclick='attachOrphan(${v.id}, ${JSON.stringify(String(m.vlan))}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>🔗 ${v.vlan==null?'Attach':'Move'} to VLAN ${esc(m.vlan)}</button>
+            <button class="btn gold" style="float:right;padding:5px 12px;font-size:12px" onclick='attachOrphan(${v.id}, ${attrJS(String(m.vlan))}, ${attrJS(m.server_name||"Dicayas Server")})'>🔗 ${v.vlan==null?'Attach':'Move'} to VLAN ${esc(m.vlan)}</button>
             <div style="clear:both"></div>
           </div>`;
         });
-        html+=`<div style="margin-top:8px;text-align:center"><button class="lnk link" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>None of these — create a new record</button></div>
+        html+=`<div style="margin-top:8px;text-align:center"><button class="lnk link" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||"Dicayas Server")})'>None of these — create a new record</button></div>
         </div>`;
       } else {
         html+=`<div style="padding:18px 0;text-align:center">
           <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>
           <p style="font-size:12px;color:var(--navy);margin-bottom:12px">Router says: <b>${esc(suggest||'—')}</b></p>
-          <button class="btn gold" onclick='createLink(${JSON.stringify(String(m.vlan))}, ${JSON.stringify(suggest)}, ${JSON.stringify(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
+          <button class="btn gold" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
         </div>`;
       }
     }
@@ -1433,7 +1436,7 @@ function changeArea(vid){
   const v=VENDOS.find(x=>x.id===vid);
   const cur=v?v.area:null;
   document.getElementById('areaList').innerHTML=AREAS.map(a=>`
-    <div class="pickitem" onclick='pickArea(${JSON.stringify(a)})'>${esc(a)}${a===cur?' <span class="area">current</span>':''}</div>`).join('');
+    <div class="pickitem" onclick='pickArea(${attrJS(a)})'>${esc(a)}${a===cur?' <span class="area">current</span>':''}</div>`).join('');
   document.getElementById('areaOv').classList.add('show');
 }
 function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; }
@@ -1709,7 +1712,7 @@ async function tgSearch(q){
   let html='';
   if(rows.length){
     html=rows.map(r=>`
-      <div class="tgrow" onclick='pickTg(${JSON.stringify(r.tg_name)})'>
+      <div class="tgrow" onclick='pickTg(${attrJS(r.tg_name)})'>
         <span class="tgnm">${esc(r.tg_name)}</span>
         <span class="tgmeta">${r.msgs} msgs - ${r.last_seen||'-'}${r.linked?` - <span style="color:#a31c2e">linked${r.linked_vlan?' VLAN '+r.linked_vlan:''}</span>`:' - <span style="color:#1c6b54">free</span>'}</span>
       </div>`).join('');
@@ -1717,7 +1720,7 @@ async function tgSearch(q){
   // Always offer to use the typed text directly (router comment may not be a TG-income name).
   const typed=(q||'').trim();
   if(typed){
-    html+=`<div class="tgrow" style="background:#fff8e8" onclick='pickTg(${JSON.stringify(typed)})'>
+    html+=`<div class="tgrow" style="background:#fff8e8" onclick='pickTg(${attrJS(typed)})'>
       <span class="tgnm">➕ Use "${esc(typed)}" as the name</span>
       <span class="tgmeta">no Telegram income match — use this text directly</span>
     </div>`;
@@ -1968,7 +1971,7 @@ async function renderPickList(q){
     const ql=q.toLowerCase();
     const hl=(s)=>{ if(!ql)return esc(s); const i=s.toLowerCase().indexOf(ql); if(i<0)return esc(s);
       return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+ql.length))+'</mark>'+esc(s.slice(i+ql.length)); };
-    listEl.innerHTML = rows.map(r=>`<div class="pickitem" onclick='pickName(${JSON.stringify(r.tg_name)})'>
+    listEl.innerHTML = rows.map(r=>`<div class="pickitem" onclick='pickName(${attrJS(r.tg_name)})'>
         <span>${hl(r.tg_name)}</span>
         <span class="area" style="font-size:10px">${r.msgs} msgs · ${r.last_seen||'—'}${r.linked?` · <span style="color:#a31c2e">linked${r.linked_vlan?' V'+r.linked_vlan:''}</span>`:' · <span style="color:#1c6b54">free</span>'}</span>
       </div>`).join('');
@@ -1988,7 +1991,7 @@ async function renderPickList(q){
   const hl=(s)=>{ if(!q)return esc(s); const i=s.toLowerCase().indexOf(q); if(i<0)return esc(s);
     return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length)); };
   listEl.innerHTML = items.length
-    ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${JSON.stringify(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
+    ? items.map(([nm,area])=>`<div class="pickitem" onclick='pickName(${attrJS(nm)})'>${hl(nm)}${area?`<span class="area">${esc(area)}</span>`:''}</div>`).join('')
     : '<div class="empty" style="padding:24px">No matches — type a new name below</div>';
 }
 async function pickName(name){
