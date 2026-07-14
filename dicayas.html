@@ -152,6 +152,10 @@
   .pendingbar{background:#fdecef;border:1px solid #f3b4bd;border-radius:8px;padding:7px 11px;margin-top:8px;font-size:12px;font-weight:700;color:#a31c2e}
   .candbox.pending{opacity:.7;border-color:#f3b4bd}
   .dupename.resolved{background:#e6f7ee;color:#1f7d4d;border-color:#a9e0c2}
+  .junktg{background:#fff4e5;color:#b45309;border:1px solid #fed7aa;border-radius:4px;padding:0 5px;font-size:10px;font-weight:800;margin-left:5px;cursor:default}
+  .notg-ok{background:#e6f7ee;color:#1f7d4d;border:1px solid #a9e0c2;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:800}
+  .lnk.notg{background:#eef4ff;color:#1e40af;border:1px solid #bfdbfe}
+  .lnk.notg:hover{background:#dbeafe}
   .resolvedbox{background:#e6f7ee;border:1px solid #a9e0c2;border-radius:10px;padding:11px 13px;margin:6px 0 12px}
   .finalrow{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #c8ecd6;font-size:14px}
   .finalrow .k{color:#1f7d4d;font-weight:700}
@@ -991,10 +995,18 @@ function renderModal(m, cands){
         </div>
         <div class="linkrow">
           <span class="k">TG</span>
-          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.tg_name,'tg_name',d.area)}</span>
+          <span class="v">${
+            d.tg_name
+              ? esc(d.tg_name)+(isJunkTg(d.tg_name)?' <span class="junktg" title="Short/manual — probably not a real Telegram name. Clear it or replace with the real TG name.">⚠ looks manual</span>':'')+dupeBadge(d.tg_name,'tg_name',d.area)
+              : (d.no_tg
+                  ? '<span class="notg-ok" title="Marked as having no Telegram name — not an error">✓ No TG (intentional)</span>'
+                  : '<i style="color:var(--dim)">(none)</i>')
+          }</span>
           ${d.tg_name
-            ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
-            : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
+            ? `<button class="lnk unlink" onclick='clearTg(${vid})'>Clear TG</button><button class="lnk link" onclick='linkField(${vid},"tg_name")'>Change</button>`
+            : (d.no_tg
+                ? `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Add TG</button>`
+                : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button><button class="lnk notg" onclick='markNoTg(${vid})'>No TG name yet</button>`)}
         </div>
         <div class="linkrow">
           <span class="k">Group</span>
@@ -1564,6 +1576,46 @@ function refreshVendoLocal(vid, patch){
   }catch(_){}
   try{ if(document.getElementById('dupeOv').classList.contains('show') && typeof renderDupes==='function') renderDupes(); }catch(_){}
 }
+// A "real" Telegram name is long and multi-word (comes straight from a TG message).
+// Manual junk (nnn, ==, ffg, test, asdf, single short tokens) is what we let the user clean.
+function isJunkTg(tg){
+  if(!tg) return false;
+  const t=String(tg).trim();
+  if(t.length<=4) return true;                       // very short -> junk
+  if(!/[a-z]/i.test(t)) return true;                 // no letters (==, 123) -> junk
+  if(!/\s/.test(t) && t.length<8) return true;       // single short word -> junk
+  if(/^(test|asdf|qwer|nnn+|aaa+|xxx+|tg|na|none|null)$/i.test(t)) return true;
+  return false;
+}
+async function clearTg(vid){
+  const v=VENDOS.find(x=>x.id===vid); if(!v) return;
+  const ok=await prettyConfirm({title:'Clear TG name',
+    message:'Remove the TG name "<b>'+esc(v.tg_name||'')+'</b>" from this record. Use this for names you typed manually that are NOT real Telegram names. Harvest money is not affected.',
+    okText:'Clear TG'});
+  if(!ok) return;
+  const pwd=await askPasswordValue('Enter password to clear the TG name.');
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  try{ await sbPatch(vid,{tg_name:null, tg_match_confirmed:false, tg_match_method:null}); }
+  catch(e){ toast('Failed: '+e.message); return; }
+  window._curTab='names';
+  refreshVendoLocal(vid,{tg_name:null, tg_match_confirmed:false});
+  toast('✓ TG name cleared — now Link the real one or tap "No TG name yet"');
+}
+async function markNoTg(vid){
+  const ok=await prettyConfirm({title:'No TG name yet',
+    message:'Mark this vendo as having <b>no Telegram name</b> (offline/manual vendo). It will no longer be flagged as unmatched, and you can still lock &amp; finalize it. You can add a real TG name later anytime.',
+    okText:'✓ Mark No TG'});
+  if(!ok) return;
+  const pwd=await askPasswordValue('Enter password to mark No TG.');
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  try{ await sbPatch(vid,{no_tg:true, tg_name:null}); }
+  catch(e){ toast('Failed: '+e.message); return; }
+  window._curTab='names';
+  refreshVendoLocal(vid,{no_tg:true, tg_name:null});
+  toast('✓ Marked as No TG (intentional)');
+}
 async function unlinkField(vid, field){
   const lbl=field==='tg_name'?'TG name':'Sheet name';
   const ok=await prettyConfirm({title:'Unlink '+lbl+' (this record only)',
@@ -1756,7 +1808,7 @@ async function doCreateLink(){
 async function reloadVendos(){
   const fresh=[];
   for(let off=0; off<10000; off+=1000){
-    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed&order=id&limit=1000&offset=${off}`);
+    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000&offset=${off}`);
     if(!page||!page.length) break;
     fresh.push(...page);
     if(page.length<1000) break;
@@ -1951,7 +2003,9 @@ async function pickName(name){
       catch(e){ toast("Failed: "+e.message); return; }
     }
     if(!res.ok){ toast("⛔ "+(res.error||'Failed')); return; }
-    refreshVendoLocal(vid,{tg_name:name});
+    // adding a real TG name clears any "No TG (intentional)" marker
+    try{ await sbPatch(vid,{no_tg:false}); }catch(_){}
+    refreshVendoLocal(vid,{tg_name:name, no_tg:false});
     toast("Linked TG: "+name);
     return;
   }
