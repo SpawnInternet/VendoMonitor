@@ -567,7 +567,7 @@ async function loadHome(){
 
   try{
     // Load harvests
-    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,vendo_id&order=collector.asc,harvested_at.asc`);
+    const h=await sbFetch(`harvests?harvest_date=eq.${currentDate}&select=id,collector,vendo_name,tg_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at,vendo_id,vendo_code&order=collector.asc,harvested_at.asc`);
     if(!Array.isArray(h)){el.innerHTML='<div class="empty">Error loading data</div>';return;}
     allHarvests=h;
 
@@ -946,7 +946,7 @@ function renderVendo(h){
   const rec=Number(h.spawn_share||0);
   const cnt=calcCounted(ps);
   const isSaved=savedSet.has(h.id);
-  const vcode=h._vendo_code||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
+  const vcode=h.vendo_code||h._vendo_code||''; const name=(h.vendo_name||h.sheet_name||h.tg_name||'—');
   const suggest=suggestPacks(rec);
   // Net target = spawn share minus collector expenses (expenses taken from vendo coins)
   const _collExp=(expState[h.collector]||[]).reduce((s,e)=>s+e.amt,0);
@@ -1400,7 +1400,7 @@ async function loadRecon(collector){
           return `<div class="recon-vendo ${cls}">
             <div class="rv-top">
               <div>
-                <span class="rv-code" style="background:var(--spawn-blue);color:#fff;font-size:11px;font-weight:900;padding:2px 8px;border-radius:5px;margin-right:5px">${h._vendo_code||(h.sheet_name?(h.sheet_name.substring(0,4).toUpperCase()):'—')}</span>
+                <span class="rv-code" style="background:var(--spawn-blue);color:#fff;font-size:11px;font-weight:900;padding:2px 8px;border-radius:5px;margin-right:5px">${h.vendo_code||h._vendo_code||(h.sheet_name?(h.sheet_name.substring(0,4).toUpperCase()):'—')}</span>
                 <span class="rv-name">${h.vendo_name||h.sheet_name||'—'}</span>
               </div>
               <span class="rv-time">${t}</span>
