@@ -1003,7 +1003,9 @@ function renderModal(m, cands){
                   : '<i style="color:var(--dim)">(none)</i>')
           }</span>
           ${d.tg_name
-            ? `<button class="lnk unlink" onclick='clearTg(${vid})'>Clear TG</button><button class="lnk link" onclick='linkField(${vid},"tg_name")'>Change</button>`
+            ? (isJunkTg(d.tg_name)
+                ? `<button class="lnk unlink" onclick='clearTg(${vid})'>Clear TG</button><button class="lnk link" onclick='linkField(${vid},"tg_name")'>Change</button>`
+                : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Change</button>`)
             : (d.no_tg
                 ? `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Add TG</button>`
                 : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button><button class="lnk notg" onclick='markNoTg(${vid})'>No TG name yet</button>`)}
@@ -1590,14 +1592,19 @@ function isJunkTg(tg){
 async function clearTg(vid){
   const v=VENDOS.find(x=>x.id===vid); if(!v) return;
   const ok=await prettyConfirm({title:'Clear TG name',
-    message:'Remove the TG name "<b>'+esc(v.tg_name||'')+'</b>" from this record. Use this for names you typed manually that are NOT real Telegram names. Harvest money is not affected.',
+    message:'Remove the TG name "<b>'+esc(v.tg_name||'')+'</b>" from this record. This only works for names you typed manually. <b>Real Telegram names (with message history) are protected and cannot be cleared.</b> Harvest money is not affected.',
     okText:'Clear TG'});
   if(!ok) return;
   const pwd=await askPasswordValue('Enter password to clear the TG name.');
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
-  try{ await sbPatch(vid,{tg_name:null, tg_match_confirmed:false, tg_match_method:null}); }
+  let res;
+  try{ res=await sbRpc('clear_junk_tg',{p_vendo_id:vid, p_pwd:pwd}); }
   catch(e){ toast('Failed: '+e.message); return; }
+  if(!res.ok){
+    if(res.protected){ await prettyConfirm({title:'🔒 Protected — real Telegram name', message:res.error, okText:'OK', cancelText:''}); }
+    else { toast('⛔ '+(res.error||'Failed')); }
+    return;
+  }
   window._curTab='names';
   refreshVendoLocal(vid,{tg_name:null, tg_match_confirmed:false});
   toast('✓ TG name cleared — now Link the real one or tap "No TG name yet"');
