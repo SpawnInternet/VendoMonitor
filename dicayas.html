@@ -818,19 +818,23 @@ function openSub(mk){
   document.getElementById('ov').classList.add('show');
 }
 
-// detect if a name appears on multiple vendo records; returns {total, surviving, pending}
-function nameDupeInfo(name, field){
+// detect if a name appears on multiple vendo records IN THE SAME AREA; returns {total, surviving, pending}
+// Vendos in different areas that share a name (e.g. Taruc DIPOLOG vs Taruc DAPITAN) are
+// separate machines, NOT duplicates — area is a namespace, so we scope the count by area.
+function nameDupeInfo(name, field, area){
   if(!name) return null;
-  const matches=VENDOS.filter(v=>v[field]===name);
+  const norm=a=>(a||'').trim().toUpperCase();
+  let matches=VENDOS.filter(v=>v[field]===name);
+  if(area!=null) matches=matches.filter(v=>norm(v.area)===norm(area));
   if(matches.length<=1) return null;
   const pending=matches.filter(v=>v.pending_delete_at).length;
   return {total:matches.length, surviving:matches.length-pending, pending};
 }
 // renders the dupe badge: red ⚠️×N while unresolved, green ✓ when only 1 survives
-function dupeBadge(name, field){
-  const info=nameDupeInfo(name, field);
+function dupeBadge(name, field, area){
+  const info=nameDupeInfo(name, field, area);
   if(!info) return '';
-  const onclick=`onclick='showDupes(${JSON.stringify(name)},"${field}")'`;
+  const onclick=`onclick='showDupes(${JSON.stringify(name)},"${field}",${JSON.stringify(area||'')})'`;
   if(info.surviving<=1){
     return ` <span class="dupename resolved" ${onclick} title="Resolved — ${info.pending} scheduled for deletion">✓ clean${info.pending?' ('+info.pending+'🕗)':''}</span>`;
   }
@@ -977,14 +981,14 @@ function renderModal(m, cands){
         <div class="candhead">${esc(d.area)||'?'} ${d.pending_delete_at?'<span class="pendtag">🕗 DELETING 8PM</span>':''} ${hasMoney?`<span class="moneybadge" style="cursor:pointer" onclick='showHarvests(${d.id})' title="Tap for harvest dates &amp; collectors">💰 ${hi.harvests} harvest(s) ›</span>`:loading?'<span class="loadbadge">…</span>':'<span class="emptybadge">no harvests</span>'}</div>
         <div class="linkrow">
           <span class="k">Sheet</span>
-          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.sheet_name,'sheet_name')}</span>
+          <span class="v">${esc(d.sheet_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.sheet_name,'sheet_name',d.area)}</span>
           ${d.sheet_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"sheet_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"sheet_name")'>Link</button>`}
         </div>
         <div class="linkrow">
           <span class="k">TG</span>
-          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.tg_name,'tg_name')}</span>
+          <span class="v">${esc(d.tg_name)||'<i style="color:var(--dim)">(none)</i>'}${dupeBadge(d.tg_name,'tg_name',d.area)}</span>
           ${d.tg_name
             ? `<button class="lnk unlink" onclick='unlinkField(${vid},"tg_name")'>Unlink</button>`
             : `<button class="lnk link" onclick='linkField(${vid},"tg_name")'>Link</button>`}
@@ -1167,18 +1171,20 @@ async function cancelPendingDelete(vid){
 }
 
 // ---- DUPLICATE NAME BREAKDOWN ----
-let _dupeName=null, _dupeField=null;
-async function showDupes(name, field){
-  _dupeName=name; _dupeField=field;
-  const recs=VENDOS.filter(v=>v[field]===name);
-  document.getElementById('dupeTitle').textContent=`"${name}" — ${recs.length} records`;
+let _dupeName=null, _dupeField=null, _dupeArea='';
+async function showDupes(name, field, area){
+  _dupeName=name; _dupeField=field; _dupeArea=area||'';
+  const norm=a=>(a||'').trim().toUpperCase();
+  const recs=VENDOS.filter(v=>v[field]===name && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
+  document.getElementById('dupeTitle').textContent=`"${name}"${_dupeArea?' · '+_dupeArea:''} — ${recs.length} records`;
   document.getElementById('dupeBody').innerHTML='<div class="empty">Loading harvest info…</div>';
   document.getElementById('dupeOv').classList.add('show');
   await loadHarvestInfo(recs.map(r=>r.id));
   renderDupes();
 }
 function renderDupes(){
-  const recs=VENDOS.filter(v=>v[_dupeField]===_dupeName);
+  const norm=a=>(a||'').trim().toUpperCase();
+  const recs=VENDOS.filter(v=>v[_dupeField]===_dupeName && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
   if(!recs.length){ closeDupe(); return; }
   const fieldLabel=_dupeField==='tg_name'?'TG name':'Sheet name';
   let html=`<p style="color:var(--dim);font-size:13px;font-weight:600;margin-bottom:12px">
@@ -1207,7 +1213,7 @@ function renderDupes(){
   });
   document.getElementById('dupeBody').innerHTML=html;
 }
-function closeDupe(){ document.getElementById('dupeOv').classList.remove('show'); _dupeName=null; _dupeField=null; }
+function closeDupe(){ document.getElementById('dupeOv').classList.remove('show'); _dupeName=null; _dupeField=null; _dupeArea=''; }
 document.getElementById('dupeOv').addEventListener('click',e=>{if(e.target.id==='dupeOv')closeDupe()});
 
 async function showHarvests(vid){
