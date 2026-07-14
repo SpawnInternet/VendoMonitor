@@ -2864,6 +2864,7 @@ function klDetail(id){
     +   (returned?row('↩','Returned At',_fmt(r.returned_at)):'')
     +   (returned&&r.returned_notes?row('🗒️','Return Notes',r.returned_notes):'')
     +   '<div style="display:flex;gap:8px;margin-top:18px;">'+actions
+    +     '<button onclick="klEdit('+r.id+')" style="padding:11px 14px;background:#fff;color:#025AC6;border:1.5px solid #93c5fd;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">✏️ Edit</button>'
     +     '<button onclick="klCloseDetail();klDelete('+r.id+')" style="padding:11px 14px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
     +   '</div>'
     + '</div>'
@@ -2873,3 +2874,72 @@ function klDetail(id){
 }
 
 function klCloseDetail(){ const ov=document.getElementById('kl-detail-modal'); if(ov) ov.remove(); }
+
+// ── Edit a key-custody record (password 101510 required to save) ──
+function klEdit(id){
+  const r = _klRows.find(x=>x.id===id); if(!r) return;
+  klCloseDetail();
+  const old = document.getElementById('kl-edit-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kl-edit-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit;';
+  const fld = (id,label,val,ph)=>
+      '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin:12px 0 5px;">'+label+'</label>'
+    + '<input id="'+id+'" type="text" value="'+klEsc(val==null?'':val)+'" placeholder="'+(ph||'')+'" style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;box-sizing:border-box;outline:none;font-family:inherit;">';
+  const numFld = (id,label,val)=>
+      '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin:12px 0 5px;">'+label+'</label>'
+    + '<input id="'+id+'" type="number" min="0" value="'+(val||0)+'" style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;box-sizing:border-box;outline:none;font-family:inherit;">';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);">'
+    + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+    +   '<div style="font-size:18px;font-weight:800;">✏️ Edit Key Record</div>'
+    +   '<button onclick="klCloseEdit()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
+    + '</div>'
+    + '<div style="padding:16px 22px 20px;">'
+    +   fld('kl-e-collector','👤 Lineman / Collector', r.collector_name, 'Name')
+    +   fld('kl-e-area','📍 Areas', r.area, '—')
+    +   numFld('kl-e-keys','🔑 No. of Keys', r.keys_taken)
+    +   fld('kl-e-date','📅 Date', r.key_date, 'YYYY-MM-DD')
+    +   fld('kl-e-lineman','🛠️ Lineman', r.lineman, '')
+    +   fld('kl-e-wifikey','📶 WiFi Key', r.wifi_key, '')
+    +   fld('kl-e-reason','💬 Reason', r.lineman_reason, '')
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin:12px 0 5px;">📝 Notes</label>'
+    +   '<textarea id="kl-e-notes" rows="2" placeholder="Optional" style="width:100%;padding:11px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;box-sizing:border-box;outline:none;font-family:inherit;resize:vertical;">'+klEsc(r.notes||'')+'</textarea>'
+    +   '<div style="display:flex;gap:8px;margin-top:20px;">'
+    +     '<button onclick="klCloseEdit()" style="flex:1;padding:12px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="klSaveEdit('+r.id+')" style="flex:2;padding:12px;background:#028867;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">💾 Save changes</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) klCloseEdit(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const i=document.getElementById('kl-e-collector'); if(i) i.focus(); }, 60);
+}
+
+function klCloseEdit(){ const ov=document.getElementById('kl-edit-modal'); if(ov) ov.remove(); }
+
+async function klSaveEdit(id){
+  const gv = k => { const el=document.getElementById(k); return el? el.value : ''; };
+  const body = {
+    collector_name: (gv('kl-e-collector').trim())||null,
+    area:           (gv('kl-e-area').trim())||null,
+    keys_taken:     parseInt(gv('kl-e-keys'),10)||0,
+    key_date:       (gv('kl-e-date').trim())||null,
+    lineman:        (gv('kl-e-lineman').trim())||null,
+    wifi_key:       (gv('kl-e-wifikey').trim())||null,
+    lineman_reason: (gv('kl-e-reason').trim())||null,
+    notes:          (gv('kl-e-notes').trim())||null
+  };
+  // password gate (101510) using the shared pretty popup
+  const pw = await askAdminPw('Enter admin password to save these changes.');
+  if(pw===null) return;
+  if(pw!=='101510'){ markAdminPwWrong(); return; }
+  const pwModal = document.getElementById('spawn-pw-modal'); if(pwModal) pwModal.remove();
+  try{
+    const r = await fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)});
+    if(!r.ok){ const t=await r.text(); throw new Error(t); }
+    klCloseEdit();
+    if(typeof toast==='function') toast('✓ Key record updated'); else alert('Key record updated');
+    klLoad();
+  }catch(e){ alert('Update failed: '+e.message); }
+}
