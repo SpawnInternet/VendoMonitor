@@ -1,6 +1,6 @@
-// sw-office.js — Spawn Count PWA Service Worker v1.1
+// sw-office.js — Spawn Count PWA Service Worker v1.2
 // SAFETY: Supabase requests are NEVER cached. Money figures always come from the network.
-const CACHE = 'spawn-count-v1.1';
+const CACHE = 'spawn-count-v1.2';
 const APP_HTML = '/VendoMonitor/office.html';
 const APP_SHELL = [
   '/VendoMonitor/office.html',
