@@ -3595,6 +3595,8 @@ function viCompile(){
   if(_viNoTg) bits.push('🚫 no TG (sheet name)');
   else if(_viTg) bits.push('📶 '+_viTg);
   if(_viSrv) bits.push('🖥️ '+_viSrv);
+  const _ad = (((document.getElementById('vi-addr')||{}).value)||'').trim();
+  if(_ad) bits.push('🏠 '+_ad);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
   if(_viPhotoFile) bits.push('📷 photo');
   pv.style.display='block';
@@ -3650,7 +3652,8 @@ async function viAdd(){
         p_installed_by: by, p_install_date: idate,
         p_key_coin_original: co, p_key_coin_duplicate: cd, p_key_board: bd,
         p_notes: notes, p_existing_vendo_id: _viPicked.id,
-        p_server_name: _viSrv || null
+        p_server_name: _viSrv || null,
+        p_address: (((document.getElementById('vi-addr')||{}).value)||'').trim() || null
       })
     }).then(async r=>{ const t = await r.text(); if(!r.ok) throw new Error(t); return JSON.parse(t); });
 
@@ -3703,6 +3706,7 @@ async function viAdd(){
           ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
           ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
           ['Server',  res.server_name ? klEsc(res.server_name) : '<span style="color:#9ca3af;">—</span>'],
+          ['Address',  res.address ? klEsc(res.address) : '<span style="color:#9ca3af;">—</span>'],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
           ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
           ['Photo',   photoUrl ? '<img src="'+photoUrl+'" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;">' : '<span style="color:#9ca3af;">—</span>'],
@@ -3744,7 +3748,8 @@ async function viAdd(){
 function viResetForm(){
   _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const as=document.getElementById('vi-addr-state'); if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
   const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
@@ -4583,6 +4588,44 @@ function viPickRouter(r){
       + ' · '+(r.online?'🟢 online':'🔴 offline')
       + (r.ip?' · <span style="color:#6b7280;">'+klEsc(r.ip)+'</span>':'');
   }
+  // offer the address hiding inside the router comment
+  const guess = viAddrFromComment(r.comment);
+  const ai = document.getElementById('vi-addr'), as = document.getElementById('vi-addr-state');
+  if(guess && ai && as && !ai.value.trim()){
+    as.style.color = '#025AC6';
+    as.innerHTML = '💡 From router: "'+klEsc(guess)+'" · '
+      + '<button type="button" onclick="viUseAddr('+JSON.stringify(guess)+')" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use it</button>';
+  }
+  viCompile();
+}
+
+/* Router comments look like:
+     "Gina Velasco\r\nPurok Santan 2\r\nSitio balabag\r\nBarangay Gulayon\r\nD.C. 12/13/25"
+     "Bendong Purok Sidlakan upper turno 09709162679  9/19/25"
+   Strip the vlan label, phone numbers and trailing dates; keep the location-ish remainder. */
+function viAddrFromComment(cmt){
+  if(!cmt) return null;
+  let s = String(cmt).replace(/[\r\n]+/g, ', ');
+  s = s.replace(/\bvlan\s*\d+\b/ig, ' ');       // "vlan201"
+  s = s.replace(/\b09\d{9}\b/g, ' ');            // phone
+  s = s.replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, ' '); // dates
+  s = s.replace(/\s*,\s*/g, ', ').replace(/\s{2,}/g, ' ');
+  s = s.replace(/(^[\s,]+)|([\s,]+$)/g, '');
+  // drop a leading person-name chunk if the rest still looks like an address
+  const parts = s.split(', ').filter(Boolean);
+  if(parts.length > 1 && /purok|sitio|barangay|brgy|street|st\.|road|rd|bypass|upper|lower|relocation|site/i.test(parts.slice(1).join(' '))){
+    parts.shift();
+    s = parts.join(', ');
+  }
+  s = s.replace(/(^[\s,]+)|([\s,]+$)/g, '');
+  return s.length > 3 ? s : null;
+}
+
+function viUseAddr(a){
+  const ai = document.getElementById('vi-addr');
+  if(ai){ ai.value = a; ai.style.borderColor='#028867'; setTimeout(()=>{ai.style.borderColor='#e5e7eb';},1500); }
+  const as = document.getElementById('vi-addr-state');
+  if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
   viCompile();
 }
 
