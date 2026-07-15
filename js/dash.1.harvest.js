@@ -4144,7 +4144,9 @@ function ktAdd(){
   const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
   if(!holder){ alert('Who is holding the key? Enter staff custodian'); return; }
   if(!_ktVendos.length){ alert('Search and pick a vendo first'); return; }
-  const notes = ((document.getElementById('kt-notes')||{}).value||'').trim() || null;
+  let notes = ((document.getElementById('kt-notes')||{}).value||'').trim() || null;
+  // tie this transfer back to the free-text lineman log it resolves
+  if(_ktForLog) notes = (notes ? notes+' · ' : '') + 'log#'+_ktForLog;
   const rows = _ktVendos.map(v=>({
     vendo_id:v.id, vendo_name:v.name, area:v.area,
     held_by:holder, added_to_pungpung:false, notes:notes
@@ -4158,6 +4160,7 @@ function ktAdd(){
       if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
       _ktVendos = [];
       const nt=document.getElementById('kt-notes'); if(nt) nt.value='';
+      ktClearForLog();
       ktRenderVendos();
       if(typeof toast==='function') toast('✓ '+rows.length+' key(s) logged for transfer');
       ktLoad();
@@ -4783,9 +4786,10 @@ function viExifWalk(dv, tiff){
 /* ══ PUNGPUNG: auto-checker — keys now with the office, not yet in a pungpung ══
    Suggestions only. Nothing is written until staff taps Add. */
 const KT_SRC = {
-  lineman: {icon:'🔧', label:'Lineman returned', color:'#025AC6'},
-  padlock: {icon:'🔁', label:'Padlock remitted', color:'#C01176'},
-  install: {icon:'📦', label:'New install',      color:'#028867'}
+  lineman:      {icon:'🔧', label:'Lineman returned', color:'#025AC6'},
+  lineman_text: {icon:'🔧', label:'Lineman returned', color:'#025AC6'},
+  padlock:      {icon:'🔁', label:'Padlock remitted', color:'#C01176'},
+  install:      {icon:'📦', label:'New install',      color:'#028867'}
 };
 
 function ktRenderPending(){
@@ -4812,6 +4816,7 @@ function ktRenderPending(){
     + '<div style="font-size:10px;color:#78350f;font-weight:600;margin-bottom:9px;line-height:1.5;">Keys the office has received but that are not on a pungpung yet. Tap Add to move one across — nothing is saved until you do.</div>'
     + rows.map(r=>{
         const s = KT_SRC[r.source] || {icon:'🔑', label:r.source, color:'#6b7280'};
+        if(!r.vendo_id) return ktPendingUnlinked(r, s);
         const already = _ktVendos.some(v=>v.id===r.vendo_id);
         return '<div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
@@ -4854,4 +4859,48 @@ function ktAddAllPending(){
   ktRenderVendos();
   ktRenderPending();
   if(typeof toast==='function') toast(n?('Added '+n+' to the list below — set the custodian, then save.'):'All already in the list.');
+}
+
+
+/* Free-text lineman return — vendo never linked, so staff must choose.
+   Names like "ZAMORA" match several vendos; auto-matching would risk wrong custody. */
+function ktPendingUnlinked(r, s){
+  const when = (()=>{ if(!r.when) return ''; const d=new Date(r.when); if(isNaN(d)) return '';
+    const days=Math.floor((Date.now()-d.getTime())/86400000);
+    return days<=0?'today':days===1?'1 day ago':days+' days ago'; })();
+  return '<div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+    +   '<div style="min-width:0;flex:1;">'
+    +     '<div style="font-size:10px;color:#6b7280;font-weight:600;">'
+    +       '<span style="color:'+s.color+';font-weight:800;">'+s.icon+' '+s.label+'</span>'
+    +       (r.who?' · from '+klEsc(r.who):'') + (when?' · '+when:'')
+    +       ' · <span style="color:#9ca3af;">log #'+r.log_id+'</span>'
+    +     '</div>'
+    +     '<div style="font-size:12px;font-weight:700;color:#311A8E;margin-top:3px;word-break:break-word;">🔑 '+klEsc(r.raw_text||'')+'</div>'
+    +     (r.detail?'<div style="font-size:10px;color:#9ca3af;font-weight:600;margin-top:1px;">'+klEsc(r.detail)+'</div>':'')
+    +     '<div style="font-size:10px;color:#C01176;font-weight:700;margin-top:3px;">⚠️ Typed by hand — no vendo linked. Pick which vendo this key belongs to.</div>'
+    +   '</div>'
+    +   '<button type="button" onclick=\'ktPickForLog('+JSON.stringify(r.log_id)+')\' style="padding:5px 11px;background:#025AC6;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">Pick vendo</button>'
+    + '</div></div>';
+}
+
+/* focus the existing vendo search and remember which log we are resolving */
+let _ktForLog = null;
+function ktPickForLog(logId){
+  _ktForLog = logId;
+  const inp = document.getElementById('kt-vq');
+  if(inp){ inp.focus(); inp.scrollIntoView({behavior:'smooth', block:'center'}); }
+  const note = document.getElementById('kt-forlog');
+  if(note){
+    note.style.display = 'block';
+    note.innerHTML = '🔗 Linking to <b>log #'+logId+'</b> — search the vendo above, then save. '
+      + '<button type="button" onclick="ktClearForLog()" style="padding:1px 7px;background:#fff;border:1.5px solid #e5e7eb;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;">cancel</button>';
+  }
+  if(typeof toast==='function') toast('Search the vendo, then Log Keys for Transfer.');
+}
+
+function ktClearForLog(){
+  _ktForLog = null;
+  const note = document.getElementById('kt-forlog');
+  if(note){ note.style.display='none'; note.innerHTML=''; }
 }
