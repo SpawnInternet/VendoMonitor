@@ -740,6 +740,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Address</div>
         <div id="address-display" style="font-size:13px;font-weight:600;color:var(--text)">—</div>
       </div>
+      <div id="installed-block" style="background:var(--bg);border-radius:8px;padding:9px 12px;margin-bottom:8px;display:none">
+        <div style="font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">Date installed</div>
+        <div id="installed-display" style="font-size:13px;font-weight:600;color:var(--text)">—</div>
+      </div>
     </div>
     <!-- Edit mode -->
     <div id="owner-edit" style="display:none">
@@ -1215,7 +1219,7 @@ async function downloadAllOffline(manual=false){
         while(true){
           const r = await fetch(
             `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
-            `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+            `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,date_installed,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
             `&order=id.asc&limit=500&offset=${offset}`,{headers:HDR}
           );
           const batch = await r.json();
@@ -1233,6 +1237,7 @@ async function downloadAllOffline(manual=false){
             last_harvest_date:(cached && cached.last_harvest_date)||item.last_harvest_date,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
+            date_installed: item.date_installed || (cached && cached.date_installed) || null,
             owner_name: item.owner_name || (cached && cached.owner_name) || '',
             contact_number: item.contact_number || (cached && cached.contact_number) || '',
             coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
@@ -1487,7 +1492,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.7';
+const APP_VERSION = 'v12.8';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -2251,7 +2256,7 @@ async function prewarmGroups(groupDefs){
       try{
         const r = await fetch(
           `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${g.id}`+
-          `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+          `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,date_installed,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
           `&order=id.asc&limit=2000`,{headers:HDR});
         const allItems = await r.json();
         if(!Array.isArray(allItems)||!allItems.length) return;
@@ -2263,6 +2268,7 @@ async function prewarmGroups(groupDefs){
             last_harvest_date:lhd,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
+            date_installed: item.date_installed || (cached && cached.date_installed) || null,
             owner_name: item.owner_name || (cached && cached.owner_name) || '',
             contact_number: item.contact_number || (cached && cached.contact_number) || ''
           };
@@ -2397,7 +2403,7 @@ async function startGroup(groupId){
     while(true){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
-        `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
+        `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,date_installed,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
         `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR}
       );
       const batch = await r.json();
@@ -2437,6 +2443,7 @@ async function startGroup(groupId){
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
+            date_installed: item.date_installed || (cached && cached.date_installed) || null,
           owner_name: item.owner_name || (cached && cached.owner_name) || '',
           contact_number: item.contact_number || (cached && cached.contact_number) || ''
         };
@@ -2455,6 +2462,7 @@ async function startGroup(groupId){
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
+            date_installed: item.date_installed || (cached && cached.date_installed) || null,
           owner_name: item.owner_name || (cached && cached.owner_name) || '',
           contact_number: item.contact_number || (cached && cached.contact_number) || ''
         };
@@ -2464,6 +2472,7 @@ async function startGroup(groupId){
         last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
         vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
         address: item.address || (cached && cached.address) || '',
+            date_installed: item.date_installed || (cached && cached.date_installed) || null,
         owner_name: item.owner_name || (cached && cached.owner_name) || '',
         contact_number: item.contact_number || (cached && cached.contact_number) || '',
         coins_total:null,coins_free_time:null,coins_free_coins:null,coins_old:null,coins_saloy:null,net_collectible:null,harvested_at:null,collector_note:null
@@ -3200,6 +3209,27 @@ function openItem(idx){
   document.getElementById('contact-display').textContent=currentItem.contact_number||'—';
   const addrDisp=document.getElementById('address-display');
   if(addrDisp) addrDisp.textContent=currentItem.address||'—';
+  // Date installed — read-only, hidden when unknown (most vendos predate this field)
+  const instBlock=document.getElementById('installed-block');
+  const instDisp=document.getElementById('installed-display');
+  if(instBlock&&instDisp){
+    const di=currentItem.date_installed;
+    if(di){
+      let shown=di;
+      try{
+        const d=new Date(di+'T00:00:00');
+        if(!isNaN(d)){
+          shown=d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});
+          const days=Math.floor((Date.now()-d.getTime())/86400000);
+          if(days>=0) shown+=' · '+(days===0?'today':days===1?'1 day ago':days<30?days+' days ago':days<365?Math.floor(days/30)+' mo ago':Math.floor(days/365)+'y ago');
+        }
+      }catch(_){}
+      instDisp.textContent=shown;
+      instBlock.style.display='';
+    } else {
+      instBlock.style.display='none';
+    }
+  }
   const addrInp=document.getElementById('address-inp');
   if(addrInp) addrInp.value=currentItem.address||'';
   const snEl=document.getElementById('owner-name-inp');if(snEl){if(snEl.tagName==='INPUT')snEl.value=currentItem.sheet_name||'';else snEl.textContent=currentItem.sheet_name||'—';}
