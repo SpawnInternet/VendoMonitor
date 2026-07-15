@@ -73,7 +73,7 @@ function hvNewTab(id, btn){
   btn.classList.add('on');
   hvNewActiveTab = id;
   // close any open Keys modals when leaving the keys sub-tab
-  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
+  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal','ki-pw-modal','vi-give-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
   if(id==='htable'){ htLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
@@ -2650,10 +2650,70 @@ function klLoad(){
       })
       .catch(()=>{});
   }
-  fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR})
-    .then(r=>r.json())
-    .then(rows=>{ _klRows = Array.isArray(rows)?rows:[]; klRender(); })
+  Promise.all([
+    fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR}).then(r=>r.json()),
+    fetch(_SB+'/rest/v1/key_items?select=*&order=id.asc&limit=2000', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+  ])
+    .then(([rows, items])=>{ _klRows = Array.isArray(rows)?rows:[]; _klItems = Array.isArray(items)?items:[]; klRender(); })
     .catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+let _klItems = [];
+const KI_LBL = it => it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(it.coin_variant==='duplicate'?'Duplicate':'Not Duplicate')+')');
+
+/* per-key checkbox: mark a single key_items row returned (password 101510) */
+function kiToggle(itemId, makeReturned){
+  const it = _klItems.find(x=>x.id===itemId); if(!it) return;
+  const verb = makeReturned ? 'RETURNED' : 'NOT returned';
+  const old = document.getElementById('ki-pw-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'ki-pw-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,'+(makeReturned?'#028867':'#DF1A35')+',#311A8E);padding:18px 22px;color:#fff;">'
+    +   '<div style="font-size:17px;font-weight:800;">🔑 Mark '+verb+'</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(it.vendo_name)+' · '+KI_LBL(it)+'</div>'
+    + '</div>'
+    + '<div style="padding:18px 22px;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
+    +   '<input id="ki-pw" type="password" inputmode="numeric" placeholder="Enter password" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')kiConfirm('+itemId+','+(makeReturned?'true':'false')+')">'
+    +   '<div id="ki-pw-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+    +   '<div style="display:flex;gap:8px;margin-top:18px;">'
+    +     '<button onclick="kiClosePw()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="kiConfirm('+itemId+','+(makeReturned?'true':'false')+')" style="flex:2;padding:11px;background:'+(makeReturned?'#028867':'#DF1A35')+';color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) kiClosePw(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const p=document.getElementById('ki-pw'); if(p) p.focus(); }, 60);
+}
+
+function kiClosePw(){ const ov=document.getElementById('ki-pw-modal'); if(ov) ov.remove(); klRender(); }
+
+function kiConfirm(itemId, makeReturned){
+  const pw = (document.getElementById('ki-pw')||{}).value || '';
+  const err = document.getElementById('ki-pw-err');
+  if(pw !== KL_RETURN_PW){ if(err) err.style.display='block'; const p=document.getElementById('ki-pw'); if(p){p.value='';p.focus();} return; }
+  const body = makeReturned
+    ? { returned:true, returned_at:new Date().toISOString() }
+    : { returned:false, returned_at:null };
+  fetch(_SB+'/rest/v1/key_items?id=eq.'+itemId, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});}
+      const ov=document.getElementById('ki-pw-modal'); if(ov) ov.remove();
+      // auto-close parent log when all its items are returned
+      const it = _klItems.find(x=>x.id===itemId);
+      if(it && it.key_log_id){
+        const sibs = _klItems.filter(x=>x.key_log_id===it.key_log_id);
+        sibs.forEach(s=>{ if(s.id===itemId) s.returned = makeReturned; });
+        const allBack = sibs.every(s=>s.returned);
+        return fetch(_SB+'/rest/v1/key_logs?id=eq.'+it.key_log_id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR),
+          body:JSON.stringify(allBack ? {returned:true, returned_at:new Date().toISOString()} : {returned:false, returned_at:null})});
+      }
+    })
+    .then(()=>klLoad())
+    .catch(e=>alert('Update failed: '+e.message));
 }
 
 function klAdd(){
@@ -2680,26 +2740,41 @@ function klAdd(){
 
 function klOpenLineman(){
   const old = document.getElementById('kl-lineman-modal'); if(old) old.remove();
+  _lmPicked = null;
   const now = new Date();
   const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   const ov = document.createElement('div');
   ov.id = 'kl-lineman-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML =
-    '<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
+    '<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
     + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
     +   '<div style="font-size:18px;font-weight:800;">🛠️ Lineman WiFi Key</div>'
     +   '<button onclick="klCloseLineman()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
     + '</div>'
     + '<div style="padding:18px 22px;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Lineman Name</label>'
-    +   '<input id="kl-lm-name" placeholder="e.g. Jericho" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">WiFi Key GI DALA</label>'
-    +   '<input id="kl-lm-wifikey" placeholder="e.g. RETES PISO WIFI DOHINOB" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<input id="kl-lm-name" list="kc-by-list" placeholder="e.g. Jericho" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Vendo (search then click)</label>'
+    +   '<div style="position:relative;margin-bottom:10px;">'
+    +     '<input id="kl-lm-vq" placeholder="🔍 Type vendo name..." oninput="lmVendoInput()" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">'
+    +     '<div id="kl-lm-vres" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #025AC6;border-radius:8px;max-height:200px;overflow-y:auto;z-index:60;display:none;box-shadow:0 8px 20px rgba(0,0,0,.15);"></div>'
+    +   '</div>'
+    +   '<div id="kl-lm-picked" style="display:none;background:#f0f7ff;border:1.5px solid #025AC6;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:#025AC6;"></div>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Yabi nga GI DALA (pwede both)</label>'
+    +   '<div style="border:1.5px solid #e5e7eb;border-radius:9px;padding:11px;background:#fafafa;margin-bottom:12px;">'
+    +     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;margin-bottom:8px;"><input type="checkbox" id="kl-lm-coin" onchange="lmToggleCoin();lmCompile()" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key</label>'
+    +     '<div id="kl-lm-coinvar" style="display:none;padding-left:24px;margin-bottom:9px;">'
+    +       '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;margin-right:14px;"><input type="radio" name="lmcv" value="original" checked onchange="lmCompile()" style="cursor:pointer;">Original (Not Duplicate)</label>'
+    +       '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;"><input type="radio" name="lmcv" value="duplicate" onchange="lmCompile()" style="cursor:pointer;">Duplicate</label>'
+    +     '</div>'
+    +     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;"><input type="checkbox" id="kl-lm-board" onchange="lmCompile()" style="width:15px;height:15px;cursor:pointer;">🔌 Board Key</label>'
+    +   '</div>'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Reason (nganong gi dala ang wifi key)</label>'
-    +   '<input id="kl-lm-reason" placeholder="e.g. ibalhin ang box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<input id="kl-lm-reason" placeholder="e.g. ibalhin ang box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Date</label>'
-    +   '<input id="kl-lm-date" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:18px;outline:none;">'
+    +   '<input id="kl-lm-date" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
+    +   '<div id="kl-lm-preview" style="display:none;background:#f0f7ff;border:1.5px dashed #025AC6;border-radius:9px;padding:11px 13px;margin-bottom:16px;font-size:12px;color:#1e3a8a;font-weight:700;white-space:pre-line;"></div>'
     +   '<div style="display:flex;gap:8px;">'
     +     '<button onclick="klCloseLineman()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
     +     '<button onclick="klAddLineman()" style="flex:2;padding:11px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Log Lineman Key</button>'
@@ -2708,20 +2783,101 @@ function klOpenLineman(){
     + '</div>';
   ov.addEventListener('click', e=>{ if(e.target===ov) klCloseLineman(); });
   document.body.appendChild(ov);
+  kcEnsureNames();
   setTimeout(()=>{ const n=document.getElementById('kl-lm-name'); if(n) n.focus(); }, 60);
 }
 
-function klCloseLineman(){ const ov=document.getElementById('kl-lineman-modal'); if(ov) ov.remove(); }
+let _lmPicked = null, _lmVT = null;
+
+function lmToggleCoin(){
+  const cb = document.getElementById('kl-lm-coin');
+  const box = document.getElementById('kl-lm-coinvar');
+  if(box) box.style.display = (cb && cb.checked) ? 'block' : 'none';
+}
+
+function lmVendoInput(){
+  clearTimeout(_lmVT);
+  const q = (document.getElementById('kl-lm-vq')||{}).value.trim();
+  const box = document.getElementById('kl-lm-vres');
+  if(!box) return;
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _lmVT = setTimeout(()=>{
+    const enc = encodeURIComponent('*'+q+'*');
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
+        box.innerHTML = rows.map(v=>{
+          const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+          return '<div onclick=\'lmPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+            + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
+            + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">'
+            + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
+            + (v.area?' · <span style="color:#025AC6;font-weight:700;">'+klEsc(v.area)+'</span>':'')
+            + '</div>';
+        }).join('');
+        box.style.display='block';
+      })
+      .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function lmPickVendo(id, name, area){
+  _lmPicked = {id:id, name:name, area:area||null};
+  const box = document.getElementById('kl-lm-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const vq = document.getElementById('kl-lm-vq'); if(vq) vq.value = name;
+  const p = document.getElementById('kl-lm-picked');
+  if(p){ p.style.display='block'; p.textContent = '✓ '+name+(area?(' · '+area):''); }
+  lmCompile();
+}
+
+// auto-compiled message of what was clicked/typed
+function lmCompile(){
+  const pv = document.getElementById('kl-lm-preview');
+  if(!pv) return;
+  if(!_lmPicked){ pv.style.display='none'; return; }
+  const parts = [];
+  const coin = document.getElementById('kl-lm-coin');
+  if(coin && coin.checked){
+    const v = (document.querySelector('input[name="lmcv"]:checked')||{}).value || 'original';
+    parts.push(v==='duplicate' ? 'Coins (Duplicate)' : 'Coins (Not Duplicate)');
+  }
+  const bd = document.getElementById('kl-lm-board');
+  if(bd && bd.checked) parts.push('Board');
+  if(!parts.length){ pv.style.display='block'; pv.textContent='📝 '+_lmPicked.name+' — ⚠️ walay yabi nga na-check'; return; }
+  const only = (parts.length===1 && parts[0]==='Board') ? ' Key only' : '';
+  pv.style.display='block';
+  pv.textContent = '📝 Compiled: '+_lmPicked.name+' — '+parts.join(', ')+only;
+}
+
+function klCloseLineman(){ const ov=document.getElementById('kl-lineman-modal'); if(ov) ov.remove(); _lmPicked=null; }
 
 function klAddLineman(){
-  const lineman = (document.getElementById('kl-lm-name')||{}).value.trim();
-  const wifikey = (document.getElementById('kl-lm-wifikey')||{}).value.trim();
-  const reason  = (document.getElementById('kl-lm-reason')||{}).value.trim();
+  const lineman = ((document.getElementById('kl-lm-name')||{}).value||'').trim();
+  const reason  = ((document.getElementById('kl-lm-reason')||{}).value||'').trim();
   const kdate   = (document.getElementById('kl-lm-date')||{}).value || null;
   if(!lineman){ alert('Enter lineman name'); return; }
-  if(!wifikey){ alert('Enter the wifi key'); return; }
-  const body = { record_type:'lineman', collector_name:lineman, lineman:lineman, wifi_key:wifikey, lineman_reason:reason||null, key_date:kdate, keys_taken:1, returned:false };
-  fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+  if(!_lmPicked){ alert('Search ug pili una ug vendo'); return; }
+  const coinOn = (document.getElementById('kl-lm-coin')||{}).checked;
+  const bdOn   = (document.getElementById('kl-lm-board')||{}).checked;
+  if(!coinOn && !bdOn){ alert('Check at least one key (coin or board)'); return; }
+  const cv = (document.querySelector('input[name="lmcv"]:checked')||{}).value || 'original';
+  const items = [];
+  if(coinOn) items.push({vendo_id:_lmPicked.id, vendo_name:_lmPicked.name, area:_lmPicked.area, key_kind:'coin', coin_variant:cv, returned:false});
+  if(bdOn)   items.push({vendo_id:_lmPicked.id, vendo_name:_lmPicked.name, area:_lmPicked.area, key_kind:'board', coin_variant:null, returned:false});
+  const compiled = (document.getElementById('kl-lm-preview')||{}).textContent || '';
+  const body = { record_type:'lineman', collector_name:lineman, lineman:lineman,
+                 wifi_key: compiled.replace('📝 Compiled: ',''),
+                 lineman_reason:reason||null, key_date:kdate, keys_taken:items.length,
+                 area:_lmPicked.area, returned:false };
+  fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=representation'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} return r.json(); })
+    .then(rows=>{
+      const logId = Array.isArray(rows)&&rows[0] ? rows[0].id : null;
+      if(!logId) throw new Error('no log id returned');
+      items.forEach(it=>{ it.key_log_id = logId; });
+      return fetch(_SB+'/rest/v1/key_items', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(items)});
+    })
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseLineman(); klLoad(); })
     .catch(e=>alert('Save failed: '+e.message));
 }
@@ -2827,6 +2983,7 @@ function klRender(){
       + (isLM
           ? '<div style="font-size:12px;color:#025AC6;margin-top:3px;font-weight:600;">📶 '+klEsc(r.wifi_key||'—')+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>'
             + (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">💬 '+klEsc(r.lineman_reason)+'</div>':'')
+            + klItemBoxes(r.id)
           : '<div style="font-size:12px;color:#374151;margin-top:3px;">📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>')
       + '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Tap for details ›</div>'
       + '</div>';
@@ -2950,7 +3107,7 @@ let _kvPane = 'borrow';
 
 function kvPane(p, btn){
   _kvPane = p;
-  ['borrow','overview','changes'].forEach(t=>{
+  ['borrow','overview','changes','installs'].forEach(t=>{
     const el = document.getElementById('kv-pane-'+t);
     if(el) el.style.display = (t===p) ? (t==='overview'?'flex':'block') : 'none';
     const b = document.getElementById('kvp-'+t);
@@ -2964,22 +3121,36 @@ function kvPane(p, btn){
   if(p==='borrow')   klLoad();
   if(p==='overview') kvoLoad();
   if(p==='changes')  kcLoad();
+  if(p==='installs') viLoad();
 }
 
 /* ── OVERVIEW: merged view of key_logs + key_changes, search per day or by name ── */
-let _kvoLogs = [], _kvoChanges = [];
+let _kvoLogs = [], _kvoChanges = [], _kvoItems = [], _kvoInstalls = [];
 
 function kvoLoad(){
   const list = document.getElementById('kvo-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
   Promise.all([
     fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json())
-  ]).then(([logs, changes])=>{
+    fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
+    fetch(_SB+'/rest/v1/key_items?select=*&limit=2000', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
+    fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+  ]).then(([logs, changes, items, installs])=>{
     _kvoLogs = Array.isArray(logs)?logs:[];
     _kvoChanges = Array.isArray(changes)?changes:[];
+    _kvoItems = Array.isArray(items)?items:[];
+    _kvoInstalls = Array.isArray(installs)?installs:[];
     kvoRender();
   }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+function kvoItemLbl(logId){
+  const its = _kvoItems.filter(x=>x.key_log_id===logId);
+  if(!its.length) return '';
+  return its.map(it=>{
+    const k = it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(it.coin_variant==='duplicate'?'Duplicate':'Not Duplicate')+')');
+    return it.vendo_name+' — '+k+' '+(it.returned?'✅':'🔴');
+  }).join(' · ');
 }
 
 function kvoRender(){
@@ -3001,10 +3172,21 @@ function kvoRender(){
       date: r.key_date || (r.taken_at||'').slice(0,10),
       ts:   r.taken_at || '',
       title: r.collector_name || '—',
-      sub:  isLM ? ('📶 '+(r.wifi_key||'—')+(r.lineman_reason?(' · 💬 '+r.lineman_reason):''))
+      sub:  isLM ? (kvoItemLbl(r.id) || ('📶 '+(r.wifi_key||'—')))+(r.lineman_reason?(' · 💬 '+r.lineman_reason):'')
                  : ('📍 '+(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.notes?(' · 📝 '+r.notes):'')),
       badge: r.returned ? {t:'✅ Returned',c:'#028867'} : {t:'🔴 OUT',c:'#DF1A35'},
-      blob: ((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')+' '+(r.lineman_reason||'')).toLowerCase()
+      blob: ((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')+' '+(r.lineman_reason||'')+' '+kvoItemLbl(r.id)).toLowerCase()
+    });
+  });
+  _kvoInstalls.forEach(r=>{
+    evs.push({
+      kind: 'install',
+      date: r.install_date || (r.created_at||'').slice(0,10),
+      ts:   r.created_at || '',
+      title: r.vendo_name || '—',
+      sub:  viKeysLbl(r)+' · 👷 '+(r.installed_by||'—')+(r.area?(' · 📍 '+r.area):'')+(r.notes?(' · 📝 '+r.notes):''),
+      badge: r.given_to_office ? {t:'✅ Given'+(r.received_by?(' · '+r.received_by):''),c:'#028867'} : {t:'🔴 NOT GIVEN',c:'#DF1A35'},
+      blob: ((r.vendo_name||'')+' '+(r.installed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.received_by||'')+' '+viKeysLbl(r)).toLowerCase()
     });
   });
   _kvoChanges.forEach(r=>{
@@ -3028,7 +3210,7 @@ function kvoRender(){
   if(!evs.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records found.</div>'; return; }
 
   // group per day
-  const KIND_ICON = { borrow:'🔑', lineman:'🛠️', change:'🔁' };
+  const KIND_ICON = { borrow:'🔑', lineman:'🛠️', change:'🔁', install:'📦' };
   let html = '', curDay = null;
   evs.forEach(e=>{
     if(e.date!==curDay){
@@ -3061,18 +3243,7 @@ function kcLoad(){
   const dEl = document.getElementById('kc-date');
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
   // datalist of collectors + technicians
-  const dl = document.getElementById('kc-by-list');
-  if(dl && !dl.children.length){
-    Promise.all([
-      fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
-      fetch(_SB+'/rest/v1/technicians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
-    ]).then(([cs,ts])=>{
-      const names = new Set();
-      (Array.isArray(cs)?cs:[]).forEach(c=>names.add(c.name));
-      (Array.isArray(ts)?ts:[]).forEach(t=>names.add(t.name));
-      dl.innerHTML = Array.from(names).sort().map(n=>'<option value="'+klEsc(n)+'">').join('');
-    });
-  }
+  kcEnsureNames();
   fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=500', {headers:_HDR})
     .then(r=>r.json())
     .then(rows=>{ _kcRows = Array.isArray(rows)?rows:[]; kcRender(); })
@@ -3241,5 +3412,234 @@ function kcDelete(id){
   if(!confirm('Delete this key-change record permanently?')) return;
   fetch(_SB+'/rest/v1/key_changes?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} kcLoad(); })
+    .catch(e=>alert('Delete failed: '+e.message));
+}
+
+
+/* per-key checker boxes under a lineman record */
+function klItemBoxes(logId){
+  const items = _klItems.filter(x=>x.key_log_id===logId);
+  if(!items.length) return '';
+  return '<div style="margin-top:7px;border-top:1px dashed #e5e7eb;padding-top:7px;" onclick="event.stopPropagation()">'
+    + items.map(it=>{
+        const c = it.returned ? '#028867' : '#DF1A35';
+        return '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:'+c+';cursor:pointer;padding:3px 0;">'
+          + '<input type="checkbox" '+(it.returned?'checked':'')+' onclick="event.stopPropagation();kiToggle('+it.id+',this.checked)" style="width:15px;height:15px;cursor:pointer;">'
+          + klEsc(it.vendo_name)+' — '+KI_LBL(it)+' '+(it.returned?'✅':'🔴')
+          + '</label>';
+      }).join('')
+    + '</div>';
+}
+
+/* shared collector+technician datalist loader */
+function kcEnsureNames(){
+  const dl = document.getElementById('kc-by-list');
+  if(!dl || dl.children.length) return;
+  Promise.all([
+    fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
+    fetch(_SB+'/rest/v1/technicians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+  ]).then(([cs,ts])=>{
+    const names = new Set();
+    (Array.isArray(cs)?cs:[]).forEach(c=>names.add(c.name));
+    (Array.isArray(ts)?ts:[]).forEach(t=>names.add(t.name));
+    dl.innerHTML = Array.from(names).sort().map(n=>'<option value="'+klEsc(n)+'">').join('');
+  });
+}
+
+/* ══ NEW VENDO INSTALLS ══ */
+let _viRows = [], _viPicked = null, _viVT = null;
+
+function viLoad(){
+  const list = document.getElementById('vi-list');
+  if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  const dEl = document.getElementById('vi-date');
+  if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+  kcEnsureNames();
+  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', viCompile); e._wired=true; } });
+  fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=500', {headers:_HDR})
+    .then(r=>r.json())
+    .then(rows=>{ _viRows = Array.isArray(rows)?rows:[]; viRender(); })
+    .catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+function viVendoInput(){
+  clearTimeout(_viVT);
+  const q = (document.getElementById('vi-vq')||{}).value.trim();
+  const box = document.getElementById('vi-vres');
+  if(!box) return;
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _viVT = setTimeout(()=>{
+    const enc = encodeURIComponent('*'+q+'*');
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
+        box.innerHTML = rows.map(v=>{
+          const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+          return '<div onclick=\'viPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+            + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
+            + 'onmouseover="this.style.background=\'#f0fdf9\'" onmouseout="this.style.background=\'#fff\'">'
+            + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
+            + (v.area?' · <span style="color:#028867;font-weight:700;">'+klEsc(v.area)+'</span>':'')
+            + '</div>';
+        }).join('');
+        box.style.display='block';
+      })
+      .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function viPickVendo(id, name, area){
+  _viPicked = {id:id, name:name, area:area||null};
+  const box = document.getElementById('vi-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const vq = document.getElementById('vi-vq'); if(vq) vq.value = name;
+  const p = document.getElementById('vi-picked');
+  if(p){ p.style.display='block'; p.textContent = '✓ '+name+(area?(' · '+area):''); }
+  viCompile();
+}
+
+function viCompile(){
+  const pv = document.getElementById('vi-preview');
+  if(!pv) return;
+  if(!_viPicked){ pv.style.display='none'; return; }
+  const parts = [];
+  if((document.getElementById('vi-k-co')||{}).checked) parts.push('Coins (Not Duplicate)');
+  if((document.getElementById('vi-k-cd')||{}).checked) parts.push('Coins (Duplicate)');
+  if((document.getElementById('vi-k-bd')||{}).checked) parts.push('Board');
+  pv.style.display='block';
+  pv.textContent = parts.length
+    ? '📝 Compiled: '+_viPicked.name+' — '+parts.join(', ')
+    : '📝 '+_viPicked.name+' — ⚠️ walay yabi nga na-check';
+}
+
+function viAdd(){
+  if(!_viPicked){ alert('Search ug pili una ug vendo'); return; }
+  const co = (document.getElementById('vi-k-co')||{}).checked;
+  const cd = (document.getElementById('vi-k-cd')||{}).checked;
+  const bd = (document.getElementById('vi-k-bd')||{}).checked;
+  if(!co && !cd && !bd){ alert('Check at least one key received'); return; }
+  const by = ((document.getElementById('vi-by')||{}).value||'').trim();
+  if(!by){ alert('Kinsa nag-install? Enter name'); return; }
+  const body = {
+    vendo_id:_viPicked.id, vendo_name:_viPicked.name, area:_viPicked.area,
+    install_date: (document.getElementById('vi-date')||{}).value || null,
+    installed_by: by,
+    key_coin_original: co, key_coin_duplicate: cd, key_board: bd,
+    given_to_office: false,
+    notes: ((document.getElementById('vi-notes')||{}).value||'').trim() || null
+  };
+  fetch(_SB+'/rest/v1/vendo_installs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{
+      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
+      _viPicked = null;
+      ['vi-vq','vi-by','vi-notes'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+      ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e) e.checked=false; });
+      const p=document.getElementById('vi-picked'); if(p) p.style.display='none';
+      const pv=document.getElementById('vi-preview'); if(pv) pv.style.display='none';
+      if(typeof toast==='function') toast('✓ Install logged');
+      viLoad();
+    })
+    .catch(e=>alert('Save failed: '+e.message));
+}
+
+function viKeysLbl(r){
+  const p = [];
+  if(r.key_coin_original)  p.push('🪙 Coins (Not Duplicate)');
+  if(r.key_coin_duplicate) p.push('🪙 Coins (Duplicate)');
+  if(r.key_board)          p.push('🔌 Board');
+  return p.length ? p.join(', ') : '—';
+}
+
+function viRender(){
+  const list = document.getElementById('vi-list');
+  const lbl  = document.getElementById('vi-lbl');
+  if(!list) return;
+  const filt = (document.getElementById('vi-filter')||{}).value || 'pending';
+  const q = ((document.getElementById('vi-q')||{}).value||'').toLowerCase().trim();
+  let rows = _viRows.slice();
+  if(filt==='pending')     rows = rows.filter(r=>!r.given_to_office);
+  else if(filt==='given')  rows = rows.filter(r=>r.given_to_office);
+  if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.installed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.received_by||'')).toLowerCase().includes(q));
+
+  const pend = _viRows.filter(r=>!r.given_to_office).length;
+  if(lbl) lbl.textContent = rows.length+' install(s) shown · '+pend+' wala pa ma-hatag sa office';
+  if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No installs.</div>'; return; }
+
+  list.innerHTML = rows.map(r=>{
+    const bd = r.given_to_office ? '#028867' : '#DF1A35';
+    const badge = r.given_to_office
+      ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ GIVEN</span>'
+      : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 NOT GIVEN</span>';
+    const actions = r.given_to_office
+      ? '<button onclick="viUndoGive('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
+      : '<button onclick="viGive('+r.id+')" style="padding:6px 12px;background:#028867;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Given to Office</button>';
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">📦 '+klEsc(r.vendo_name)+'</div>'+badge
+      + '</div>'
+      + '<div style="font-size:12px;color:#374151;margin-top:4px;">'+viKeysLbl(r)+'</div>'
+      + '<div style="font-size:11px;color:#6b7280;margin-top:3px;">👷 '+klEsc(r.installed_by||'—')+' · 📅 '+klEsc(r.install_date||'—')+(r.area?(' · 📍 '+klEsc(r.area)):'')+'</div>'
+      + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
+      + (r.given_to_office?'<div style="font-size:11px;color:#028867;margin-top:2px;">🏢 Given'+(r.received_by?(' to '+klEsc(r.received_by)):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'</div>':'')
+      + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
+      +   '<button onclick="viDelete('+r.id+')" style="padding:6px 9px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function viGive(id){
+  const rec = _viRows.find(r=>r.id===id) || {};
+  const old = document.getElementById('vi-give-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'vi-give-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#028867,#025AC6);padding:20px 22px;color:#fff;">'
+    +   '<div style="font-size:19px;font-weight:800;">🏢 Turnover sa Office</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+' · '+viKeysLbl(rec)+'</div>'
+    + '</div>'
+    + '<div style="padding:20px 22px;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Received by (office staff)</label>'
+    +   '<input id="vi-g-by" placeholder="e.g. Joi" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
+    +   '<input id="vi-g-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')viConfirmGive('+id+')">'
+    +   '<div id="vi-g-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+    +   '<div style="display:flex;gap:8px;margin-top:20px;">'
+    +     '<button onclick="viCloseGive()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="viConfirmGive('+id+')" style="flex:2;padding:11px;background:#028867;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) viCloseGive(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const p=document.getElementById('vi-g-by'); if(p) p.focus(); }, 60);
+}
+
+function viCloseGive(){ const ov=document.getElementById('vi-give-modal'); if(ov) ov.remove(); }
+
+function viConfirmGive(id){
+  const pw = (document.getElementById('vi-g-pw')||{}).value || '';
+  const err = document.getElementById('vi-g-err');
+  if(pw !== KL_RETURN_PW){ if(err) err.style.display='block'; const p=document.getElementById('vi-g-pw'); if(p){p.value='';p.focus();} return; }
+  const by = ((document.getElementById('vi-g-by')||{}).value||'').trim();
+  const body = { given_to_office:true, given_at:new Date().toISOString(), received_by:by||null };
+  fetch(_SB+'/rest/v1/vendo_installs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} viCloseGive(); viLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function viUndoGive(id){
+  if(!confirm('Mark as NOT yet given to office again?')) return;
+  fetch(_SB+'/rest/v1/vendo_installs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({given_to_office:false, given_at:null, received_by:null})})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} viLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function viDelete(id){
+  if(!confirm('Delete this install record permanently?')) return;
+  fetch(_SB+'/rest/v1/vendo_installs?id=eq.'+id, {method:'DELETE', headers:_HDR})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} viLoad(); })
     .catch(e=>alert('Delete failed: '+e.message));
 }
