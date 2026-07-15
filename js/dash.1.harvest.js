@@ -4016,20 +4016,23 @@ function viTgState(){
 }
 
 /* ══ PUNGPUNG TRANSFER — keys to move into a collector's bunch ══ */
-let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [];
+let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false;
 
 function ktLoad(){
   const list = document.getElementById('kt-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
   Promise.all([
     fetch(_SB+'/rest/v1/key_transfers?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
-  ]).then(([rows, cus])=>{
+    fetch(_SB+'/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
+    fetch(_SB+'/rest/v1/rpc/spawn_pungpung_pending', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[])
+  ]).then(([rows, cus, pend])=>{
     _ktRows = Array.isArray(rows)?rows:[];
     _ktCustodians = (Array.isArray(cus)?cus:[]).map(c=>c.name);
+    _ktPending = Array.isArray(pend)?pend:[];
     ktRenderCustodians();
     ktWireHolder();
     ktRenderVendos();
+    ktRenderPending();
     ktRender();
   }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
 }
@@ -4102,7 +4105,7 @@ function ktAddVendo(id, name, area){
   ktRenderVendos();
 }
 
-function ktRemoveVendo(row){ _ktVendos = _ktVendos.filter(v=>v.row!==row); ktRenderVendos(); }
+function ktRemoveVendo(row){ _ktVendos = _ktVendos.filter(v=>v.row!==row); ktRenderVendos(); ktRenderPending(); }
 
 function ktRenderVendos(){
   const el = document.getElementById('kt-vlist');
@@ -4137,6 +4140,7 @@ function ktCompile(){
 }
 
 function ktAdd(){
+  if(_ktBusy) return;                       // guard: double-click duplicated every row before
   const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
   if(!holder){ alert('Who is holding the key? Enter staff custodian'); return; }
   if(!_ktVendos.length){ alert('Search and pick a vendo first'); return; }
@@ -4145,6 +4149,9 @@ function ktAdd(){
     vendo_id:v.id, vendo_name:v.name, area:v.area,
     held_by:holder, added_to_pungpung:false, notes:notes
   }));
+  const btn = document.getElementById('kt-add-btn');
+  _ktBusy = true;
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
   ktRememberCustodian(holder)
     .then(()=>fetch(_SB+'/rest/v1/key_transfers', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(rows)}))
     .then(r=>{
@@ -4155,7 +4162,12 @@ function ktAdd(){
       if(typeof toast==='function') toast('✓ '+rows.length+' key(s) logged for transfer');
       ktLoad();
     })
-    .catch(e=>alert('Save failed: '+e.message));
+    .catch(e=>{
+      let m = String(e.message||e);
+      if(/key_transfers_one_open_per_vendo/.test(m)) m = 'That vendo already has an open transfer for this custodian.';
+      alert('Save failed: '+m);
+    })
+    .finally(()=>{ _ktBusy=false; if(btn){ btn.disabled=false; btn.style.opacity='1'; } });
 }
 
 function ktRender(){
@@ -4766,4 +4778,80 @@ function viExifWalk(dv, tiff){
   if(latR === 'S') lat = -lat;
   if(lngR === 'W') lng = -lng;
   return {lat:+lat.toFixed(6), lng:+lng.toFixed(6)};
+}
+
+/* ══ PUNGPUNG: auto-checker — keys now with the office, not yet in a pungpung ══
+   Suggestions only. Nothing is written until staff taps Add. */
+const KT_SRC = {
+  lineman: {icon:'🔧', label:'Lineman returned', color:'#025AC6'},
+  padlock: {icon:'🔁', label:'Padlock remitted', color:'#C01176'},
+  install: {icon:'📦', label:'New install',      color:'#028867'}
+};
+
+function ktRenderPending(){
+  const box = document.getElementById('kt-pending');
+  if(!box) return;
+  const rows = _ktPending || [];
+  if(!rows.length){
+    box.innerHTML = '<div style="background:#f0fdf9;border:1.5px solid #028867;border-radius:10px;padding:11px 13px;font-size:12px;color:#065f46;font-weight:700;">'
+      + '✅ Nothing waiting — every key given to the office is already logged for transfer.</div>';
+    return;
+  }
+  const when = t => {
+    if(!t) return '';
+    const d = new Date(t); if(isNaN(d)) return '';
+    const days = Math.floor((Date.now()-d.getTime())/86400000);
+    return days<=0?'today':days===1?'1 day ago':days+' days ago';
+  };
+  box.innerHTML =
+    '<div style="background:#fffbeb;border:1.5px solid #FFB725;border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:9px;">'
+    +   '<div style="font-size:12px;font-weight:800;color:#92400e;">📋 Waiting to be transferred · '+rows.length+'</div>'
+    +   '<button type="button" onclick="ktAddAllPending()" style="padding:5px 11px;background:#92400e;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add all</button>'
+    + '</div>'
+    + '<div style="font-size:10px;color:#78350f;font-weight:600;margin-bottom:9px;line-height:1.5;">Keys the office has received but that are not on a pungpung yet. Tap Add to move one across — nothing is saved until you do.</div>'
+    + rows.map(r=>{
+        const s = KT_SRC[r.source] || {icon:'🔑', label:r.source, color:'#6b7280'};
+        const already = _ktVendos.some(v=>v.id===r.vendo_id);
+        return '<div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+          +   '<div style="min-width:0;flex:1;">'
+          +     '<div style="font-size:12px;font-weight:800;color:#311A8E;">'+klEsc(r.vendo_name||('#'+r.vendo_id))
+          +       (r.vendo_code?' <span style="background:#311A8E;color:#fff;padding:1px 5px;border-radius:4px;font-size:9px;">'+klEsc(r.vendo_code)+'</span>':'')+'</div>'
+          +     '<div style="font-size:10px;color:#6b7280;font-weight:600;margin-top:2px;">'
+          +       '<span style="color:'+s.color+';font-weight:800;">'+s.icon+' '+s.label+'</span>'
+          +       ' · '+klEsc(r.area||'—')
+          +       (r.who?' · from '+klEsc(r.who):'')
+          +       (r.when?' · '+when(r.when):'')
+          +     '</div>'
+          +     (r.detail?'<div style="font-size:10px;color:#9ca3af;font-weight:600;margin-top:1px;">'+klEsc(r.detail)+'</div>':'')
+          +   '</div>'
+          +   (already
+              ? '<span style="font-size:10px;color:#028867;font-weight:800;white-space:nowrap;">✓ added</span>'
+              : '<button type="button" onclick=\'ktAddPending('+JSON.stringify(r.vendo_id)+','+JSON.stringify(r.vendo_name||'')+','+JSON.stringify(r.area||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
+          + '</div></div>';
+      }).join('')
+    + '</div>';
+}
+
+/* move one suggestion into the manual basket — still not saved */
+function ktAddPending(id, name, area){
+  if(_ktVendos.some(v=>v.id===id)) return;
+  _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area});
+  ktRenderVendos();
+  ktRenderPending();
+  if(typeof toast==='function') toast('Added to the list below — set the custodian, then save.');
+}
+
+function ktAddAllPending(){
+  let n = 0;
+  (_ktPending||[]).forEach(r=>{
+    if(!_ktVendos.some(v=>v.id===r.vendo_id)){
+      _ktVendos.push({row:++_ktSeq, id:r.vendo_id, name:r.vendo_name||('#'+r.vendo_id), area:r.area||''});
+      n++;
+    }
+  });
+  ktRenderVendos();
+  ktRenderPending();
+  if(typeof toast==='function') toast(n?('Added '+n+' to the list below — set the custodian, then save.'):'All already in the list.');
 }
