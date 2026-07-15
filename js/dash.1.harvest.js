@@ -3519,6 +3519,7 @@ function viLoad(){
     fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label&order=area.asc,id.asc', {headers:_HDR})
       .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); }).catch(()=>{});
   }
+  viSrvLoadList();
   fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=500', {headers:_HDR})
     .then(r=>r.json())
     .then(rows=>{ _viRows = Array.isArray(rows)?rows:[]; viRender(); })
@@ -3541,18 +3542,23 @@ function viVendoInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _viVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
-    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,server_name&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ New vendo — just type the name, it will still save.</div>'; box.style.display='block'; return; }
         box.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#6b7280;background:#fafafa;border-bottom:1px solid #f1f5f9;">Click to link an existing vendo, or just type for a new one:</div>'
           + rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+          const sub = [];
+          if(v.tg_name && v.tg_name!==nm) sub.push('📶 '+klEsc(v.tg_name));
+          if(v.vlan) sub.push('VLAN '+v.vlan);
+          if(v.server_name) sub.push('🖥️ '+klEsc(v.server_name));
           return '<div onclick=\'viPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f0fdf9\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
             + (v.area?' · <span style="color:#028867;font-weight:700;">'+klEsc(v.area)+'</span>':'')
+            + (sub.length?'<div style="font-size:10px;color:#6b7280;margin-top:2px;">'+sub.join(' · ')+'</div>':'')
             + '</div>';
         }).join('');
         box.style.display='block';
@@ -3588,6 +3594,7 @@ function viCompile(){
   if(glbl) bits.push('👥 '+glbl);
   if(_viNoTg) bits.push('🚫 no TG (sheet name)');
   else if(_viTg) bits.push('📶 '+_viTg);
+  if(_viSrv) bits.push('🖥️ '+_viSrv);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
   if(_viPhotoFile) bits.push('📷 photo');
   pv.style.display='block';
@@ -3642,7 +3649,8 @@ async function viAdd(){
         p_vlan: vlan, p_group_id: gid,
         p_installed_by: by, p_install_date: idate,
         p_key_coin_original: co, p_key_coin_duplicate: cd, p_key_board: bd,
-        p_notes: notes, p_existing_vendo_id: _viPicked.id
+        p_notes: notes, p_existing_vendo_id: _viPicked.id,
+        p_server_name: _viSrv || null
       })
     }).then(async r=>{ const t = await r.text(); if(!r.ok) throw new Error(t); return JSON.parse(t); });
 
@@ -3694,6 +3702,7 @@ async function viAdd(){
           ['Area',    klEsc(res.area||'—')],
           ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
           ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
+          ['Server',  res.server_name ? klEsc(res.server_name) : '<span style="color:#9ca3af;">—</span>'],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
           ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
           ['Photo',   photoUrl ? '<img src="'+photoUrl+'" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;">' : '<span style="color:#9ca3af;">—</span>'],
@@ -3725,9 +3734,10 @@ async function viAdd(){
 }
 
 function viResetForm(){
-  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null;
+  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
   const ps=document.getElementById('vi-photo-state'); if(ps){ ps.style.color='#9ca3af'; ps.textContent='Optional — uploaded after the vendo is created.'; }
   const gs=document.getElementById('vi-gps-state'); if(gs){ gs.style.color='#9ca3af'; gs.textContent='Paste coordinates — only real camera/Maps values, never estimated.'; }
@@ -4389,4 +4399,73 @@ async function viUploadPhoto(vendoId){
   // gateway replies { ok, status, body, public_url }
   try{ const j = JSON.parse(txt); if(j && j.public_url) return j.public_url; }catch(_){}
   return _SB+'/storage/v1/object/public/harvest-photos/'+path;
+}
+
+/* ══ INSTALL: server name — searchable, free-type allowed ══ */
+let _viSrv = null, _viSrvVT = null, _viSrvList = null;
+
+/* known servers = distinct server_name from mikrotik_status (the live source) */
+async function viSrvLoadList(){
+  if(_viSrvList) return _viSrvList;
+  try{
+    const r = await fetch(_SB+'/rest/v1/mikrotik_status?select=server_name&limit=2000', {headers:_HDR});
+    const rows = await r.json();
+    const set = new Set();
+    (Array.isArray(rows)?rows:[]).forEach(x=>{ if(x.server_name) set.add(x.server_name); });
+    // include anything already used on vendos, in case a server has no router rows
+    const r2 = await fetch(_SB+'/rest/v1/vendos?select=server_name&server_name=not.is.null&limit=2000', {headers:_HDR});
+    const rows2 = await r2.json();
+    (Array.isArray(rows2)?rows2:[]).forEach(x=>{ if(x.server_name) set.add(x.server_name); });
+    _viSrvList = Array.from(set).sort();
+  }catch(e){ _viSrvList = []; }
+  return _viSrvList;
+}
+
+async function viSrvInput(){
+  clearTimeout(_viSrvVT);
+  const q = ((document.getElementById('vi-srvq')||{}).value||'').trim();
+  const box = document.getElementById('vi-srvres');
+  _viSrv = q || null;
+  viSrvState();
+  if(!box) return;
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  _viSrvVT = setTimeout(async ()=>{
+    const list = await viSrvLoadList();
+    const hits = list.filter(s=>s.toLowerCase().includes(q.toLowerCase()));
+    const exact = list.some(s=>s.toLowerCase()===q.toLowerCase());
+    let html = '';
+    if(hits.length){
+      html += hits.map(s=>
+        '<div onclick=\'viPickSrv('+JSON.stringify(s)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
+        + 'onmouseover="this.style.background=\'#f0fdf9\'" onmouseout="this.style.background=\'#fff\'">🖥️ '+klEsc(s)+'</div>'
+      ).join('');
+    }
+    if(!exact){
+      html += '<div style="padding:9px 12px;font-size:11px;color:#028867;font-weight:700;background:#f0fdf9;">'
+            + '✏️ New server — "'+klEsc(q)+'" will be saved as typed.</div>';
+    }
+    box.innerHTML = html;
+    box.style.display = 'block';
+  }, 250);
+}
+
+function viPickSrv(name){
+  _viSrv = name;
+  const el = document.getElementById('vi-srvq'); if(el) el.value = name;
+  const box = document.getElementById('vi-srvres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  viSrvState();
+}
+
+function viSrvState(){
+  const el = document.getElementById('vi-srv-state');
+  if(!el) return;
+  if(!_viSrv){
+    el.style.color = '#9ca3af';
+    el.textContent = 'Optional — which MikroTik server this vendo sits on.';
+  } else {
+    const known = _viSrvList && _viSrvList.some(s=>s.toLowerCase()===_viSrv.toLowerCase());
+    el.style.color = known ? '#028867' : '#C01176';
+    el.textContent = known ? ('✅ '+_viSrv) : ('✏️ New server: '+_viSrv);
+  }
+  viCompile();
 }
