@@ -4182,7 +4182,7 @@ function ktRender(){
   if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.held_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.transferred_by||'')+' '+(r.transferred_to||'')).toLowerCase().includes(q));
 
   const pend = _ktRows.filter(r=>!r.added_to_pungpung).length;
-  if(lbl) lbl.textContent = rows.length+' key(s) shown · '+pend+' wala pa ma-apil sa pungpung';
+  if(lbl) lbl.textContent = rows.length+' key(s) shown · '+pend+' not yet in a pungpung';
   if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
 
   // group by area
