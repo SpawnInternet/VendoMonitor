@@ -4262,8 +4262,11 @@ function viCloseModal(){ const ov=document.getElementById('vi-result-modal'); if
 /* problems found before saving — shown per field, with a fix button for VLAN */
 function viProblems(errors){
   const FIELD = { name:'📛 Vendo name', area:'📍 Area', tg:'📶 TG name', vlan:'🔌 VLAN' };
-  let suggest = null;
-  errors.forEach(e=>{ if(e.field==='vlan' && e.suggest) suggest = e.suggest; });
+  let suggest = null, blockerId = null, blockerUnnamed = false;
+  errors.forEach(e=>{
+    if(e.field==='vlan' && e.suggest) suggest = e.suggest;
+    if(e.vendo_id){ blockerId = e.vendo_id; blockerUnnamed = !!e.blocker_unnamed; }
+  });
   const old = document.getElementById('vi-result-modal'); if(old) old.remove();
   const ov = document.createElement('div');
   ov.id = 'vi-result-modal';
@@ -4282,10 +4285,18 @@ function viProblems(errors){
           + '<div style="font-size:12px;color:#374151;font-weight:600;line-height:1.5;">'+klEsc(e.msg)+'</div>'
           + '</div>'
         ).join('')
+    +   (blockerUnnamed && blockerId
+        ? '<div style="background:#fffbeb;border:1.5px solid #FFB725;border-radius:10px;padding:11px 13px;margin-top:4px;">'
+          + '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:5px;">⚠️ The vendo holding this VLAN has no name (#'+blockerId+').</div>'
+          + '<div style="font-size:11px;color:#78350f;font-weight:600;line-height:1.5;">This is often the <b>same vendo</b> you\u2019re adding — already in the system but never named. '
+          + 'Check it in the <b>Vendos</b> tab first. If it is the same one, rename that record instead of creating a new vendo.</div>'
+          + '</div>'
+        : '')
     +   (suggest
-        ? '<div style="background:#f0f7ff;border:1.5px solid #025AC6;border-radius:10px;padding:11px 13px;margin-top:4px;">'
+        ? '<div style="background:#f0f7ff;border:1.5px solid #025AC6;border-radius:10px;padding:11px 13px;margin-top:8px;">'
           + '<div style="font-size:12px;color:#1e3a8a;font-weight:700;margin-bottom:8px;">💡 Next free VLAN in this area: <b style="font-size:15px;">'+suggest+'</b></div>'
           + '<button onclick="viUseVlan('+suggest+')" style="width:100%;padding:9px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Use VLAN '+suggest+'</button>'
+          + '<div style="font-size:10px;color:#6b7280;margin-top:6px;font-weight:600;">Only if this really is a different vendo.</div>'
           + '</div>'
         : '')
     +   '<button onclick="viCloseModal()" style="width:100%;margin-top:12px;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Close</button>'
