@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Spawn Jobs · Lineman Tracker · v1.1 · cache-bust 2026-06-20b -->
+<!-- Spawn Jobs · Lineman Tracker · v1.2 · keys · cache-bust 2026-07-15a -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -87,6 +87,27 @@
     <div class="queue" id="queue">All synced</div>
     <div class="coords" id="coords"></div>
   </div>
+
+  <!-- VENDO KEYS -->
+  <div id="keys-card" class="card hide">
+    <label>🔑 Vendo Keys</label>
+    <input id="vk-q" placeholder="Search vendo name…" autocomplete="off">
+    <div id="vk-res"></div>
+    <div id="vk-detail" class="hide">
+      <div id="vk-title" style="font-weight:800;font-size:16px;margin:6px 0 10px;color:var(--gold)"></div>
+      <div id="vk-latest" style="margin-bottom:12px"></div>
+      <div id="vk-history" style="margin-bottom:14px"></div>
+      <label>Log key / padlock change (gi-ilisan)</label>
+      <select id="vk-type">
+        <option value="coin_original">🪙 Coin Key — Original</option>
+        <option value="coin_duplicate">🪙 Coin Key — Duplicate</option>
+        <option value="board">🔌 Board Key</option>
+      </select>
+      <input id="vk-notes" placeholder="Notes (optional)">
+      <button class="btn btn-start" id="vk-log-btn" style="font-size:15px;padding:13px">✓ Log Key Change</button>
+      <div id="vk-msg" style="text-align:center;font-size:13px;margin-top:10px;color:var(--green);font-weight:700"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -133,6 +154,7 @@ $('begin-btn').addEventListener('click', async ()=>{
   localStorage.setItem('spawn_lineman', tech);
   $('setup').classList.add('hide');
   $('tracking').classList.remove('hide');
+  $('keys-card').classList.remove('hide');
 });
 
 // ---------- offline queue ----------
@@ -185,6 +207,82 @@ $('toggle-btn').addEventListener('click', ()=> watchId? stop() : start());
 
 window.addEventListener('online', flushQ);
 setInterval(flushQ, 30000); // retry queue every 30s
+
+// ---------- vendo keys ----------
+const VK_LBL = {coin_original:'🪙 Coin Key — Original', coin_duplicate:'🪙 Coin Key — Duplicate', board:'🔌 Board Key'};
+let vkT=null, vkVendo=null;
+const vkEsc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+$('vk-q').addEventListener('input', ()=>{
+  clearTimeout(vkT);
+  const q = $('vk-q').value.trim();
+  if(q.length<2){ $('vk-res').innerHTML=''; return; }
+  vkT = setTimeout(async ()=>{
+    try{
+      const enc = encodeURIComponent('*'+q+'*');
+      const r = await fetch(`${SB}/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.${enc},tg_name.ilike.${enc},owner_name.ilike.${enc})&limit=10`,{headers:HDR});
+      const rows = await r.json();
+      if(!Array.isArray(rows)||!rows.length){ $('vk-res').innerHTML='<div style="font-size:13px;color:var(--muted);padding:6px 2px">No vendo found</div>'; return; }
+      $('vk-res').innerHTML = rows.map(v=>{
+        const nm = v.sheet_name||v.tg_name||v.owner_name||('#'+v.id);
+        return `<div class="vk-hit" data-id="${v.id}" data-name="${vkEsc(nm)}" data-area="${vkEsc(v.area||'')}"
+          style="padding:11px 12px;border:1px solid #2a3340;border-radius:10px;margin-bottom:8px;cursor:pointer;background:#0f141b;font-size:14px">
+          <b>${vkEsc(nm)}</b>${v.area?` <span style="color:var(--blue);font-size:12px">· ${vkEsc(v.area)}</span>`:''}
+        </div>`;
+      }).join('');
+      document.querySelectorAll('.vk-hit').forEach(el=>el.addEventListener('click',()=>vkPick(el.dataset.id, el.dataset.name, el.dataset.area)));
+    }catch(e){ $('vk-res').innerHTML='<div style="font-size:13px;color:var(--red)">Search failed (offline?)</div>'; }
+  }, 300);
+});
+
+async function vkPick(id, name, area){
+  vkVendo = {id:parseInt(id,10), name, area:area||null};
+  $('vk-res').innerHTML=''; $('vk-q').value=name; $('vk-msg').textContent='';
+  $('vk-detail').classList.remove('hide');
+  $('vk-title').textContent = '🔐 '+name+(area?' · '+area:'');
+  $('vk-latest').innerHTML = '<div style="font-size:13px;color:var(--muted)">Loading key info…</div>';
+  $('vk-history').innerHTML='';
+  try{
+    const r = await fetch(`${SB}/rest/v1/key_changes?vendo_id=eq.${vkVendo.id}&select=*&order=created_at.desc&limit=25`,{headers:HDR});
+    const rows = await r.json();
+    const latest = {};
+    (Array.isArray(rows)?rows:[]).forEach(x=>{ if(!latest[x.key_type]) latest[x.key_type]=x; });
+    const types = ['coin_original','coin_duplicate','board'];
+    $('vk-latest').innerHTML = types.map(t=>{
+      const L = latest[t];
+      return `<div style="background:#0f141b;border:1px solid #2a3340;border-radius:10px;padding:10px 12px;margin-bottom:6px;font-size:13px">
+        <b style="color:var(--gold)">${VK_LBL[t]}</b><br>
+        ${L ? `Last changed by <b>${vkEsc(L.changed_by)}</b> · ${vkEsc(L.change_date||'')} ${L.remitted?'<span style="color:var(--green);font-weight:700">✅ remitted</span>':'<span style="color:var(--red);font-weight:700">🔴 not remitted</span>'}`
+            : '<span style="color:var(--muted)">No change recorded yet</span>'}
+      </div>`;
+    }).join('');
+    if(Array.isArray(rows)&&rows.length){
+      $('vk-history').innerHTML = '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px">History</div>'
+        + rows.slice(0,8).map(x=>`<div style="font-size:12px;color:var(--muted);padding:4px 2px;border-bottom:1px solid #232c39">
+            ${vkEsc(x.change_date||'')} · ${VK_LBL[x.key_type]||vkEsc(x.key_type)} · 👷 ${vkEsc(x.changed_by)} ${x.remitted?'✅':'🔴'}${x.notes?(' · '+vkEsc(x.notes)):''}
+          </div>`).join('');
+    }
+  }catch(e){ $('vk-latest').innerHTML='<div style="font-size:13px;color:var(--red)">Failed to load (offline?)</div>'; }
+}
+
+$('vk-log-btn').addEventListener('click', async ()=>{
+  if(!vkVendo){ alert('Search and pick a vendo first'); return; }
+  if(!tech){ alert('Set your name first (Continue button above)'); return; }
+  const body = {
+    vendo_id:vkVendo.id, vendo_name:vkVendo.name, area:vkVendo.area,
+    key_type:$('vk-type').value, changed_by:tech,
+    notes:$('vk-notes').value.trim()||null, remitted:false, source:'lineman'
+  };
+  $('vk-log-btn').disabled = true;
+  try{
+    const r = await fetch(`${SB}/rest/v1/key_changes`,{method:'POST',headers:{...HDR,Prefer:'return=minimal'},body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await r.text());
+    $('vk-notes').value='';
+    $('vk-msg').textContent = '✓ Logged! I-remit ang daan nga yabi sa office.';
+    vkPick(vkVendo.id, vkVendo.name, vkVendo.area||'');
+  }catch(e){ alert('Save failed: '+e.message); }
+  $('vk-log-btn').disabled = false;
+});
 
 // init
 renderQ();
