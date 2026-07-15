@@ -73,7 +73,7 @@ function hvNewTab(id, btn){
   btn.classList.add('on');
   hvNewActiveTab = id;
   // close any open Keys modals when leaving the keys sub-tab
-  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal','ki-pw-modal','vi-give-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
+  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal','ki-pw-modal','vi-give-modal','kt-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
   if(id==='htable'){ htLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
@@ -3157,7 +3157,7 @@ let _kvPane = 'borrow';
 
 function kvPane(p, btn){
   _kvPane = p;
-  ['borrow','overview','changes','installs'].forEach(t=>{
+  ['borrow','overview','changes','installs','transfer'].forEach(t=>{
     const el = document.getElementById('kv-pane-'+t);
     if(el) el.style.display = (t===p) ? (t==='overview'?'flex':'block') : 'none';
     const b = document.getElementById('kvp-'+t);
@@ -3172,6 +3172,7 @@ function kvPane(p, btn){
   if(p==='overview') kvoLoad();
   if(p==='changes')  kcLoad();
   if(p==='installs') viLoad();
+  if(p==='transfer') { kcEnsureNames(); ktLoad(); }
 }
 
 /* ── OVERVIEW: merged view of key_logs + key_changes, search per day or by name ── */
@@ -3881,4 +3882,268 @@ function viTgState(){
     el.textContent = 'Pili ug TG name o i-tap ang "Wala pay TG name".';
   }
   viCompile();
+}
+
+/* ══ PUNGPUNG TRANSFER — keys to move into a collector's bunch ══ */
+let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [];
+
+function ktLoad(){
+  const list = document.getElementById('kt-list');
+  if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  Promise.all([
+    fetch(_SB+'/rest/v1/key_transfers?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
+    fetch(_SB+'/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+  ]).then(([rows, cus])=>{
+    _ktRows = Array.isArray(rows)?rows:[];
+    _ktCustodians = (Array.isArray(cus)?cus:[]).map(c=>c.name);
+    ktRenderCustodians();
+    ktWireHolder();
+    ktRenderVendos();
+    ktRender();
+  }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+/* remembered custodian names — click a chip to reuse */
+function ktRenderCustodians(){
+  const dl = document.getElementById('kt-holder-list');
+  if(dl) dl.innerHTML = _ktCustodians.map(n=>'<option value="'+klEsc(n)+'">').join('');
+  const box = document.getElementById('kt-holder-chips');
+  if(!box) return;
+  box.innerHTML = _ktCustodians.length
+    ? _ktCustodians.map(n=>
+        '<button type="button" onclick="ktPickHolder('+JSON.stringify(n)+')" style="padding:4px 10px;background:#f5f3ff;color:#311A8E;border:1.5px solid #c4b5fd;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">👤 '+klEsc(n)+'</button>'
+      ).join('')
+    : '<span style="font-size:11px;color:#9ca3af;">Wala pay saved nga custodian — i-type lang, ma-remember dayon.</span>';
+}
+
+function ktWireHolder(){
+  const el = document.getElementById('kt-holder');
+  if(el && !el._wired){ el.addEventListener('input', ktCompile); el._wired = true; }
+}
+
+function ktPickHolder(n){
+  const el = document.getElementById('kt-holder');
+  if(el) el.value = n;
+  ktCompile();
+}
+
+function ktRememberCustodian(name){
+  const nm = (name||'').trim();
+  if(!nm) return Promise.resolve();
+  if(_ktCustodians.some(c=>c.toLowerCase()===nm.toLowerCase())) return Promise.resolve();
+  return fetch(_SB+'/rest/v1/key_custodians', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({name:nm, active:true})})
+    .then(()=>{ _ktCustodians.push(nm); _ktCustodians.sort(); ktRenderCustodians(); })
+    .catch(()=>{});
+}
+
+function ktVendoInput(){
+  clearTimeout(_ktVT);
+  const q = ((document.getElementById('kt-vq')||{}).value||'').trim();
+  const box = document.getElementById('kt-vres');
+  if(!box) return;
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _ktVT = setTimeout(()=>{
+    const enc = encodeURIComponent('*'+q+'*');
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
+        box.innerHTML = rows.map(v=>{
+          const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+          return '<div onclick=\'ktAddVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+            + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
+            + 'onmouseover="this.style.background=\'#f5f3ff\'" onmouseout="this.style.background=\'#fff\'">'
+            + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
+            + (v.area?' · <span style="color:#025AC6;font-weight:700;">'+klEsc(v.area)+'</span>':'')
+            + '</div>';
+        }).join('');
+        box.style.display='block';
+      })
+      .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function ktAddVendo(id, name, area){
+  const box = document.getElementById('kt-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const vq = document.getElementById('kt-vq'); if(vq) vq.value='';
+  if(_ktVendos.some(v=>v.id===id)){ alert('Na-add na ni nga vendo: '+name); return; }
+  _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area||null});
+  ktRenderVendos();
+}
+
+function ktRemoveVendo(row){ _ktVendos = _ktVendos.filter(v=>v.row!==row); ktRenderVendos(); }
+
+function ktRenderVendos(){
+  const el = document.getElementById('kt-vlist');
+  if(!el) return;
+  if(!_ktVendos.length){
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:8px;">Wala pay vendo. Search sa taas para mag-add.</div>';
+    ktCompile(); return;
+  }
+  el.innerHTML = _ktVendos.map(v=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1.5px solid #311A8E;border-radius:8px;padding:8px 11px;margin-bottom:6px;background:#faf9ff;">'
+    + '<div style="font-size:12px;font-weight:800;color:#311A8E;">'+klEsc(v.name)
+    +   (v.area?' <span style="font-size:10px;color:#025AC6;font-weight:700;">· '+klEsc(v.area)+'</span>':'<span style="font-size:10px;color:#DF1A35;font-weight:700;"> · walay area</span>')
+    + '</div>'
+    + '<button onclick="ktRemoveVendo('+v.row+')" style="background:#fff;border:1.5px solid #fca5a5;color:#DF1A35;width:24px;height:24px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;">✕</button>'
+    + '</div>'
+  ).join('');
+  ktCompile();
+}
+
+function ktCompile(){
+  const pv = document.getElementById('kt-preview');
+  if(!pv) return;
+  if(!_ktVendos.length){ pv.style.display='none'; return; }
+  const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
+  const byArea = {};
+  _ktVendos.forEach(v=>{ const a=v.area||'(walay area)'; (byArea[a]=byArea[a]||[]).push(v.name); });
+  const lines = Object.keys(byArea).sort().map(a=>'📍 '+a+': '+byArea[a].join(', '));
+  pv.style.display='block';
+  pv.textContent = '📝 Compiled ('+_ktVendos.length+' key'+(_ktVendos.length===1?'':'s')+')'
+    + (holder?'\n👤 Gihawid ni: '+holder:'\n⚠️ Kinsa ang naghawid?')
+    + '\n'+lines.join('\n');
+}
+
+function ktAdd(){
+  const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
+  if(!holder){ alert('Kinsa ang naghawid sa yabi? Enter staff custodian'); return; }
+  if(!_ktVendos.length){ alert('Search ug pili una ug vendo'); return; }
+  const notes = ((document.getElementById('kt-notes')||{}).value||'').trim() || null;
+  const rows = _ktVendos.map(v=>({
+    vendo_id:v.id, vendo_name:v.name, area:v.area,
+    held_by:holder, added_to_pungpung:false, notes:notes
+  }));
+  ktRememberCustodian(holder)
+    .then(()=>fetch(_SB+'/rest/v1/key_transfers', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(rows)}))
+    .then(r=>{
+      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
+      _ktVendos = [];
+      const nt=document.getElementById('kt-notes'); if(nt) nt.value='';
+      ktRenderVendos();
+      if(typeof toast==='function') toast('✓ '+rows.length+' key(s) logged for transfer');
+      ktLoad();
+    })
+    .catch(e=>alert('Save failed: '+e.message));
+}
+
+function ktRender(){
+  const list = document.getElementById('kt-list');
+  const lbl  = document.getElementById('kt-lbl');
+  if(!list) return;
+  const filt = (document.getElementById('kt-filter')||{}).value || 'pending';
+  const q = ((document.getElementById('kt-q')||{}).value||'').toLowerCase().trim();
+  let rows = _ktRows.slice();
+  if(filt==='pending')   rows = rows.filter(r=>!r.added_to_pungpung);
+  else if(filt==='done') rows = rows.filter(r=>r.added_to_pungpung);
+  if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.held_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.transferred_by||'')+' '+(r.transferred_to||'')).toLowerCase().includes(q));
+
+  const pend = _ktRows.filter(r=>!r.added_to_pungpung).length;
+  if(lbl) lbl.textContent = rows.length+' key(s) shown · '+pend+' wala pa ma-apil sa pungpung';
+  if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
+
+  // group by area
+  const byArea = {};
+  rows.forEach(r=>{ const a = r.area || '(walay area)'; (byArea[a]=byArea[a]||[]).push(r); });
+
+  list.innerHTML = Object.keys(byArea).sort().map(area=>{
+    const items = byArea[area];
+    const outN = items.filter(r=>!r.added_to_pungpung).length;
+    return '<div style="font-size:12px;font-weight:800;color:#311A8E;margin:12px 0 7px;padding-bottom:4px;border-bottom:2px solid #e5e7eb;">📍 '+klEsc(area)
+      + ' <span style="color:#6b7280;font-weight:600;">· '+items.length+' key(s)'+(outN?' · <span style="color:#DF1A35;">'+outN+' pending</span>':'')+'</span></div>'
+      + items.map(r=>{
+          const done = !!r.added_to_pungpung;
+          const bd = done ? '#028867' : '#DF1A35';
+          const badge = done
+            ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ SA PUNGPUNG</span>'
+            : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 PENDING</span>';
+          const actions = done
+            ? '<button onclick="ktUndo('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
+            : '<button onclick="ktTransfer('+r.id+')" style="padding:6px 12px;background:#311A8E;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Added to the Pungpung</button>';
+          return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:10px 13px;margin-bottom:7px;">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+            +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">🔑 '+klEsc(r.vendo_name)+'</div>'+badge
+            + '</div>'
+            + '<div style="font-size:11px;color:#374151;margin-top:3px;">👤 Gihawid ni: <b>'+klEsc(r.held_by||'—')+'</b></div>'
+            + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
+            + (done
+                ? '<div style="font-size:11px;color:#028867;margin-top:2px;">🔗 Gi-transfer ni <b>'+klEsc(r.transferred_by||'—')+'</b>'
+                  + (r.transferred_to?(' → pungpung ni <b>'+klEsc(r.transferred_to)+'</b>'):'')
+                  + (r.transferred_at?(' · '+_fmt(r.transferred_at)):'')+'</div>'
+                : '')
+            + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
+            +   '<button onclick="ktDelete('+r.id+')" style="padding:6px 9px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+            + '</div>'
+            + '</div>';
+        }).join('');
+  }).join('');
+}
+
+function ktTransfer(id){
+  const rec = _ktRows.find(r=>r.id===id) || {};
+  const old = document.getElementById('kt-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kt-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#311A8E,#025AC6);padding:20px 22px;color:#fff;">'
+    +   '<div style="font-size:19px;font-weight:800;">🔗 Added to the Pungpung</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+(rec.area?(' · '+klEsc(rec.area)):'')+'</div>'
+    + '</div>'
+    + '<div style="padding:20px 22px;">'
+    +   '<div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:9px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:#311A8E;">'
+    +     '👤 Naghawid karon: <b>'+klEsc(rec.held_by||'—')+'</b></div>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Kinsa ang nag-transfer?</label>'
+    +   '<input id="kt-m-by" list="kt-holder-list" placeholder="e.g. Joi" value="'+klEsc(rec.held_by||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Kang kinsa nga pungpung? (optional)</label>'
+    +   '<input id="kt-m-to" list="kc-by-list" placeholder="collector name" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
+    +   '<input id="kt-m-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')ktConfirm('+id+')">'
+    +   '<div id="kt-m-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+    +   '<div style="display:flex;gap:8px;margin-top:20px;">'
+    +     '<button onclick="ktCloseModal()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="ktConfirm('+id+')" style="flex:2;padding:11px;background:#311A8E;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm Transfer</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) ktCloseModal(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const p=document.getElementById('kt-m-by'); if(p) p.focus(); }, 60);
+}
+
+function ktCloseModal(){ const ov=document.getElementById('kt-modal'); if(ov) ov.remove(); }
+
+function ktConfirm(id){
+  const pw = (document.getElementById('kt-m-pw')||{}).value || '';
+  const err = document.getElementById('kt-m-err');
+  if(pw !== KL_RETURN_PW){ if(err) err.style.display='block'; const p=document.getElementById('kt-m-pw'); if(p){p.value='';p.focus();} return; }
+  const by = ((document.getElementById('kt-m-by')||{}).value||'').trim();
+  const to = ((document.getElementById('kt-m-to')||{}).value||'').trim();
+  const body = { added_to_pungpung:true, transferred_at:new Date().toISOString(), transferred_by:by||null, transferred_to:to||null };
+  ktRememberCustodian(by)
+    .then(()=>fetch(_SB+'/rest/v1/key_transfers?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)}))
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} ktCloseModal(); ktLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function ktUndo(id){
+  if(!confirm('Mark as NOT yet added to the pungpung again?')) return;
+  fetch(_SB+'/rest/v1/key_transfers?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({added_to_pungpung:false, transferred_at:null, transferred_by:null, transferred_to:null})})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} ktLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function ktDelete(id){
+  const r = _ktRows.find(x=>x.id===id);
+  if(r && r.added_to_pungpung){
+    alert('🔒 Dili ma-delete ni nga record.\n\n'
+      + r.vendo_name+' — na-apil na sa pungpung'+(r.transferred_by?(' (gi-transfer ni '+r.transferred_by+')'):'')+'.\n\n'
+      + 'Mawala ang transfer history kung i-delete. Undo una kung sigurado ka.');
+    return;
+  }
+  if(!confirm('Delete this transfer record permanently?')) return;
+  fetch(_SB+'/rest/v1/key_transfers?id=eq.'+id, {method:'DELETE', headers:_HDR})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} ktLoad(); })
+    .catch(e=>alert('Delete failed: '+e.message));
 }
