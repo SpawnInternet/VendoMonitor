@@ -3593,87 +3593,99 @@ function viCompile(){
     + (bits.length ? '\n🆕 ' + bits.join(' · ') : '');
 }
 
-function viAdd(){
+let _viBusy = false;
+
+async function viAdd(){
+  if(_viBusy) return;                       // guard against double-click double-insert
+  const btn = document.getElementById('vi-add-btn');
   const typedName = ((document.getElementById('vi-vq')||{}).value||'').trim();
-  if(!_viPicked && !typedName){ alert('Type or pick the vendo name'); return; }
+  if(!_viPicked && !typedName){ viModal({ok:false, title:'Missing vendo name', lead:'Type or pick the vendo name first.'}); return; }
   if(!_viPicked) _viPicked = {id:null, name:typedName, area:null, typed:true};
+
   const co = (document.getElementById('vi-k-co')||{}).checked;
   const cd = (document.getElementById('vi-k-cd')||{}).checked;
   const bd = (document.getElementById('vi-k-bd')||{}).checked;
-  if(!co && !cd && !bd){ alert('Check at least one key received'); return; }
+  if(!co && !cd && !bd){ viModal({ok:false, title:'No keys checked', lead:'Check at least one key that was received.'}); return; }
   const by = ((document.getElementById('vi-by')||{}).value||'').trim();
-  if(!by){ alert('Who installed it? Enter a name'); return; }
+  if(!by){ viModal({ok:false, title:'Missing installer', lead:'Enter who installed this vendo.'}); return; }
 
   const area  = (document.getElementById('vi-area')||{}).value || '';
   const vlanS = ((document.getElementById('vi-vlan')||{}).value||'').trim();
   const vlan  = vlanS ? parseInt(vlanS,10) : null;
   const gsel  = document.getElementById('vi-group');
   const gid   = gsel && gsel.value ? parseInt(gsel.value,10) : null;
-  const isNew = !_viPicked.id;   // no linked vendo => we may create one
-
-  // creating a vendo needs area + a TG decision
-  if(isNew){
-    if(!area){ alert('Pick an Area — required to create the vendo.'); return; }
-    if(!_viNoTg && !_viTg){ alert('Pick a TG name, or tap "No TG name yet".'); return; }
-  }
-
   const idate = (document.getElementById('vi-date')||{}).value || null;
-  const body = {
-    vendo_id:_viPicked.id, vendo_name:_viPicked.name, area: area || _viPicked.area,
-    install_date: idate,
-    installed_by: by,
-    key_coin_original: co, key_coin_duplicate: cd, key_board: bd,
-    given_to_office: false,
-    tg_name: _viNoTg ? null : (_viTg||null),
-    no_tg: !!_viNoTg,
-    vlan: vlan,
-    harvest_group_id: gid,
-    vendo_created: false,
-    notes: ((document.getElementById('vi-notes')||{}).value||'').trim() || null
-  };
+  const notes = ((document.getElementById('vi-notes')||{}).value||'').trim() || null;
+  const isNew = !_viPicked.id;
 
-  fetch(_SB+'/rest/v1/vendo_installs', {method:'POST', headers:Object.assign({'Prefer':'return=representation'},_HDR), body:JSON.stringify(body)})
-    .then(r=>{ if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); } return r.json(); })
-    .then(rows=>{
-      const installId = Array.isArray(rows)&&rows[0] ? rows[0].id : null;
-      if(!isNew) return {skipped:true};
-      // create the real vendo so it shows across harvest / recon / maps
-      return fetch(_SB+'/rest/v1/rpc/spawn_create_vendo_from_install', {
+  _viBusy = true;
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; btn.textContent = '⏳ Saving…'; }
+  try{
+    // 1) validate BEFORE writing anything
+    if(isNew){
+      const chk = await fetch(_SB+'/rest/v1/rpc/spawn_check_new_vendo', {
         method:'POST', headers:_HDR,
-        body: JSON.stringify({
-          p_sheet_name: _viPicked.name, p_area: area,
-          p_tg_name: _viNoTg ? null : _viTg,
-          p_no_tg: !!_viNoTg, p_vlan: vlan, p_group_id: gid,
-          p_installer: by, p_install_date: idate, p_install_id: installId
-        })
-      }).then(r=>r.text().then(t=>{
-        if(!r.ok) throw new Error('Install saved, but the vendo was NOT created:\n\n'+t);
-        return JSON.parse(t);
-      }));
-    })
-    .then(res=>{
-      viResetForm();
-      if(res && res.skipped){ if(typeof toast==='function') toast('✓ Install logged'); }
-      else {
-        const vid = res && res.vendo_id;
-        if(typeof toast==='function') toast('✓ Install logged · vendo #'+vid+' created');
-        alert('✅ Vendo created!\n\n'
-          + '• '+(res.sheet_name||'')+'\n'
-          + '• Area: '+(res.area||'')+'\n'
-          + '• TG name: '+(res.tg_name||'(none)')+'\n'
-          + (res.group_id?'• Added sa harvest group\n':'')
-          + '\nIt now appears in Vendos, Harvest, Recon and Maps.'
-          + '\n\n⚠️ If it has no TG name yet, link it in dicayas.html later.');
-      }
-      viLoad();
-      // vendos.json cache must be rebuilt so the PWAs see the new vendo
-      if(!(res && res.skipped)){
-        fetch(_SB.replace('/rest/v1','')+'/functions/v1/write-vendos-cache', {
-          method:'POST', headers:{'Content-Type':'application/json','x-cache-secret':'spawn-cache-2026'}
-        }).catch(()=>{});
-      }
-    })
-    .catch(e=>{ viLoad(); alert('Save failed: '+e.message); });
+        body: JSON.stringify({ p_sheet_name:_viPicked.name, p_area:area,
+                               p_tg_name:_viNoTg?null:_viTg, p_no_tg:!!_viNoTg, p_vlan:vlan })
+      }).then(r=>r.json());
+      if(chk && chk.ok === false){ viProblems(chk.errors||[]); return; }
+    }
+
+    // 2) install + vendo in ONE transaction — both or neither
+    const res = await fetch(_SB+'/rest/v1/rpc/spawn_log_install_and_create_vendo', {
+      method:'POST', headers:_HDR,
+      body: JSON.stringify({
+        p_sheet_name:_viPicked.name, p_area: area || _viPicked.area || '',
+        p_tg_name: _viNoTg ? null : _viTg, p_no_tg: !!_viNoTg,
+        p_vlan: vlan, p_group_id: gid,
+        p_installed_by: by, p_install_date: idate,
+        p_key_coin_original: co, p_key_coin_duplicate: cd, p_key_board: bd,
+        p_notes: notes, p_existing_vendo_id: _viPicked.id
+      })
+    }).then(async r=>{ const t = await r.text(); if(!r.ok) throw new Error(t); return JSON.parse(t); });
+
+    const keys = [];
+    if(co) keys.push('🪙 Coins (Not Duplicate)');
+    if(cd) keys.push('🪙 Coins (Duplicate)');
+    if(bd) keys.push('🔌 Board');
+    const gLbl = gsel && gsel.value ? gsel.options[gsel.selectedIndex].text : null;
+
+    viResetForm();
+    if(res.vendo_created){
+      viModal({
+        ok:true, title:'Vendo created', btn:'Done',
+        lead:'The install was logged and the vendo now exists in the system.',
+        rows:[
+          ['Code',    res.vendo_code ? '<span style="background:#311A8E;color:#fff;padding:2px 9px;border-radius:6px;font-weight:800;letter-spacing:.5px;">'+klEsc(res.vendo_code)+'</span>' : '<span style="color:#9ca3af;">—</span>'],
+          ['Vendo',   klEsc(res.sheet_name||'')+' <span style="color:#6b7280;font-weight:600;">#'+res.vendo_id+'</span>'],
+          ['Area',    klEsc(res.area||'—')],
+          ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
+          ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
+          ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
+          ['Keys',    keys.join('<br>')]
+        ],
+        note: 'It now appears in Vendos, Harvest, Recon and Maps.'
+              + (_viNoTg ? '<br><br>⚠️ No TG name yet — link it in <b>dicayas.html</b> when ready.' : '')
+      });
+      // rebuild vendos.json so the collector PWA sees it
+      fetch(_SB.replace('/rest/v1','')+'/functions/v1/write-vendos-cache', {
+        method:'POST', headers:{'Content-Type':'application/json','x-cache-secret':'spawn-cache-2026'}
+      }).catch(()=>{});
+    } else {
+      viModal({ ok:true, title:'Install logged', btn:'Done',
+        lead:'Logged against the existing vendo — no new vendo was created.',
+        rows:[['Vendo', klEsc(res.sheet_name||'')], ['Keys', keys.join('<br>')]] });
+    }
+    viLoad();
+  }catch(e){
+    let msg = String(e.message||e);
+    try{ const j = JSON.parse(msg); msg = j.message || j.details || msg; }catch(_){}
+    viModal({ ok:false, title:'Save failed', lead:'Nothing was saved — you can fix this and try again.',
+              note: klEsc(msg) });
+  }finally{
+    _viBusy = false;
+    if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✓ Log Install'; }
+  }
 }
 
 function viResetForm(){
@@ -4146,4 +4158,83 @@ function ktDelete(id){
   fetch(_SB+'/rest/v1/key_transfers?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} ktLoad(); })
     .catch(e=>alert('Delete failed: '+e.message));
+}
+
+/* ══ Pretty result modals for installs (replaces raw alert JSON) ══ */
+function viModal(opts){
+  const old = document.getElementById('vi-result-modal'); if(old) old.remove();
+  const ok    = !!opts.ok;
+  const tint  = ok ? '#028867' : '#DF1A35';
+  const icon  = ok ? '✅' : '⚠️';
+  const ov = document.createElement('div');
+  ov.id = 'vi-result-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:430px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);">'
+    + '<div style="background:linear-gradient(135deg,'+tint+',#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+    +   '<div style="font-size:18px;font-weight:800;">'+icon+' '+klEsc(opts.title||'')+'</div>'
+    +   '<button onclick="viCloseModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
+    + '</div>'
+    + '<div style="padding:18px 22px;">'
+    +   (opts.lead ? '<div style="font-size:13px;color:#374151;margin-bottom:14px;line-height:1.5;">'+opts.lead+'</div>' : '')
+    +   (opts.rows && opts.rows.length
+        ? '<div style="border:1.5px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:14px;">'
+          + opts.rows.map((r,i)=>
+              '<div style="display:flex;gap:10px;padding:9px 12px;'+(i?'border-top:1px solid #f1f5f9;':'')+'background:'+(i%2?'#fafbfc':'#fff')+';">'
+              + '<div style="width:104px;font-size:11px;color:#6b7280;font-weight:700;flex-shrink:0;">'+r[0]+'</div>'
+              + '<div style="font-size:12px;color:#111827;font-weight:700;flex:1;word-break:break-word;">'+r[1]+'</div></div>'
+            ).join('')
+          + '</div>'
+        : '')
+    +   (opts.note ? '<div style="background:'+(ok?'#f0fdf9':'#fef2f2')+';border:1.5px solid '+tint+';border-radius:10px;padding:10px 12px;font-size:12px;color:'+(ok?'#065f46':'#991b1b')+';font-weight:600;line-height:1.5;margin-bottom:6px;">'+opts.note+'</div>' : '')
+    +   '<button onclick="viCloseModal()" style="width:100%;margin-top:12px;padding:11px;background:'+tint+';color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">'+(opts.btn||'OK')+'</button>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) viCloseModal(); });
+  document.body.appendChild(ov);
+}
+
+function viCloseModal(){ const ov=document.getElementById('vi-result-modal'); if(ov) ov.remove(); }
+
+/* problems found before saving — shown per field, with a fix button for VLAN */
+function viProblems(errors){
+  const FIELD = { name:'📛 Vendo name', area:'📍 Area', tg:'📶 TG name', vlan:'🔌 VLAN' };
+  let suggest = null;
+  errors.forEach(e=>{ if(e.field==='vlan' && e.suggest) suggest = e.suggest; });
+  const old = document.getElementById('vi-result-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'vi-result-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100000;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:430px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;">'
+    + '<div style="background:linear-gradient(135deg,#DF1A35,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+    +   '<div><div style="font-size:18px;font-weight:800;">⚠️ Cannot create this vendo</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:2px;">Nothing was saved — fix these first</div></div>'
+    +   '<button onclick="viCloseModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;flex-shrink:0;">✕</button>'
+    + '</div>'
+    + '<div style="padding:18px 22px;">'
+    +   errors.map(e=>
+          '<div style="border:1.5px solid #fca5a5;background:#fef2f2;border-radius:10px;padding:11px 13px;margin-bottom:9px;">'
+          + '<div style="font-size:11px;font-weight:800;color:#991b1b;margin-bottom:3px;">'+(FIELD[e.field]||e.field)+'</div>'
+          + '<div style="font-size:12px;color:#374151;font-weight:600;line-height:1.5;">'+klEsc(e.msg)+'</div>'
+          + '</div>'
+        ).join('')
+    +   (suggest
+        ? '<div style="background:#f0f7ff;border:1.5px solid #025AC6;border-radius:10px;padding:11px 13px;margin-top:4px;">'
+          + '<div style="font-size:12px;color:#1e3a8a;font-weight:700;margin-bottom:8px;">💡 Next free VLAN in this area: <b style="font-size:15px;">'+suggest+'</b></div>'
+          + '<button onclick="viUseVlan('+suggest+')" style="width:100%;padding:9px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Use VLAN '+suggest+'</button>'
+          + '</div>'
+        : '')
+    +   '<button onclick="viCloseModal()" style="width:100%;margin-top:12px;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Close</button>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) viCloseModal(); });
+  document.body.appendChild(ov);
+}
+
+function viUseVlan(v){
+  const el = document.getElementById('vi-vlan');
+  if(el){ el.value = v; el.style.borderColor = '#028867'; setTimeout(()=>{ el.style.borderColor='#e5e7eb'; }, 1500); }
+  viCloseModal();
+  viCompile();
 }
