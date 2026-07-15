@@ -2784,7 +2784,6 @@ function klOpenLineman(){
 let _lmVendos = [], _lmVT = null, _lmSeq = 0;
 
 const LM_KEYS = [
-  {k:'coin_original',  lbl:'🪙 Coin Key — Original'},
   {k:'coin_duplicate', lbl:'🪙 Coin Key — Duplicate'},
   {k:'coin_pungpung',  lbl:'🪙 Coin Key sa Pungpung'},
   {k:'board',          lbl:'🔌 Board Key'}
