@@ -3588,6 +3588,8 @@ function viCompile(){
   if(glbl) bits.push('👥 '+glbl);
   if(_viNoTg) bits.push('🚫 no TG (sheet name)');
   else if(_viTg) bits.push('📶 '+_viTg);
+  if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
+  if(_viPhotoFile) bits.push('📷 photo');
   pv.style.display='block';
   pv.textContent = '📝 Compiled: '+_viPicked.name+' — '+(parts.length?parts.join(', '):'⚠️ no key checked')
     + (bits.length ? '\n🆕 ' + bits.join(' · ') : '');
@@ -3650,6 +3652,37 @@ async function viAdd(){
     if(bd) keys.push('🔌 Board');
     const gLbl = gsel && gsel.value ? gsel.options[gsel.selectedIndex].text : null;
 
+    // GPS + photo are best-effort: the vendo already exists, so never fail the whole save
+    let extraNote = '';
+    const vid = res.vendo_id;
+    if(_viGps && vid){
+      try{
+        const gpsBody = { lat:_viGps.lat, lng:_viGps.lng,
+                          gps:_viGps.lat+', '+_viGps.lng,
+                          gps_updated_at:new Date().toISOString() };
+        const gr = await fetch(_SB+'/rest/v1/vendos?id=eq.'+vid, {method:'PATCH',
+          headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(gpsBody)});
+        if(!gr.ok) throw new Error(await gr.text());
+        // the collector PWA reads lat/lng from harvest_group_items — keep both in sync
+        await fetch(_SB+'/rest/v1/harvest_group_items?vendo_id=eq.'+vid, {method:'PATCH',
+          headers:Object.assign({'Prefer':'return=minimal'},_HDR),
+          body:JSON.stringify({lat:_viGps.lat, lng:_viGps.lng})}).catch(()=>{});
+      }catch(err){ extraNote += '<br><br>⚠️ GPS not saved: '+klEsc(String(err.message||err)); }
+    }
+    let photoUrl = null;
+    if(_viPhotoFile && vid){
+      try{
+        photoUrl = await viUploadPhoto(vid);
+        if(photoUrl){
+          const pr = await fetch(_SB+'/rest/v1/vendos?id=eq.'+vid, {method:'PATCH',
+            headers:Object.assign({'Prefer':'return=minimal'},_HDR),
+            body:JSON.stringify({photo_url:photoUrl})});
+          if(!pr.ok) throw new Error(await pr.text());
+        }
+      }catch(err){ photoUrl = null; extraNote += '<br><br>⚠️ Photo not saved: '+klEsc(String(err.message||err)); }
+    }
+    const savedGps = _viGps;
+
     viResetForm();
     if(res.vendo_created){
       viModal({
@@ -3662,10 +3695,13 @@ async function viAdd(){
           ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
           ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
+          ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
+          ['Photo',   photoUrl ? '<img src="'+photoUrl+'" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;">' : '<span style="color:#9ca3af;">—</span>'],
           ['Keys',    keys.join('<br>')]
         ],
         note: 'It now appears in Vendos, Harvest, Recon and Maps.'
               + (_viNoTg ? '<br><br>⚠️ No TG name yet — link it in <b>dicayas.html</b> when ready.' : '')
+              + extraNote
       });
       // rebuild vendos.json so the collector PWA sees it
       fetch(_SB.replace('/rest/v1','')+'/functions/v1/write-vendos-cache', {
@@ -3689,9 +3725,12 @@ async function viAdd(){
 }
 
 function viResetForm(){
-  _viPicked = null; _viTg = null;
+  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
+  const ps=document.getElementById('vi-photo-state'); if(ps){ ps.style.color='#9ca3af'; ps.textContent='Optional — uploaded after the vendo is created.'; }
+  const gs=document.getElementById('vi-gps-state'); if(gs){ gs.style.color='#9ca3af'; gs.textContent='Paste coordinates — only real camera/Maps values, never estimated.'; }
   ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e) e.checked=false; });
   const a=document.getElementById('vi-area'); if(a) a.value='';
   viAreaChanged();
@@ -4237,4 +4276,117 @@ function viUseVlan(v){
   if(el){ el.value = v; el.style.borderColor = '#028867'; setTimeout(()=>{ el.style.borderColor='#e5e7eb'; }, 1500); }
   viCloseModal();
   viCompile();
+}
+
+/* ══ INSTALL: GPS parser + photo upload ══ */
+let _viGps = null, _viPhotoFile = null;
+
+/* Accepts:
+     8.59408, 123.35089
+     8.59408,123.35089
+     Lat 8.59408 Long 123.35089
+     8°35'38.7"N 123°21'03.2"E     (Conota / Maps DMS)
+     8.59408N, 123.35089E
+   Rejects anything outside Zamboanga del Norte's plausible box. */
+function viGpsParseStr(raw){
+  if(!raw) return null;
+  const s = String(raw).trim();
+  if(!s) return null;
+
+  // DMS first: 8°35'38.7"N 123°21'03.2"E
+  const dms = s.match(/(\d+)\s*[°º]\s*(\d+)\s*['′]\s*([\d.]+)\s*["″]?\s*([NS])[,\s]+(\d+)\s*[°º]\s*(\d+)\s*['′]\s*([\d.]+)\s*["″]?\s*([EW])/i);
+  if(dms){
+    let la = (+dms[1]) + (+dms[2])/60 + (+dms[3])/3600;
+    let ln = (+dms[5]) + (+dms[6])/60 + (+dms[7])/3600;
+    if(dms[4].toUpperCase()==='S') la = -la;
+    if(dms[8].toUpperCase()==='W') ln = -ln;
+    return {lat:+la.toFixed(6), lng:+ln.toFixed(6)};
+  }
+
+  // decimal pair, tolerating labels and N/E suffixes
+  const nums = s.replace(/[NnEe](?![\d.])/g,' ').match(/-?\d+\.\d+|-?\d+/g);
+  if(!nums || nums.length < 2) return null;
+  const lat = parseFloat(nums[0]), lng = parseFloat(nums[1]);
+  if(isNaN(lat) || isNaN(lng)) return null;
+  return {lat:+lat.toFixed(6), lng:+lng.toFixed(6)};
+}
+
+/* plausible box for Zamboanga del Norte — catches swapped lat/lng and typos */
+function viGpsSane(g){
+  if(!g) return {ok:false, why:'Could not read coordinates'};
+  const inBox = (la,ln) => la > 7.5 && la < 9.5 && ln > 122.5 && ln < 124.0;
+  if(inBox(g.lat, g.lng)) return {ok:true};
+  // check the reverse before complaining about range — a swapped paste is the common case
+  if(inBox(g.lng, g.lat)) return {ok:false, why:'Looks reversed — lat and lng are swapped', swapped:true};
+  if(Math.abs(g.lat)>90 || Math.abs(g.lng)>180) return {ok:false, why:'Out of range for a coordinate'};
+  return {ok:false, why:'Outside Zamboanga del Norte'};
+}
+
+function viGpsParse(){
+  const raw = ((document.getElementById('vi-gps')||{}).value||'');
+  const el = document.getElementById('vi-gps-state');
+  if(!el) return;
+  if(!raw.trim()){
+    _viGps = null;
+    el.style.color = '#9ca3af';
+    el.textContent = 'Paste coordinates — only real camera/Maps values, never estimated.';
+    viCompile(); return;
+  }
+  const g = viGpsParseStr(raw);
+  const s = viGpsSane(g);
+  if(!s.ok){
+    _viGps = null;
+    el.style.color = '#DF1A35';
+    el.innerHTML = '❌ '+klEsc(s.why)
+      + (s.swapped ? ' · <button type="button" onclick="viGpsSwap()" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">Swap them</button>' : '');
+    viCompile(); return;
+  }
+  _viGps = g;
+  el.style.color = '#028867';
+  el.innerHTML = '✅ ' + g.lat + ', ' + g.lng
+    + ' · <a href="https://www.google.com/maps?q='+g.lat+','+g.lng+'" target="_blank" rel="noopener" style="color:#025AC6;font-weight:800;">view on map ↗</a>';
+  viCompile();
+}
+
+function viGpsSwap(){
+  const el = document.getElementById('vi-gps');
+  const g = viGpsParseStr(el ? el.value : '');
+  if(g && el){ el.value = g.lng + ', ' + g.lat; viGpsParse(); }
+}
+
+function viGpsClear(){
+  const el = document.getElementById('vi-gps'); if(el) el.value='';
+  _viGps = null;
+  viGpsParse();
+}
+
+function viPhotoPick(input){
+  const f = input.files && input.files[0];
+  const st = document.getElementById('vi-photo-state');
+  const pv = document.getElementById('vi-photo-prev');
+  if(!f){ _viPhotoFile=null; if(pv) pv.style.display='none'; if(st){st.style.color='#9ca3af';st.textContent='Optional — uploaded after the vendo is created.';} viCompile(); return; }
+  if(!/^image\//.test(f.type)){ _viPhotoFile=null; if(st){st.style.color='#DF1A35';st.textContent='❌ Not an image file';} return; }
+  if(f.size > 10*1024*1024){ _viPhotoFile=null; if(st){st.style.color='#DF1A35';st.textContent='❌ Too big (max 10MB)';} return; }
+  _viPhotoFile = f;
+  if(st){ st.style.color='#028867'; st.textContent='✅ '+f.name+' · '+Math.round(f.size/1024)+' KB'; }
+  if(pv){ pv.src = URL.createObjectURL(f); pv.style.display='block'; }
+  viCompile();
+}
+
+/* upload to harvest-photos/vendo-profiles/vendo_{id}.jpg (existing convention).
+   The core fetch interceptor rewrites this into a spawn-gw-admin storage call. */
+async function viUploadPhoto(vendoId){
+  if(!_viPhotoFile || !vendoId) return null;
+  const path = 'vendo-profiles/vendo_' + vendoId + '.jpg';
+  const up = await fetch(_SB+'/storage/v1/object/harvest-photos/'+path, {
+    method:'POST',
+    headers:{ apikey:_KEY, Authorization:'Bearer '+_KEY,
+              'Content-Type': _viPhotoFile.type||'image/jpeg', 'x-upsert':'true' },
+    body:_viPhotoFile
+  });
+  const txt = await up.text();
+  if(!up.ok) throw new Error('Photo upload failed: '+txt);
+  // gateway replies { ok, status, body, public_url }
+  try{ const j = JSON.parse(txt); if(j && j.public_url) return j.public_url; }catch(_){}
+  return _SB+'/storage/v1/object/public/harvest-photos/'+path;
 }
