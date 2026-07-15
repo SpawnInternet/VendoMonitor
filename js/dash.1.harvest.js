@@ -3742,9 +3742,10 @@ async function viAdd(){
 }
 
 function viResetForm(){
-  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null;
+  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
   const ps=document.getElementById('vi-photo-state'); if(ps){ ps.style.color='#9ca3af'; ps.textContent='Optional — uploaded after the vendo is created.'; }
@@ -4378,7 +4379,7 @@ function viGpsClear(){
   viGpsParse();
 }
 
-function viPhotoPick(input){
+async function viPhotoPick(input){
   const f = input.files && input.files[0];
   const st = document.getElementById('vi-photo-state');
   const pv = document.getElementById('vi-photo-prev');
@@ -4386,9 +4387,43 @@ function viPhotoPick(input){
   if(!/^image\//.test(f.type)){ _viPhotoFile=null; if(st){st.style.color='#DF1A35';st.textContent='❌ Not an image file';} return; }
   if(f.size > 10*1024*1024){ _viPhotoFile=null; if(st){st.style.color='#DF1A35';st.textContent='❌ Too big (max 10MB)';} return; }
   _viPhotoFile = f;
-  if(st){ st.style.color='#028867'; st.textContent='✅ '+f.name+' · '+Math.round(f.size/1024)+' KB'; }
   if(pv){ pv.src = URL.createObjectURL(f); pv.style.display='block'; }
+  const size = Math.round(f.size/1024)+' KB';
+  if(st){ st.style.color='#6b7280'; st.textContent='📷 '+f.name+' · '+size+' · reading GPS…'; }
+
+  // try to lift GPS straight out of the photo's EXIF
+  const g = await viExifGps(f);
+  if(!st){ viCompile(); return; }
+  if(g){
+    const sane = viGpsSane(g);
+    if(sane.ok){
+      const box = document.getElementById('vi-gps');
+      const already = box && box.value.trim();
+      if(!already){
+        if(box) box.value = g.lat+', '+g.lng;
+        viGpsParse();
+        st.style.color='#028867';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 <b>GPS read from photo</b> — filled in above.';
+      } else {
+        st.style.color='#025AC6';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 Photo has GPS ('+g.lat+', '+g.lng+') · '
+          + '<button type="button" onclick="viUsePhotoGps('+g.lat+','+g.lng+')" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use it</button>';
+      }
+    } else {
+      st.style.color='#C01176';
+      st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>⚠️ Photo GPS looks wrong ('+g.lat+', '+g.lng+') — ignored.';
+    }
+  } else {
+    st.style.color='#6b7280';
+    st.innerHTML = '✅ '+klEsc(f.name)+' · '+size
+      + '<br><span style="color:#9ca3af;">No GPS in this photo — a Conota stamp is printed on the image, not stored as data. Type or paste the coordinates above.</span>';
+  }
   viCompile();
+}
+
+function viUsePhotoGps(lat, lng){
+  const box = document.getElementById('vi-gps');
+  if(box){ box.value = lat+', '+lng; viGpsParse(); }
 }
 
 /* upload to harvest-photos/vendo-profiles/vendo_{id}.jpg (existing convention).
@@ -4476,4 +4511,149 @@ function viSrvState(){
     el.textContent = known ? ('✅ '+_viSrv) : ('✏️ New server: '+_viSrv);
   }
   viCompile();
+}
+
+/* ══ INSTALL: router search — links VLAN + server from MikroTik ══ */
+let _viRt = null, _viRtVT = null;
+
+function viRtInput(){
+  clearTimeout(_viRtVT);
+  const q = ((document.getElementById('vi-rtq')||{}).value||'').trim();
+  const box = document.getElementById('vi-rtres');
+  if(!box) return;
+  if(q.length < 2){ box.style.display='none'; box.innerHTML=''; return; }
+  const area = (document.getElementById('vi-area')||{}).value || null;
+  _viRtVT = setTimeout(()=>{
+    fetch(_SB+'/rest/v1/rpc/spawn_search_routers', {
+      method:'POST', headers:_HDR,
+      body: JSON.stringify({ p_q:q, p_area:area, p_limit:12 })
+    })
+    .then(r=>r.json())
+    .then(rows=>{
+      if(!Array.isArray(rows) || !rows.length){
+        box.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No router found. Check the MikroTik comment, or leave this blank.</div>';
+        box.style.display='block'; return;
+      }
+      box.innerHTML = rows.map(r=>{
+        const dot = r.online ? '🟢' : '🔴';
+        const taken = !!r.claimed_by;
+        const cmt = (r.comment||'').replace(/[\r\n]+/g,' · ').trim();
+        return '<div onclick=\'viPickRouter('+JSON.stringify(r)+')\' '
+          + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:'+(taken?'not-allowed':'pointer')+';font-size:12px;'+(taken?'background:#fafafa;opacity:.75;':'')+'" '
+          + 'onmouseover="this.style.background=\''+(taken?'#fafafa':'#f5f3ff')+'\'" onmouseout="this.style.background=\''+(taken?'#fafafa':'#fff')+'\'">'
+          + '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">'
+          +   '<b style="color:#311A8E;">'+dot+' VLAN '+r.vlan+'</b>'
+          +   (taken ? '<span style="font-size:9px;background:#DF1A35;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">TAKEN</span>'
+                     : '<span style="font-size:9px;background:#028867;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">FREE</span>')
+          + '</div>'
+          + '<div style="font-size:11px;color:#374151;margin-top:2px;">'+klEsc(cmt||'(no comment)')+'</div>'
+          + (taken ? '<div style="font-size:10px;color:#DF1A35;margin-top:2px;font-weight:700;">Already used by: '+klEsc(r.claimed_by)+'</div>' : '')
+          + '</div>';
+      }).join('');
+      box.style.display='block';
+    })
+    .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function viPickRouter(r){
+  if(r.claimed_by){
+    viModal({ok:false, title:'Router already in use',
+      lead:'VLAN '+r.vlan+' is already linked to another vendo.',
+      rows:[['Used by', klEsc(r.claimed_by)], ['Comment', klEsc((r.comment||'').replace(/[\r\n]+/g,' · '))]],
+      note:'Pick a FREE router, or fix the other vendo\u2019s VLAN first.'});
+    return;
+  }
+  _viRt = r;
+  const box=document.getElementById('vi-rtres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const q=document.getElementById('vi-rtq');
+  if(q) q.value = 'VLAN '+r.vlan+' — '+((r.comment||'').replace(/[\r\n]+/g,' ').slice(0,40));
+  // auto-fill VLAN + server
+  const vl = document.getElementById('vi-vlan');
+  if(vl){ vl.value = r.vlan; vl.style.borderColor='#028867'; setTimeout(()=>{vl.style.borderColor='#e5e7eb';},1500); }
+  if(r.server_name){
+    _viSrv = r.server_name;
+    const s = document.getElementById('vi-srvq'); if(s) s.value = r.server_name;
+    viSrvState();
+  }
+  const st = document.getElementById('vi-rt-state');
+  if(st){
+    st.style.color = '#028867';
+    st.innerHTML = '✅ Linked · VLAN <b>'+r.vlan+'</b> · '+klEsc(r.server_name||'—')
+      + ' · '+(r.online?'🟢 online':'🔴 offline')
+      + (r.ip?' · <span style="color:#6b7280;">'+klEsc(r.ip)+'</span>':'');
+  }
+  viCompile();
+}
+
+function viRtClear(){
+  _viRt = null;
+  const q=document.getElementById('vi-rtq'); if(q) q.value='';
+  const st=document.getElementById('vi-rt-state');
+  if(st){ st.style.color='#9ca3af'; st.textContent='Linking a router auto-fills VLAN + server.'; }
+  viCompile();
+}
+
+/* ══ INSTALL: read GPS out of a photo's EXIF (no library) ══
+   Only works if the camera wrote real GPS EXIF tags. Coordinates *burned into
+   the pixels* (Conota-style stamps) are NOT readable this way — those must be
+   typed or pasted. */
+function viExifGps(file){
+  return new Promise(resolve=>{
+    const fr = new FileReader();
+    fr.onerror = ()=>resolve(null);
+    fr.onload = ()=>{
+      try{
+        const dv = new DataView(fr.result);
+        if(dv.byteLength < 4 || dv.getUint16(0) !== 0xFFD8) return resolve(null); // not a JPEG
+        let off = 2;
+        // walk JPEG markers to find APP1/Exif
+        while(off < dv.byteLength - 4){
+          const marker = dv.getUint16(off);
+          if(marker === 0xFFE1){
+            const exifStart = off + 4;
+            if(dv.getUint32(exifStart) !== 0x45786966) return resolve(null); // "Exif"
+            return resolve(viExifWalk(dv, exifStart + 6));
+          }
+          if((marker & 0xFF00) !== 0xFF00) break;
+          off += 2 + dv.getUint16(off + 2);
+        }
+        resolve(null);
+      }catch(e){ resolve(null); }
+    };
+    fr.readAsArrayBuffer(file.slice(0, 256*1024)); // header only
+  });
+}
+
+function viExifWalk(dv, tiff){
+  const le = dv.getUint16(tiff) === 0x4949;           // II = little-endian
+  const u16 = o => dv.getUint16(o, le);
+  const u32 = o => dv.getUint32(o, le);
+  if(u16(tiff + 2) !== 0x002A) return null;
+  const ifd0 = tiff + u32(tiff + 4);
+  let gpsOff = 0;
+  const n = u16(ifd0);
+  for(let i=0;i<n;i++){
+    const e = ifd0 + 2 + i*12;
+    if(u16(e) === 0x8825){ gpsOff = tiff + u32(e + 8); break; }  // GPSInfo pointer
+  }
+  if(!gpsOff) return null;
+
+  const rat = (o) => u32(o) / (u32(o+4) || 1);
+  const dms = (o) => rat(o) + rat(o+8)/60 + rat(o+16)/3600;
+  let lat=null, lng=null, latR='N', lngR='E';
+  const gn = u16(gpsOff);
+  for(let i=0;i<gn;i++){
+    const e = gpsOff + 2 + i*12;
+    const tag = u16(e), cnt = u32(e+4);
+    const valOff = (cnt*8 > 4) ? (tiff + u32(e+8)) : (e+8);
+    if(tag === 1) latR = String.fromCharCode(dv.getUint8(e+8));
+    if(tag === 3) lngR = String.fromCharCode(dv.getUint8(e+8));
+    if(tag === 2) lat = dms(valOff);
+    if(tag === 4) lng = dms(valOff);
+  }
+  if(lat==null || lng==null || isNaN(lat) || isNaN(lng)) return null;
+  if(latR === 'S') lat = -lat;
+  if(lngR === 'W') lng = -lng;
+  return {lat:+lat.toFixed(6), lng:+lng.toFixed(6)};
 }
