@@ -2659,7 +2659,8 @@ function klLoad(){
 }
 
 let _klItems = [];
-const KI_LBL = it => it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(it.coin_variant==='duplicate'?'Duplicate':'Not Duplicate')+')');
+const KI_VAR = { original:'Original', duplicate:'Duplicate', pungpung:'Pungpung' };
+const KI_LBL = it => it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
 
 /* per-key checkbox: mark a single key_items row returned (password 101510) */
 function kiToggle(itemId, makeReturned){
@@ -2740,41 +2741,32 @@ function klAdd(){
 
 function klOpenLineman(){
   const old = document.getElementById('kl-lineman-modal'); if(old) old.remove();
-  _lmPicked = null;
+  _lmVendos = [];
   const now = new Date();
   const today = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
   const ov = document.createElement('div');
   ov.id = 'kl-lineman-modal';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
   ov.innerHTML =
-    '<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
-    + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;">'
+    '<div style="background:#fff;border-radius:18px;max-width:480px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:18px 22px;color:#fff;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:2;">'
     +   '<div style="font-size:18px;font-weight:800;">🛠️ Lineman WiFi Key</div>'
     +   '<button onclick="klCloseLineman()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>'
     + '</div>'
     + '<div style="padding:18px 22px;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Lineman Name</label>'
     +   '<input id="kl-lm-name" list="kc-by-list" placeholder="e.g. Jericho" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Vendo (search then click)</label>'
-    +   '<div style="position:relative;margin-bottom:10px;">'
-    +     '<input id="kl-lm-vq" placeholder="🔍 Type vendo name..." oninput="lmVendoInput()" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Add vendo nga gi-dala-an ug yabi</label>'
+    +   '<div style="position:relative;margin-bottom:12px;">'
+    +     '<input id="kl-lm-vq" placeholder="🔍 Search vendo then click to add..." oninput="lmVendoInput()" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #025AC6;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">'
     +     '<div id="kl-lm-vres" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #025AC6;border-radius:8px;max-height:200px;overflow-y:auto;z-index:60;display:none;box-shadow:0 8px 20px rgba(0,0,0,.15);"></div>'
     +   '</div>'
-    +   '<div id="kl-lm-picked" style="display:none;background:#f0f7ff;border:1.5px solid #025AC6;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:#025AC6;"></div>'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Yabi nga GI DALA (pwede both)</label>'
-    +   '<div style="border:1.5px solid #e5e7eb;border-radius:9px;padding:11px;background:#fafafa;margin-bottom:12px;">'
-    +     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;margin-bottom:8px;"><input type="checkbox" id="kl-lm-coin" onchange="lmToggleCoin();lmCompile()" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key</label>'
-    +     '<div id="kl-lm-coinvar" style="display:none;padding-left:24px;margin-bottom:9px;">'
-    +       '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;margin-right:14px;"><input type="radio" name="lmcv" value="original" checked onchange="lmCompile()" style="cursor:pointer;">Original (Not Duplicate)</label>'
-    +       '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;"><input type="radio" name="lmcv" value="duplicate" onchange="lmCompile()" style="cursor:pointer;">Duplicate</label>'
-    +     '</div>'
-    +     '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;"><input type="checkbox" id="kl-lm-board" onchange="lmCompile()" style="width:15px;height:15px;cursor:pointer;">🔌 Board Key</label>'
-    +   '</div>'
+    +   '<div id="kl-lm-vlist" style="margin-bottom:12px;"></div>'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Reason (nganong gi dala ang wifi key)</label>'
     +   '<input id="kl-lm-reason" placeholder="e.g. ibalhin ang box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Date</label>'
     +   '<input id="kl-lm-date" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
-    +   '<div id="kl-lm-preview" style="display:none;background:#f0f7ff;border:1.5px dashed #025AC6;border-radius:9px;padding:11px 13px;margin-bottom:16px;font-size:12px;color:#1e3a8a;font-weight:700;white-space:pre-line;"></div>'
+    +   '<div id="kl-lm-preview" style="display:none;background:#f0f7ff;border:1.5px dashed #025AC6;border-radius:9px;padding:11px 13px;margin-bottom:16px;font-size:12px;color:#1e3a8a;font-weight:700;white-space:pre-line;line-height:1.6;"></div>'
     +   '<div style="display:flex;gap:8px;">'
     +     '<button onclick="klCloseLineman()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
     +     '<button onclick="klAddLineman()" style="flex:2;padding:11px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Log Lineman Key</button>'
@@ -2784,16 +2776,20 @@ function klOpenLineman(){
   ov.addEventListener('click', e=>{ if(e.target===ov) klCloseLineman(); });
   document.body.appendChild(ov);
   kcEnsureNames();
+  lmRenderVendos();
   setTimeout(()=>{ const n=document.getElementById('kl-lm-name'); if(n) n.focus(); }, 60);
 }
 
-let _lmPicked = null, _lmVT = null;
+// multiple vendos per lineman borrow record
+let _lmVendos = [], _lmVT = null, _lmSeq = 0;
 
-function lmToggleCoin(){
-  const cb = document.getElementById('kl-lm-coin');
-  const box = document.getElementById('kl-lm-coinvar');
-  if(box) box.style.display = (cb && cb.checked) ? 'block' : 'none';
-}
+const LM_KEYS = [
+  {k:'coin_original',  lbl:'🪙 Coin Key — Original'},
+  {k:'coin_duplicate', lbl:'🪙 Coin Key — Duplicate'},
+  {k:'coin_pungpung',  lbl:'🪙 Coin Key sa Pungpung'},
+  {k:'board',          lbl:'🔌 Board Key'}
+];
+const LM_SHORT = { coin_original:'Coins (Original)', coin_duplicate:'Coins (Duplicate)', coin_pungpung:'Coins (Pungpung)', board:'Board' };
 
 function lmVendoInput(){
   clearTimeout(_lmVT);
@@ -2809,7 +2805,7 @@ function lmVendoInput(){
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
-          return '<div onclick=\'lmPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+          return '<div onclick=\'lmAddVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
@@ -2822,54 +2818,95 @@ function lmVendoInput(){
   }, 300);
 }
 
-function lmPickVendo(id, name, area){
-  _lmPicked = {id:id, name:name, area:area||null};
+function lmAddVendo(id, name, area){
   const box = document.getElementById('kl-lm-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
-  const vq = document.getElementById('kl-lm-vq'); if(vq) vq.value = name;
-  const p = document.getElementById('kl-lm-picked');
-  if(p){ p.style.display='block'; p.textContent = '✓ '+name+(area?(' · '+area):''); }
+  const vq = document.getElementById('kl-lm-vq'); if(vq) vq.value='';
+  if(_lmVendos.some(v=>v.id===id)){ alert('Na-add na ni nga vendo: '+name); return; }
+  _lmVendos.push({row:++_lmSeq, id:id, name:name, area:area||null, keys:{}});
+  lmRenderVendos();
+}
+
+function lmRemoveVendo(row){
+  _lmVendos = _lmVendos.filter(v=>v.row!==row);
+  lmRenderVendos();
+}
+
+function lmSetKey(row, k, on){
+  const v = _lmVendos.find(x=>x.row===row); if(!v) return;
+  v.keys[k] = on;
   lmCompile();
 }
 
-// auto-compiled message of what was clicked/typed
+function lmRenderVendos(){
+  const el = document.getElementById('kl-lm-vlist');
+  if(!el) return;
+  if(!_lmVendos.length){
+    el.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:9px;">Wala pay vendo. Search sa taas para mag-add.</div>';
+    lmCompile();
+    return;
+  }
+  el.innerHTML = _lmVendos.map(v=>
+    '<div style="border:1.5px solid #025AC6;border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#f8fbff;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:7px;">'
+    +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">'+klEsc(v.name)+(v.area?' <span style="font-size:10px;color:#025AC6;">· '+klEsc(v.area)+'</span>':'')+'</div>'
+    +   '<button onclick="lmRemoveVendo('+v.row+')" style="background:#fff;border:1.5px solid #fca5a5;color:#DF1A35;width:26px;height:26px;border-radius:7px;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0;">✕</button>'
+    + '</div>'
+    + LM_KEYS.map(kk=>
+        '<label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:#374151;cursor:pointer;padding:2px 0;">'
+        + '<input type="checkbox" '+(v.keys[kk.k]?'checked':'')+' onchange="lmSetKey('+v.row+',\''+kk.k+'\',this.checked)" style="width:15px;height:15px;cursor:pointer;">'
+        + kk.lbl + '</label>'
+      ).join('')
+    + '</div>'
+  ).join('');
+  lmCompile();
+}
+
+// auto-compiled message of everything clicked
 function lmCompile(){
   const pv = document.getElementById('kl-lm-preview');
   if(!pv) return;
-  if(!_lmPicked){ pv.style.display='none'; return; }
-  const parts = [];
-  const coin = document.getElementById('kl-lm-coin');
-  if(coin && coin.checked){
-    const v = (document.querySelector('input[name="lmcv"]:checked')||{}).value || 'original';
-    parts.push(v==='duplicate' ? 'Coins (Duplicate)' : 'Coins (Not Duplicate)');
-  }
-  const bd = document.getElementById('kl-lm-board');
-  if(bd && bd.checked) parts.push('Board');
-  if(!parts.length){ pv.style.display='block'; pv.textContent='📝 '+_lmPicked.name+' — ⚠️ walay yabi nga na-check'; return; }
-  const only = (parts.length===1 && parts[0]==='Board') ? ' Key only' : '';
+  if(!_lmVendos.length){ pv.style.display='none'; return; }
+  const lines = _lmVendos.map(v=>{
+    const picked = LM_KEYS.filter(kk=>v.keys[kk.k]).map(kk=>LM_SHORT[kk.k]);
+    if(!picked.length) return '⚠️ '+v.name+' — walay yabi nga na-check';
+    const only = (picked.length===1 && picked[0]==='Board') ? ' Key only' : '';
+    return '• '+v.name+' — '+picked.join(', ')+only;
+  });
+  const total = _lmVendos.reduce((s,v)=>s+LM_KEYS.filter(kk=>v.keys[kk.k]).length, 0);
   pv.style.display='block';
-  pv.textContent = '📝 Compiled: '+_lmPicked.name+' — '+parts.join(', ')+only;
+  pv.textContent = '📝 Compiled ('+total+' key'+(total===1?'':'s')+' · '+_lmVendos.length+' vendo'+(_lmVendos.length===1?'':'s')+'):\n'+lines.join('\n');
 }
 
-function klCloseLineman(){ const ov=document.getElementById('kl-lineman-modal'); if(ov) ov.remove(); _lmPicked=null; }
+function klCloseLineman(){ const ov=document.getElementById('kl-lineman-modal'); if(ov) ov.remove(); _lmVendos=[]; }
 
 function klAddLineman(){
   const lineman = ((document.getElementById('kl-lm-name')||{}).value||'').trim();
   const reason  = ((document.getElementById('kl-lm-reason')||{}).value||'').trim();
   const kdate   = (document.getElementById('kl-lm-date')||{}).value || null;
   if(!lineman){ alert('Enter lineman name'); return; }
-  if(!_lmPicked){ alert('Search ug pili una ug vendo'); return; }
-  const coinOn = (document.getElementById('kl-lm-coin')||{}).checked;
-  const bdOn   = (document.getElementById('kl-lm-board')||{}).checked;
-  if(!coinOn && !bdOn){ alert('Check at least one key (coin or board)'); return; }
-  const cv = (document.querySelector('input[name="lmcv"]:checked')||{}).value || 'original';
+  if(!_lmVendos.length){ alert('Search ug pili una ug vendo'); return; }
   const items = [];
-  if(coinOn) items.push({vendo_id:_lmPicked.id, vendo_name:_lmPicked.name, area:_lmPicked.area, key_kind:'coin', coin_variant:cv, returned:false});
-  if(bdOn)   items.push({vendo_id:_lmPicked.id, vendo_name:_lmPicked.name, area:_lmPicked.area, key_kind:'board', coin_variant:null, returned:false});
+  const bad = [];
+  _lmVendos.forEach(v=>{
+    const picked = LM_KEYS.filter(kk=>v.keys[kk.k]);
+    if(!picked.length){ bad.push(v.name); return; }
+    picked.forEach(kk=>{
+      items.push({
+        vendo_id: v.id, vendo_name: v.name, area: v.area,
+        key_kind: kk.k==='board' ? 'board' : 'coin',
+        coin_variant: kk.k==='board' ? null : kk.k.replace('coin_',''),
+        returned: false
+      });
+    });
+  });
+  if(bad.length){ alert('Walay yabi nga na-check para sa:\n\n'+bad.map(b=>'  • '+b).join('\n')+'\n\nCheck ug yabi o tanggala ni sila.'); return; }
+  if(!items.length){ alert('Check at least one key'); return; }
+  const areas = Array.from(new Set(_lmVendos.map(v=>v.area).filter(Boolean))).join(', ');
   const compiled = (document.getElementById('kl-lm-preview')||{}).textContent || '';
   const body = { record_type:'lineman', collector_name:lineman, lineman:lineman,
-                 wifi_key: compiled.replace('📝 Compiled: ',''),
+                 wifi_key: compiled.split('\n').slice(1).join(' · ').replace(/^• /,'').replace(/ · • /g,' · '),
                  lineman_reason:reason||null, key_date:kdate, keys_taken:items.length,
-                 area:_lmPicked.area, returned:false };
+                 area:areas||null, returned:false };
   fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=representation'},_HDR), body:JSON.stringify(body)})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} return r.json(); })
     .then(rows=>{
@@ -3162,7 +3199,7 @@ function kvoItemLbl(logId){
   const its = _kvoItems.filter(x=>x.key_log_id===logId);
   if(!its.length) return '';
   return its.map(it=>{
-    const k = it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(it.coin_variant==='duplicate'?'Duplicate':'Not Duplicate')+')');
+    const k = it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
     return it.vendo_name+' — '+k+' '+(it.returned?'✅':'🔴');
   }).join(' · ');
 }
@@ -3489,14 +3526,23 @@ function viVendoInput(){
   const q = (document.getElementById('vi-vq')||{}).value.trim();
   const box = document.getElementById('vi-vres');
   if(!box) return;
+  // free-typed name counts as picked (new vendo may not exist in `vendos` yet)
+  _viPicked = q ? {id:null, name:q, area:null, typed:true} : null;
+  const p = document.getElementById('vi-picked');
+  if(p){
+    if(q){ p.style.display='block'; p.innerHTML='✏️ <b>'+klEsc(q)+'</b> · <span style="color:#C01176;">bag-o (wala pa sa vendos)</span>'; }
+    else { p.style.display='none'; }
+  }
+  viCompile();
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _viVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
       .then(r=>r.json())
       .then(rows=>{
-        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
-        box.innerHTML = rows.map(v=>{
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ Bag-ong vendo — i-type lang ang name, ma-save gihapon.</div>'; box.style.display='block'; return; }
+        box.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#6b7280;background:#fafafa;border-bottom:1px solid #f1f5f9;">Click para i-link sa existing vendo, o i-type lang para bag-o:</div>'
+          + rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
           return '<div onclick=\'viPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
@@ -3512,11 +3558,11 @@ function viVendoInput(){
 }
 
 function viPickVendo(id, name, area){
-  _viPicked = {id:id, name:name, area:area||null};
+  _viPicked = {id:id, name:name, area:area||null, typed:false};
   const box = document.getElementById('vi-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
   const vq = document.getElementById('vi-vq'); if(vq) vq.value = name;
   const p = document.getElementById('vi-picked');
-  if(p){ p.style.display='block'; p.textContent = '✓ '+name+(area?(' · '+area):''); }
+  if(p){ p.style.display='block'; p.innerHTML='✓ <b>'+klEsc(name)+'</b>'+(area?(' · '+klEsc(area)):'')+' <span style="color:#6b7280;font-weight:600;">(linked)</span>'; }
   viCompile();
 }
 
@@ -3535,7 +3581,9 @@ function viCompile(){
 }
 
 function viAdd(){
-  if(!_viPicked){ alert('Search ug pili una ug vendo'); return; }
+  const typedName = ((document.getElementById('vi-vq')||{}).value||'').trim();
+  if(!_viPicked && !typedName){ alert('I-type o pili ang vendo name'); return; }
+  if(!_viPicked) _viPicked = {id:null, name:typedName, area:null, typed:true};
   const co = (document.getElementById('vi-k-co')||{}).checked;
   const cd = (document.getElementById('vi-k-cd')||{}).checked;
   const bd = (document.getElementById('vi-k-bd')||{}).checked;
