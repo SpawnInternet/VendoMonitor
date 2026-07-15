@@ -2943,7 +2943,21 @@ function klUndoReturn(id){
 }
 
 function klDelete(id){
-  if(!confirm('Delete this key record permanently?')) return;
+  // custody-safe delete: never destroy return history
+  const kids = _klItems.filter(x=>x.key_log_id===id);
+  const back = kids.filter(x=>x.returned);
+  if(back.length){
+    alert('🔒 Dili ma-delete ni nga record.\n\n'
+      + back.length+' sa '+kids.length+' ka yabi kay na-marka na nga returned:\n'
+      + back.map(x=>'  ✅ '+x.vendo_name+' — '+KI_LBL(x)).join('\n')
+      + '\n\nMawala ang return history kung i-delete. Uncheck una ang returned nga yabi (password '+KL_RETURN_PW+') kung sigurado ka nga i-delete gyud.');
+    return;
+  }
+  const warn = kids.length
+    ? 'Delete this key record permanently?\n\nApil ma-delete ang '+kids.length+' ka yabi nga wala pa ma-return:\n'
+      + kids.map(x=>'  🔴 '+x.vendo_name+' — '+KI_LBL(x)).join('\n')
+    : 'Delete this key record permanently?';
+  if(!confirm(warn)) return;
   fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} klCloseDetail(); klLoad(); })
     .catch(e=>alert('Delete failed: '+e.message));
@@ -3409,6 +3423,14 @@ function kcUndoRemit(id){
 }
 
 function kcDelete(id){
+  const r = _kcRows.find(x=>x.id===id);
+  if(r && r.remitted){
+    alert('🔒 Dili ma-delete ni nga record.\n\n'
+      + r.vendo_name+' — '+(KC_TYPE_LBL[r.key_type]||r.key_type)+'\n'
+      + 'Na-remit na sa office'+(r.remitted_by?(' kang '+r.remitted_by):'')+(r.remitted_at?(' · '+_fmt(r.remitted_at)):'')+'.\n\n'
+      + 'Mawala ang remit history kung i-delete. Undo una ang remit kung sigurado ka.');
+    return;
+  }
   if(!confirm('Delete this key-change record permanently?')) return;
   fetch(_SB+'/rest/v1/key_changes?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} kcLoad(); })
@@ -3638,6 +3660,14 @@ function viUndoGive(id){
 }
 
 function viDelete(id){
+  const r = _viRows.find(x=>x.id===id);
+  if(r && r.given_to_office){
+    alert('🔒 Dili ma-delete ni nga record.\n\n'
+      + r.vendo_name+' — '+viKeysLbl(r)+'\n'
+      + 'Na-hatag na sa office'+(r.received_by?(' kang '+r.received_by):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'.\n\n'
+      + 'Mawala ang turnover history kung i-delete. Undo una ang turnover kung sigurado ka.');
+    return;
+  }
   if(!confirm('Delete this install record permanently?')) return;
   fetch(_SB+'/rest/v1/vendo_installs?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} viLoad(); })
