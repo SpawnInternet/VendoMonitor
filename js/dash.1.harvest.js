@@ -2756,14 +2756,14 @@ function klOpenLineman(){
     + '<div style="padding:18px 22px;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Lineman Name</label>'
     +   '<input id="kl-lm-name" list="kc-by-list" placeholder="e.g. Jericho" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Add vendo nga gi-dala-an ug yabi</label>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Add vendo he took keys for</label>'
     +   '<div style="position:relative;margin-bottom:12px;">'
     +     '<input id="kl-lm-vq" placeholder="🔍 Search vendo then click to add..." oninput="lmVendoInput()" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #025AC6;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">'
     +     '<div id="kl-lm-vres" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #025AC6;border-radius:8px;max-height:200px;overflow-y:auto;z-index:60;display:none;box-shadow:0 8px 20px rgba(0,0,0,.15);"></div>'
     +   '</div>'
     +   '<div id="kl-lm-vlist" style="margin-bottom:12px;"></div>'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Reason (nganong gi dala ang wifi key)</label>'
-    +   '<input id="kl-lm-reason" placeholder="e.g. ibalhin ang box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Reason (why the wifi key was taken)</label>'
+    +   '<input id="kl-lm-reason" placeholder="e.g. move the box, repair..." style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Date</label>'
     +   '<input id="kl-lm-date" type="date" value="'+today+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<div id="kl-lm-preview" style="display:none;background:#f0f7ff;border:1.5px dashed #025AC6;border-radius:9px;padding:11px 13px;margin-bottom:16px;font-size:12px;color:#1e3a8a;font-weight:700;white-space:pre-line;line-height:1.6;"></div>'
@@ -2820,7 +2820,7 @@ function lmVendoInput(){
 function lmAddVendo(id, name, area){
   const box = document.getElementById('kl-lm-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
   const vq = document.getElementById('kl-lm-vq'); if(vq) vq.value='';
-  if(_lmVendos.some(v=>v.id===id)){ alert('Na-add na ni nga vendo: '+name); return; }
+  if(_lmVendos.some(v=>v.id===id)){ alert('This vendo is already added: '+name); return; }
   _lmVendos.push({row:++_lmSeq, id:id, name:name, area:area||null, keys:{}});
   lmRenderVendos();
 }
@@ -2840,7 +2840,7 @@ function lmRenderVendos(){
   const el = document.getElementById('kl-lm-vlist');
   if(!el) return;
   if(!_lmVendos.length){
-    el.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:9px;">Wala pay vendo. Search sa taas para mag-add.</div>';
+    el.innerHTML = '<div style="padding:14px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:9px;">No vendo yet. Search above to add.</div>';
     lmCompile();
     return;
   }
@@ -2867,7 +2867,7 @@ function lmCompile(){
   if(!_lmVendos.length){ pv.style.display='none'; return; }
   const lines = _lmVendos.map(v=>{
     const picked = LM_KEYS.filter(kk=>v.keys[kk.k]).map(kk=>LM_SHORT[kk.k]);
-    if(!picked.length) return '⚠️ '+v.name+' — walay yabi nga na-check';
+    if(!picked.length) return '⚠️ '+v.name+' — no key checked';
     const only = (picked.length===1 && picked[0]==='Board') ? ' Key only' : '';
     return '• '+v.name+' — '+picked.join(', ')+only;
   });
@@ -2883,7 +2883,7 @@ function klAddLineman(){
   const reason  = ((document.getElementById('kl-lm-reason')||{}).value||'').trim();
   const kdate   = (document.getElementById('kl-lm-date')||{}).value || null;
   if(!lineman){ alert('Enter lineman name'); return; }
-  if(!_lmVendos.length){ alert('Search ug pili una ug vendo'); return; }
+  if(!_lmVendos.length){ alert('Search and pick a vendo first'); return; }
   const items = [];
   const bad = [];
   _lmVendos.forEach(v=>{
@@ -2898,7 +2898,7 @@ function klAddLineman(){
       });
     });
   });
-  if(bad.length){ alert('Walay yabi nga na-check para sa:\n\n'+bad.map(b=>'  • '+b).join('\n')+'\n\nCheck ug yabi o tanggala ni sila.'); return; }
+  if(bad.length){ alert('No keys checked for:\n\n'+bad.map(b=>'  • '+b).join('\n')+'\n\nCheck a key or remove them.'); return; }
   if(!items.length){ alert('Check at least one key'); return; }
   const areas = Array.from(new Set(_lmVendos.map(v=>v.area).filter(Boolean))).join(', ');
   const compiled = (document.getElementById('kl-lm-preview')||{}).textContent || '';
@@ -2983,14 +2983,14 @@ function klDelete(id){
   const kids = _klItems.filter(x=>x.key_log_id===id);
   const back = kids.filter(x=>x.returned);
   if(back.length){
-    alert('🔒 Dili ma-delete ni nga record.\n\n'
-      + back.length+' sa '+kids.length+' ka yabi kay na-marka na nga returned:\n'
+    alert('🔒 This record cannot be deleted.\n\n'
+      + back.length+' of '+kids.length+' key(s) already marked returned:\n'
       + back.map(x=>'  ✅ '+x.vendo_name+' — '+KI_LBL(x)).join('\n')
-      + '\n\nMawala ang return history kung i-delete. Uncheck una ang returned nga yabi (password '+KL_RETURN_PW+') kung sigurado ka nga i-delete gyud.');
+      + '\n\nDeleting would lose the return history. Uncheck the returned key(s) first (password '+KL_RETURN_PW+') if you really want to delete.');
     return;
   }
   const warn = kids.length
-    ? 'Delete this key record permanently?\n\nApil ma-delete ang '+kids.length+' ka yabi nga wala pa ma-return:\n'
+    ? 'Delete this key record permanently?\n\nThis also deletes '+kids.length+' key(s) not yet returned:\n'
       + kids.map(x=>'  🔴 '+x.vendo_name+' — '+KI_LBL(x)).join('\n')
     : 'Delete this key record permanently?';
   if(!confirm(warn)) return;
@@ -3281,7 +3281,7 @@ function kvoRender(){
   list.innerHTML = html;
 }
 
-/* ── PADLOCK / KEY CHANGES (kinsa last ang ga-ilis ug yabi + remit checker) ── */
+/* ── PADLOCK / KEY CHANGES (who last changed the key + remit checker) ── */
 let _kcRows = [], _kcPicked = null, _kcVT = null;
 
 const KC_TYPE_LBL = { coin_original:'🪙 Coin — Original', coin_duplicate:'🪙 Coin — Duplicate', board:'🔌 Board Key' };
@@ -3338,12 +3338,12 @@ function kcPickVendo(id, name, area){
 }
 
 function kcAdd(){
-  if(!_kcPicked){ alert('Search ug pili una ug vendo'); return; }
+  if(!_kcPicked){ alert('Search and pick a vendo first'); return; }
   const type  = (document.getElementById('kc-type')||{}).value;
   const by    = ((document.getElementById('kc-by')||{}).value||'').trim();
   const kdate = (document.getElementById('kc-date')||{}).value || null;
   const notes = ((document.getElementById('kc-notes')||{}).value||'').trim();
-  if(!by){ alert('Kinsa ang ga-ilis? Enter name'); return; }
+  if(!by){ alert('Who changed it? Enter a name'); return; }
   const body = { vendo_id:_kcPicked.id, vendo_name:_kcPicked.name, area:_kcPicked.area, key_type:type, changed_by:by, change_date:kdate, notes:notes||null, remitted:false, source:'dashboard' };
   fetch(_SB+'/rest/v1/key_changes', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
     .then(r=>{
@@ -3372,10 +3372,10 @@ function kcRender(){
   if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.changed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.remitted_by||'')).toLowerCase().includes(q));
 
   const pend = _kcRows.filter(r=>!r.remitted).length;
-  if(lbl) lbl.textContent = rows.length+' record(s) shown · '+pend+' wala pa ma-remit sa office';
+  if(lbl) lbl.textContent = rows.length+' record(s) shown · '+pend+' not yet remitted to office';
   if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
 
-  // mark latest change per vendo+type = "last ang ga-ilis"
+  // mark latest change per vendo+type = who changed it last
   const latest = {};
   _kcRows.forEach(r=>{
     const k = (r.vendo_id||r.vendo_name)+'|'+r.key_type;
@@ -3418,7 +3418,7 @@ function kcRemit(id){
   ov.innerHTML =
     '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
     + '<div style="background:linear-gradient(135deg,#028867,#025AC6);padding:20px 22px;color:#fff;">'
-    +   '<div style="font-size:19px;font-weight:800;">🏢 Remit Key sa Office</div>'
+    +   '<div style="font-size:19px;font-weight:800;">🏢 Remit Key to Office</div>'
     +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+' · '+(KC_TYPE_LBL[rec.key_type]||'')+'</div>'
     + '</div>'
     + '<div style="padding:20px 22px;">'
@@ -3462,10 +3462,10 @@ function kcUndoRemit(id){
 function kcDelete(id){
   const r = _kcRows.find(x=>x.id===id);
   if(r && r.remitted){
-    alert('🔒 Dili ma-delete ni nga record.\n\n'
+    alert('🔒 This record cannot be deleted.\n\n'
       + r.vendo_name+' — '+(KC_TYPE_LBL[r.key_type]||r.key_type)+'\n'
-      + 'Na-remit na sa office'+(r.remitted_by?(' kang '+r.remitted_by):'')+(r.remitted_at?(' · '+_fmt(r.remitted_at)):'')+'.\n\n'
-      + 'Mawala ang remit history kung i-delete. Undo una ang remit kung sigurado ka.');
+      + 'Already remitted to office'+(r.remitted_by?(' to '+r.remitted_by):'')+(r.remitted_at?(' · '+_fmt(r.remitted_at)):'')+'.\n\n'
+      + 'Deleting would lose the remit history. Undo the remit first if you are sure.');
     return;
   }
   if(!confirm('Delete this key-change record permanently?')) return;
@@ -3534,7 +3534,7 @@ function viVendoInput(){
   _viPicked = q ? {id:null, name:q, area:null, typed:true} : null;
   const p = document.getElementById('vi-picked');
   if(p){
-    if(q){ p.style.display='block'; p.innerHTML='✏️ <b>'+klEsc(q)+'</b> · <span style="color:#C01176;">bag-o (wala pa sa vendos)</span>'; }
+    if(q){ p.style.display='block'; p.innerHTML='✏️ <b>'+klEsc(q)+'</b> · <span style="color:#C01176;">new (not yet in vendos)</span>'; }
     else { p.style.display='none'; }
   }
   viCompile();
@@ -3544,8 +3544,8 @@ function viVendoInput(){
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
       .then(r=>r.json())
       .then(rows=>{
-        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ Bag-ong vendo — i-type lang ang name, ma-save gihapon.</div>'; box.style.display='block'; return; }
-        box.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#6b7280;background:#fafafa;border-bottom:1px solid #f1f5f9;">Click para i-link sa existing vendo, o i-type lang para bag-o:</div>'
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ New vendo — just type the name, it will still save.</div>'; box.style.display='block'; return; }
+        box.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#6b7280;background:#fafafa;border-bottom:1px solid #f1f5f9;">Click to link an existing vendo, or just type for a new one:</div>'
           + rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
           return '<div onclick=\'viPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
@@ -3589,20 +3589,20 @@ function viCompile(){
   if(_viNoTg) bits.push('🚫 no TG (sheet name)');
   else if(_viTg) bits.push('📶 '+_viTg);
   pv.style.display='block';
-  pv.textContent = '📝 Compiled: '+_viPicked.name+' — '+(parts.length?parts.join(', '):'⚠️ walay yabi nga na-check')
+  pv.textContent = '📝 Compiled: '+_viPicked.name+' — '+(parts.length?parts.join(', '):'⚠️ no key checked')
     + (bits.length ? '\n🆕 ' + bits.join(' · ') : '');
 }
 
 function viAdd(){
   const typedName = ((document.getElementById('vi-vq')||{}).value||'').trim();
-  if(!_viPicked && !typedName){ alert('I-type o pili ang vendo name'); return; }
+  if(!_viPicked && !typedName){ alert('Type or pick the vendo name'); return; }
   if(!_viPicked) _viPicked = {id:null, name:typedName, area:null, typed:true};
   const co = (document.getElementById('vi-k-co')||{}).checked;
   const cd = (document.getElementById('vi-k-cd')||{}).checked;
   const bd = (document.getElementById('vi-k-bd')||{}).checked;
   if(!co && !cd && !bd){ alert('Check at least one key received'); return; }
   const by = ((document.getElementById('vi-by')||{}).value||'').trim();
-  if(!by){ alert('Kinsa nag-install? Enter name'); return; }
+  if(!by){ alert('Who installed it? Enter a name'); return; }
 
   const area  = (document.getElementById('vi-area')||{}).value || '';
   const vlanS = ((document.getElementById('vi-vlan')||{}).value||'').trim();
@@ -3613,8 +3613,8 @@ function viAdd(){
 
   // creating a vendo needs area + a TG decision
   if(isNew){
-    if(!area){ alert('Pili ug Area — kinahanglan para ma-create ang vendo.'); return; }
-    if(!_viNoTg && !_viTg){ alert('Pili ug TG name, o i-tap ang "Wala pay TG name".'); return; }
+    if(!area){ alert('Pick an Area — required to create the vendo.'); return; }
+    if(!_viNoTg && !_viTg){ alert('Pick a TG name, or tap "No TG name yet".'); return; }
   }
 
   const idate = (document.getElementById('vi-date')||{}).value || null;
@@ -3647,7 +3647,7 @@ function viAdd(){
           p_installer: by, p_install_date: idate, p_install_id: installId
         })
       }).then(r=>r.text().then(t=>{
-        if(!r.ok) throw new Error('Install saved, pero WALA na-create ang vendo:\n\n'+t);
+        if(!r.ok) throw new Error('Install saved, but the vendo was NOT created:\n\n'+t);
         return JSON.parse(t);
       }));
     })
@@ -3662,8 +3662,8 @@ function viAdd(){
           + '• Area: '+(res.area||'')+'\n'
           + '• TG name: '+(res.tg_name||'(none)')+'\n'
           + (res.group_id?'• Added sa harvest group\n':'')
-          + '\nMakita na ni sa Vendos, Harvest, Recon ug Maps.'
-          + '\n\n⚠️ Kung wala pay TG name, i-link ni sa dicayas.html unya.');
+          + '\nIt now appears in Vendos, Harvest, Recon and Maps.'
+          + '\n\n⚠️ If it has no TG name yet, link it in dicayas.html later.');
       }
       viLoad();
       // vendos.json cache must be rebuilt so the PWAs see the new vendo
@@ -3707,7 +3707,7 @@ function viRender(){
   if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.installed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.received_by||'')).toLowerCase().includes(q));
 
   const pend = _viRows.filter(r=>!r.given_to_office).length;
-  if(lbl) lbl.textContent = rows.length+' install(s) shown · '+pend+' wala pa ma-hatag sa office';
+  if(lbl) lbl.textContent = rows.length+' install(s) shown · '+pend+' not yet given to office';
   if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No installs.</div>'; return; }
 
   list.innerHTML = rows.map(r=>{
@@ -3725,8 +3725,8 @@ function viRender(){
       + '<div style="font-size:12px;color:#374151;margin-top:4px;">'+viKeysLbl(r)+'</div>'
       + '<div style="font-size:11px;color:#6b7280;margin-top:3px;">👷 '+klEsc(r.installed_by||'—')+' · 📅 '+klEsc(r.install_date||'—')+(r.area?(' · 📍 '+klEsc(r.area)):'')+(r.vlan?(' · VLAN '+r.vlan):'')+'</div>'
       + (r.vendo_created
-          ? '<div style="font-size:11px;color:#028867;margin-top:2px;font-weight:700;">🆕 Vendo created'+(r.vendo_id?(' #'+r.vendo_id):'')+(r.no_tg?' · <span style="color:#C01176;">🚫 walay TG name — i-link sa dicayas</span>':(r.tg_name?(' · 📶 '+klEsc(r.tg_name)):''))+'</div>'
-          : '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">Existing vendo (wala nag-create ug bag-o)</div>')
+          ? '<div style="font-size:11px;color:#028867;margin-top:2px;font-weight:700;">🆕 Vendo created'+(r.vendo_id?(' #'+r.vendo_id):'')+(r.no_tg?' · <span style="color:#C01176;">🚫 no TG name — link in dicayas</span>':(r.tg_name?(' · 📶 '+klEsc(r.tg_name)):''))+'</div>'
+          : '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">Existing vendo (no new one created)</div>')
       + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
       + (r.given_to_office?'<div style="font-size:11px;color:#028867;margin-top:2px;">🏢 Given'+(r.received_by?(' to '+klEsc(r.received_by)):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'</div>':'')
       + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
@@ -3745,7 +3745,7 @@ function viGive(id){
   ov.innerHTML =
     '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
     + '<div style="background:linear-gradient(135deg,#028867,#025AC6);padding:20px 22px;color:#fff;">'
-    +   '<div style="font-size:19px;font-weight:800;">🏢 Turnover sa Office</div>'
+    +   '<div style="font-size:19px;font-weight:800;">🏢 Turnover to Office</div>'
     +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+' · '+viKeysLbl(rec)+'</div>'
     + '</div>'
     + '<div style="padding:20px 22px;">'
@@ -3788,10 +3788,10 @@ function viUndoGive(id){
 function viDelete(id){
   const r = _viRows.find(x=>x.id===id);
   if(r && r.given_to_office){
-    alert('🔒 Dili ma-delete ni nga record.\n\n'
+    alert('🔒 This record cannot be deleted.\n\n'
       + r.vendo_name+' — '+viKeysLbl(r)+'\n'
-      + 'Na-hatag na sa office'+(r.received_by?(' kang '+r.received_by):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'.\n\n'
-      + 'Mawala ang turnover history kung i-delete. Undo una ang turnover kung sigurado ka.');
+      + 'Already given to office'+(r.received_by?(' to '+r.received_by):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'.\n\n'
+      + 'Deleting would lose the turnover history. Undo the turnover first if you are sure.');
     return;
   }
   if(!confirm('Delete this install record permanently?')) return;
@@ -3828,7 +3828,7 @@ function viTgInput(){
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){
-          box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">Walay TG name nga na-match. I-type gihapon o gamita ang "Wala pay TG name".</div>';
+          box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No TG name matched. Keep typing or use "No TG name yet".</div>';
           box.style.display='block'; return;
         }
         box.innerHTML = rows.map(v=>
@@ -3858,11 +3858,11 @@ function viSetNoTg(on){
   if(_viNoTg){
     _viTg = null;
     if(q){ q.value=''; q.disabled = true; q.style.background='#f3f4f6'; }
-    if(btn){ btn.style.background='#C01176'; btn.style.color='#fff'; btn.textContent='✓ Walay TG name — sheet name ang gamiton'; }
+    if(btn){ btn.style.background='#C01176'; btn.style.color='#fff'; btn.textContent='✓ No TG name — sheet name will be used'; }
     const box = document.getElementById('vi-tgres'); if(box){ box.style.display='none'; }
   } else {
     if(q){ q.disabled = false; q.style.background='#fff'; }
-    if(btn){ btn.style.background='#fff'; btn.style.color='#C01176'; btn.textContent='🚫 Wala pay TG name — gamiton ang sheet name'; }
+    if(btn){ btn.style.background='#fff'; btn.style.color='#C01176'; btn.textContent='🚫 No TG name yet — use the sheet name'; }
   }
   viTgState();
 }
@@ -3873,13 +3873,13 @@ function viTgState(){
   const nm = ((document.getElementById('vi-vq')||{}).value||'').trim();
   if(_viNoTg){
     el.style.color = '#C01176';
-    el.textContent = '🚫 no_tg = true · tg_name = "'+(nm||'(sheet name)')+'" · i-link nimo sa dicayas.html unya';
+    el.textContent = '🚫 no_tg = true · tg_name = "'+(nm||'(sheet name)')+'" · link it in dicayas.html later';
   } else if(_viTg){
     el.style.color = '#028867';
     el.textContent = '✅ TG name: '+_viTg;
   } else {
     el.style.color = '#6b7280';
-    el.textContent = 'Pili ug TG name o i-tap ang "Wala pay TG name".';
+    el.textContent = 'Pick a TG name or tap "No TG name yet".';
   }
   viCompile();
 }
@@ -3913,7 +3913,7 @@ function ktRenderCustodians(){
     ? _ktCustodians.map(n=>
         '<button type="button" onclick="ktPickHolder('+JSON.stringify(n)+')" style="padding:4px 10px;background:#f5f3ff;color:#311A8E;border:1.5px solid #c4b5fd;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">👤 '+klEsc(n)+'</button>'
       ).join('')
-    : '<span style="font-size:11px;color:#9ca3af;">Wala pay saved nga custodian — i-type lang, ma-remember dayon.</span>';
+    : '<span style="font-size:11px;color:#9ca3af;">No saved custodian yet — just type, it will be remembered.</span>';
 }
 
 function ktWireHolder(){
@@ -3966,7 +3966,7 @@ function ktVendoInput(){
 function ktAddVendo(id, name, area){
   const box = document.getElementById('kt-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
   const vq = document.getElementById('kt-vq'); if(vq) vq.value='';
-  if(_ktVendos.some(v=>v.id===id)){ alert('Na-add na ni nga vendo: '+name); return; }
+  if(_ktVendos.some(v=>v.id===id)){ alert('This vendo is already added: '+name); return; }
   _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area||null});
   ktRenderVendos();
 }
@@ -3977,13 +3977,13 @@ function ktRenderVendos(){
   const el = document.getElementById('kt-vlist');
   if(!el) return;
   if(!_ktVendos.length){
-    el.innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:8px;">Wala pay vendo. Search sa taas para mag-add.</div>';
+    el.innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;border:1.5px dashed #e5e7eb;border-radius:8px;">No vendo yet. Search above to add.</div>';
     ktCompile(); return;
   }
   el.innerHTML = _ktVendos.map(v=>
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1.5px solid #311A8E;border-radius:8px;padding:8px 11px;margin-bottom:6px;background:#faf9ff;">'
     + '<div style="font-size:12px;font-weight:800;color:#311A8E;">'+klEsc(v.name)
-    +   (v.area?' <span style="font-size:10px;color:#025AC6;font-weight:700;">· '+klEsc(v.area)+'</span>':'<span style="font-size:10px;color:#DF1A35;font-weight:700;"> · walay area</span>')
+    +   (v.area?' <span style="font-size:10px;color:#025AC6;font-weight:700;">· '+klEsc(v.area)+'</span>':'<span style="font-size:10px;color:#DF1A35;font-weight:700;"> · no area</span>')
     + '</div>'
     + '<button onclick="ktRemoveVendo('+v.row+')" style="background:#fff;border:1.5px solid #fca5a5;color:#DF1A35;width:24px;height:24px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit;flex-shrink:0;">✕</button>'
     + '</div>'
@@ -3997,18 +3997,18 @@ function ktCompile(){
   if(!_ktVendos.length){ pv.style.display='none'; return; }
   const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
   const byArea = {};
-  _ktVendos.forEach(v=>{ const a=v.area||'(walay area)'; (byArea[a]=byArea[a]||[]).push(v.name); });
+  _ktVendos.forEach(v=>{ const a=v.area||'(no area)'; (byArea[a]=byArea[a]||[]).push(v.name); });
   const lines = Object.keys(byArea).sort().map(a=>'📍 '+a+': '+byArea[a].join(', '));
   pv.style.display='block';
   pv.textContent = '📝 Compiled ('+_ktVendos.length+' key'+(_ktVendos.length===1?'':'s')+')'
-    + (holder?'\n👤 Gihawid ni: '+holder:'\n⚠️ Kinsa ang naghawid?')
+    + (holder?'\n👤 Held by: '+holder:'\n⚠️ Who is holding them?')
     + '\n'+lines.join('\n');
 }
 
 function ktAdd(){
   const holder = ((document.getElementById('kt-holder')||{}).value||'').trim();
-  if(!holder){ alert('Kinsa ang naghawid sa yabi? Enter staff custodian'); return; }
-  if(!_ktVendos.length){ alert('Search ug pili una ug vendo'); return; }
+  if(!holder){ alert('Who is holding the key? Enter staff custodian'); return; }
+  if(!_ktVendos.length){ alert('Search and pick a vendo first'); return; }
   const notes = ((document.getElementById('kt-notes')||{}).value||'').trim() || null;
   const rows = _ktVendos.map(v=>({
     vendo_id:v.id, vendo_name:v.name, area:v.area,
@@ -4044,7 +4044,7 @@ function ktRender(){
 
   // group by area
   const byArea = {};
-  rows.forEach(r=>{ const a = r.area || '(walay area)'; (byArea[a]=byArea[a]||[]).push(r); });
+  rows.forEach(r=>{ const a = r.area || '(no area)'; (byArea[a]=byArea[a]||[]).push(r); });
 
   list.innerHTML = Object.keys(byArea).sort().map(area=>{
     const items = byArea[area];
@@ -4064,11 +4064,11 @@ function ktRender(){
             + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
             +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">🔑 '+klEsc(r.vendo_name)+'</div>'+badge
             + '</div>'
-            + '<div style="font-size:11px;color:#374151;margin-top:3px;">👤 Gihawid ni: <b>'+klEsc(r.held_by||'—')+'</b></div>'
+            + '<div style="font-size:11px;color:#374151;margin-top:3px;">👤 Held by: <b>'+klEsc(r.held_by||'—')+'</b></div>'
             + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
             + (done
-                ? '<div style="font-size:11px;color:#028867;margin-top:2px;">🔗 Gi-transfer ni <b>'+klEsc(r.transferred_by||'—')+'</b>'
-                  + (r.transferred_to?(' → pungpung ni <b>'+klEsc(r.transferred_to)+'</b>'):'')
+                ? '<div style="font-size:11px;color:#028867;margin-top:2px;">🔗 Transferred by <b>'+klEsc(r.transferred_by||'—')+'</b>'
+                  + (r.transferred_to?(' → into <b>'+klEsc(r.transferred_to)+'</b>&#39;s pungpung'):'')
                   + (r.transferred_at?(' · '+_fmt(r.transferred_at)):'')+'</div>'
                 : '')
             + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
@@ -4093,10 +4093,10 @@ function ktTransfer(id){
     + '</div>'
     + '<div style="padding:20px 22px;">'
     +   '<div style="background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:9px;padding:9px 12px;margin-bottom:14px;font-size:12px;color:#311A8E;">'
-    +     '👤 Naghawid karon: <b>'+klEsc(rec.held_by||'—')+'</b></div>'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Kinsa ang nag-transfer?</label>'
+    +     '👤 Currently held by: <b>'+klEsc(rec.held_by||'—')+'</b></div>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Who did the transfer?</label>'
     +   '<input id="kt-m-by" list="kt-holder-list" placeholder="e.g. Joi" value="'+klEsc(rec.held_by||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Kang kinsa nga pungpung? (optional)</label>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Into whose pungpung? (optional)</label>'
     +   '<input id="kt-m-to" list="kc-by-list" placeholder="collector name" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
     +   '<input id="kt-m-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')ktConfirm('+id+')">'
@@ -4137,9 +4137,9 @@ function ktUndo(id){
 function ktDelete(id){
   const r = _ktRows.find(x=>x.id===id);
   if(r && r.added_to_pungpung){
-    alert('🔒 Dili ma-delete ni nga record.\n\n'
-      + r.vendo_name+' — na-apil na sa pungpung'+(r.transferred_by?(' (gi-transfer ni '+r.transferred_by+')'):'')+'.\n\n'
-      + 'Mawala ang transfer history kung i-delete. Undo una kung sigurado ka.');
+    alert('🔒 This record cannot be deleted.\n\n'
+      + r.vendo_name+' — already added to the pungpung'+(r.transferred_by?(' (transferred by '+r.transferred_by+')'):'')+'.\n\n'
+      + 'Deleting would lose the transfer history. Undo it first if you are sure.');
     return;
   }
   if(!confirm('Delete this transfer record permanently?')) return;
