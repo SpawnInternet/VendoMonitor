@@ -73,7 +73,7 @@ function hvNewTab(id, btn){
   btn.classList.add('on');
   hvNewActiveTab = id;
   // close any open Keys modals when leaving the keys sub-tab
-  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
+  if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
   if(id==='htable'){ htLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
@@ -2942,4 +2942,304 @@ async function klSaveEdit(id){
     if(typeof toast==='function') toast('✓ Key record updated'); else alert('Key record updated');
     klLoad();
   }catch(e){ alert('Update failed: '+e.message); }
+}
+
+
+/* ══ KEYS SUB-PANES — Borrow Log / Overview / Padlock Changes ══ */
+let _kvPane = 'borrow';
+
+function kvPane(p, btn){
+  _kvPane = p;
+  ['borrow','overview','changes'].forEach(t=>{
+    const el = document.getElementById('kv-pane-'+t);
+    if(el) el.style.display = (t===p) ? (t==='overview'?'flex':'block') : 'none';
+    const b = document.getElementById('kvp-'+t);
+    if(b){
+      const on = (t===p);
+      b.style.background = on ? '#025AC6' : '#fff';
+      b.style.color      = on ? '#fff'    : '#374151';
+      b.style.borderColor= on ? '#025AC6' : '#e5e7eb';
+    }
+  });
+  if(p==='borrow')   klLoad();
+  if(p==='overview') kvoLoad();
+  if(p==='changes')  kcLoad();
+}
+
+/* ── OVERVIEW: merged view of key_logs + key_changes, search per day or by name ── */
+let _kvoLogs = [], _kvoChanges = [];
+
+function kvoLoad(){
+  const list = document.getElementById('kvo-list');
+  if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  Promise.all([
+    fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
+    fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json())
+  ]).then(([logs, changes])=>{
+    _kvoLogs = Array.isArray(logs)?logs:[];
+    _kvoChanges = Array.isArray(changes)?changes:[];
+    kvoRender();
+  }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+function kvoRender(){
+  const list = document.getElementById('kvo-list');
+  const lbl  = document.getElementById('kvo-lbl');
+  if(!list) return;
+  const day  = (document.getElementById('kvo-date')||{}).value || '';
+  const type = (document.getElementById('kvo-type')||{}).value || 'all';
+  const q    = ((document.getElementById('kvo-q')||{}).value||'').toLowerCase().trim();
+
+  const KT_LBL = { coin_original:'🪙 Coin Key — Original', coin_duplicate:'🪙 Coin Key — Duplicate', board:'🔌 Board Key' };
+
+  // normalize into one event list
+  let evs = [];
+  _kvoLogs.forEach(r=>{
+    const isLM = (r.record_type==='lineman');
+    evs.push({
+      kind: isLM ? 'lineman' : 'borrow',
+      date: r.key_date || (r.taken_at||'').slice(0,10),
+      ts:   r.taken_at || '',
+      title: r.collector_name || '—',
+      sub:  isLM ? ('📶 '+(r.wifi_key||'—')+(r.lineman_reason?(' · 💬 '+r.lineman_reason):''))
+                 : ('📍 '+(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.notes?(' · 📝 '+r.notes):'')),
+      badge: r.returned ? {t:'✅ Returned',c:'#028867'} : {t:'🔴 OUT',c:'#DF1A35'},
+      blob: ((r.collector_name||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.lineman||'')+' '+(r.wifi_key||'')+' '+(r.lineman_reason||'')).toLowerCase()
+    });
+  });
+  _kvoChanges.forEach(r=>{
+    evs.push({
+      kind: 'change',
+      date: r.change_date || (r.created_at||'').slice(0,10),
+      ts:   r.created_at || '',
+      title: r.vendo_name || '—',
+      sub:  (KT_LBL[r.key_type]||r.key_type)+' · 👷 '+(r.changed_by||'—')+(r.area?(' · 📍 '+r.area):'')+(r.notes?(' · 📝 '+r.notes):''),
+      badge: r.remitted ? {t:'✅ Remitted'+(r.remitted_by?(' · '+r.remitted_by):''),c:'#028867'} : {t:'🔴 NOT REMITTED',c:'#DF1A35'},
+      blob: ((r.vendo_name||'')+' '+(r.changed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(KT_LBL[r.key_type]||'')+' '+(r.remitted_by||'')).toLowerCase()
+    });
+  });
+
+  if(day)  evs = evs.filter(e=>e.date===day);
+  if(type!=='all') evs = evs.filter(e=>e.kind===type);
+  if(q)    evs = evs.filter(e=>e.blob.includes(q));
+  evs.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || (b.ts||'').localeCompare(a.ts||''));
+
+  if(lbl) lbl.textContent = evs.length+' record(s)'+(day?(' on '+day):'')+(q?(' matching "'+q+'"'):'');
+  if(!evs.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records found.</div>'; return; }
+
+  // group per day
+  const KIND_ICON = { borrow:'🔑', lineman:'🛠️', change:'🔁' };
+  let html = '', curDay = null;
+  evs.forEach(e=>{
+    if(e.date!==curDay){
+      curDay = e.date;
+      const d = curDay ? new Date(curDay+'T00:00:00') : null;
+      const dLbl = d && !isNaN(d) ? d.toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : (curDay||'No date');
+      html += '<div style="font-size:12px;font-weight:800;color:#311A8E;margin:14px 0 8px;padding-bottom:4px;border-bottom:2px solid #e5e7eb;">📅 '+klEsc(dLbl)+'</div>';
+    }
+    html += '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+e.badge.c+';border-radius:9px;padding:10px 13px;margin-bottom:7px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">'+KIND_ICON[e.kind]+' '+klEsc(e.title)+'</div>'
+      +   '<span style="background:'+e.badge.c+';color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;">'+klEsc(e.badge.t)+'</span>'
+      + '</div>'
+      + '<div style="font-size:12px;color:#374151;margin-top:3px;">'+klEsc(e.sub)+'</div>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+
+/* ── PADLOCK / KEY CHANGES (kinsa last ang ga-ilis ug yabi + remit checker) ── */
+let _kcRows = [], _kcPicked = null, _kcVT = null;
+
+const KC_TYPE_LBL = { coin_original:'🪙 Coin — Original', coin_duplicate:'🪙 Coin — Duplicate', board:'🔌 Board Key' };
+const KC_TYPE_CLR = { coin_original:'#FFB725', coin_duplicate:'#C01176', board:'#025AC6' };
+
+function kcLoad(){
+  const list = document.getElementById('kc-list');
+  if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  // default date today
+  const dEl = document.getElementById('kc-date');
+  if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
+  // datalist of collectors + technicians
+  const dl = document.getElementById('kc-by-list');
+  if(dl && !dl.children.length){
+    Promise.all([
+      fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
+      fetch(_SB+'/rest/v1/technicians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+    ]).then(([cs,ts])=>{
+      const names = new Set();
+      (Array.isArray(cs)?cs:[]).forEach(c=>names.add(c.name));
+      (Array.isArray(ts)?ts:[]).forEach(t=>names.add(t.name));
+      dl.innerHTML = Array.from(names).sort().map(n=>'<option value="'+klEsc(n)+'">').join('');
+    });
+  }
+  fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=500', {headers:_HDR})
+    .then(r=>r.json())
+    .then(rows=>{ _kcRows = Array.isArray(rows)?rows:[]; kcRender(); })
+    .catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+}
+
+function kcVendoInput(){
+  clearTimeout(_kcVT);
+  const q = (document.getElementById('kc-vq')||{}).value.trim();
+  const box = document.getElementById('kc-vres');
+  if(!box) return;
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _kcVT = setTimeout(()=>{
+    const enc = encodeURIComponent('*'+q+'*');
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
+        box.innerHTML = rows.map(v=>{
+          const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+          return '<div onclick=\'kcPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+            + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
+            + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">'
+            + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
+            + (v.tg_name && v.tg_name!==nm ? ' <span style="color:#6b7280;">('+klEsc(v.tg_name)+')</span>':'')
+            + (v.area?' · <span style="color:#025AC6;font-weight:700;">'+klEsc(v.area)+'</span>':'')
+            + '</div>';
+        }).join('');
+        box.style.display='block';
+      })
+      .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function kcPickVendo(id, name, area){
+  _kcPicked = {id:id, name:name, area:area||null};
+  const box = document.getElementById('kc-vres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const vq = document.getElementById('kc-vq'); if(vq) vq.value = name;
+  const p = document.getElementById('kc-picked');
+  if(p){ p.style.display='block'; p.textContent = '✓ '+name+(area?(' · '+area):''); }
+}
+
+function kcAdd(){
+  if(!_kcPicked){ alert('Search ug pili una ug vendo'); return; }
+  const type  = (document.getElementById('kc-type')||{}).value;
+  const by    = ((document.getElementById('kc-by')||{}).value||'').trim();
+  const kdate = (document.getElementById('kc-date')||{}).value || null;
+  const notes = ((document.getElementById('kc-notes')||{}).value||'').trim();
+  if(!by){ alert('Kinsa ang ga-ilis? Enter name'); return; }
+  const body = { vendo_id:_kcPicked.id, vendo_name:_kcPicked.name, area:_kcPicked.area, key_type:type, changed_by:by, change_date:kdate, notes:notes||null, remitted:false, source:'dashboard' };
+  fetch(_SB+'/rest/v1/key_changes', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{
+      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
+      _kcPicked = null;
+      const vq=document.getElementById('kc-vq'); if(vq) vq.value='';
+      const p=document.getElementById('kc-picked'); if(p) p.style.display='none';
+      const by2=document.getElementById('kc-by'); if(by2) by2.value='';
+      const nt=document.getElementById('kc-notes'); if(nt) nt.value='';
+      if(typeof toast==='function') toast('✓ Key change logged');
+      kcLoad();
+    })
+    .catch(e=>alert('Save failed: '+e.message));
+}
+
+function kcRender(){
+  const list = document.getElementById('kc-list');
+  const lbl  = document.getElementById('kc-lbl');
+  if(!list) return;
+  const filt = (document.getElementById('kc-filter')||{}).value || 'pending';
+  const q = ((document.getElementById('kc-q')||{}).value||'').toLowerCase().trim();
+  let rows = _kcRows.slice();
+  if(filt==='pending')       rows = rows.filter(r=>!r.remitted);
+  else if(filt==='remitted') rows = rows.filter(r=>r.remitted);
+  else if(filt==='coin_original'||filt==='coin_duplicate'||filt==='board') rows = rows.filter(r=>r.key_type===filt);
+  if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.changed_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.remitted_by||'')).toLowerCase().includes(q));
+
+  const pend = _kcRows.filter(r=>!r.remitted).length;
+  if(lbl) lbl.textContent = rows.length+' record(s) shown · '+pend+' wala pa ma-remit sa office';
+  if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
+
+  // mark latest change per vendo+type = "last ang ga-ilis"
+  const latest = {};
+  _kcRows.forEach(r=>{
+    const k = (r.vendo_id||r.vendo_name)+'|'+r.key_type;
+    if(!latest[k] || (r.created_at||'')>(latest[k].created_at||'')) latest[k]=r;
+  });
+
+  list.innerHTML = rows.map(r=>{
+    const bd = r.remitted ? '#028867' : '#DF1A35';
+    const isLatest = latest[(r.vendo_id||r.vendo_name)+'|'+r.key_type] && latest[(r.vendo_id||r.vendo_name)+'|'+r.key_type].id===r.id;
+    const tClr = KC_TYPE_CLR[r.key_type]||'#6b7280';
+    const badge = r.remitted
+      ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ REMITTED</span>'
+      : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 NOT REMITTED</span>';
+    const actions = r.remitted
+      ? '<button onclick="event.stopPropagation();kcUndoRemit('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
+      : '<button onclick="event.stopPropagation();kcRemit('+r.id+')" style="padding:6px 12px;background:#028867;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Remit sa Office</button>';
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(r.vendo_name)+(isLatest?' <span style="font-size:9px;background:#311A8E;color:#fff;padding:1px 6px;border-radius:5px;vertical-align:middle;">LAST</span>':'')+'</div>'
+      +   badge
+      + '</div>'
+      + '<div style="font-size:12px;margin-top:4px;"><span style="background:'+tClr+'22;color:'+tClr+';border:1px solid '+tClr+';padding:1px 7px;border-radius:6px;font-weight:800;font-size:10px;">'+(KC_TYPE_LBL[r.key_type]||klEsc(r.key_type))+'</span>'
+      +   ' <span style="color:#374151;">👷 '+klEsc(r.changed_by||'—')+' · 📅 '+klEsc(r.change_date||'—')+(r.area?(' · 📍 '+klEsc(r.area)):'')+'</span></div>'
+      + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
+      + (r.remitted?'<div style="font-size:11px;color:#028867;margin-top:2px;">🏢 Remitted'+(r.remitted_by?(' to '+klEsc(r.remitted_by)):'')+(r.remitted_at?(' · '+_fmt(r.remitted_at)):'')+'</div>':'')
+      + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'
+      +   actions
+      +   '<button onclick="event.stopPropagation();kcDelete('+r.id+')" style="padding:6px 9px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function kcRemit(id){
+  const rec = _kcRows.find(r=>r.id===id) || {};
+  const old = document.getElementById('kc-remit-modal'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kc-remit-modal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
+    + '<div style="background:linear-gradient(135deg,#028867,#025AC6);padding:20px 22px;color:#fff;">'
+    +   '<div style="font-size:19px;font-weight:800;">🏢 Remit Key sa Office</div>'
+    +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+' · '+(KC_TYPE_LBL[rec.key_type]||'')+'</div>'
+    + '</div>'
+    + '<div style="padding:20px 22px;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Received by (office staff)</label>'
+    +   '<input id="kc-rm-by" placeholder="e.g. Joi" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:14px;outline:none;">'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
+    +   '<input id="kc-rm-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')kcConfirmRemit('+id+')">'
+    +   '<div id="kc-rm-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none;">❌ Wrong password.</div>'
+    +   '<div style="display:flex;gap:8px;margin-top:20px;">'
+    +     '<button onclick="kcCloseRemit()" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Cancel</button>'
+    +     '<button onclick="kcConfirmRemit('+id+')" style="flex:2;padding:11px;background:#028867;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">✓ Confirm Remit</button>'
+    +   '</div>'
+    + '</div>'
+    + '</div>';
+  ov.addEventListener('click', e=>{ if(e.target===ov) kcCloseRemit(); });
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const p=document.getElementById('kc-rm-by'); if(p) p.focus(); }, 60);
+}
+
+function kcCloseRemit(){ const ov=document.getElementById('kc-remit-modal'); if(ov) ov.remove(); }
+
+function kcConfirmRemit(id){
+  const pw = (document.getElementById('kc-rm-pw')||{}).value || '';
+  const err = document.getElementById('kc-rm-err');
+  if(pw !== KL_RETURN_PW){ if(err) err.style.display='block'; const p=document.getElementById('kc-rm-pw'); if(p){p.value='';p.focus();} return; }
+  const by = ((document.getElementById('kc-rm-by')||{}).value||'').trim();
+  const body = { remitted:true, remitted_at:new Date().toISOString(), remitted_by:by||null };
+  fetch(_SB+'/rest/v1/key_changes?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} kcCloseRemit(); kcLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function kcUndoRemit(id){
+  if(!confirm('Mark this key as NOT yet remitted again?')) return;
+  const body = { remitted:false, remitted_at:null, remitted_by:null };
+  fetch(_SB+'/rest/v1/key_changes?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} kcLoad(); })
+    .catch(e=>alert('Update failed: '+e.message));
+}
+
+function kcDelete(id){
+  if(!confirm('Delete this key-change record permanently?')) return;
+  fetch(_SB+'/rest/v1/key_changes?id=eq.'+id, {method:'DELETE', headers:_HDR})
+    .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} kcLoad(); })
+    .catch(e=>alert('Delete failed: '+e.message));
 }
