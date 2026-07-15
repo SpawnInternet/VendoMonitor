@@ -3516,7 +3516,7 @@ function viLoad(){
   kcEnsureNames();
   ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', viCompile); e._wired=true; } });
   if(!_viGroups.length){
-    fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label&order=area.asc,id.asc', {headers:_HDR})
+    fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label,group_id,collector,team,barangays,total_vendos,status&status=eq.active&order=area.asc,group_id.asc', {headers:_HDR})
       .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); }).catch(()=>{});
   }
   viSrvLoadList();
@@ -3877,14 +3877,70 @@ function viDelete(id){
 
 
 /* ── install: vendo detail fields (area / group / tg / vlan) ── */
+/* Vendos in SINAMAN / MINAOG / MIX AREAS are harvested by DIPOLOG groups —
+   those area labels have no groups of their own. Never hide a valid choice:
+   show every group, grouped by area, with the suggested ones first. */
+const VI_AREA_GROUPS = { 'SINAMAN':'DIPOLOG', 'MINAOG':'DIPOLOG', 'MIX AREAS':'DIPOLOG' };
+
 function viAreaChanged(){
-  const area = (document.getElementById('vi-area')||{}).value || '';
-  const sel = document.getElementById('vi-group');
+  const area = ((document.getElementById('vi-area')||{}).value || '').toUpperCase();
+  const sel  = document.getElementById('vi-group');
   if(!sel) return;
-  const mine = _viGroups.filter(g=>String(g.area||'').toUpperCase()===area.toUpperCase());
-  sel.innerHTML = '<option value="">— No group —</option>'
-    + mine.map(g=>'<option value="'+g.id+'">'+klEsc(g.group_label||('Group '+g.id))+'</option>').join('');
-  if(!area) sel.innerHTML = '<option value="">— Select area first —</option>';
+  const prev = sel.value;
+
+  if(!_viGroups.length){ sel.innerHTML = '<option value="">— Loading groups… —</option>'; return; }
+
+  // which area's groups actually harvest this vendo
+  const harvestArea = VI_AREA_GROUPS[area] || area;
+
+  const label = g => {
+    const b = (g.barangays||'').trim();
+    const t = g.group_label || ('Group '+g.id);
+    const who = g.collector ? ' · '+g.collector : '';
+    return b ? (t+who+' — '+b) : (t+who);
+  };
+
+  // bucket by area, suggested area first
+  const byArea = {};
+  _viGroups.forEach(g=>{
+    const a = String(g.area||'—').toUpperCase();
+    (byArea[a] = byArea[a] || []).push(g);
+  });
+  const areas = Object.keys(byArea).sort((a,b)=>{
+    if(a===harvestArea) return -1;
+    if(b===harvestArea) return 1;
+    return a.localeCompare(b);
+  });
+
+  let html = '<option value="">— No group —</option>';
+  areas.forEach(a=>{
+    const suggested = (a === harvestArea);
+    const note = suggested && VI_AREA_GROUPS[area] ? ' (harvests '+area+')' : '';
+    html += '<optgroup label="'+klEsc(a + note + (suggested ? '  ★' : ''))+'">';
+    byArea[a].sort((x,y)=>String(x.group_id||'').localeCompare(String(y.group_id||'')))
+      .forEach(g=>{
+        html += '<option value="'+g.id+'">'
+             + klEsc((g.group_id?g.group_id+' · ':'') + label(g))
+             + ' ('+(g.total_vendos||0)+')</option>';
+      });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+  if(prev && sel.querySelector('option[value="'+prev+'"]')) sel.value = prev;
+
+  const hint = document.getElementById('vi-group-hint');
+  if(hint){
+    if(VI_AREA_GROUPS[area]){
+      hint.style.color = '#025AC6';
+      hint.innerHTML = 'ℹ️ <b>'+klEsc(area)+'</b> vendos are harvested by <b>'+VI_AREA_GROUPS[area]+'</b> groups (★).';
+    } else if(area){
+      hint.style.color = '#9ca3af';
+      hint.textContent = '★ = groups for this area. Any group can still be picked.';
+    } else {
+      hint.style.color = '#9ca3af';
+      hint.textContent = 'Pick an area to highlight its groups.';
+    }
+  }
   viCompile();
 }
 
