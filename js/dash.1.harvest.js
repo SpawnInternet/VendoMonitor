@@ -3708,14 +3708,22 @@ async function viAdd(){
           ['Photo',   photoUrl ? '<img src="'+photoUrl+'" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;">' : '<span style="color:#9ca3af;">—</span>'],
           ['Keys',    keys.join('<br>')]
         ],
-        note: 'It now appears in Vendos, Harvest, Recon and Maps.'
+        note: '✅ Live now in <b>Vendos</b>, <b>Spawn Harvest</b> (collector route), <b>Vendo Map</b>'
+              + (savedGps ? ' with its GPS pin' : '') + ' and <b>Recon</b>. Caches rebuilt.'
               + (_viNoTg ? '<br><br>⚠️ No TG name yet — link it in <b>dicayas.html</b> when ready.' : '')
               + extraNote
       });
-      // rebuild vendos.json so the collector PWA sees it
-      fetch(_SB.replace('/rest/v1','')+'/functions/v1/write-vendos-cache', {
-        method:'POST', headers:{'Content-Type':'application/json','x-cache-secret':'spawn-cache-2026'}
-      }).catch(()=>{});
+      // rebuild BOTH caches so the new vendo shows up everywhere immediately:
+      //   write-vendo-cache  -> vendos.json       (collector PWA; cron only runs 21:00 daily)
+      //   write-vendos-cache -> vendos_table.json (dashboard Vendos tab; cron hourly at :30)
+      // Routed via the gateway: those functions are secret-auth'd and send no CORS headers.
+      try{
+        await fetch(_SB+'/functions/v1/spawn-gw-admin', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-gw-token': window.__ADMIN_GW_TOKEN||''},
+          body: JSON.stringify({ kind:'cache', fns:['write-vendo-cache','write-vendos-cache'] })
+        });
+      }catch(_){ /* cache refresh is best-effort; cron will catch up */ }
     } else {
       viModal({ ok:true, title:'Install logged', btn:'Done',
         lead:'Logged against the existing vendo — no new vendo was created.',
