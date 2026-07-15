@@ -3505,7 +3505,7 @@ function kcEnsureNames(){
 }
 
 /* ══ NEW VENDO INSTALLS ══ */
-let _viRows = [], _viPicked = null, _viVT = null;
+let _viRows = [], _viPicked = null, _viVT = null, _viTgVT = null, _viTg = null, _viNoTg = false, _viGroups = [];
 
 function viLoad(){
   const list = document.getElementById('vi-list');
@@ -3514,6 +3514,10 @@ function viLoad(){
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
   kcEnsureNames();
   ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', viCompile); e._wired=true; } });
+  if(!_viGroups.length){
+    fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label&order=area.asc,id.asc', {headers:_HDR})
+      .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); }).catch(()=>{});
+  }
   fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=500', {headers:_HDR})
     .then(r=>r.json())
     .then(rows=>{ _viRows = Array.isArray(rows)?rows:[]; viRender(); })
@@ -3573,10 +3577,19 @@ function viCompile(){
   if((document.getElementById('vi-k-co')||{}).checked) parts.push('Coins (Not Duplicate)');
   if((document.getElementById('vi-k-cd')||{}).checked) parts.push('Coins (Duplicate)');
   if((document.getElementById('vi-k-bd')||{}).checked) parts.push('Board');
+  const area = (document.getElementById('vi-area')||{}).value || '';
+  const vlan = (document.getElementById('vi-vlan')||{}).value || '';
+  const gsel = document.getElementById('vi-group');
+  const glbl = gsel && gsel.value ? gsel.options[gsel.selectedIndex].text : '';
+  const bits = [];
+  if(area) bits.push('📍 '+area);
+  if(vlan) bits.push('VLAN '+vlan);
+  if(glbl) bits.push('👥 '+glbl);
+  if(_viNoTg) bits.push('🚫 no TG (sheet name)');
+  else if(_viTg) bits.push('📶 '+_viTg);
   pv.style.display='block';
-  pv.textContent = parts.length
-    ? '📝 Compiled: '+_viPicked.name+' — '+parts.join(', ')
-    : '📝 '+_viPicked.name+' — ⚠️ walay yabi nga na-check';
+  pv.textContent = '📝 Compiled: '+_viPicked.name+' — '+(parts.length?parts.join(', '):'⚠️ walay yabi nga na-check')
+    + (bits.length ? '\n🆕 ' + bits.join(' · ') : '');
 }
 
 function viAdd(){
@@ -3589,26 +3602,88 @@ function viAdd(){
   if(!co && !cd && !bd){ alert('Check at least one key received'); return; }
   const by = ((document.getElementById('vi-by')||{}).value||'').trim();
   if(!by){ alert('Kinsa nag-install? Enter name'); return; }
+
+  const area  = (document.getElementById('vi-area')||{}).value || '';
+  const vlanS = ((document.getElementById('vi-vlan')||{}).value||'').trim();
+  const vlan  = vlanS ? parseInt(vlanS,10) : null;
+  const gsel  = document.getElementById('vi-group');
+  const gid   = gsel && gsel.value ? parseInt(gsel.value,10) : null;
+  const isNew = !_viPicked.id;   // no linked vendo => we may create one
+
+  // creating a vendo needs area + a TG decision
+  if(isNew){
+    if(!area){ alert('Pili ug Area — kinahanglan para ma-create ang vendo.'); return; }
+    if(!_viNoTg && !_viTg){ alert('Pili ug TG name, o i-tap ang "Wala pay TG name".'); return; }
+  }
+
+  const idate = (document.getElementById('vi-date')||{}).value || null;
   const body = {
-    vendo_id:_viPicked.id, vendo_name:_viPicked.name, area:_viPicked.area,
-    install_date: (document.getElementById('vi-date')||{}).value || null,
+    vendo_id:_viPicked.id, vendo_name:_viPicked.name, area: area || _viPicked.area,
+    install_date: idate,
     installed_by: by,
     key_coin_original: co, key_coin_duplicate: cd, key_board: bd,
     given_to_office: false,
+    tg_name: _viNoTg ? null : (_viTg||null),
+    no_tg: !!_viNoTg,
+    vlan: vlan,
+    harvest_group_id: gid,
+    vendo_created: false,
     notes: ((document.getElementById('vi-notes')||{}).value||'').trim() || null
   };
-  fetch(_SB+'/rest/v1/vendo_installs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
-    .then(r=>{
-      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
-      _viPicked = null;
-      ['vi-vq','vi-by','vi-notes'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
-      ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e) e.checked=false; });
-      const p=document.getElementById('vi-picked'); if(p) p.style.display='none';
-      const pv=document.getElementById('vi-preview'); if(pv) pv.style.display='none';
-      if(typeof toast==='function') toast('✓ Install logged');
-      viLoad();
+
+  fetch(_SB+'/rest/v1/vendo_installs', {method:'POST', headers:Object.assign({'Prefer':'return=representation'},_HDR), body:JSON.stringify(body)})
+    .then(r=>{ if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); } return r.json(); })
+    .then(rows=>{
+      const installId = Array.isArray(rows)&&rows[0] ? rows[0].id : null;
+      if(!isNew) return {skipped:true};
+      // create the real vendo so it shows across harvest / recon / maps
+      return fetch(_SB+'/rest/v1/rpc/spawn_create_vendo_from_install', {
+        method:'POST', headers:_HDR,
+        body: JSON.stringify({
+          p_sheet_name: _viPicked.name, p_area: area,
+          p_tg_name: _viNoTg ? null : _viTg,
+          p_no_tg: !!_viNoTg, p_vlan: vlan, p_group_id: gid,
+          p_installer: by, p_install_date: idate, p_install_id: installId
+        })
+      }).then(r=>r.text().then(t=>{
+        if(!r.ok) throw new Error('Install saved, pero WALA na-create ang vendo:\n\n'+t);
+        return JSON.parse(t);
+      }));
     })
-    .catch(e=>alert('Save failed: '+e.message));
+    .then(res=>{
+      viResetForm();
+      if(res && res.skipped){ if(typeof toast==='function') toast('✓ Install logged'); }
+      else {
+        const vid = res && res.vendo_id;
+        if(typeof toast==='function') toast('✓ Install logged · vendo #'+vid+' created');
+        alert('✅ Vendo created!\n\n'
+          + '• '+(res.sheet_name||'')+'\n'
+          + '• Area: '+(res.area||'')+'\n'
+          + '• TG name: '+(res.tg_name||'(none)')+'\n'
+          + (res.group_id?'• Added sa harvest group\n':'')
+          + '\nMakita na ni sa Vendos, Harvest, Recon ug Maps.'
+          + '\n\n⚠️ Kung wala pay TG name, i-link ni sa dicayas.html unya.');
+      }
+      viLoad();
+      // vendos.json cache must be rebuilt so the PWAs see the new vendo
+      if(!(res && res.skipped)){
+        fetch(_SB.replace('/rest/v1','')+'/functions/v1/write-vendos-cache', {
+          method:'POST', headers:{'Content-Type':'application/json','x-cache-secret':'spawn-cache-2026'}
+        }).catch(()=>{});
+      }
+    })
+    .catch(e=>{ viLoad(); alert('Save failed: '+e.message); });
+}
+
+function viResetForm(){
+  _viPicked = null; _viTg = null;
+  viSetNoTg(false);
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e) e.checked=false; });
+  const a=document.getElementById('vi-area'); if(a) a.value='';
+  viAreaChanged();
+  const p=document.getElementById('vi-picked'); if(p) p.style.display='none';
+  const pv=document.getElementById('vi-preview'); if(pv) pv.style.display='none';
 }
 
 function viKeysLbl(r){
@@ -3647,7 +3722,10 @@ function viRender(){
       +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">📦 '+klEsc(r.vendo_name)+'</div>'+badge
       + '</div>'
       + '<div style="font-size:12px;color:#374151;margin-top:4px;">'+viKeysLbl(r)+'</div>'
-      + '<div style="font-size:11px;color:#6b7280;margin-top:3px;">👷 '+klEsc(r.installed_by||'—')+' · 📅 '+klEsc(r.install_date||'—')+(r.area?(' · 📍 '+klEsc(r.area)):'')+'</div>'
+      + '<div style="font-size:11px;color:#6b7280;margin-top:3px;">👷 '+klEsc(r.installed_by||'—')+' · 📅 '+klEsc(r.install_date||'—')+(r.area?(' · 📍 '+klEsc(r.area)):'')+(r.vlan?(' · VLAN '+r.vlan):'')+'</div>'
+      + (r.vendo_created
+          ? '<div style="font-size:11px;color:#028867;margin-top:2px;font-weight:700;">🆕 Vendo created'+(r.vendo_id?(' #'+r.vendo_id):'')+(r.no_tg?' · <span style="color:#C01176;">🚫 walay TG name — i-link sa dicayas</span>':(r.tg_name?(' · 📶 '+klEsc(r.tg_name)):''))+'</div>'
+          : '<div style="font-size:11px;color:#9ca3af;margin-top:2px;">Existing vendo (wala nag-create ug bag-o)</div>')
       + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
       + (r.given_to_office?'<div style="font-size:11px;color:#028867;margin-top:2px;">🏢 Given'+(r.received_by?(' to '+klEsc(r.received_by)):'')+(r.given_at?(' · '+_fmt(r.given_at)):'')+'</div>':'')
       + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
@@ -3719,4 +3797,88 @@ function viDelete(id){
   fetch(_SB+'/rest/v1/vendo_installs?id=eq.'+id, {method:'DELETE', headers:_HDR})
     .then(r=>{ if(!r.ok){return r.text().then(t=>{throw new Error(t);});} viLoad(); })
     .catch(e=>alert('Delete failed: '+e.message));
+}
+
+
+/* ── install: vendo detail fields (area / group / tg / vlan) ── */
+function viAreaChanged(){
+  const area = (document.getElementById('vi-area')||{}).value || '';
+  const sel = document.getElementById('vi-group');
+  if(!sel) return;
+  const mine = _viGroups.filter(g=>String(g.area||'').toUpperCase()===area.toUpperCase());
+  sel.innerHTML = '<option value="">— No group —</option>'
+    + mine.map(g=>'<option value="'+g.id+'">'+klEsc(g.group_label||('Group '+g.id))+'</option>').join('');
+  if(!area) sel.innerHTML = '<option value="">— Select area first —</option>';
+  viCompile();
+}
+
+function viTgInput(){
+  clearTimeout(_viTgVT);
+  const q = ((document.getElementById('vi-tgq')||{}).value||'').trim();
+  const box = document.getElementById('vi-tgres');
+  if(!box) return;
+  _viTg = q || null;
+  if(q) viSetNoTg(false);
+  viTgState();
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _viTgVT = setTimeout(()=>{
+    const enc = encodeURIComponent('*'+q+'*');
+    fetch(_SB+'/rest/v1/tg_vendo_names?select=name&name=ilike.'+enc+'&limit=12', {headers:_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        if(!Array.isArray(rows) || !rows.length){
+          box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">Walay TG name nga na-match. I-type gihapon o gamita ang "Wala pay TG name".</div>';
+          box.style.display='block'; return;
+        }
+        box.innerHTML = rows.map(v=>
+          '<div onclick=\'viPickTg('+JSON.stringify(v.name)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
+          + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">📶 '+klEsc(v.name)+'</div>'
+        ).join('');
+        box.style.display='block';
+      })
+      .catch(()=>{ box.style.display='none'; });
+  }, 300);
+}
+
+function viPickTg(name){
+  _viTg = name;
+  viSetNoTg(false);
+  const q = document.getElementById('vi-tgq'); if(q) q.value = name;
+  const box = document.getElementById('vi-tgres'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  viTgState();
+}
+
+function viToggleNoTg(){ viSetNoTg(!_viNoTg); }
+
+function viSetNoTg(on){
+  _viNoTg = !!on;
+  const btn = document.getElementById('vi-notg-btn');
+  const q   = document.getElementById('vi-tgq');
+  if(_viNoTg){
+    _viTg = null;
+    if(q){ q.value=''; q.disabled = true; q.style.background='#f3f4f6'; }
+    if(btn){ btn.style.background='#C01176'; btn.style.color='#fff'; btn.textContent='✓ Walay TG name — sheet name ang gamiton'; }
+    const box = document.getElementById('vi-tgres'); if(box){ box.style.display='none'; }
+  } else {
+    if(q){ q.disabled = false; q.style.background='#fff'; }
+    if(btn){ btn.style.background='#fff'; btn.style.color='#C01176'; btn.textContent='🚫 Wala pay TG name — gamiton ang sheet name'; }
+  }
+  viTgState();
+}
+
+function viTgState(){
+  const el = document.getElementById('vi-tg-state');
+  if(!el) return;
+  const nm = ((document.getElementById('vi-vq')||{}).value||'').trim();
+  if(_viNoTg){
+    el.style.color = '#C01176';
+    el.textContent = '🚫 no_tg = true · tg_name = "'+(nm||'(sheet name)')+'" · i-link nimo sa dicayas.html unya';
+  } else if(_viTg){
+    el.style.color = '#028867';
+    el.textContent = '✅ TG name: '+_viTg;
+  } else {
+    el.style.color = '#6b7280';
+    el.textContent = 'Pili ug TG name o i-tap ang "Wala pay TG name".';
+  }
+  viCompile();
 }
