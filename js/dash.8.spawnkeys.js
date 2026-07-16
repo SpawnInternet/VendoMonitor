@@ -52,14 +52,31 @@
 
       var logs = await skGet('key_logs?select=*&order=taken_at.desc&limit=40');
       if(!Array.isArray(logs)) logs=[];
+      var pend = await skGet('key_transfers?select=*&added_to_pungpung=eq.false'
+        +'&auto_source=not.is.null&order=created_at.desc&limit=30');
+      if(!Array.isArray(pend)) pend=[];
       var openLogs = logs.filter(function(l){ return !l.returned; });
 
       var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
         + card('Rings total', rings.length, '#2D3547')
         + card('Rings out', out.length, out.length? '#DF1A35':'#028867')
         + card('Borrowed — not back', openLogs.length, openLogs.length? '#DF1A35':'#028867')
-        + card('Needs your check', unver.length, unver.length? '#FFB725':'#028867')
+        + card('Pungpung pending', pend.length, pend.length? '#FFB725':'#028867')
         + '</div>';
+
+      if(pend.length){
+        html += '<div style="background:#EBF0FB;border:1px solid #a8c0ef;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
+          + '<div style="font-weight:800;font-size:13px;color:#025AC6;margin-bottom:4px">⛓ Auto-chained — waiting for pungpung transfer</div>'
+          + '<div style="font-size:11px;color:#025AC6;opacity:.8;margin-bottom:8px">Created automatically from installs and padlock changes. Approve in the Keys tab → Pungpung Transfer.</div>';
+        pend.slice(0,10).forEach(function(t){
+          var src = (t.auto_source||'').indexOf('install:')===0 ? 'new install' : 'padlock change';
+          html += '<div style="font-size:12px;color:#025AC6;padding:4px 0;border-top:1px solid #d6e2f7">'
+            + '<b>'+esc(t.vendo_name||'—')+'</b> · '+esc(t.area||'')
+            + ' · held by '+esc(t.held_by||'?')
+            + ' <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;background:#fff;margin-left:4px">'+src+'</span></div>';
+        });
+        html += '</div>';
+      }
 
       if(unver.length){
         html += '<div style="background:#FEF7E8;border:1px solid #f5d78e;border-radius:12px;padding:12px 14px;margin-bottom:16px">'
