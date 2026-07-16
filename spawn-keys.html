@@ -79,7 +79,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 <body>
 
 <div class="topbar">
-  <div class="tb-title">🔑 SPAWN KEYS</div>
+  <div class="tb-title">🔑 SPAWN KEYS <span style="background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:99px;margin-left:4px;vertical-align:2px">TRIAL</span></div>
   <div class="tb-user" id="tb-user" onclick="logout()" style="cursor:pointer"></div>
 </div>
 
@@ -99,11 +99,17 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 <!-- HOME -->
 <div class="screen" id="screen-home">
   <div class="wrap">
+    <div style="background:#FEF7E8;border:1px solid #f5d78e;border-radius:11px;padding:11px 13px;font-size:12px;font-weight:600;color:#8a5a00;margin-bottom:12px;line-height:1.5">
+      🧪 <b>TRIAL MODE</b> — practice freely. Nothing here is a real key record.
+      Keep using the paper log until Wendell says otherwise.
+    </div>
     <div id="home-keeper"></div>
     <button class="btn btn-gray" onclick="openPull(null)" style="width:100%;margin-bottom:16px">
       🔍 Pull single key (no QR)</button>
     <div class="lbl">Rings</div>
     <div id="ring-list"><div class="empty">Loading…</div></div>
+    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;margin-top:14px;color:#DF1A35">
+      ↺ Reset trial data</button>
   </div>
 </div>
 
@@ -288,7 +294,7 @@ async function ringOut(){
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_out',actor:to,
     auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
-    notes:'Released by '+ME.name}]);
+    is_test:true,notes:'Released by '+ME.name}]);
   CUR_RING.status='out';CUR_RING.out_to=to;CUR_RING.out_at=new Date().toISOString();
   toast('Ring out to '+to); renderRing(); loadRings();
 }
@@ -299,7 +305,7 @@ async function ringIn(){
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_in',actor:CUR_RING.out_to||'—',
     auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
-    notes:'Received by '+ME.name}]);
+    is_test:true,notes:'Received by '+ME.name}]);
   CUR_RING.status='in';CUR_RING.out_to=null;
   toast('Ring returned'); renderRing(); loadRings();
 }
@@ -379,6 +385,7 @@ async function confirmPull(){
     vendo_id: PULL_VENDO.id,
     key_type: PULL_KT,
     event:'key_pull',
+    is_test: true,
     actor: ME.name,
     auth_method: auth,
     from_ring_out: fieldPull,
@@ -389,6 +396,18 @@ async function confirmPull(){
   if(!Array.isArray(r)){toast('Save failed');return;}
   toast('Logged — '+(PULL_VENDO.sheet_name||'key')+' ('+PULL_KT.replace('_',' ')+')');
   go('home'); loadRings();
+}
+
+async function resetTrial(){
+  if(!confirm('Clear all trial data?\n\nEvery ring goes back to IN and the test log is wiped.')) return;
+  try{
+    await fetch(SB+'/rest/v1/key_events?is_test=eq.true',{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}});
+    await fetch(SB+'/rest/v1/key_rings?status=eq.out',{method:'PATCH',
+      headers:{...HDR,Prefer:'return=minimal'},
+      body:JSON.stringify({status:'in',out_to:null,out_at:null})});
+    toast('Trial data cleared');
+    loadRings();
+  }catch(e){ toast('Reset failed'); }
 }
 
 function logout(){
