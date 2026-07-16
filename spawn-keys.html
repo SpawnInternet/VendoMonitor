@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#025AC6">
+<title>Spawn Keys</title>
+<link rel="manifest" href="keys-manifest.json">
+<link rel="apple-touch-icon" href="spawn-globe.png">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --spawn-gold:#FFB725; --spawn-teal:#028867; --spawn-blue:#025AC6;
+  --spawn-purple:#311A8E; --spawn-pink:#C01176; --spawn-red:#DF1A35;
+  --spawn-navy:#2D3547;
+  --border:#e5e7eb; --bg:#f0f4f8; --text:#2D3547; --muted:#6b7280;
+  --blue-light:#EBF0FB; --green-light:#E6F7F5; --amber-light:#FEF7E8;
+  --red-light:#fef2f2; --purple-light:#F3EEF8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+.topbar{background:linear-gradient(135deg,var(--spawn-blue) 0%,#013e8a 100%);color:#fff;
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:200;padding-top:calc(12px + env(safe-area-inset-top))}
+.tb-title{font-weight:800;font-size:16px;letter-spacing:.02em}
+.tb-user{font-size:12px;opacity:.9;font-weight:600}
+.btn{border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.btn-pri{background:var(--spawn-blue);color:#fff;width:100%}
+.btn-ok{background:var(--spawn-teal);color:#fff}
+.btn-gray{background:#fff;color:var(--text);border:1px solid var(--border)}
+.btn:active{transform:scale(.98)}
+.wrap{padding:16px;max-width:640px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
+.screen{display:none}.screen.active{display:block}
+.lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);margin-bottom:8px}
+input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;
+  font-size:15px;font-family:inherit;background:#fff;color:var(--text)}
+.ring{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:#fff;border:1px solid var(--border);border-left:4px solid var(--spawn-teal);
+  border-radius:0 12px 12px 0;padding:13px 14px;margin-bottom:8px;cursor:pointer}
+.ring.out{border-left-color:var(--spawn-red);background:var(--red-light)}
+.ring-l{font-weight:800;font-size:15px}
+.ring-s{font-size:12px;color:var(--muted);margin-top:2px}
+.pill{font-size:10px;font-weight:800;padding:4px 9px;border-radius:99px;text-transform:uppercase}
+.p-in{background:var(--green-light);color:var(--spawn-teal)}
+.p-out{background:#fde8ea;color:var(--spawn-red)}
+.p-qr{background:var(--green-light);color:var(--spawn-teal)}
+.p-pin{background:var(--amber-light);color:#8a5a00}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.pin-k{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;
+  font-size:20px;font-weight:800;cursor:pointer;font-family:inherit;color:var(--text)}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin:16px 0}
+.pin-dot{width:13px;height:13px;border-radius:50%;background:var(--border)}
+.pin-dot.on{background:var(--spawn-blue)}
+.vrow{padding:12px;border-bottom:1px solid var(--border);cursor:pointer}
+.vrow:active{background:var(--blue-light)}
+.vname{font-weight:700;font-size:14px}
+.vmeta{font-size:11px;color:var(--muted);margin-top:2px}
+.kt{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.kt-b{padding:14px;border:2px solid var(--border);border-radius:11px;background:#fff;
+  font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;color:var(--text)}
+.kt-b.sel{border-color:var(--spawn-blue);background:var(--blue-light);color:var(--spawn-blue)}
+.ev{padding:11px 0;border-bottom:1px solid var(--border)}
+.ev-t{font-weight:700;font-size:14px}
+.ev-m{font-size:11px;color:var(--muted);margin-top:3px}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(90px);
+  background:var(--spawn-navy);color:#fff;padding:13px 20px;border-radius:11px;font-size:14px;
+  font-weight:600;transition:transform .25s;z-index:900;max-width:90vw}
+.toast.show{transform:translateX(-50%) translateY(0)}
+#reader{width:100%;border-radius:12px;overflow:hidden}
+.empty{text-align:center;padding:32px 16px;color:var(--muted);font-size:14px}
+.banner{background:var(--amber-light);border:1px solid #f5d78e;border-radius:11px;
+  padding:11px 13px;font-size:13px;margin-bottom:12px;font-weight:600;color:#8a5a00}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="tb-title">🔑 SPAWN KEYS</div>
+  <div class="tb-user" id="tb-user"></div>
+</div>
+
+<!-- LOGIN -->
+<div class="screen active" id="screen-login">
+  <div class="wrap">
+    <div class="card">
+      <div class="lbl">Who are you?</div>
+      <select id="acc-sel"><option value="">Loading…</option></select>
+      <div class="pin-dots" id="pin-dots"></div>
+      <div class="pin-grid" id="pin-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HOME -->
+<div class="screen" id="screen-home">
+  <div class="wrap">
+    <button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>
+    <button class="btn btn-gray" onclick="openPull(null)" style="width:100%;margin-bottom:16px">
+      🔍 Pull single key (no QR)</button>
+    <div class="lbl">Rings</div>
+    <div id="ring-list"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+
+<!-- SCAN -->
+<div class="screen" id="screen-scan">
+  <div class="wrap">
+    <div class="card"><div id="reader"></div></div>
+    <button class="btn btn-gray" onclick="stopScan()" style="width:100%">Cancel</button>
+  </div>
+</div>
+
+<!-- RING -->
+<div class="screen" id="screen-ring">
+  <div class="wrap">
+    <div class="card">
+      <div id="ring-hdr"></div>
+      <div id="ring-act" style="margin-top:14px"></div>
+    </div>
+    <button class="btn btn-gray" onclick="openPull(CUR_RING)" style="width:100%;margin-bottom:14px">
+      🔍 Pull single key from this ring</button>
+    <div class="lbl">Recent</div>
+    <div class="card" id="ring-ev"></div>
+    <button class="btn btn-gray" onclick="go('home')" style="width:100%">← Back</button>
+  </div>
+</div>
+
+<!-- PULL -->
+<div class="screen" id="screen-pull">
+  <div class="wrap">
+    <div id="pull-banner"></div>
+    <div class="card">
+      <div class="lbl">Find vendo</div>
+      <input id="pull-q" placeholder="Type a name…" oninput="doSearch()" autocomplete="off">
+      <div id="pull-res" style="max-height:280px;overflow-y:auto;margin-top:8px"></div>
+    </div>
+    <div class="card" id="pull-pick" style="display:none">
+      <div class="lbl">Key type</div>
+      <div id="pull-vendo" style="font-weight:800;margin-bottom:10px"></div>
+      <div class="kt">
+        <button class="kt-b" onclick="pickKT('coin_original',this)">Coin original</button>
+        <button class="kt-b" onclick="pickKT('coin_duplicate',this)">Coin duplicate</button>
+        <button class="kt-b" onclick="pickKT('board',this)">Board</button>
+        <button class="kt-b" onclick="pickKT('board_duplicate',this)">Board duplicate</button>
+      </div>
+      <input id="pull-note" placeholder="Note (optional)" style="margin-top:10px">
+      <button class="btn btn-ok" onclick="confirmPull()" style="width:100%;margin-top:12px">
+        Confirm — key taken</button>
+    </div>
+    <button class="btn btn-gray" onclick="go('home')" style="width:100%">← Back</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY='gw';
+const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json','x-spawn-gw':'1'};
+const LOGIN_URL=SB+'/functions/v1/spawn-office-login';
+const GW_URL=SB+'/functions/v1/spawn-gw-office';
+window.__GW_TOKEN=null;
+
+(function(){
+  const _f=window.fetch.bind(window);
+  const RE=/\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  window.fetch=async function(input,init){
+    try{
+      const url=(typeof input==='string')?input:(input&&input.url)||'';
+      const o=init||{}, h=o.headers||{};
+      const isGw=(h['x-spawn-gw']==='1')||(h.apikey==='gw');
+      if(url.indexOf(SB)===0&&isGw){
+        const T=window.__GW_TOKEN;
+        if(!T) return new Response(JSON.stringify({error:'not authenticated'}),{status:401});
+        const m=url.match(RE);
+        if(m){
+          return _f(GW_URL,{method:'POST',
+            headers:{'Content-Type':'application/json','x-gw-token':T},
+            body:JSON.stringify({kind:'rest',table:m[1],
+              method:(o.method||'GET').toUpperCase(),query:m[3]||'',
+              body:o.body?JSON.parse(o.body):undefined,
+              prefer:h['Prefer']||h['prefer']||''})});
+        }
+      }
+    }catch(e){console.warn('[GW]',e&&e.message);}
+    return _f(input,init);
+  };
+})();
+
+let ME=null, ACCTS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
+let PULL_RING=null, PULL_VENDO=null, PULL_KT=null, SEARCH_T=null;
+
+function toast(m,d=2600){const e=document.getElementById('toast');e.textContent=m;
+  e.classList.add('show');setTimeout(()=>e.classList.remove('show'),d);}
+function go(s){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-'+s).classList.add('active');window.scrollTo(0,0);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function ago(t){if(!t)return'';const s=(Date.now()-new Date(t))/1000;
+  if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';}
+async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:HDR});return r.json();}
+async function sbPost(t,b){const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',
+  headers:{...HDR,Prefer:'return=representation'},body:JSON.stringify(b)});return r.json();}
+async function sbPatch(p,b){const r=await fetch(SB+'/rest/v1/'+p,{method:'PATCH',
+  headers:{...HDR,Prefer:'return=minimal'},body:JSON.stringify(b)});return r.ok;}
+
+// ── LOGIN ──
+async function loadRoster(){
+  try{
+    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roster:true})});
+    const d=await r.json();
+    ACCTS=d.accounts||d.roster||d||[];
+    const sel=document.getElementById('acc-sel');
+    sel.innerHTML='<option value="">Select your name…</option>'+
+      ACCTS.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}${a.role?' — '+esc(a.role):''}</option>`).join('');
+  }catch(e){ toast('Cannot load accounts'); }
+}
+function buildPad(){
+  const g=document.getElementById('pin-grid');
+  g.innerHTML=[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>
+    `<button class="pin-k" onclick="tapPin('${k}')">${k}</button>`).join('');
+  drawDots();
+}
+function drawDots(){
+  document.getElementById('pin-dots').innerHTML=
+    [0,1,2,3,4,5].map(i=>`<div class="pin-dot ${i<PIN.length?'on':''}"></div>`).join('');
+}
+function tapPin(k){
+  if(k==='⌫'){PIN=PIN.slice(0,-1);drawDots();return;}
+  if(k==='✓'){doLogin();return;}
+  if(PIN.length<6){PIN+=k;drawDots();}
+}
+async function doLogin(){
+  const name=document.getElementById('acc-sel').value;
+  if(!name){toast('Pick your name first');return;}
+  if(!PIN){toast('Enter your PIN');return;}
+  try{
+    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pin:PIN})});
+    const d=await r.json();
+    if(!d.token){PIN='';drawDots();toast('Wrong PIN');return;}
+    window.__GW_TOKEN=d.token;
+    ME={name:(d.name||name),role:(d.role||'')};
+    document.getElementById('tb-user').textContent=ME.name;
+    PIN='';drawDots();
+    go('home'); loadRings();
+  }catch(e){toast('Login failed');}
+}
+
+// ── RINGS ──
+async function loadRings(){
+  const d=await sbGet('key_rings?active=eq.true&order=area.asc,label.asc');
+  if(!Array.isArray(d)){document.getElementById('ring-list').innerHTML=
+    '<div class="empty">Cannot load rings — gateway may not allow key_rings yet.</div>';return;}
+  RINGS=d;
+  document.getElementById('ring-list').innerHTML = d.length? d.map(r=>`
+    <div class="ring ${r.status==='out'?'out':''}" onclick="openRing(${r.id})">
+      <div><div class="ring-l">${esc(r.label)}</div>
+        <div class="ring-s">${esc(r.area)}${r.status==='out'?' · '+esc(r.out_to||'')+' · '+ago(r.out_at):''}</div></div>
+      <span class="pill ${r.status==='out'?'p-out':'p-in'}">${r.status==='out'?'OUT':'IN'}</span>
+    </div>`).join('') : '<div class="empty">No rings yet.</div>';
+}
+async function openRing(id){
+  CUR_RING=RINGS.find(r=>r.id===id);
+  if(!CUR_RING){const d=await sbGet('key_rings?id=eq.'+id);CUR_RING=d&&d[0];}
+  if(!CUR_RING){toast('Ring not found');return;}
+  renderRing(); go('ring');
+  const ev=await sbGet('key_events?ring_id=eq.'+CUR_RING.id+'&order=at.desc&limit=12');
+  document.getElementById('ring-ev').innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+    <div class="ev"><div class="ev-t">${esc(evLabel(e))}</div>
+      <div class="ev-m">${esc(e.actor)} · ${ago(e.at)}
+        <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">
+        ${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+    : '<div class="empty">No activity.</div>';
+}
+function evLabel(e){
+  const m={ring_out:'Ring taken out',ring_in:'Ring returned',
+           key_pull:'Key pulled',key_return:'Key returned'};
+  return m[e.event]||e.event;
+}
+function renderRing(){
+  const r=CUR_RING;
+  document.getElementById('ring-hdr').innerHTML=`
+    <div style="font-size:20px;font-weight:800">${esc(r.label)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(r.area)}</div>
+    <div style="margin-top:9px"><span class="pill ${r.status==='out'?'p-out':'p-in'}">
+      ${r.status==='out'?'OUT — '+esc(r.out_to||'')+' · '+ago(r.out_at):'IN OFFICE'}</span></div>`;
+  document.getElementById('ring-act').innerHTML = r.status==='out'
+    ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
+    : `<div class="lbl">Give ring to</div>
+       <select id="ring-to">${ACCTS.map(a=>`<option>${esc(a.name)}</option>`).join('')}</select>
+       <button class="btn btn-pri" style="margin-top:10px" onclick="ringOut()">Ring out →</button>`;
+}
+async function ringOut(){
+  const to=document.getElementById('ring-to').value;
+  const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
+    {status:'out',out_to:to,out_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  if(!ok){toast('Failed');return;}
+  await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_out',actor:to,
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString()}]);
+  CUR_RING.status='out';CUR_RING.out_to=to;CUR_RING.out_at=new Date().toISOString();
+  toast('Ring out to '+to); renderRing(); loadRings();
+}
+async function ringIn(){
+  const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
+    {status:'in',out_to:null,out_at:null,updated_at:new Date().toISOString()});
+  if(!ok){toast('Failed');return;}
+  await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_in',actor:CUR_RING.out_to||'—',
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString()}]);
+  CUR_RING.status='in';CUR_RING.out_to=null;
+  toast('Ring returned'); renderRing(); loadRings();
+}
+
+// ── SCAN ──
+let LAST_AUTH='pin';
+function startScan(){
+  go('scan');
+  SCANNER=new Html5Qrcode('reader');
+  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},
+    async txt=>{
+      await stopScan();
+      LAST_AUTH='qr';
+      const d=await sbGet('key_rings?qr_code=eq.'+encodeURIComponent(txt.trim()));
+      if(Array.isArray(d)&&d[0]){ RINGS=RINGS.filter(r=>r.id!==d[0].id).concat(d[0]); openRing(d[0].id); }
+      else toast('Unknown QR: '+txt);
+    },()=>{}
+  ).catch(()=>{toast('Camera failed — use the list');go('home');});
+}
+async function stopScan(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+  go('home');
+}
+
+// ── PULL ──
+function openPull(ring){
+  PULL_RING=ring; PULL_VENDO=null; PULL_KT=null;
+  document.getElementById('pull-q').value='';
+  document.getElementById('pull-res').innerHTML='';
+  document.getElementById('pull-pick').style.display='none';
+  document.getElementById('pull-banner').innerHTML = (ring&&ring.status==='out')
+    ? `<div class="banner">⚠ ${esc(ring.label)} is already out with ${esc(ring.out_to||'—')}.
+        This key is coming off a ring in the field — logged as self-reported.</div>`
+    : (ring? `<div class="banner">Ring: ${esc(ring.label)} · ${esc(ring.area)}</div>`
+           : `<div class="banner">No ring scanned — searching all vendos. Logged as self-reported.</div>`);
+  go('pull');
+  setTimeout(()=>document.getElementById('pull-q').focus(),250);
+}
+function doSearch(){
+  clearTimeout(SEARCH_T);
+  SEARCH_T=setTimeout(runSearch,280);
+}
+async function runSearch(){
+  const q=document.getElementById('pull-q').value.trim();
+  if(q.length<2){document.getElementById('pull-res').innerHTML='';return;}
+  const like='*'+q.replace(/[(),*]/g,'')+'*';
+  let f='or=(sheet_name.ilike.'+like+',tg_name.ilike.'+like+',owner_name.ilike.'+like+',excel_name.ilike.'+like+')';
+  if(PULL_RING) f+='&area=ilike.*'+encodeURIComponent(PULL_RING.area)+'*';
+  const d=await sbGet('vendos?'+f+'&status=not.eq.pulled_out&select=id,sheet_name,tg_name,owner_name,area,vendo_code&limit=25');
+  if(!Array.isArray(d)){document.getElementById('pull-res').innerHTML='<div class="empty">Search failed.</div>';return;}
+  document.getElementById('pull-res').innerHTML = d.length? d.map(v=>`
+    <div class="vrow" onclick='pickVendo(${JSON.stringify(v)})'>
+      <div class="vname">${esc(v.sheet_name||v.tg_name||('#'+v.id))}</div>
+      <div class="vmeta">${esc(v.area||'')}${v.vendo_code?' · '+esc(v.vendo_code):''}${v.owner_name?' · '+esc(v.owner_name):''}</div>
+    </div>`).join('') : '<div class="empty">No match.</div>';
+}
+function pickVendo(v){
+  PULL_VENDO=v; PULL_KT=null;
+  document.querySelectorAll('.kt-b').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('pull-vendo').textContent=v.sheet_name||v.tg_name||('#'+v.id);
+  document.getElementById('pull-pick').style.display='block';
+  document.getElementById('pull-pick').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function pickKT(k,el){
+  PULL_KT=k;
+  document.querySelectorAll('.kt-b').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+async function confirmPull(){
+  if(!PULL_VENDO){toast('Pick a vendo');return;}
+  if(!PULL_KT){toast('Pick key type');return;}
+  const fieldPull = !!(PULL_RING && PULL_RING.status==='out');
+  const auth = (PULL_RING && LAST_AUTH==='qr' && !fieldPull) ? 'qr' : 'pin';
+  const row={
+    ring_id: PULL_RING?PULL_RING.id:null,
+    vendo_id: PULL_VENDO.id,
+    key_type: PULL_KT,
+    event:'key_pull',
+    actor: ME.name,
+    auth_method: auth,
+    from_ring_out: fieldPull,
+    notes: document.getElementById('pull-note').value||null
+  };
+  if(auth==='qr'){ row.verified_by=ME.name; row.verified_at=new Date().toISOString(); }
+  const r=await sbPost('key_events',[row]);
+  if(!Array.isArray(r)){toast('Save failed');return;}
+  toast('Logged — '+(PULL_VENDO.sheet_name||'key')+' ('+PULL_KT.replace('_',' ')+')');
+  go('home'); loadRings();
+}
+
+// ── BOOT ──
+buildPad(); loadRoster();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw-keys.js').catch(()=>{});}
+</script>
+</body>
+</html>
