@@ -50,10 +50,14 @@
       var pulls = evs.filter(function(e){ return e.event==='key_pull'; });
       var unver = evs.filter(function(e){ return !e.verified_at && e.auth_method==='pin'; });
 
+      var logs = await skGet('key_logs?select=*&order=taken_at.desc&limit=40');
+      if(!Array.isArray(logs)) logs=[];
+      var openLogs = logs.filter(function(l){ return !l.returned; });
+
       var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">'
         + card('Rings total', rings.length, '#2D3547')
         + card('Rings out', out.length, out.length? '#DF1A35':'#028867')
-        + card('Key pulls (recent)', pulls.length, '#025AC6')
+        + card('Borrowed — not back', openLogs.length, openLogs.length? '#DF1A35':'#028867')
         + card('Needs your check', unver.length, unver.length? '#FFB725':'#028867')
         + '</div>';
 
@@ -67,6 +71,32 @@
             + ' · '+esc(ago(e.at))+'</div>';
         });
         html += '</div>';
+      }
+
+      html += '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:4px 0 8px">Borrow log — auto-filled by ring scans</div>';
+      if(!logs.length){
+        html += '<div style="color:#6b7280;font-size:13px;margin-bottom:16px">No borrow records yet.</div>';
+      } else {
+        html += '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;margin-bottom:16px">'
+          + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+          + '<tr style="background:#f8f9fa">'
+          + ['Ring / area','Collector','Taken','Status','Source'].map(function(h){
+              return '<th style="text-align:left;padding:8px 10px;font-weight:800;color:#6b7280;font-size:10px;text-transform:uppercase;letter-spacing:.05em">'+h+'</th>';}).join('')
+          + '</tr>';
+        logs.slice(0,15).forEach(function(l){
+          var auto = (l.notes||'').indexOf('Auto —')===0;
+          html += '<tr style="border-top:1px solid #f1f3f5;'+(l.returned?'':'background:#fef2f2')+'">'
+            + '<td style="padding:8px 10px;font-weight:700">'+esc(l.area||'—')+'</td>'
+            + '<td style="padding:8px 10px">'+esc(l.collector_name||l.lineman||'—')+'</td>'
+            + '<td style="padding:8px 10px;color:#6b7280">'+esc(ago(l.taken_at))+'</td>'
+            + '<td style="padding:8px 10px"><span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;background:'
+            + (l.returned?'#E6F7F5;color:#028867':'#fde8ea;color:#DF1A35')+'">'
+            + (l.returned?'BACK':'OUT')+'</span></td>'
+            + '<td style="padding:8px 10px"><span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;background:'
+            + (auto?'#EBF0FB;color:#025AC6':'#F1EFE8;color:#5F5E5A')+'">'
+            + (auto?'SCAN':'MANUAL')+'</span></td></tr>';
+        });
+        html += '</table></div>';
       }
 
       html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
