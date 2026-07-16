@@ -161,37 +161,8 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
-const KEY='gw';
-const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json','x-spawn-gw':'1'};
-const LOGIN_URL=SB+'/functions/v1/spawn-office-login';
-const GW_URL=SB+'/functions/v1/spawn-gw-office';
-window.__GW_TOKEN=null;
-
-(function(){
-  const _f=window.fetch.bind(window);
-  const RE=/\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
-  window.fetch=async function(input,init){
-    try{
-      const url=(typeof input==='string')?input:(input&&input.url)||'';
-      const o=init||{}, h=o.headers||{};
-      const isGw=(h['x-spawn-gw']==='1')||(h.apikey==='gw');
-      if(url.indexOf(SB)===0&&isGw){
-        const T=window.__GW_TOKEN;
-        if(!T) return new Response(JSON.stringify({error:'not authenticated'}),{status:401});
-        const m=url.match(RE);
-        if(m){
-          return _f(GW_URL,{method:'POST',
-            headers:{'Content-Type':'application/json','x-gw-token':T},
-            body:JSON.stringify({kind:'rest',table:m[1],
-              method:(o.method||'GET').toUpperCase(),query:m[3]||'',
-              body:o.body?JSON.parse(o.body):undefined,
-              prefer:h['Prefer']||h['prefer']||''})});
-        }
-      }
-    }catch(e){console.warn('[GW]',e&&e.message);}
-    return _f(input,init);
-  };
-})();
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
+const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'};
 
 let ME=null, ACCTS=[], COLLECTORS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
 let PULL_RING=null, PULL_VENDO=null, PULL_KT=null, SEARCH_T=null;
@@ -216,17 +187,12 @@ async function sbPatch(p,b){const r=await fetch(SB+'/rest/v1/'+p,{method:'PATCH'
 // ── LOGIN ──
 async function loadRoster(){
   try{
-    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({roster:true})});
-    const d=await r.json();
-    ACCTS=(d&&Array.isArray(d.accounts))?d.accounts:[];
-  }catch(e){ ACCTS=[]; }
-  try{
     const c=await fetch(SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc',{headers:HDR});
     const cd=await c.json();
     if(Array.isArray(cd)) COLLECTORS=cd.map(x=>x.name);
-  }catch(e){}
+  }catch(e){ COLLECTORS=[]; }
 }
+
 function buildPad(){
   const g=document.getElementById('pin-grid');
   g.innerHTML=[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>
@@ -246,25 +212,22 @@ async function doLogin(){
   if(PIN.length<3){toast('Enter your PIN');return;}
   const err=document.getElementById('pin-err');
   try{
-    const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({pin:PIN})});
+    const r=await fetch(SB+'/rest/v1/rpc/spawn_keys_login',{method:'POST',headers:HDR,
+      body:JSON.stringify({p_pin:PIN})});
     const d=await r.json();
-    if(!(r.ok && d && d.ok && d.token)){
-      PIN='';drawDots();err.textContent='Wrong PIN — try again';return;
-    }
-    if(String(d.role||'').toLowerCase()!=='keykeeper'){
+    const row=Array.isArray(d)?d[0]:d;
+    if(!(r.ok && row && row.ok)){
       PIN='';drawDots();
-      err.textContent='SPAWN KEYS is for Ailyn and Steph only';
+      err.textContent='Wrong PIN, or not a key keeper';
       return;
     }
-    window.__GW_TOKEN=d.token;
-    ME={id:d.id,name:d.name,role:d.role};
+    ME={id:row.id,name:row.name,role:row.role};
     err.textContent='';
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
     await loadRoster();
     go('home'); renderHome(); loadRings();
-  }catch(e){ PIN='';drawDots();err.textContent='Login failed'; }
+  }catch(e){ PIN='';drawDots();err.textContent='Login failed — check connection'; }
 }
 
 // ── RINGS ──
@@ -314,7 +277,7 @@ function renderRing(){
   document.getElementById('ring-act').innerHTML = r.status==='out'
     ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
     : `<div class="lbl">Give ring to</div>
-       <select id="ring-to">${(COLLECTORS.length?COLLECTORS:ACCTS.map(a=>a.name)).map(n=>`<option>${esc(n)}</option>`).join('')}</select>
+       <select id="ring-to">${COLLECTORS.map(n=>`<option>${esc(n)}</option>`).join('')}</select>
        <button class="btn btn-pri" style="margin-top:10px" onclick="ringOut()">Ring out →</button>`;
 }
 async function ringOut(){
@@ -431,7 +394,7 @@ async function confirmPull(){
 function logout(){
   if(!ME) return;
   if(!confirm('Log out '+ME.name+'?')) return;
-  window.__GW_TOKEN=null; ME=null; PIN=''; drawDots();
+  ME=null; PIN=''; drawDots();
   document.getElementById('tb-user').textContent='';
   go('login');
 }
