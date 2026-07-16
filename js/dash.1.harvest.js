@@ -60,7 +60,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps','keys','harveststats'].forEach(t=>{
+  ['htable','livefeed','recon','receipt','settings','perf','progress','names','ledger','gps','keys','spawnkeys','harveststats'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
