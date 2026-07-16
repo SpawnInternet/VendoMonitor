@@ -315,14 +315,17 @@ let LAST_AUTH='pin';
 function startScan(){
   if(!isKeeper()){toast('Ring scan is for Ailyn or Steph');return;}
   go('scan');
-  SCANNER=new Html5Qrcode('reader');
-  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},
+  const F=Html5QrcodeSupportedFormats;
+  SCANNER=new Html5Qrcode('reader',{formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]});
+  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:160}},
     async txt=>{
       await stopScan();
       LAST_AUTH='qr';
-      const d=await sbGet('key_rings?qr_code=eq.'+encodeURIComponent(txt.trim()));
+      const c=txt.trim();
+      let d=await sbGet('key_rings?select=*&or=(qr_code.eq.'+encodeURIComponent(c)+
+                        ',short_code.eq.'+encodeURIComponent(c.toUpperCase())+')');
       if(Array.isArray(d)&&d[0]){ RINGS=RINGS.filter(r=>r.id!==d[0].id).concat(d[0]); openRing(d[0].id); }
-      else toast('Unknown QR: '+txt);
+      else toast('Unknown code: '+c);
     },()=>{}
   ).catch(()=>{toast('Camera failed — use the list');go('home');});
 }
