@@ -26,8 +26,12 @@
       + '<div style="font-size:26px;font-weight:800;margin-top:6px;color:'+color+'">'+val+'</div></div>';
   }
 
+  var SK_SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+  var SK_KEY = '"""+ANON+"""';
+  var SK_HDR = {apikey:SK_KEY, Authorization:'Bearer '+SK_KEY, 'Content-Type':'application/json'};
+
   async function skGet(path){
-    var r = await fetch(_SB+'/rest/v1/'+path, {headers:_HDR});
+    var r = await fetch(SK_SB+'/rest/v1/'+path, {headers:SK_HDR});
     if(!r.ok) throw new Error('HTTP '+r.status+' on '+path.split('?')[0]);
     return r.json();
   }
@@ -111,7 +115,7 @@
     }catch(err){
       root.innerHTML='<div style="padding:20px;color:#DF1A35;font-size:13px">'
         + 'Could not load SPAWN KEYS: '+esc(err && err.message)
-        + '<br><span style="color:#6b7280">Add <b>key_rings</b> and <b>key_events</b> to the spawn-gw-admin table allowlist.</span></div>';
+        + '</div>';
     }
   };
 })();
