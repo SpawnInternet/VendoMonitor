@@ -88,6 +88,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   <div class="wrap">
     <div class="card">
       <div class="lbl">Enter your PIN</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Ailyn or Steph</div>
       <div id="pin-err" style="color:var(--spawn-red);font-size:13px;font-weight:700;min-height:18px"></div>
       <div class="pin-dots" id="pin-dots"></div>
       <div class="pin-grid" id="pin-grid"></div>
@@ -251,8 +252,13 @@ async function doLogin(){
     if(!(r.ok && d && d.ok && d.token)){
       PIN='';drawDots();err.textContent='Wrong PIN — try again';return;
     }
+    if(String(d.role||'').toLowerCase()!=='keykeeper'){
+      PIN='';drawDots();
+      err.textContent='SPAWN KEYS is for Ailyn and Steph only';
+      return;
+    }
     window.__GW_TOKEN=d.token;
-    ME={id:d.id,name:d.name,role:d.role||'Staff'};
+    ME={id:d.id,name:d.name,role:d.role};
     err.textContent='';
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
@@ -265,9 +271,7 @@ async function doLogin(){
 function renderHome(){
   var el=document.getElementById('home-keeper');
   if(!el) return;
-  el.innerHTML = isKeeper()
-    ? '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>'
-    : '<div class="banner">You can pull a single key. Ring release is done by Ailyn or Steph.</div>';
+  el.innerHTML = '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>';
 }
 
 async function loadRings(){
@@ -307,11 +311,6 @@ function renderRing(){
     <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(r.area)}</div>
     <div style="margin-top:9px"><span class="pill ${r.status==='out'?'p-out':'p-in'}">
       ${r.status==='out'?'OUT — '+esc(r.out_to||'')+' · '+ago(r.out_at):'IN OFFICE'}</span></div>`;
-  if(!isKeeper()){
-    document.getElementById('ring-act').innerHTML =
-      '<div class="banner">Only Ailyn or Steph can release or receive a ring.</div>';
-    return;
-  }
   document.getElementById('ring-act').innerHTML = r.status==='out'
     ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
     : `<div class="lbl">Give ring to</div>
