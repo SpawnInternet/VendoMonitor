@@ -315,8 +315,12 @@ let LAST_AUTH='pin';
 function startScan(){
   if(!isKeeper()){toast('Ring scan is for Ailyn or Steph');return;}
   go('scan');
-  const F=Html5QrcodeSupportedFormats;
-  SCANNER=new Html5Qrcode('reader',{formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]});
+  var cfg;
+  try{
+    const F=Html5QrcodeSupportedFormats;
+    cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
+  }catch(e){ cfg=undefined; }
+  SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
   SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:160}},
     async txt=>{
       await stopScan();
