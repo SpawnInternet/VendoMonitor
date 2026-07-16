@@ -98,7 +98,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 <!-- HOME -->
 <div class="screen" id="screen-home">
   <div class="wrap">
-    <button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>
+    <div id="home-keeper"></div>
     <button class="btn btn-gray" onclick="openPull(null)" style="width:100%;margin-bottom:16px">
       🔍 Pull single key (no QR)</button>
     <div class="lbl">Rings</div>
@@ -199,6 +199,7 @@ function toast(m,d=2600){const e=document.getElementById('toast');e.textContent=
   e.classList.add('show');setTimeout(()=>e.classList.remove('show'),d);}
 function go(s){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.getElementById('screen-'+s).classList.add('active');window.scrollTo(0,0);}
+function isKeeper(){ return !!(ME && String(ME.role||'').toLowerCase()==='keykeeper'); }
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function ago(t){if(!t)return'';const s=(Date.now()-new Date(t))/1000;
@@ -256,11 +257,19 @@ async function doLogin(){
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
     await loadRoster();
-    go('home'); loadRings();
+    go('home'); renderHome(); loadRings();
   }catch(e){ PIN='';drawDots();err.textContent='Login failed'; }
 }
 
 // ── RINGS ──
+function renderHome(){
+  var el=document.getElementById('home-keeper');
+  if(!el) return;
+  el.innerHTML = isKeeper()
+    ? '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>'
+    : '<div class="banner">You can pull a single key. Ring release is done by Ailyn or Steph.</div>';
+}
+
 async function loadRings(){
   const d=await sbGet('key_rings?active=eq.true&order=area.asc,label.asc');
   if(!Array.isArray(d)){document.getElementById('ring-list').innerHTML=
@@ -298,6 +307,11 @@ function renderRing(){
     <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(r.area)}</div>
     <div style="margin-top:9px"><span class="pill ${r.status==='out'?'p-out':'p-in'}">
       ${r.status==='out'?'OUT — '+esc(r.out_to||'')+' · '+ago(r.out_at):'IN OFFICE'}</span></div>`;
+  if(!isKeeper()){
+    document.getElementById('ring-act').innerHTML =
+      '<div class="banner">Only Ailyn or Steph can release or receive a ring.</div>';
+    return;
+  }
   document.getElementById('ring-act').innerHTML = r.status==='out'
     ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
     : `<div class="lbl">Give ring to</div>
@@ -305,21 +319,25 @@ function renderRing(){
        <button class="btn btn-pri" style="margin-top:10px" onclick="ringOut()">Ring out →</button>`;
 }
 async function ringOut(){
+  if(!isKeeper()){toast('Only Ailyn or Steph can release a ring');return;}
   const to=document.getElementById('ring-to').value;
   const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
     {status:'out',out_to:to,out_at:new Date().toISOString(),updated_at:new Date().toISOString()});
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_out',actor:to,
-    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString()}]);
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
+    notes:'Released by '+ME.name}]);
   CUR_RING.status='out';CUR_RING.out_to=to;CUR_RING.out_at=new Date().toISOString();
   toast('Ring out to '+to); renderRing(); loadRings();
 }
 async function ringIn(){
+  if(!isKeeper()){toast('Only Ailyn or Steph can receive a ring');return;}
   const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
     {status:'in',out_to:null,out_at:null,updated_at:new Date().toISOString()});
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_in',actor:CUR_RING.out_to||'—',
-    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString()}]);
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
+    notes:'Received by '+ME.name}]);
   CUR_RING.status='in';CUR_RING.out_to=null;
   toast('Ring returned'); renderRing(); loadRings();
 }
@@ -327,6 +345,7 @@ async function ringIn(){
 // ── SCAN ──
 let LAST_AUTH='pin';
 function startScan(){
+  if(!isKeeper()){toast('Ring scan is for Ailyn or Steph');return;}
   go('scan');
   SCANNER=new Html5Qrcode('reader');
   SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:230,height:230}},
