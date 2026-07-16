@@ -80,15 +80,15 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="topbar">
   <div class="tb-title">🔑 SPAWN KEYS</div>
-  <div class="tb-user" id="tb-user"></div>
+  <div class="tb-user" id="tb-user" onclick="logout()" style="cursor:pointer"></div>
 </div>
 
 <!-- LOGIN -->
 <div class="screen active" id="screen-login">
   <div class="wrap">
     <div class="card">
-      <div class="lbl">Who are you?</div>
-      <select id="acc-sel"><option value="">Loading…</option></select>
+      <div class="lbl">Enter your PIN</div>
+      <div id="pin-err" style="color:var(--spawn-red);font-size:13px;font-weight:700;min-height:18px"></div>
       <div class="pin-dots" id="pin-dots"></div>
       <div class="pin-grid" id="pin-grid"></div>
     </div>
@@ -192,7 +192,7 @@ window.__GW_TOKEN=null;
   };
 })();
 
-let ME=null, ACCTS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
+let ME=null, ACCTS=[], COLLECTORS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
 let PULL_RING=null, PULL_VENDO=null, PULL_KT=null, SEARCH_T=null;
 
 function toast(m,d=2600){const e=document.getElementById('toast');e.textContent=m;
@@ -217,11 +217,13 @@ async function loadRoster(){
     const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({roster:true})});
     const d=await r.json();
-    ACCTS=d.accounts||d.roster||d||[];
-    const sel=document.getElementById('acc-sel');
-    sel.innerHTML='<option value="">Select your name…</option>'+
-      ACCTS.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}${a.role?' — '+esc(a.role):''}</option>`).join('');
-  }catch(e){ toast('Cannot load accounts'); }
+    ACCTS=(d&&Array.isArray(d.accounts))?d.accounts:[];
+  }catch(e){ ACCTS=[]; }
+  try{
+    const c=await fetch(SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc',{headers:HDR});
+    const cd=await c.json();
+    if(Array.isArray(cd)) COLLECTORS=cd.map(x=>x.name);
+  }catch(e){}
 }
 function buildPad(){
   const g=document.getElementById('pin-grid');
@@ -239,20 +241,23 @@ function tapPin(k){
   if(PIN.length<6){PIN+=k;drawDots();}
 }
 async function doLogin(){
-  const name=document.getElementById('acc-sel').value;
-  if(!name){toast('Pick your name first');return;}
-  if(!PIN){toast('Enter your PIN');return;}
+  if(PIN.length<3){toast('Enter your PIN');return;}
+  const err=document.getElementById('pin-err');
   try{
     const r=await fetch(LOGIN_URL,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({pin:PIN})});
     const d=await r.json();
-    if(!d.token){PIN='';drawDots();toast('Wrong PIN');return;}
+    if(!(r.ok && d && d.ok && d.token)){
+      PIN='';drawDots();err.textContent='Wrong PIN — try again';return;
+    }
     window.__GW_TOKEN=d.token;
-    ME={name:(d.name||name),role:(d.role||'')};
+    ME={id:d.id,name:d.name,role:d.role||'Staff'};
+    err.textContent='';
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
+    await loadRoster();
     go('home'); loadRings();
-  }catch(e){toast('Login failed');}
+  }catch(e){ PIN='';drawDots();err.textContent='Login failed'; }
 }
 
 // ── RINGS ──
@@ -296,7 +301,7 @@ function renderRing(){
   document.getElementById('ring-act').innerHTML = r.status==='out'
     ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
     : `<div class="lbl">Give ring to</div>
-       <select id="ring-to">${ACCTS.map(a=>`<option>${esc(a.name)}</option>`).join('')}</select>
+       <select id="ring-to">${(COLLECTORS.length?COLLECTORS:ACCTS.map(a=>a.name)).map(n=>`<option>${esc(n)}</option>`).join('')}</select>
        <button class="btn btn-pri" style="margin-top:10px" onclick="ringOut()">Ring out →</button>`;
 }
 async function ringOut(){
@@ -405,8 +410,16 @@ async function confirmPull(){
   go('home'); loadRings();
 }
 
+function logout(){
+  if(!ME) return;
+  if(!confirm('Log out '+ME.name+'?')) return;
+  window.__GW_TOKEN=null; ME=null; PIN=''; drawDots();
+  document.getElementById('tb-user').textContent='';
+  go('login');
+}
+
 // ── BOOT ──
-buildPad(); loadRoster();
+buildPad();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw-keys.js').catch(()=>{});}
 </script>
 </body>
