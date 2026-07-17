@@ -5220,14 +5220,28 @@ let _bwTick = null;
 // a test harvest silently become real money, which is not recoverable by
 // inspection because nothing would distinguish it.
 let _V4_TRIAL = true;
+
+// Show the badge IMMEDIATELY, before any network call. It was previously only
+// drawn after the settings fetch resolved — so if spawn_settings is not on the
+// spawn-gw allowlist (it is a new table), the fetch 403s, the badge never
+// appears, and v4 looks exactly like the real app while still being trial.
+// The warning must not depend on the network succeeding.
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', ()=>{ if(_V4_TRIAL) _v4TrialBadge(); });
+}else{
+  setTimeout(()=>{ if(_V4_TRIAL) _v4TrialBadge(); }, 0);
+}
+
 (async function loadTrialFlag(){
   try{
     const r = await fetch(SB+'/rest/v1/spawn_settings?select=value&key=eq.v4_trial_mode',{headers:HDR});
-    if(!r.ok) return;                       // stay trial
+    if(!r.ok){ console.warn('[v4] trial flag read failed ('+r.status+') — staying in TRIAL'); return; }
     const d = await r.json();
     if(Array.isArray(d) && d[0]) _V4_TRIAL = (d[0].value === 'true');
-    if(_V4_TRIAL) _v4TrialBadge();
-  }catch(e){ /* stay trial */ }
+    // Promoted to live: take the badge down.
+    if(!_V4_TRIAL){ const b=document.getElementById('v4-trial-badge'); if(b) b.remove(); }
+    else _v4TrialBadge();
+  }catch(e){ console.warn('[v4] trial flag read threw — staying in TRIAL', e); }
 })();
 
 // Make trial mode impossible to miss. A tester who forgets he is in trial
@@ -5259,7 +5273,15 @@ async function bwNeedsBorrow(){
   if(!selectedCollector) return false;
   const r = await fetch(SB+'/rest/v1/key_rings?select=id,label,area,short_code&status=eq.out&out_to=eq.'
                         +encodeURIComponent(selectedCollector), {headers:HDR});
-  if(!r.ok) return false;
+  if(!r.ok){
+    // key_rings is a NEW table. v4 routes REST through spawn-gw, which keeps its
+    // own table allowlist — if key_rings is not on it this 403s and, returning
+    // false, we would skip the borrow screen entirely and look like it works.
+    // Say so instead of hiding it.
+    console.error('[Borrow] key_rings read failed ('+r.status+') — is key_rings on the spawn-gw allowlist?');
+    toast('⚠ Cannot read keys (gateway '+r.status+')', 5000);
+    return false;
+  }
   const held = await r.json();
   if(Array.isArray(held) && held.length){
     _bwHeld = held;      // he's carrying — show them on home, don't block
