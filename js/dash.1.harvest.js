@@ -2016,11 +2016,17 @@ async function rcnUnlink(vendoName, opts){
       body:JSON.stringify(vendoPatch)});
     if(!r2.ok){ toast('Unlink failed'); return; }
 
-    // Clear the name everywhere it is mirrored.
+    // Clear the name everywhere it is mirrored — AND clear the recon figures
+    // derived from it. tg_income/recon_gap/recon_flag were computed FROM the
+    // TG match; once the match is gone they are orphaned. Leaving them behind
+    // means the row keeps reconciling against income it is no longer linked to,
+    // and the deficit/surplus cards keep counting it. Only NAME-DERIVED recon
+    // fields are cleared here — coins_total, spawn_share and every other money
+    // column the collector actually counted are never touched.
     try{
       await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}`,{method:'PATCH',
         headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
-        body:JSON.stringify({tg_name:null})});
+        body:JSON.stringify({tg_name:null, tg_income:null, recon_gap:null, recon_flag:null, recon_at:null})});
     }catch(e){ console.error('harvests unlink sync failed:',e); }
     try{
       await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${id}`,{method:'PATCH',
