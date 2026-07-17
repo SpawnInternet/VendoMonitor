@@ -286,9 +286,51 @@ function startApprove(){
   ).catch(()=>{toast('Camera failed');go('home');});
 }
 
+// Branded PIN sheet. prompt() is a grey OS box that looks like a scam and
+// shows the PIN in plain text on some Androids — not what you want the person
+// holding the keys to your whole float typing into.
+function keeperPinAsk(title, subtitle){
+  return new Promise(resolve=>{
+    let val='';
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;font-family:inherit';
+    const dots=()=>Array.from({length:4},(_,i)=>
+      `<div style="width:13px;height:13px;border-radius:50%;background:${i<val.length?'#025AC6':'#dbe2f0'};transition:.15s"></div>`).join('');
+    const keys=['1','2','3','4','5','6','7','8','9','','0','⌫'];
+    ov.innerHTML=`<div data-sheet style="width:100%;max-width:420px;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.3);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;padding:18px 20px;text-align:center">
+        <div style="font-size:17px;font-weight:800">${title}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:2px">${subtitle||''}</div>
+      </div>
+      <div style="padding:18px">
+        <div data-dots style="display:flex;gap:11px;justify-content:center;margin-bottom:16px">${dots()}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+          ${keys.map(k=>k===''
+            ? '<div></div>'
+            : `<button data-k="${k}" style="padding:15px 0;border:0;border-radius:13px;background:${k==='⌫'?'#f1f4fa':'#EEF1FA'};color:#025AC6;font-size:19px;font-weight:800;font-family:inherit;cursor:pointer">${k}</button>`).join('')}
+        </div>
+        <button data-cancel style="width:100%;margin-top:12px;padding:12px;border:2px solid #e6eaf4;border-radius:12px;background:#fff;color:#7a869c;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
+      </div>
+    </div>`;
+    const redraw=()=>{ ov.querySelector('[data-dots]').innerHTML=dots(); };
+    const done=v=>{ ov.remove(); resolve(v); };
+    ov.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+      const k=b.getAttribute('data-k');
+      if(k==='⌫'){ val=val.slice(0,-1); redraw(); return; }
+      if(val.length>=4) return;
+      val+=k; redraw();
+      try{ navigator.vibrate && navigator.vibrate(15); }catch(e){}
+      if(val.length===4) setTimeout(()=>done(val),140);
+    });
+    ov.querySelector('[data-cancel]').onclick=()=>done(null);
+    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
+    document.body.appendChild(ov);
+  });
+}
+
 async function askApprovePin(){
   if(!APPROVE_TOKEN){ toast('No QR scanned'); return; }
-  const pin = prompt('Your PIN to approve this handover:');
+  const pin = await keeperPinAsk('Approve handover','Your PIN — not the collector\'s');
   if(pin===null) { go('home'); return; }
   try{
     const r = await fetch(SB+'/rest/v1/rpc/spawn_handover_approve',{
