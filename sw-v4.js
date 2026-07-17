@@ -2,7 +2,7 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-trial-v1';
+const CACHE = 'spawn-harvest-v4-trial-v2';
 const APP_HTML = '/VendoMonitor/harvest_v4.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v4.html',
