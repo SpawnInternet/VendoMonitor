@@ -5314,9 +5314,95 @@ async function bwStopScan(){
   const sb=document.getElementById('bw-scan-btn'); if(sb) sb.style.display='';
   const tb=document.getElementById('bw-stop-btn'); if(tb) tb.style.display='none';
 }
-function bwManualEntry(){
-  const c = prompt('Type the tag code (e.g. SK04):');
+// Branded code entry. Replaces prompt(), which on a cracked 6AM phone screen
+// is a grey box that half of them will dismiss by accident.
+function bwCodeAsk(){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
+    ov.innerHTML=`<div style="width:100%;max-width:330px;background:#fff;border-radius:19px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.34)">
+      <div style="background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;padding:17px 19px">
+        <div style="font-size:16.5px;font-weight:800">Type the tag code</div>
+        <div style="font-size:12px;opacity:.82;margin-top:2px">It is printed under the barcode, e.g. SK04</div>
+      </div>
+      <div style="padding:18px">
+        <input data-in maxlength="6" autocapitalize="characters" autocomplete="off"
+          style="width:100%;box-sizing:border-box;padding:14px;border:2px solid #C7D2FE;border-radius:13px;font-size:22px;font-weight:800;font-family:inherit;text-align:center;letter-spacing:3px;color:#025AC6;text-transform:uppercase" placeholder="SK__">
+        <button data-ok style="width:100%;margin-top:12px;padding:14px;border:0;border-radius:13px;background:linear-gradient(135deg,#025AC6,#1565c0);color:#fff;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer">Add tag</button>
+        <button data-cancel style="width:100%;margin-top:8px;padding:11px;border:2px solid #e6eaf4;border-radius:12px;background:#fff;color:#7a869c;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
+      </div>
+    </div>`;
+    const inp=ov.querySelector('[data-in]');
+    const done=v=>{ ov.remove(); resolve(v); };
+    ov.querySelector('[data-ok]').onclick=()=>done(inp.value.trim().toUpperCase()||null);
+    ov.querySelector('[data-cancel]').onclick=()=>done(null);
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') done(inp.value.trim().toUpperCase()||null); });
+    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
+    document.body.appendChild(ov);
+    setTimeout(()=>inp.focus(),80);
+  });
+}
+async function bwManualEntry(){
+  const c = await bwCodeAsk();
   if(c) bwAddCode(c);
+}
+
+// ══ RETURN KEYS ═══════════════════════════════════════════════════════
+// End of day: he raises a returning QR, Steph scans it, keys mark IN and
+// tomorrow's gate opens. Same token mechanics as borrow — nothing secret on
+// his phone, single-use, 5-minute life.
+async function bwReturnQR(){
+  if(!selectedCollector) return;
+  try{
+    const res = await bwRpc('spawn_handover_create', {
+      p_collector: selectedCollector, p_kind: 'return', p_ring_ids: []
+    });
+    if(!res || !res.ok){ toast(res && res.error ? res.error : 'Could not create'); return; }
+    _bwToken = res.token;
+
+    document.getElementById('bw-who').textContent = selectedCollector + ' · returning keys';
+    document.getElementById('bw-scan-card').style.display='none';
+    document.getElementById('bw-qr-card').style.display='';
+    document.getElementById('borrow-overlay').style.display='block';
+
+    const box=document.getElementById('bw-qr'); box.innerHTML='';
+    if(typeof QRCode!=='undefined'){
+      new QRCode(box,{text:_bwToken,width:200,height:200,colorDark:'#028867',colorLight:'#ffffff'});
+    }else{
+      box.innerHTML='<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:200px;color:#028867">'+_bwToken+'</div>';
+    }
+    document.getElementById('bw-qr-rings').innerHTML =
+      _bwHeld.length ? '↩ Returning: ' + _bwHeld.map(r=>`<b>${r.label}</b>`).join(' · ')
+                     : '↩ Returning everything you are holding';
+    document.getElementById('bw-qr-status').innerHTML='⏳ Waiting for Steph…';
+    bwStartPollReturn(res.expires_in_sec||300);
+  }catch(e){ toast('Error: '+e.message); }
+}
+
+function bwStartPollReturn(secs){
+  let left=secs;
+  const tEl=document.getElementById('bw-qr-timer');
+  bwCancelPoll();
+  _bwTick=setInterval(()=>{
+    left--;
+    const m=Math.floor(left/60), s=left%60;
+    if(tEl) tEl.textContent = left>0 ? `expires in ${m}:${String(s).padStart(2,'0')}` : 'expired';
+    if(left<=0){ bwCancelPoll();
+      document.getElementById('bw-qr-status').innerHTML='<span style="color:#DF1A35">⌛ Expired — tap Back and retry</span>'; }
+  },1000);
+  _bwPoll=setInterval(async ()=>{
+    try{
+      const st=await bwRpc('spawn_handover_status',{p_token:_bwToken});
+      if(st && st.status==='approved'){
+        bwCancelPoll();
+        document.getElementById('bw-qr-status').innerHTML=
+          '<span style="color:#028867">✅ Keys returned — approved by '+(st.approved_by||'keeper')+'</span>';
+        try{ navigator.vibrate && navigator.vibrate([60,40,60]); }catch(e){}
+        _bwHeld=[];
+        setTimeout(()=>{ bwHide(); bwRenderHeldBanner(); }, 1300);
+      }
+    }catch(e){}
+  },2500);
 }
 
 // Ask the server for a token, render it as a QR, then poll until Steph approves.
@@ -5409,8 +5495,39 @@ function bwRenderHeldBanner(){
   el.style.cssText='background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;border-radius:15px;padding:13px 15px;margin:0 0 13px;box-shadow:0 4px 16px rgba(2,90,198,.26)';
   el.innerHTML = `<div style="font-size:11px;font-weight:700;opacity:.8;letter-spacing:.4px">🔑 KEYS YOU ARE CARRYING</div>
     <div style="font-size:14.5px;font-weight:800;margin-top:4px;line-height:1.5">${_bwHeld.map(r=>r.label).join(' · ')}</div>
-    <div style="font-size:11px;opacity:.75;margin-top:4px">Return to the office and have Steph scan your QR</div>`;
+    <button onclick="bwReturnQR()" style="width:100%;margin-top:11px;padding:11px;border:0;border-radius:11px;background:rgba(255,255,255,.18);color:#fff;font-size:13.5px;font-weight:800;font-family:inherit;cursor:pointer;backdrop-filter:blur(4px)">↩ Return keys — show QR to Steph</button>`;
 }
+
+// ══ 3AM AUTO-CLOSE ════════════════════════════════════════════════════
+// The app locks between 22:00 and 05:00 Manila. Nobody harvests at 3am, and a
+// phone left logged in overnight is an open door.
+//
+// HONEST LIMIT: this reads the PHONE's clock. Change the device time and it is
+// gone. It keeps honest people honest and closes the "left it logged in on the
+// jeep" case — it is not a security control, and should not be sold as one.
+function bwNightCheck(){
+  const now = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
+  const h = now.getHours();
+  const closed = (h >= 22 || h < 5);
+  let el = document.getElementById('bw-night');
+  if(!closed){ if(el) el.remove(); return false; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'bw-night';
+    el.style.cssText='position:fixed;inset:0;z-index:99997;background:linear-gradient(160deg,#0d1b3e,#311A8E);display:flex;align-items:center;justify-content:center;padding:26px;font-family:inherit';
+    el.innerHTML=`<div style="text-align:center;color:#fff;max-width:330px">
+      <div style="font-size:52px;margin-bottom:12px">🌙</div>
+      <div style="font-size:21px;font-weight:800;margin-bottom:7px">Closed for the night</div>
+      <div style="font-size:14px;opacity:.8;line-height:1.6">Spawn Harvest is available from <b style="color:#FFB725">5:00 AM</b> to <b style="color:#FFB725">10:00 PM</b>.<br>Get some rest.</div>
+      <div id="bw-night-clock" style="font-size:13px;opacity:.55;margin-top:16px;font-weight:700"></div>
+    </div>`;
+    document.body.appendChild(el);
+  }
+  const c=document.getElementById('bw-night-clock');
+  if(c) c.textContent = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' Manila';
+  return true;
+}
+setInterval(bwNightCheck, 30000);
 
 async function showHomeScreen(){
   if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}
@@ -5428,6 +5545,7 @@ async function showHomeScreen(){
   // Yesterday's keys are cleared. Now: is he carrying today's?
   // If he holds no rings, he must borrow before harvesting.
   try{
+    if(bwNightCheck()) return;    // 22:00–05:00 Manila: closed
     const needBorrow = await bwNeedsBorrow();
     if(needBorrow){ bwShow(); return; }
   }catch(e){
@@ -5444,6 +5562,7 @@ async function showHomeScreen(){
   const hb = document.getElementById('bnav-home');
   if(hb) hb.classList.add('active');
   loadHomeStats();
+  bwRenderHeldBanner();   // if he is already carrying, remind him on home
   loadCrucialAreas();
 }
 
