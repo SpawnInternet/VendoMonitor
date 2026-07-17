@@ -1,11 +1,13 @@
-// sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
+// sw-v4.js — Spawn Harvest V4 TRIAL Service Worker.
+// Strictly isolated from v3: own cache name, own manifest, own HTML.
+// It must never read, write, or evict anything belonging to v3, because
+// v3 is the app live in collectors' hands.
 const CACHE = 'spawn-harvest-v4-trial-v1';
 const APP_HTML = '/VendoMonitor/harvest_v4.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v4.html',
-  '/VendoMonitor/manifest-v3.json',
-  // Shared with v2 — v3 uses the same mark. Precached so an installed app shows
-  // its icon and splash offline from the first launch.
+  '/VendoMonitor/manifest-v4.json',
+  // Icons are shared static assets — read-only, safe to precache.
   '/VendoMonitor/icon-192.png',
   '/VendoMonitor/icon-512.png',
 ];
@@ -25,13 +27,19 @@ self.addEventListener('install', e => {
   );
 });
 
-// ── ACTIVATE: delete old v3 caches only (leave v2's alone) ─────────
+// ── ACTIVATE: delete ONLY our own stale v4-trial caches. ───────────
+// This SW was copied from sw-v3.js, where this line read
+// startsWith('spawn-harvest-v3') — correct there, catastrophic here:
+// v4's CACHE is 'spawn-harvest-v4-...', so the `k !== CACHE` guard
+// never protected v3, and opening v4 on a phone that has v3 installed
+// would wipe v3's offline cache out from under a working collector.
+// v4 must never touch anything that isn't v4's.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k.startsWith('spawn-harvest-v3') && k !== CACHE)
+          .filter(k => k.startsWith('spawn-harvest-v4') && k !== CACHE)
           .map(k => caches.delete(k))
       )
     )
@@ -59,8 +67,17 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
 
-  // Navigation requests — network first (fresh HTML), cache fallback offline
+  // Navigation requests — network first (fresh HTML), cache fallback offline.
+  //
+  // ISOLATION: sw-v3 and sw-v4 both claim scope /VendoMonitor/, and only one
+  // SW can control a page — last registration wins. If v4 wins on a phone that
+  // also has v3, an OFFLINE v3 navigation would land here and serveAppHtml()
+  // would hand back harvest_v4.html — a v3 collector silently getting v4.
+  // So: only handle navigations that are actually for v4. Everything else is
+  // passed straight through to the network, untouched.
   if (req.mode === 'navigate') {
+    const isV4Nav = url.pathname.includes('harvest_v4');
+    if (!isV4Nav) return;   // not ours — let the browser/other SW deal with it
     e.respondWith(
       fetch(req).then(response => {
         if (response && response.status === 200) {
