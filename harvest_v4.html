@@ -368,6 +368,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Sticky bottom bar for receipt screen */
 .rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
 </style>
+<!-- Borrow flow needs: barcode scanning (area tags) + QR rendering (for Steph).
+     v4 had no external scripts; these are the only two. Both are guarded —
+     if a CDN is unreachable (spotty signal at 6AM), bwStartScan/bwRequestQR
+     fall back to manual entry rather than dying silently. -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -392,6 +398,54 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eef1f6">
         <span id="gate-admin-link" onclick="gateAdminPrompt()" style="font-size:12px;color:#b6bfd0;cursor:pointer;user-select:none;letter-spacing:.4px">admin</span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BORROW KEYS ══════════════════════════════════════════════════
+     Shown after the gate opens, before harvesting. He scans area tags
+     (Code128 "SK01".."SK20"), taps Go Harvest, and a QR appears that
+     Steph scans in SPAWN KEYS. Only then does harvest open.
+     Mounted in the SHELL, outside .screen, so showScreen() can't hide it. -->
+<div id="borrow-overlay" style="display:none;position:fixed;inset:0;z-index:99998;background:linear-gradient(160deg,#eef1fa 0%,#e6ecfa 100%);overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 16px;box-sizing:border-box">
+    <div style="width:100%;max-width:400px">
+
+      <!-- STEP 1 — scan rings -->
+      <div id="bw-scan-card" style="background:#fff;border-radius:20px;box-shadow:0 8px 34px rgba(2,90,198,.14);overflow:hidden">
+        <div style="background:linear-gradient(135deg,#025AC6 0%,#311A8E 100%);padding:20px 22px;color:#fff">
+          <div style="font-size:20px;font-weight:800;letter-spacing:-.3px">🔑 Borrow Keys</div>
+          <div id="bw-who" style="font-size:12.5px;opacity:.82;margin-top:3px"></div>
+        </div>
+        <div style="padding:20px 18px">
+          <div id="bw-reader" style="display:none;border-radius:14px;overflow:hidden;margin-bottom:14px;background:#000"></div>
+
+          <button id="bw-scan-btn" onclick="bwStartScan()" style="width:100%;padding:15px;border-radius:14px;border:0;background:linear-gradient(135deg,#025AC6,#1565c0);color:#fff;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(2,90,198,.3)">📷 Scan area tag</button>
+          <button id="bw-stop-btn" onclick="bwStopScan()" style="display:none;width:100%;padding:13px;border-radius:14px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">✕ Stop camera</button>
+
+          <div onclick="bwManualEntry()" style="text-align:center;margin-top:11px;font-size:12px;color:#8a93a8;cursor:pointer;text-decoration:underline;text-underline-offset:2px">tag damaged? type the code</div>
+
+          <div id="bw-picked" style="margin-top:16px"></div>
+
+          <button id="bw-go" onclick="bwRequestQR()" disabled style="display:none;width:100%;margin-top:16px;padding:16px;border-radius:14px;border:0;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;font-size:17px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 4px 16px rgba(2,136,103,.34)">Go Harvest →</button>
+        </div>
+      </div>
+
+      <!-- STEP 2 — show QR for Steph -->
+      <div id="bw-qr-card" style="display:none;background:#fff;border-radius:20px;box-shadow:0 8px 34px rgba(2,90,198,.14);overflow:hidden">
+        <div style="background:linear-gradient(135deg,#028867 0%,#025AC6 100%);padding:20px 22px;color:#fff;text-align:center">
+          <div style="font-size:19px;font-weight:800">Show this to Steph</div>
+          <div style="font-size:12.5px;opacity:.85;margin-top:3px">She scans it in Spawn Keys</div>
+        </div>
+        <div style="padding:22px 18px;text-align:center">
+          <div id="bw-qr" style="display:inline-block;padding:14px;background:#fff;border:3px solid #EEF1FA;border-radius:16px"></div>
+          <div id="bw-qr-rings" style="font-size:13px;color:#5a6478;margin-top:14px;line-height:1.6"></div>
+          <div id="bw-qr-timer" style="font-size:12px;font-weight:700;color:#FFB725;margin-top:10px"></div>
+          <div id="bw-qr-status" style="font-size:13px;font-weight:700;color:#025AC6;margin-top:14px">⏳ Waiting for approval…</div>
+          <button onclick="bwCancelQR()" style="width:100%;margin-top:18px;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">← Back</button>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -5135,6 +5189,229 @@ async function gateAdminPrompt(){
   }
 }
 
+// ══ BORROW KEYS ═══════════════════════════════════════════════════════
+// Flow: scan area tags → Go Harvest → QR appears → Steph scans it in
+// SPAWN KEYS → rings go OUT to him → harvest opens.
+//
+// The QR carries ONLY an opaque token. No name, no ring list. A photo of it
+// is worthless: single-use, dead in 5 minutes, and generating a new one
+// cancels the old.
+let _bwRings = [];        // rings he has scanned, [{id,label,area,short_code}]
+let _bwScanner = null;
+let _bwToken = null;
+let _bwPoll = null;
+let _bwTick = null;
+
+async function bwRpc(fn, args){
+  const r = await fetch(GW_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+    body: JSON.stringify({kind:'rpc', fn, args})
+  });
+  if(!r.ok) throw new Error('rpc '+fn+' failed: '+r.status);
+  const j = await r.json();
+  return (Array.isArray(j) && j.length===1 && typeof j[0]==='object' && !Array.isArray(j[0]))
+    ? j[0] : j;
+}
+
+// Does he already hold rings? If yes, no borrow needed — he's mid-cycle.
+async function bwNeedsBorrow(){
+  if(!selectedCollector) return false;
+  const r = await fetch(SB+'/rest/v1/key_rings?select=id,label,area,short_code&status=eq.out&out_to=eq.'
+                        +encodeURIComponent(selectedCollector), {headers:HDR});
+  if(!r.ok) return false;
+  const held = await r.json();
+  if(Array.isArray(held) && held.length){
+    _bwHeld = held;      // he's carrying — show them on home, don't block
+    return false;
+  }
+  return true;
+}
+let _bwHeld = [];
+
+function bwShow(){
+  _bwRings = [];
+  document.getElementById('bw-who').textContent = (selectedCollector||'') + ' · scan the tags you are taking';
+  document.getElementById('bw-scan-card').style.display='';
+  document.getElementById('bw-qr-card').style.display='none';
+  document.getElementById('borrow-overlay').style.display='block';
+  bwRenderPicked();
+}
+function bwHide(){
+  bwStopScan();
+  bwCancelPoll();
+  document.getElementById('borrow-overlay').style.display='none';
+}
+
+function bwRenderPicked(){
+  const el = document.getElementById('bw-picked');
+  const go = document.getElementById('bw-go');
+  if(!_bwRings.length){
+    el.innerHTML = '<div style="text-align:center;color:#a8b0c2;font-size:13px;padding:14px 0">No tags scanned yet</div>';
+    go.style.display='none';
+    return;
+  }
+  el.innerHTML = _bwRings.map(r=>`
+    <div style="display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#EEF1FA,#e6ecfa);border:2px solid #C7D2FE;border-radius:13px;padding:11px 13px;margin-bottom:8px">
+      <div style="width:34px;height:34px;border-radius:9px;background:#025AC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">${r.short_code||''}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14.5px;font-weight:800;color:#111">${r.label}</div>
+        <div style="font-size:11px;color:#6b7a90;font-weight:600">${r.area}</div>
+      </div>
+      <div onclick="bwRemove(${r.id})" style="color:#DF1A35;font-weight:800;font-size:16px;cursor:pointer;padding:0 4px">✕</div>
+    </div>`).join('');
+  go.style.display='';
+  go.disabled = false;
+}
+function bwRemove(id){ _bwRings = _bwRings.filter(r=>r.id!==id); bwRenderPicked(); }
+
+async function bwAddCode(code){
+  const c = String(code||'').trim().toUpperCase();
+  if(!c) return;
+  if(_bwRings.some(r=>r.short_code===c || r.qr_code===c)){ toast('Already scanned'); return; }
+  const r = await fetch(SB+'/rest/v1/key_rings?select=id,label,area,short_code,status,out_to&or=(short_code.eq.'
+            +encodeURIComponent(c)+',qr_code.eq.'+encodeURIComponent(c)+')', {headers:HDR});
+  const d = await r.json();
+  if(!Array.isArray(d) || !d.length){ toast('Unknown tag: '+c); return; }
+  const ring = d[0];
+  if(ring.status==='out' && ring.out_to && ring.out_to!==selectedCollector){
+    toast('⚠ '+ring.label+' is already out with '+ring.out_to);
+    return;
+  }
+  _bwRings.push(ring);
+  bwRenderPicked();
+  try{ navigator.vibrate && navigator.vibrate(40); }catch(e){}
+  toast('✅ '+ring.label);
+}
+
+function bwStartScan(){
+  if(typeof Html5Qrcode==='undefined'){
+    toast('Scanner unavailable — type the code');
+    bwManualEntry();
+    return;
+  }
+  document.getElementById('bw-reader').style.display='';
+  document.getElementById('bw-scan-btn').style.display='none';
+  document.getElementById('bw-stop-btn').style.display='';
+  let cfg;
+  try{
+    const F = Html5QrcodeSupportedFormats;
+    cfg = {formatsToSupport:[F.CODE_128, F.QR_CODE, F.DATA_MATRIX]};
+  }catch(e){ cfg = undefined; }
+  _bwScanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
+  _bwScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:250,height:130}},
+    async txt=>{ await bwAddCode(txt); },
+    ()=>{}
+  ).catch(()=>{
+    toast('Camera failed — type the code');
+    bwStopScan();
+    bwManualEntry();
+  });
+}
+async function bwStopScan(){
+  if(_bwScanner){ try{ await _bwScanner.stop(); _bwScanner.clear(); }catch(e){} _bwScanner=null; }
+  const rd=document.getElementById('bw-reader');   if(rd) rd.style.display='none';
+  const sb=document.getElementById('bw-scan-btn'); if(sb) sb.style.display='';
+  const tb=document.getElementById('bw-stop-btn'); if(tb) tb.style.display='none';
+}
+function bwManualEntry(){
+  const c = prompt('Type the tag code (e.g. SK04):');
+  if(c) bwAddCode(c);
+}
+
+// Ask the server for a token, render it as a QR, then poll until Steph approves.
+async function bwRequestQR(){
+  if(!_bwRings.length){ toast('Scan at least one tag'); return; }
+  await bwStopScan();
+  const go = document.getElementById('bw-go');
+  go.disabled = true; go.textContent = 'Creating…';
+  try{
+    const res = await bwRpc('spawn_handover_create', {
+      p_collector: selectedCollector, p_kind: 'borrow',
+      p_ring_ids: _bwRings.map(r=>r.id)
+    });
+    if(!res || !res.ok){ toast(res && res.error ? res.error : 'Could not create request'); return; }
+    _bwToken = res.token;
+
+    document.getElementById('bw-scan-card').style.display='none';
+    document.getElementById('bw-qr-card').style.display='';
+    const box = document.getElementById('bw-qr');
+    box.innerHTML='';
+    if(typeof QRCode!=='undefined'){
+      new QRCode(box, {text:_bwToken, width:200, height:200,
+                       colorDark:'#025AC6', colorLight:'#ffffff'});
+    }else{
+      // No QR lib: show the token so Steph can type it. Ugly but not stranded.
+      box.innerHTML = '<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:200px;color:#025AC6">'+_bwToken+'</div>';
+    }
+    document.getElementById('bw-qr-rings').innerHTML =
+      '🔑 ' + _bwRings.map(r=>`<b>${r.label}</b>`).join(' · ');
+
+    bwStartPoll(res.expires_in_sec||300);
+  }catch(e){
+    toast('Error: '+e.message);
+  }finally{
+    go.disabled=false; go.textContent='Go Harvest →';
+  }
+}
+
+function bwStartPoll(secs){
+  let left = secs;
+  const tEl = document.getElementById('bw-qr-timer');
+  bwCancelPoll();
+  _bwTick = setInterval(()=>{
+    left--;
+    const m = Math.floor(left/60), s = left%60;
+    if(tEl) tEl.textContent = left>0 ? `expires in ${m}:${String(s).padStart(2,'0')}` : 'expired';
+    if(left<=0){
+      bwCancelPoll();
+      document.getElementById('bw-qr-status').innerHTML='<span style="color:#DF1A35">⌛ Expired — go back and try again</span>';
+    }
+  },1000);
+  _bwPoll = setInterval(async ()=>{
+    try{
+      const st = await bwRpc('spawn_handover_status', {p_token:_bwToken});
+      if(st && st.status==='approved'){
+        bwCancelPoll();
+        document.getElementById('bw-qr-status').innerHTML =
+          '<span style="color:#028867">✅ Approved by '+(st.approved_by||'keeper')+'</span>';
+        try{ navigator.vibrate && navigator.vibrate([60,40,60]); }catch(e){}
+        setTimeout(async ()=>{
+          bwHide();
+          _bwHeld = _bwRings.slice();
+          showScreen('screen-home');
+          bwRenderHeldBanner();
+        }, 1100);
+      }
+    }catch(e){}
+  }, 2500);
+}
+function bwCancelPoll(){
+  if(_bwPoll){ clearInterval(_bwPoll); _bwPoll=null; }
+  if(_bwTick){ clearInterval(_bwTick); _bwTick=null; }
+}
+function bwCancelQR(){
+  bwCancelPoll();
+  document.getElementById('bw-qr-card').style.display='none';
+  document.getElementById('bw-scan-card').style.display='';
+}
+
+// Reminder banner on the home screen: what he is carrying today.
+function bwRenderHeldBanner(){
+  let el = document.getElementById('bw-held-banner');
+  if(!_bwHeld || !_bwHeld.length){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'bw-held-banner';
+    const home = document.getElementById('screen-home');
+    if(home) home.insertBefore(el, home.firstChild);
+  }
+  el.style.cssText='background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;border-radius:15px;padding:13px 15px;margin:0 0 13px;box-shadow:0 4px 16px rgba(2,90,198,.26)';
+  el.innerHTML = `<div style="font-size:11px;font-weight:700;opacity:.8;letter-spacing:.4px">🔑 KEYS YOU ARE CARRYING</div>
+    <div style="font-size:14.5px;font-weight:800;margin-top:4px;line-height:1.5">${_bwHeld.map(r=>r.label).join(' · ')}</div>
+    <div style="font-size:11px;opacity:.75;margin-top:4px">Return to the office and have Steph scan your QR</div>`;
+}
+
 async function showHomeScreen(){
   if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}
   // Gate: yesterday must be closed before today opens.
@@ -5147,6 +5424,15 @@ async function showHomeScreen(){
     console.error('[Gate] check threw, failing open', e);
     _gateOK = true;
     gateHide();
+  }
+  // Yesterday's keys are cleared. Now: is he carrying today's?
+  // If he holds no rings, he must borrow before harvesting.
+  try{
+    const needBorrow = await bwNeedsBorrow();
+    if(needBorrow){ bwShow(); return; }
+  }catch(e){
+    // Same rule as the gate: never strand him on our own bug.
+    console.error('[Borrow] check threw, skipping', e);
   }
   showScreen('screen-home');
   document.getElementById('home-collector-name').textContent = selectedCollector||'—';
