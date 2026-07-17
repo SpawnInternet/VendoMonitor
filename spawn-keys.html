@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#025AC6">
 <title>Spawn Keys</title>
-<link rel="manifest" href="keys-manifest.json">
-<link rel="apple-touch-icon" href="spawn-globe.png">
+<link rel="manifest" href="/VendoMonitor/keys-manifest.json">
+<link rel="apple-touch-icon" href="/VendoMonitor/spawn-touch-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Spawn Keys">
@@ -85,7 +85,10 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="topbar">
   <div class="tb-title">🔑 SPAWN KEYS <span style="background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:99px;margin-left:4px;vertical-align:2px">TRIAL</span></div>
-  <div class="tb-user" id="tb-user" onclick="logout()" style="cursor:pointer"></div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="btn-install" onclick="doInstall()" style="display:none;border:0;border-radius:99px;background:#FFB725;color:#5c3d00;font-family:inherit;font-size:11px;font-weight:800;padding:6px 11px;cursor:pointer;white-space:nowrap">⬇ Install</button>
+    <div class="tb-user" id="tb-user" onclick="logout()" style="cursor:pointer"></div>
+  </div>
 </div>
 
 <!-- LOGIN -->
@@ -470,9 +473,64 @@ function logout(){
   go('login');
 }
 
+// ── INSTALL ─────────────────────────────────────────────────────
+// Chrome fires beforeinstallprompt only when the manifest validates.
+// It was never firing before: keys-manifest.json declared spawn-globe.png
+// as 192x192 when the file is actually 512x512, so Chrome rejected the
+// icon set and offered no install. Icons now declare true dimensions.
+//
+// We stash the event and show our own button, because Chrome's mini-infobar
+// is easy to miss and Steph/Ailyn need something obvious to tap.
+let _installPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();               // suppress the mini-infobar
+  _installPrompt = e;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = '';
+});
+
+window.addEventListener('appinstalled', () => {
+  _installPrompt = null;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = 'none';
+});
+
+async function doInstall(){
+  // iOS Safari never fires beforeinstallprompt — there is no programmatic
+  // install. Tell them how to do it by hand instead of failing silently.
+  if (!_installPrompt){
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    alert(isIOS
+      ? 'To install:\n\nTap the Share button (□↑) at the bottom,\nthen "Add to Home Screen".'
+      : 'To install:\n\nOpen the browser menu (⋮),\nthen "Install app" or "Add to Home screen".');
+    return;
+  }
+  try{
+    _installPrompt.prompt();
+    await _installPrompt.userChoice;
+  }catch(_){}
+  _installPrompt = null;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = 'none';
+}
+
+(function(){
+  const b = document.getElementById('btn-install');
+  if (!b) return;
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (installed){ b.style.display = 'none'; return; }
+  // iOS never fires beforeinstallprompt, so the button would stay hidden
+  // forever and the instructions unreachable. Show it there unconditionally;
+  // doInstall() falls back to the Share-sheet explanation.
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) b.style.display = '';
+})();
+
 // ── BOOT ──
 buildPad();
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw-keys.js').catch(()=>{});}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/VendoMonitor/sw-keys.js', {scope:'/VendoMonitor/'}).catch(()=>{});
+}
 </script>
 </body>
 </html>
