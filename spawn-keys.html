@@ -253,7 +253,64 @@ async function doLogin(){
 function renderHome(){
   var el=document.getElementById('home-keeper');
   if(!el) return;
-  el.innerHTML = '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring QR</button>';
+  // Approving a collector's QR is the thing Steph does every morning, so it
+  // leads. Scanning a ring directly is the secondary, admin-ish path.
+  el.innerHTML =
+    '<button class="btn" onclick="startApprove()" style="margin-bottom:10px;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">✅ Approve collector QR</button>'
+  + '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring tag</button>';
+}
+
+// ══ APPROVE A COLLECTOR'S HANDOVER QR ═════════════════════════════════
+// Steph scans the QR on the collector's phone with HER phone, then types HER
+// PIN here. Nothing secret ever crosses to his device — which is the whole
+// point. If she typed her PIN on his phone he would learn it in a week, and
+// every log line would then falsely say she approved.
+let APPROVE_TOKEN = null;
+
+function startApprove(){
+  if(!isKeeper()){toast('Approval is for Ailyn or Steph');return;}
+  APPROVE_TOKEN = null;
+  go('scan');
+  var cfg;
+  try{
+    const F=Html5QrcodeSupportedFormats;
+    cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
+  }catch(e){ cfg=undefined; }
+  SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
+  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},
+    async txt=>{
+      await stopScan();
+      APPROVE_TOKEN = String(txt||'').trim();
+      askApprovePin();
+    },()=>{}
+  ).catch(()=>{toast('Camera failed');go('home');});
+}
+
+async function askApprovePin(){
+  if(!APPROVE_TOKEN){ toast('No QR scanned'); return; }
+  const pin = prompt('Your PIN to approve this handover:');
+  if(pin===null) { go('home'); return; }
+  try{
+    const r = await fetch(SB+'/rest/v1/rpc/spawn_handover_approve',{
+      method:'POST', headers:HDR,
+      body: JSON.stringify({p_token:APPROVE_TOKEN, p_keeper_pin:String(pin).trim()})
+    });
+    const j = await r.json();
+    const res = (Array.isArray(j)&&j.length===1) ? j[0] : j;
+    if(!res || !res.ok){
+      toast(res && res.error ? res.error : 'Approval failed');
+      go('home');
+      return;
+    }
+    const verb = res.kind==='borrow' ? 'took' : 'returned';
+    toast('✅ '+res.collector+' '+verb+': '+res.rings, 4200);
+    APPROVE_TOKEN=null;
+    await loadRings();
+    go('home');
+  }catch(e){
+    toast('Error: '+e.message);
+    go('home');
+  }
 }
 
 async function loadRings(){
