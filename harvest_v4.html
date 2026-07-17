@@ -4118,6 +4118,14 @@ async function submitHarvest(){
 
   // Also save to harvests table
   const harvestRecord={
+    // TRIAL FLAG — v4 writes to the SAME production tables as v3. Without this
+    // a harvest submitted while testing v4 is indistinguishable from a real
+    // one: it lands in reconciliation, in Spawn share, in the money. Every v4
+    // write is stamped is_test=true and must be filtered out of reporting.
+    // Flip spawn_settings.v4_trial_mode to 'false' when v4 becomes the real
+    // app — no push needed. This also covers the offline queue, which stores
+    // this same object and replays it later.
+    is_test: (typeof _V4_TRIAL==='undefined') ? true : !!_V4_TRIAL,
     harvest_date:today,harvest_window_start:currentItem.last_harvest_date||'2026-04-09',
     harvest_window_end:now,harvested_at:now,
     vendo_id:currentItem.vendo_id||null,
@@ -5201,6 +5209,38 @@ let _bwScanner = null;
 let _bwToken = null;
 let _bwPoll = null;
 let _bwTick = null;
+
+// ══ V4 TRIAL MODE ═════════════════════════════════════════════════════
+// v4 shares production tables with v3. Until v4 is promoted, every harvest it
+// writes is stamped is_test=true so it can never enter money reporting.
+//
+// FAILS SAFE TO TRIAL: if the settings fetch fails (offline at 6AM, gateway
+// down), _V4_TRIAL stays true. The worst case is a real harvest flagged as a
+// test — visible, recoverable with one UPDATE. The opposite default would let
+// a test harvest silently become real money, which is not recoverable by
+// inspection because nothing would distinguish it.
+let _V4_TRIAL = true;
+(async function loadTrialFlag(){
+  try{
+    const r = await fetch(SB+'/rest/v1/spawn_settings?select=value&key=eq.v4_trial_mode',{headers:HDR});
+    if(!r.ok) return;                       // stay trial
+    const d = await r.json();
+    if(Array.isArray(d) && d[0]) _V4_TRIAL = (d[0].value === 'true');
+    if(_V4_TRIAL) _v4TrialBadge();
+  }catch(e){ /* stay trial */ }
+})();
+
+// Make trial mode impossible to miss. A tester who forgets he is in trial
+// reports fake numbers as real; a collector who lands here by accident needs
+// to know his work is not being counted.
+function _v4TrialBadge(){
+  if(document.getElementById('v4-trial-badge')) return;
+  const b=document.createElement('div');
+  b.id='v4-trial-badge';
+  b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99996;background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;font-size:11px;font-weight:800;text-align:center;padding:5px 8px;letter-spacing:.3px;font-family:inherit;pointer-events:none';
+  b.textContent='⚠ TRIAL MODE — harvests are NOT counted as real';
+  document.body.appendChild(b);
+}
 
 async function bwRpc(fn, args){
   const r = await fetch(GW_URL, {
