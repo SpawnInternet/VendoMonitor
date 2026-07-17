@@ -1360,15 +1360,16 @@ async function rcRun(){
           return hd >= from && hd <= to;
         });
         const age = Math.round((Date.now() - new Date(d.generated_at||0).getTime())/60000);
-        // Say plainly that this is cached, and give a one-tap way to read live.
-        // Silent staleness is what makes an edit look like it didn't save.
+        // Say plainly that this is cached. Silent staleness is what makes an
+        // edit look like it didn't save. The refresh button lives in the
+        // toolbar, not here — rcFilter() overwrites this element on every
+        // filter change, so any button placed here would vanish.
         const ageEl = document.getElementById('rc-count');
         if(ageEl){
           const stale = age >= 5;
           ageEl.innerHTML = rcAllRows.length + ' harvests · '
             + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';">'
-            + (stale ? '⚠ cached ' : 'cached ') + age + 'min ago</span> '
-            + '<button id="rc-refresh-btn" onclick="rcForceFresh()" style="border:1px solid #d1d5db;background:#fff;border-radius:6px;font-size:10px;font-weight:700;padding:2px 7px;margin-left:5px;cursor:pointer;font-family:inherit;">↻ Refresh live</button>';
+            + (stale ? '⚠ cached ' : 'cached ') + age + 'min ago</span>';
         }
         rcFilter();
         // Refresh in background if older than 10min OR no rows matched (new harvests not in cache)
