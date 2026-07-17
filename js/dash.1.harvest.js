@@ -1962,6 +1962,18 @@ async function rcnUnlink(vendoName, opts){
     toast(markNoTg ? '✅ Marked: no TG name' : '✅ TG name unlinked');
     htAllRows=[];
     document.getElementById('rc-names-overlay')?.remove();
+
+    // If the collector drill-down popup is open, refresh IT — otherwise
+    // rcRun() rebuilds the table underneath while the popup keeps showing
+    // the old snapshot, which reads as "my unlink did nothing".
+    const openModal = document.getElementById('rc-modal');
+    if(openModal && typeof rcRefreshCollector==='function'){
+      const who = (Array.isArray(rcAllRows)
+        ? (rcAllRows.find(rr=>rr.vendo_id===id)||{}).collector
+        : null) || _rcOpenCollector;
+      if(who){ await rcRefreshCollector(who); return; }
+    }
+
     if(typeof rcRun==='function'){
       try{ rcBypassCache=true; await rcRun(); }
       catch(e){ if(typeof rcFilter==='function') rcFilter(); }
@@ -2217,9 +2229,14 @@ function rcFilter(){
 }
 
 // Recon detail popup — full dates/routes/vendos with working confirm+note buttons
+// Which collector the drill-down popup is currently showing. Needed so an
+// unlink performed inside the popup knows which popup to rebuild.
+let _rcOpenCollector = null;
+
 function rcShowCollector(collector){
   const d=(window._rcDetail||{})[collector];
   if(!d) return;
+  _rcOpenCollector = collector;
   const old=document.getElementById('rc-modal'); if(old) old.remove();
   const ov=document.createElement('div');
   ov.id='rc-modal';
@@ -2236,6 +2253,7 @@ function rcShowCollector(collector){
         <div><div style="font-size:10px;opacity:.7;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${d.exactN??0}</div></div>
         <div><div style="font-size:10px;opacity:.7;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${d.surplusN??0}${d.surplusN?` · ${_php(d.surplusAmt)}`:''}</div></div>
         <div><div style="font-size:10px;opacity:.7;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${d.deficitN??0}${d.deficitN?` · ${_php(d.deficitAmt)}`:''}</div></div>
+        <button id="rc-modal-refresh" onclick='rcRefreshCollector(${JSON.stringify(collector)})' title="Re-read live from the database and rebuild this popup — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:30px;padding:0 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
         <button onclick="rcCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
       </div>
     </div>
@@ -2244,7 +2262,40 @@ function rcShowCollector(collector){
   ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
   document.body.appendChild(ov);
 }
-function rcCloseCollector(){ const o=document.getElementById('rc-modal'); if(o) o.remove(); }
+function rcCloseCollector(){ const o=document.getElementById('rc-modal'); if(o) o.remove(); _rcOpenCollector = null; }
+
+// Refresh this popup's contents from live data.
+//
+// WHY IT ISN'T JUST A RE-RENDER: the popup reads window._rcDetail, a snapshot
+// built when the table last rendered. Unlinking a TG name inside the popup
+// changes the database but NOT that snapshot — so the row keeps showing the old
+// link until the whole table is rebuilt. Re-rendering alone would just redraw
+// the same stale snapshot. So: force a live read (bypassing recon_cache.json),
+// let rcFilter() rebuild _rcDetail, then reopen this same collector.
+async function rcRefreshCollector(collector){
+  const btn = document.getElementById('rc-modal-refresh');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ …'; }
+  try{
+    rcBypassCache = true;
+    rcAllRows = [];
+    await rcRun();               // live read + rcFilter() rebuilds _rcDetail
+  }catch(e){
+    toast('Refresh failed: '+e.message);
+    if(btn){ btn.disabled = false; btn.textContent = '↻ Refresh'; }
+    return;
+  }finally{
+    rcBypassCache = false;
+  }
+  // Reopen on the rebuilt snapshot. If this collector no longer has rows in
+  // the current filter, say so rather than silently showing an empty popup.
+  const d = (window._rcDetail||{})[collector];
+  if(d){
+    rcShowCollector(collector);
+  }else{
+    rcCloseCollector();
+    toast('No rows for '+collector+' in the current filter');
+  }
+}
 
 // ══════════════════════════════════════════════════════════
 // HARVEST STATS — per-area, per-month comparison (analytics-style)
