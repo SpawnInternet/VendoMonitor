@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>[V4 TRIAL] Spawn Harvest</title>
+<title>[V4 TRIAL · GATE] Spawn Harvest</title>
 <link rel="manifest" href="/VendoMonitor/manifest-v4.json">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -370,6 +370,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 </head>
 <body>
+
+<!-- ══ SPAWN KEYS GATE ══════════════════════════════════════════
+     Mounted directly in the shell, OUTSIDE the .screen system.
+     showScreen() only touches .screen elements, so it can never
+     hide or clobber this. The admin escape lives here too — if the
+     gate's own render throws, the escape is still on the page.
+     ═══════════════════════════════════════════════════════════ -->
+<div id="gate-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#eef1fa;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;box-sizing:border-box">
+    <div style="width:100%;max-width:380px;background:#fff;border-radius:18px;box-shadow:0 6px 28px rgba(2,90,198,.13);padding:26px 22px;text-align:center">
+      <div id="gate-icon" style="font-size:44px;line-height:1;margin-bottom:10px">🔐</div>
+      <div id="gate-title" style="font-size:19px;font-weight:800;color:#025AC6;margin-bottom:6px">Checking…</div>
+      <div id="gate-msg" style="font-size:14px;color:#5a6478;line-height:1.5;margin-bottom:4px">One moment.</div>
+      <div id="gate-rings" style="font-size:13px;color:#DF1A35;font-weight:700;margin-top:12px;display:none"></div>
+      <div id="gate-actions" style="margin-top:20px;display:none">
+        <button onclick="gateRecheck()" style="width:100%;padding:13px;border-radius:12px;border:0;background:#025AC6;color:#fff;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer">↻ Check again</button>
+        <button onclick="gateLogoutBack()" style="width:100%;margin-top:9px;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">🚪 Log out</button>
+      </div>
+      <!-- The escape hatch. Deliberately plain and quiet. -->
+      <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eef1f6">
+        <span id="gate-admin-link" onclick="gateAdminPrompt()" style="font-size:12px;color:#b6bfd0;cursor:pointer;user-select:none;letter-spacing:.4px">admin</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="offline-banner" id="offline-banner">🔴 No internet — harvests will sync when back online</div>
 
@@ -986,6 +1011,9 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 // ── Transparent fetch interceptor: reroute REST + storage uploads via gateway ──
 (function installGatewayInterceptor(){
   const _origFetch = window.fetch.bind(window);
+  // Expose the untouched fetch. The SPAWN KEYS gate posts to the gateway
+  // directly with kind:'rpc' and must not be re-parsed by the shim below.
+  window._spawnOrigFetch = _origFetch;
   const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
   const STOR_UP_RE = /\/storage\/v1\/object\/(?!public\/)([a-z0-9_-]+)\/(.+)$/i;
 
@@ -1550,8 +1578,12 @@ window.addEventListener('DOMContentLoaded',()=>{
     const _last = (()=>{ try{ return JSON.parse(localStorage.getItem('harvest_session')||'null'); }catch(_){ return null; } })();
     if(_last && _last.groupId){
       // was inside a group — reopen it directly (uses cache = instant)
-      try{ startGroup(_last.groupId); }
-      catch(_){ showHomeScreen(); }
+      // GATE: this path skips showHomeScreen(), so check here too.
+      gateCheck().then(ok=>{
+        if(!ok) return;                       // overlay is up
+        try{ startGroup(_last.groupId); }
+        catch(_){ showHomeScreen(); }
+      }).catch(()=>{ try{ startGroup(_last.groupId); }catch(_){ showHomeScreen(); } });
     } else {
       showHomeScreen();
     }
@@ -4957,8 +4989,165 @@ function hrHome(){
 }
 
 // ── HOME SCREEN ───────────────────────────────────────────────────────
+// ══ SPAWN KEYS GATE ════════════════════════════════════════════
+// Yesterday's bag must be approved returned before today opens.
+//
+// DESIGN NOTES (read before changing):
+//  - The DB is the authority. spawn_harvest_gate() decides; this is
+//    only a display of that decision. Never decide locally.
+//  - FAIL OPEN on network error. If Supabase is unreachable at 6AM
+//    the gate cannot verify, and five collectors must not be stranded
+//    by our own outage. The DB-side rule stays fail-CLOSED for
+//    unknown collectors; the *client* just must not brick the morning.
+//  - The admin escape lives in the shell, not in here. If this whole
+//    block throws, the escape is still tappable.
+let _gateOK = false;        // has the gate passed this session?
+let _gateChecking = false;
+
+function gateShow(){ const o=document.getElementById('gate-overlay'); if(o) o.style.display='block'; }
+function gateHide(){ const o=document.getElementById('gate-overlay'); if(o) o.style.display='none'; }
+
+function gatePaint(icon, title, msg, ringsTxt, showActions){
+  try{
+    const $=id=>document.getElementById(id);
+    if($('gate-icon'))  $('gate-icon').textContent  = icon;
+    if($('gate-title')) $('gate-title').textContent = title;
+    if($('gate-msg'))   $('gate-msg').innerHTML     = msg;
+    const r=$('gate-rings');
+    if(r){ if(ringsTxt){ r.textContent=ringsTxt; r.style.display=''; } else { r.style.display='none'; } }
+    const a=$('gate-actions');
+    if(a) a.style.display = showActions ? '' : 'none';
+  }catch(e){ console.error('[Gate] paint failed', e); }
+}
+
+function gateCollectorName(){
+  return selectedCollector
+      || sessionStorage.getItem('col_name')
+      || localStorage.getItem('spawn_collector_name')
+      || '';
+}
+
+// Ask the DB. Returns the jsonb verdict, or null if we couldn't reach it.
+async function gateAsk(name){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), 8000);
+  try{
+    const r = await _origFetchSafe(GW_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+      body: JSON.stringify({kind:'rpc', fn:'spawn_harvest_gate', args:{p_collector:name}}),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){
+    clearTimeout(t);
+    console.warn('[Gate] unreachable:', e && e.name);
+    return null;
+  }
+}
+
+// Use the untouched original fetch so the gw shim can't interfere.
+function _origFetchSafe(u,o){
+  const f = window._spawnOrigFetch || window.fetch;
+  return f(u,o);
+}
+
+// The main entry. Resolves true = let him through, false = blocked.
+async function gateCheck(){
+  if(_gateOK) return true;
+  if(_gateChecking) return false;
+  _gateChecking = true;
+  const name = gateCollectorName();
+  gateShow();
+  gatePaint('🔐','Checking…','Looking up today\'s approval.','',false);
+  let verdict = null;
+  try{ verdict = await gateAsk(name); }catch(e){ verdict = null; }
+  _gateChecking = false;
+
+  // ── Could not reach the DB → FAIL OPEN, but say so loudly.
+  if(!verdict){
+    console.warn('[Gate] no verdict — failing open');
+    _gateOK = true;
+    gateHide();
+    try{
+      const b=document.getElementById('offline-banner');
+      if(b){ b.textContent='⚠️ Key check skipped — no connection'; b.classList.add('show'); }
+    }catch(_){}
+    return true;
+  }
+
+  if(verdict.unlocked === true){
+    _gateOK = true;
+    gateHide();
+    if(verdict.is_override){
+      console.log('[Gate] opened by override —', verdict.approved_by);
+    }
+    return true;
+  }
+
+  // ── Blocked.
+  const rings = (typeof verdict.rings_out === 'number' && verdict.rings_out > 0)
+    ? `🔑 ${verdict.rings_out} ring${verdict.rings_out>1?'s':''} still marked OUT to you`
+    : '';
+  gatePaint(
+    '🔒',
+    'Bag not checked yet',
+    (verdict.reason || 'No approval today.') +
+      (verdict.collector ? `<br><br><b>${verdict.collector}</b>` : ''),
+    rings,
+    true
+  );
+  return false;
+}
+
+function gateRecheck(){ _gateOK=false; gateCheck().then(ok=>{ if(ok) showHomeScreen(); }); }
+function gateLogoutBack(){ gateHide(); _gateOK=false; try{ pinLogout(); }catch(_){ location.reload(); } }
+
+// ── ADMIN ESCAPE ───────────────────────────────────────────────
+// Wendell's bypass. Lives in the shell so it survives the gate
+// screen failing to render at all. Every use is logged and shows
+// red on the dashboard — that is the deterrent, not secrecy.
+async function gateAdminPrompt(){
+  const code = prompt('Admin code:');
+  if(!code) return;
+  const name = gateCollectorName() || prompt('Collector name:') || '';
+  const reason = prompt('Reason (Wendell will see this):') || '';
+  try{
+    const r = await _origFetchSafe(GW_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+      body: JSON.stringify({kind:'rpc', fn:'spawn_harvest_override',
+        args:{p_admin_code:String(code).trim(), p_collector:name, p_reason:reason}})
+    });
+    const d = await r.json();
+    if(d && d.ok){
+      _gateOK = true;
+      gateHide();
+      alert('✅ Unlocked — logged as override.\n' + (d.warning||''));
+      try{ showHomeScreen(); }catch(_){ location.reload(); }
+    }else{
+      alert('❌ ' + ((d && d.error) || 'Override failed'));
+    }
+  }catch(e){
+    alert('❌ No connection — cannot log override.');
+  }
+}
+
 async function showHomeScreen(){
   if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}
+  // Gate: yesterday must be closed before today opens.
+  try{
+    const ok = await gateCheck();
+    if(!ok) return;   // gate overlay is showing; stop here
+  }catch(e){
+    // Gate itself exploded. Do not strand the collector — let him in,
+    // but leave a trail. The admin link is still in the shell.
+    console.error('[Gate] check threw, failing open', e);
+    _gateOK = true;
+    gateHide();
+  }
   showScreen('screen-home');
   document.getElementById('home-collector-name').textContent = selectedCollector||'—';
   // Always persist collector name
