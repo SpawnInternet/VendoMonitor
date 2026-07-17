@@ -2121,29 +2121,45 @@ function rcFilter(){
   window._rcDetail = {};  // collector -> full detail HTML for popup
   const cardData = [];
   Object.entries(byCollector).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([collector,cd])=>{
-    const colCoins=cd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
-    const colTG=cd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
-    const colGap=cd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
+    // MATCHED ROWS ONLY. This card compares coins against TG income, so it must
+    // only count harvests that HAVE TG income. Previously colCoins summed every
+    // row while colTG summed only rows with tg_income — so unmatched vendos
+    // (no TG link, no bot in the GC) contributed coins with nothing on the TG
+    // side, and the difference was reported as a deficit. For Gilbert that was
+    // 54 harvests holding ₱135,135 in coins, inflating the deficit to ₱82,322
+    // when the real figure is ~₱6,020. Unmatched is NOT missing money — it is
+    // a naming gap, and it belongs in "needs match", not in DEFICIT.
+    const matched = cd.rows.filter(r=>r.tg_income!=null);
+    const unmatchedN = cd.rows.length - matched.length;
+    const unmatchedCoins = cd.rows.filter(r=>r.tg_income==null)
+                                  .reduce((s,r)=>s+Number(r.coins_total||0),0);
+    const colCoins=matched.reduce((s,r)=>s+Number(r.coins_total||0),0);
+    const colTG=matched.reduce((s,r)=>s+Number(r.tg_income||0),0);
+    const colGap=matched.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
     const colAlerts=cd.rows.filter(r=>r.flag==='alert').length;
     const colWarns=cd.rows.filter(r=>r.flag==='warn').length;
     const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
     const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
 
     // ---- per-vendo reconciliation breakdown ----
-    // Direction rule (owner): coins > TG income = SURPLUS, coins < TG = DEFICIT, |diff|<100 = EXACT.
-    // Compute signed surplus = coins - TG. Prefer live tg_income; fall back to saved recon_gap (which is TG-coins, so negate).
+    // Direction rule (owner): coins > TG income = SURPLUS, coins < TG = DEFICIT.
+    //
+    // THRESHOLD: ±20, matching the table and the spawn_tg_recon RPC. This card
+    // used ±100 while the rows behind it used ±20, so the card's EXACT/SURPLUS/
+    // DEFICIT counts could never reconcile with the list you see when you tap in.
+    //
+    // SOURCE: live tg_income only. The old code fell back to the saved
+    // recon_gap column, which is written by a background job and goes stale the
+    // moment a TG name is linked or unlinked.
     const surplusVal=r=>{
-      const coins=Number(r.coins_total||0);
-      const tg=(r.tg_income!=null)?Number(r.tg_income):null;
-      if(tg!=null) return coins-tg;                          // + = surplus, - = deficit
-      if(r.recon_gap!=null) return -Number(r.recon_gap);     // recon_gap = TG - coins
-      return null;
+      if(r.tg_income==null) return null;   // unmatched — not a money discrepancy
+      return Number(r.coins_total||0)-Number(r.tg_income);   // + = surplus, - = deficit
     };
-    const rcRows=cd.rows.filter(r=>surplusVal(r)!=null);
+    const rcRows=matched.filter(r=>surplusVal(r)!=null);
     let exactN=0, surplusN=0, deficitN=0, surplusAmt=0, deficitAmt=0;
     rcRows.forEach(r=>{
       const s=Number(surplusVal(r));
-      if(Math.abs(s)<100){ exactN++; }
+      if(Math.abs(s)<=20){ exactN++; }
       else if(s>0){ surplusN++; surplusAmt+=s; }
       else { deficitN++; deficitAmt+=Math.abs(s); }
     });
@@ -2284,10 +2300,11 @@ function rcFilter(){
           </div>
           ${deficitN?`<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${deficitN} DEFICIT</span>`:''}
           ${surplusN?`<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${surplusN} SURPLUS</span>`:''}
+          ${unmatchedN?`<span title="${unmatchedN} harvests have no TG name linked, holding ${fmtP(unmatchedCoins)} in coins. Not counted as deficit — they need a TG match first." style="background:#e0e7ff;color:#4338ca;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">🔗 ${unmatchedN} NO TG</span>`:''}
           ${(!deficitN&&!surplusN)?`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">✅ OK</span>`:''}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <div style="background:#eff6ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#1565c0;">${fmtP(colCoins)}</div><div style="font-size:8px;color:var(--mu);">Coins</div></div>
+          <div style="background:#eff6ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#1565c0;">${fmtP(colCoins)}</div><div style="font-size:8px;color:var(--mu);">Coins${unmatchedN?' (matched only)':''}</div></div>
           <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#15803d;">${fmtP(colTG)}</div><div style="font-size:8px;color:var(--mu);">TG Income</div></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
