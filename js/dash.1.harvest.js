@@ -1478,7 +1478,16 @@ async function rcRun(){
     const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{
       method:'POST', headers:{..._HDR}, body:JSON.stringify({})
     });
-    const rj=await rr.json();
+    let rj=await rr.json();
+    // SHAPE: spawn_tg_recon is declared RETURNS jsonb — a single value that
+    // happens to be an ARRAY of harvest objects. PostgREST therefore hands back
+    // [ [ {...}, {...} ] ]  — an array whose one element is the real array —
+    // NOT [ {...}, {...} ]. The old code did rj.forEach(o => o.harvest_id...),
+    // where o was the inner ARRAY, so harvest_id was undefined, rpcById stayed
+    // empty, every gap computed null, and the whole table rendered "—" / "OK"
+    // with the colours gone. Unwrap before use.
+    if(Array.isArray(rj) && rj.length===1 && Array.isArray(rj[0])) rj = rj[0];
+    else if(rj && !Array.isArray(rj) && Array.isArray(rj.spawn_tg_recon)) rj = rj.spawn_tg_recon;
     if(Array.isArray(rj)){
       rj.forEach(o=>{
         if(o && o.harvest_id!=null){
