@@ -1360,7 +1360,16 @@ async function rcRun(){
           return hd >= from && hd <= to;
         });
         const age = Math.round((Date.now() - new Date(d.generated_at||0).getTime())/60000);
-        document.getElementById('rc-count').textContent = rcAllRows.length + ' harvests · cache ' + age + 'min ago';
+        // Say plainly that this is cached, and give a one-tap way to read live.
+        // Silent staleness is what makes an edit look like it didn't save.
+        const ageEl = document.getElementById('rc-count');
+        if(ageEl){
+          const stale = age >= 5;
+          ageEl.innerHTML = rcAllRows.length + ' harvests · '
+            + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';">'
+            + (stale ? '⚠ cached ' : 'cached ') + age + 'min ago</span> '
+            + '<button id="rc-refresh-btn" onclick="rcForceFresh()" style="border:1px solid #d1d5db;background:#fff;border-radius:6px;font-size:10px;font-weight:700;padding:2px 7px;margin-left:5px;cursor:pointer;font-family:inherit;">↻ Refresh live</button>';
+        }
         rcFilter();
         // Refresh in background if older than 10min OR no rows matched (new harvests not in cache)
         if (age > 10 || !rcAllRows.length) setTimeout(()=>rcRunFresh(from,to,fromISO,toISO,el), 100);
@@ -1589,6 +1598,28 @@ async function rcRunFresh(from,to,fromISO,toISO,el){
   rcAllRows = [];
   await rcRun();
   rcBypassCache = false;
+}
+
+// Manual "read live, ignore the cache" refresh.
+//
+// WHY THIS EXISTS: recon reads recon_cache.json, rebuilt hourly by cron. On a
+// cache hit it only auto-refreshes in the background when the cache is >10min
+// old. So an edit made 3 minutes after a rebuild keeps showing the OLD value
+// for the next 7 minutes with nothing on screen saying so — which reads as
+// "my change didn't save". This forces a live read on demand.
+async function rcForceFresh(){
+  const btn = document.getElementById('rc-refresh-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Reading live…'; }
+  try{
+    rcBypassCache = true;
+    rcAllRows = [];
+    await rcRun();
+  }catch(e){
+    toast('Refresh failed: '+e.message);
+  }finally{
+    rcBypassCache = false;
+    if(btn){ btn.disabled = false; btn.textContent = '↻ Refresh live'; }
+  }
 }
 
 function rcShowNamesById(harvestId){
@@ -1830,18 +1861,32 @@ async function rcnSaveHarvestWindow(){
 async function rcnQuickLink(vendoName, tgName){
   const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
-    const r=await fetch(`${_SB}/rest/v1/vendos?select=id&limit=1&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    // Same duplicate-name hazard as rcnUnlink — do not blind-pick with limit=1.
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,sheet_name&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
     const rows=await r.json();
-    if(!rows.length){toast('Vendo not found');return;}
-    const id=rows[0].id;
+    if(!Array.isArray(rows)||!rows.length){toast('Vendo not found');return;}
+    let target = rows.find(x=>x.sheet_name===vendoName) || rows[0];
+    if(rows.length>1){
+      const list = rows.map(x=>`  #${x.id}  sheet: ${x.sheet_name||'(none)'}`).join('\n');
+      if(!confirm(`${rows.length} vendo rows share this name:\n\n${list}\n\nLink #${target.id} (${target.sheet_name||'no sheet name'})?`)) return;
+    }
+    const id=target.id;
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({tg_name:tgName,tg_match_confirmed:true})});
     if(r2.ok){
-      // sync harvests too — recon reads from harvests, else change reverts on reload
+      // Three-table rule: vendos + harvests + harvest_group_items must all carry
+      // the TG name or the change silently reverts. recon reads harvests; the
+      // collector PWA reads harvest_group_items. Patching only vendos looks like
+      // it worked and then "un-does" itself on the next load.
       try{
         await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}`,{method:'PATCH',
           headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
           body:JSON.stringify({tg_name:tgName})});
       }catch(e){ console.error('harvests tg sync failed:',e); }
+      try{
+        await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${id}`,{method:'PATCH',
+          headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+          body:JSON.stringify({tg_name:tgName})});
+      }catch(e){ console.error('harvest_group_items tg sync failed:',e); }
       if(Array.isArray(rcAllRows)) rcAllRows.forEach(rr=>{ if(rr.vendo_id===id) rr.tg_name=tgName; });
       toast('✅ Linked! TG name saved.');
       htAllRows=[];
@@ -1854,6 +1899,76 @@ async function rcnQuickLink(vendoName, tgName){
     }else toast('Save failed');
   }catch(e){toast('Error: '+e.message);}
 }
+// ── UNLINK TG NAME ──────────────────────────────────────────────
+// Clears a wrong TG link, or marks a vendo as "no TG yet" (no bot in its GC).
+//
+// MONEY SAFETY: this only touches NAME columns. It never writes coins_total,
+// tg_income, recon_gap or any money field. An unlink makes recon show "no
+// match" for that vendo — which is the honest state — it does not erase or
+// alter a single peso of what was already counted.
+//
+// Same three-table rule as linking: vendos + harvests + harvest_group_items.
+async function rcnUnlink(vendoName, opts){
+  opts = opts || {};
+  const markNoTg = !!opts.noTg;
+  const label = markNoTg ? 'mark as NO TG NAME' : 'unlink the TG name';
+  if(!confirm('This will '+label+' for:\n\n'+vendoName+'\n\nMoney figures are not touched — only the name link.\n\nContinue?')) return;
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
+  if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  try{
+    // DUPLICATE NAMES ARE REAL: the same tg_name can sit on more than one
+    // vendos row (e.g. an orphan row with 0 harvests alongside the live one).
+    // A bare limit=1 would silently unlink whichever came back first — often
+    // the orphan — and report success while the real vendo kept its name.
+    // So: fetch ALL matches, and prefer sheet_name over tg_name.
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    const rows=await r.json();
+    if(!Array.isArray(rows)||!rows.length){toast('Vendo not found');return;}
+    let target = rows.find(x=>x.sheet_name===vendoName) || rows[0];
+    if(rows.length>1){
+      const list = rows.map(x=>`  #${x.id}  sheet: ${x.sheet_name||'(none)'}`).join('\n');
+      if(!confirm(`${rows.length} vendo rows share this name:\n\n${list}\n\nProceed on #${target.id} (${target.sheet_name||'no sheet name'})?`)) return;
+    }
+    const id=target.id;
+
+    const vendoPatch = markNoTg
+      ? {tg_name:null, tg_match_confirmed:false, no_tg:true}
+      : {tg_name:null, tg_match_confirmed:false};
+
+    const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',
+      headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+      body:JSON.stringify(vendoPatch)});
+    if(!r2.ok){ toast('Unlink failed'); return; }
+
+    // Clear the name everywhere it is mirrored.
+    try{
+      await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}`,{method:'PATCH',
+        headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({tg_name:null})});
+    }catch(e){ console.error('harvests unlink sync failed:',e); }
+    try{
+      await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${id}`,{method:'PATCH',
+        headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({tg_name:null})});
+    }catch(e){ console.error('harvest_group_items unlink sync failed:',e); }
+
+    // Patch the in-memory rows so the table updates before any refetch.
+    if(Array.isArray(rcAllRows)) rcAllRows.forEach(rr=>{
+      if(rr.vendo_id===id){ rr.tg_name=null; rr.tg_income=null; rr.recon_gap=null; rr.recon_flag='nodata'; }
+    });
+    if(typeof rcFilter==='function') rcFilter();
+
+    toast(markNoTg ? '✅ Marked: no TG name' : '✅ TG name unlinked');
+    htAllRows=[];
+    document.getElementById('rc-names-overlay')?.remove();
+    if(typeof rcRun==='function'){
+      try{ rcBypassCache=true; await rcRun(); }
+      catch(e){ if(typeof rcFilter==='function') rcFilter(); }
+      finally{ rcBypassCache=false; }
+    }
+  }catch(e){toast('Error: '+e.message);}
+}
+
 function rcFilter(){
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
@@ -2020,7 +2135,13 @@ function rcFilter(){
                   <span style="font-weight:600;">${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
                   <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="View/Edit TG Name">🔗</button>
                 </div>
-                ${h.tg_name?`<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}</div>`:`<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked</div>`}
+                ${h.tg_name
+                  ? `<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}
+                       <span onclick='rcnUnlink(${JSON.stringify(h.sheet_name||h.tg_name)})' style="color:#b91c1c;cursor:pointer;font-weight:700;margin-left:5px;" title="Unlink this TG name">✕ unlink</span>
+                     </div>`
+                  : `<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked
+                       <span onclick='rcnUnlink(${JSON.stringify(h.sheet_name||h.tg_name)},{noTg:true})' style="color:#6b7280;cursor:pointer;font-weight:700;margin-left:5px;" title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>
+                     </div>`}
               </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}${h.rpc_submitted_at?`<br><span style="font-weight:400;color:var(--mu);font-size:9px;">\ud83d\udd52 ${h.rpc_submitted_at.split(' ').slice(1).join(' ')}</span>`:''}</td>
