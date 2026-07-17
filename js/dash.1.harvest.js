@@ -1872,15 +1872,18 @@ async function rcnQuickLink(vendoName, tgName){
   const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
     // Same duplicate-name hazard as rcnUnlink — do not blind-pick with limit=1.
-    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,sheet_name&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
-    const rows=await r.json();
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    let rows=await r.json();
     if(!Array.isArray(rows)||!rows.length){toast('Vendo not found');return;}
-    let target = rows.find(x=>x.sheet_name===vendoName) || rows[0];
-    if(rows.length>1){
-      const list = rows.map(x=>`  #${x.id}  sheet: ${x.sheet_name||'(none)'}`).join('\n');
-      if(!confirm(`${rows.length} vendo rows share this name:\n\n${list}\n\nLink #${target.id} (${target.sheet_name||'no sheet name'})?`)) return;
+    let id;
+    if(rows.length===1){
+      id=rows[0].id;
+    }else{
+      rows=await rcEnrichVendoRows(rows);
+      rows.sort((a,b)=>b._harvests-a._harvests);
+      id=await rcPickVendo(rows, 'Link TG name to which vendo?');
+      if(id===null) return;
     }
-    const id=target.id;
     const r2=await fetch(`${_SB}/rest/v1/vendos?id=eq.${id}`,{method:'PATCH',headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({tg_name:tgName,tg_match_confirmed:true})});
     if(r2.ok){
       // Three-table rule: vendos + harvests + harvest_group_items must all carry
@@ -1918,28 +1921,91 @@ async function rcnQuickLink(vendoName, tgName){
 // alter a single peso of what was already counted.
 //
 // Same three-table rule as linking: vendos + harvests + harvest_group_items.
+// Pick which vendo row to act on when several share a name.
+//
+// The old code used confirm() with a pre-chosen row: OK or Cancel, no way to
+// choose the OTHER one. Worse, it preferred the first sheet_name match, which
+// is often an empty legacy row. Real case: "Sugabo" exists as #761 (POLANCO,
+// no TG, 0 harvests — dead) and #2865 (SINDANGAN, VLAN213, 2 harvests — live).
+// It proposed #761. Clicking OK would have unlinked nothing and looked fine.
+//
+// This shows the evidence — area, TG name, harvest count — and lets you pick.
+function rcPickVendo(rows, title){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+    const cards=rows.map(r=>{
+      const dead = (r._harvests===0);
+      return `<div onclick="this.closest('[data-pick]').__pick(${r.id})" style="border:2px solid ${dead?'#e5e7eb':'#025AC6'};background:${dead?'#f9fafb':'#f0f6ff'};border-radius:11px;padding:11px 13px;margin-bottom:9px;cursor:pointer;transition:.12s;" onmouseover="this.style.transform='translateX(3px)'" onmouseout="this.style.transform=''">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div style="font-weight:800;font-size:14px;color:#111;">#${r.id} · ${r.sheet_name||'(no sheet name)'}</div>
+          ${dead?'<span style="background:#e5e7eb;color:#6b7280;font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;">EMPTY</span>'
+                :'<span style="background:#025AC6;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;">HAS DATA</span>'}
+        </div>
+        <div style="font-size:11px;color:#4b5563;margin-top:4px;line-height:1.5;">
+          ${r.area?`<b>${r.area}</b> · `:''}${r._harvests} harvest${r._harvests===1?'':'s'}${r._last?` · last ${r._last}`:''}<br>
+          TG: ${r.tg_name?`<span style="color:#15803d;font-weight:600;">${r.tg_name}</span>`:'<span style="color:#b45309;">none</span>'}
+        </div>
+      </div>`;
+    }).join('');
+    ov.innerHTML=`<div data-pick style="background:#fff;border-radius:15px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+      <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 17px;">
+        <div style="font-size:15px;font-weight:800;">${title||'Which vendo?'}</div>
+        <div style="font-size:11px;opacity:.85;margin-top:2px;">${rows.length} rows share this name — pick the right one</div>
+      </div>
+      <div style="padding:14px;max-height:60vh;overflow-y:auto;">${cards}</div>
+      <div style="padding:0 14px 14px;"><button style="width:100%;padding:9px;border:1px solid #d1d5db;background:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#6b7280;">Cancel</button></div>
+    </div>`;
+    const box=ov.querySelector('[data-pick]');
+    box.__pick=(id)=>{ ov.remove(); resolve(id); };
+    ov.querySelector('button').onclick=()=>{ ov.remove(); resolve(null); };
+    ov.addEventListener('click',e=>{ if(e.target===ov){ ov.remove(); resolve(null); } });
+    document.body.appendChild(ov);
+  });
+}
+
+// Fetch harvest counts so the picker can show which row is real.
+async function rcEnrichVendoRows(rows){
+  const ids=rows.map(r=>r.id);
+  const counts={}, lasts={};
+  try{
+    const r=await fetch(`${_SB}/rest/v1/harvests?vendo_id=in.(${ids.join(',')})&select=vendo_id,harvest_date&limit=1000`,{headers:_HDR});
+    const d=await r.json();
+    if(Array.isArray(d)) d.forEach(h=>{
+      counts[h.vendo_id]=(counts[h.vendo_id]||0)+1;
+      if(!lasts[h.vendo_id]||h.harvest_date>lasts[h.vendo_id]) lasts[h.vendo_id]=h.harvest_date;
+    });
+  }catch(e){}
+  return rows.map(r=>({...r, _harvests:counts[r.id]||0, _last:lasts[r.id]||null}));
+}
+
 async function rcnUnlink(vendoName, opts){
   opts = opts || {};
   const markNoTg = !!opts.noTg;
-  const label = markNoTg ? 'mark as NO TG NAME' : 'unlink the TG name';
-  if(!confirm('This will '+label+' for:\n\n'+vendoName+'\n\nMoney figures are not touched — only the name link.\n\nContinue?')) return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
-  if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   try{
-    // DUPLICATE NAMES ARE REAL: the same tg_name can sit on more than one
-    // vendos row (e.g. an orphan row with 0 harvests alongside the live one).
-    // A bare limit=1 would silently unlink whichever came back first — often
-    // the orphan — and report success while the real vendo kept its name.
-    // So: fetch ALL matches, and prefer sheet_name over tg_name.
-    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
-    const rows=await r.json();
+    // DUPLICATE NAMES ARE REAL: the same name can sit on more than one vendos
+    // row (e.g. an empty legacy row alongside the live one). A bare limit=1
+    // would silently act on whichever came back first — often the empty one —
+    // and report success while the real vendo kept its name.
+    const r=await fetch(`${_SB}/rest/v1/vendos?select=id,tg_name,sheet_name,area&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
+    let rows=await r.json();
     if(!Array.isArray(rows)||!rows.length){toast('Vendo not found');return;}
-    let target = rows.find(x=>x.sheet_name===vendoName) || rows[0];
-    if(rows.length>1){
-      const list = rows.map(x=>`  #${x.id}  sheet: ${x.sheet_name||'(none)'}`).join('\n');
-      if(!confirm(`${rows.length} vendo rows share this name:\n\n${list}\n\nProceed on #${target.id} (${target.sheet_name||'no sheet name'})?`)) return;
+    let id;
+    if(rows.length===1){
+      id=rows[0].id;
+    }else{
+      rows=await rcEnrichVendoRows(rows);
+      rows.sort((a,b)=>b._harvests-a._harvests);   // real rows first
+      id=await rcPickVendo(rows, markNoTg?'Mark which as NO TG?':'Unlink which vendo?');
+      if(id===null) return;
     }
-    const id=target.id;
+    const chosen = rows.find(x=>x.id===id) || {};
+    const label = markNoTg ? 'mark as NO TG NAME' : 'unlink the TG name';
+    if(!confirm('This will '+label+' for:\n\n  #'+id+'  '+(chosen.sheet_name||vendoName)
+      + (chosen.tg_name?'\n  TG: '+chosen.tg_name:'')
+      + '\n\nMoney figures are not touched — only the name link.\n\nContinue?')) return;
+    const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
+    if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
 
     const vendoPatch = markNoTg
       ? {tg_name:null, tg_match_confirmed:false, no_tg:true}
