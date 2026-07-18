@@ -265,6 +265,34 @@ function renderHome(){
 // PIN here. Nothing secret ever crosses to his device — which is the whole
 // point. If she typed her PIN on his phone he would learn it in a week, and
 // every log line would then falsely say she approved.
+
+// Camera constraints for scanning SMALL codes.
+//
+// Previously we passed only {facingMode:'environment'} and let the browser pick
+// the resolution — commonly 640x480. At that width the narrow bars on a 12mm key
+// fob map to under one pixel: unresolvable regardless of focus. Asking for 1080p
+// puts 3-4x more pixels on the code.
+//
+// focusMode:'continuous' requests autofocus. It only does anything if the phone
+// HAS a focus motor; software cannot add one. Fixed-focus phones ignore it.
+const CAM_HD = {
+  facingMode: 'environment',
+  width:  {min: 640, ideal: 1920},
+  height: {min: 480, ideal: 1080},
+  advanced: [{focusMode: 'continuous'}]
+};
+
+// Start a scanner with HD constraints, falling back to defaults if the phone
+// rejects them (some refuse 1080p outright).
+function startScannerHD(scanner, box, onHit, onFail){
+  scanner.start(CAM_HD, {fps:10, qrbox:box, aspectRatio:1.777}, onHit, ()=>{})
+    .catch(()=>{
+      console.warn('[Keys] HD constraints rejected, retrying default');
+      scanner.start({facingMode:'environment'}, {fps:10, qrbox:box}, onHit, ()=>{})
+        .catch(onFail);
+    });
+}
+
 let APPROVE_TOKEN = null;
 
 function startApprove(){
@@ -277,13 +305,13 @@ function startApprove(){
     cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
   }catch(e){ cfg=undefined; }
   SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
-  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},
+  startScannerHD(SCANNER, {width:250,height:250},
     async txt=>{
       await stopScan();
       APPROVE_TOKEN = String(txt||'').trim();
       askApprovePin();
-    },()=>{}
-  ).catch(()=>{toast('Camera failed');go('home');});
+    },
+    ()=>{toast('Camera failed');go('home');});
 }
 
 // Branded PIN sheet. prompt() is a grey OS box that looks like a scam and
@@ -467,7 +495,7 @@ function startScan(){
     cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
   }catch(e){ cfg=undefined; }
   SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
-  SCANNER.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:160}},
+  startScannerHD(SCANNER, {width:250,height:160},
     async txt=>{
       await stopScan();
       LAST_AUTH='qr';
@@ -476,8 +504,8 @@ function startScan(){
                         ',short_code.eq.'+encodeURIComponent(c.toUpperCase())+')');
       if(Array.isArray(d)&&d[0]){ RINGS=RINGS.filter(r=>r.id!==d[0].id).concat(d[0]); openRing(d[0].id); }
       else toast('Unknown code: '+c);
-    },()=>{}
-  ).catch(()=>{toast('Camera failed — use the list');go('home');});
+    },
+    ()=>{toast('Camera failed — use the list');go('home');});
 }
 async function stopScan(){
   if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
