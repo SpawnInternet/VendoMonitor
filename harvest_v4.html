@@ -5402,13 +5402,41 @@ function bwStartScan(){
     cfg = {formatsToSupport:[F.CODE_128, F.QR_CODE, F.DATA_MATRIX]};
   }catch(e){ cfg = undefined; }
   _bwScanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
-  _bwScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:250,height:130}},
+
+  // CAMERA CONSTRAINTS — this is where small-code scanning is won or lost.
+  //
+  // We previously passed only {facingMode:'environment'} and let the browser
+  // choose everything else. Browsers commonly default to 640x480. At that
+  // width a 0.14mm bar maps to well under one pixel — literally unresolvable,
+  // no matter how sharp the lens. Asking for 1080p+ puts 3-4x more pixels on
+  // the code.
+  //
+  // focusMode:'continuous' asks for autofocus. It ONLY works if the phone has
+  // a focus motor — software cannot add one to a fixed-focus camera. On such
+  // phones the constraint is ignored, harmlessly. This is why "just add
+  // autofocus" cannot fix a fixed-focus device.
+  const camCfg = {
+    facingMode: 'environment',
+    width:  {min: 640, ideal: 1920},
+    height: {min: 480, ideal: 1080},
+    advanced: [{focusMode: 'continuous'}]
+  };
+
+  _bwScanner.start(camCfg,
+    // Tighter box = he holds the tag closer = more pixels per module.
+    {fps:10, qrbox:{width:220,height:140}, aspectRatio:1.777},
     async txt=>{ await bwAddCode(txt); },
     ()=>{}
   ).catch(()=>{
-    toast('Camera failed — type the code');
-    bwStopScan();
-    bwManualEntry();
+    // Constraint rejected (some phones refuse 1080p) — retry plain.
+    console.warn('[Borrow] HD camera constraints rejected, retrying default');
+    _bwScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:220,height:140}},
+      async txt=>{ await bwAddCode(txt); }, ()=>{}
+    ).catch(()=>{
+      toast('Camera failed — type the code');
+      bwStopScan();
+      bwManualEntry();
+    });
   });
 }
 async function bwStopScan(){
