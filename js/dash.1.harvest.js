@@ -4287,7 +4287,7 @@ function viTgState(){
 }
 
 /* ══ PUNGPUNG TRANSFER — keys to move into a collector's bunch ══ */
-let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false;
+let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false, _ktDetails = {};
 
 function ktLoad(){
   const list = document.getElementById('kt-list');
@@ -4295,11 +4295,14 @@ function ktLoad(){
   Promise.all([
     fetch(_SB+'/rest/v1/key_transfers?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
     fetch(_SB+'/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
-    fetch(_SB+'/rest/v1/rpc/spawn_pungpung_pending', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[])
-  ]).then(([rows, cus, pend])=>{
+    fetch(_SB+'/rest/v1/rpc/spawn_pungpung_pending', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[]),
+    fetch(_SB+'/rest/v1/rpc/spawn_kt_details', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[])
+  ]).then(([rows, cus, pend, det])=>{
     _ktRows = Array.isArray(rows)?rows:[];
     _ktCustodians = (Array.isArray(cus)?cus:[]).map(c=>c.name);
     _ktPending = Array.isArray(pend)?pend:[];
+    _ktDetails = {};
+    (Array.isArray(det)?det:[]).forEach(d=>{ _ktDetails[d.vendo_id]=d; });
     ktRenderCustodians();
     ktWireHolder();
     ktRenderVendos();
@@ -4420,7 +4423,8 @@ function ktAdd(){
   if(_ktForLog) notes = (notes ? notes+' · ' : '') + 'log#'+_ktForLog;
   const rows = _ktVendos.map(v=>({
     vendo_id:v.id, vendo_name:v.name, area:v.area,
-    held_by:holder, added_to_pungpung:false, notes:notes
+    held_by:holder, added_to_pungpung:false, notes:notes,
+    key_kind:v.coin_variant?'coin':null, coin_variant:v.coin_variant||null
   }));
   const btn = document.getElementById('kt-add-btn');
   _ktBusy = true;
@@ -4475,13 +4479,18 @@ function ktRender(){
             ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ SA PUNGPUNG</span>'
             : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 PENDING</span>';
           const actions = done
-            ? '<button onclick="ktUndo('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
-            : '<button onclick="ktTransfer('+r.id+')" style="padding:6px 12px;background:#311A8E;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Added to the Pungpung</button>';
-          return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:10px 13px;margin-bottom:7px;">'
+            ? '<button onclick="event.stopPropagation();ktUndo('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
+            : '<button onclick="event.stopPropagation();ktTransfer('+r.id+')" style="padding:6px 12px;background:#311A8E;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Added to the Pungpung</button>';
+          const det = _ktDetails[r.vendo_id];
+          const kindChip = r.coin_variant
+            ? '<span style="background:#EBF0FB;color:#025AC6;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:800;margin-left:6px;">'+klEsc((r.coin_variant||'').toUpperCase())+'</span>'
+            : '';
+          return '<div onclick="ktDetail('+JSON.stringify(r.vendo_id)+','+r.id+')" style="cursor:pointer;background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:10px 13px;margin-bottom:7px;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-            +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">🔑 '+klEsc(r.vendo_name)+'</div>'+badge
+            +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">🔑 '+klEsc(r.vendo_name)+kindChip+'</div>'+badge
             + '</div>'
             + '<div style="font-size:11px;color:#374151;margin-top:3px;">👤 Held by: <b>'+klEsc(r.held_by||'—')+'</b></div>'
+            + (det && det.address?'<div style="font-size:11px;color:#6b7280;margin-top:2px;">📍 '+klEsc(det.address)+'</div>':'')
             + (r.notes?'<div style="font-size:11px;color:#C01176;margin-top:2px;">📝 '+klEsc(r.notes)+'</div>':'')
             + (done
                 ? '<div style="font-size:11px;color:#028867;margin-top:2px;">🔗 Transferred by <b>'+klEsc(r.transferred_by||'—')+'</b>'
@@ -4489,11 +4498,92 @@ function ktRender(){
                   + (r.transferred_at?(' · '+_fmt(r.transferred_at)):'')+'</div>'
                 : '')
             + '<div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end;">'+actions
-            +   '<button onclick="ktDelete('+r.id+')" style="padding:6px 9px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
+            +   '<button onclick="event.stopPropagation();ktDelete('+r.id+')" style="padding:6px 9px;background:#fff;color:#DF1A35;border:1.5px solid #fca5a5;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑</button>'
             + '</div>'
             + '</div>';
         }).join('');
   }).join('');
+}
+
+function ktDetailClose(){ const m=document.getElementById('kt-detail-modal'); if(m) m.remove(); }
+
+function ktDetail(vendoId, transferId){
+  const r = _ktRows.find(x=>x.id===transferId) || {};
+  const d = _ktDetails[vendoId] || {};
+  const done = !!r.added_to_pungpung;
+  const cv = r.coin_variant || '';
+  const kindLabel = cv
+    ? (cv.charAt(0).toUpperCase()+cv.slice(1))
+      + (r.key_kind && r.key_kind!=='coin' ? ' ('+r.key_kind+')' : ' key')
+    : 'Not recorded — tap to set';
+  const kindColor = cv==='pungpung' ? '#311A8E'
+                  : cv==='duplicate' ? '#C01176'
+                  : cv==='board' ? '#028867'
+                  : '#9ca3af';
+  const realName = d.real_name || r.vendo_name || '—';
+  const addr = d.address || '';
+  const hasGps = d.lat!=null && d.lng!=null;
+  const pick = (val,label,col)=>
+    '<button onclick="ktSetKind('+r.id+','+JSON.stringify(val)+')" '
+    + 'style="flex:1;padding:8px 4px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;border:1.5px solid '
+    + (cv===val?col+';background:'+col+';color:#fff;':'#e5e7eb;background:#fff;color:'+col+';')+'">'+label+'</button>';
+  const kindPicker =
+    '<div style="display:flex;gap:6px;margin-top:6px;">'
+    + pick('pungpung','Pungpung','#311A8E')
+    + pick('duplicate','Duplicate','#C01176')
+    + pick('board','Board','#028867')
+    + '</div>';
+  const row = (icon,label,val,color)=>
+    '<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;">'
+    + '<div style="font-size:16px;flex-shrink:0;width:22px;text-align:center;">'+icon+'</div>'
+    + '<div style="flex:1;min-width:0;">'
+    +   '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;">'+label+'</div>'
+    +   '<div style="font-size:13px;font-weight:700;color:'+(color||'#1f2937')+';margin-top:1px;word-break:break-word;">'+val+'</div>'
+    + '</div></div>';
+
+  const html =
+    '<div id="kt-detail-modal" onclick="if(event.target===this)ktDetailClose()" '
+    + 'style="position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;">'
+    + '<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3);">'
+    +   '<div style="padding:16px 18px;border-bottom:1.5px solid #f1f5f9;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
+    +     '<div><div style="font-size:17px;font-weight:800;color:#311A8E;">🔑 '+klEsc(realName)+'</div>'
+    +       '<div style="font-size:12px;color:#6b7280;margin-top:2px;">'+klEsc(d.area||r.area||'')+'</div></div>'
+    +     '<button onclick="ktDetailClose()" style="background:#f3f4f6;border:none;width:30px;height:30px;border-radius:8px;font-size:16px;cursor:pointer;color:#6b7280;flex-shrink:0;">✕</button>'
+    +   '</div>'
+    +   '<div style="padding:6px 18px 14px;">'
+    +     row('🗝️','Key borrowed',
+             '<span style="color:'+kindColor+';">'+klEsc(kindLabel)+'</span>' + kindPicker, kindColor)
+    +     row('📍','Address', addr?klEsc(addr):'<span style="color:#9ca3af;font-weight:600;">No address on file</span>')
+    +     row('👤','Held by', '<b>'+klEsc(r.held_by||'—')+'</b>')
+    +     row('🔗','Pungpung status',
+             done
+               ? '<span style="color:#028867;">✅ Sa pungpung na'+(r.transferred_to?(' — '+klEsc(r.transferred_to)):'')+'</span>'
+               : '<span style="color:#DF1A35;">🔴 Pending — not yet transferred</span>')
+    +     (r.notes?row('📝','Notes','<span style="color:#C01176;">'+klEsc(r.notes)+'</span>'):'')
+    +     (hasGps
+             ? '<a href="https://www.google.com/maps?q='+d.lat+','+d.lng+'" target="_blank" rel="noopener" '
+               + 'style="display:block;text-align:center;margin-top:12px;padding:11px;background:#025AC6;color:#fff;border-radius:10px;font-size:13px;font-weight:800;text-decoration:none;">🗺️ Open in Maps</a>'
+             : '<div style="text-align:center;margin-top:12px;padding:10px;background:#f9fafb;border:1px dashed #e5e7eb;border-radius:10px;font-size:11px;color:#9ca3af;font-weight:600;">No GPS pin for this vendo yet</div>')
+    +   '</div>'
+    + '</div></div>';
+
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  document.body.appendChild(wrap.firstChild);
+}
+
+function ktSetKind(id, variant){
+  const r = _ktRows.find(x=>x.id===id);
+  fetch(_SB+'/rest/v1/key_transfers?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({coin_variant:variant, key_kind:'coin'})})
+    .then(res=>{
+      if(!res.ok){ return res.text().then(t=>{throw new Error(t);}); }
+      if(r){ r.coin_variant=variant; r.key_kind='coin'; }
+      if(typeof toast==='function') toast('✓ Key set: '+variant);
+      ktDetailClose();
+      ktDetail(r?r.vendo_id:null, id);   // reopen with updated selection
+      ktRender();                         // refresh card chip
+    })
+    .catch(e=>alert('Could not set key kind: '+String(e.message||e)));
 }
 
 function ktTransfer(id){
@@ -5104,16 +5194,25 @@ function ktRenderPending(){
           +   '</div>'
           +   (already
               ? '<span style="font-size:10px;color:#028867;font-weight:800;white-space:nowrap;">✓ added</span>'
-              : '<button type="button" onclick=\'ktAddPending('+JSON.stringify(r.vendo_id)+','+JSON.stringify(r.vendo_name||'')+','+JSON.stringify(r.area||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
+              : '<button type="button" onclick=\'ktAddPending('+JSON.stringify(r.vendo_id)+','+JSON.stringify(r.vendo_name||'')+','+JSON.stringify(r.area||'')+','+JSON.stringify(r.detail||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
           + '</div></div>';
       }).join('')
     + '</div>';
 }
 
 /* move one suggestion into the manual basket — still not saved */
-function ktAddPending(id, name, area){
+/* parse the lineman-return detail text into a stored key kind */
+function ktParseVariant(detail){
+  const s = String(detail||'').toLowerCase();
+  if(s.indexOf('pungpung')>=0 || s.indexOf('pong pong')>=0 || s.indexOf('pongpong')>=0) return 'pungpung';
+  if(s.indexOf('board')>=0) return 'board';
+  if(s.indexOf('duplicate')>=0 && s.indexOf('not duplicate')<0) return 'duplicate';
+  return null;
+}
+
+function ktAddPending(id, name, area, detail){
   if(_ktVendos.some(v=>v.id===id)) return;
-  _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area});
+  _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area, coin_variant:ktParseVariant(detail)});
   ktRenderVendos();
   ktRenderPending();
   if(typeof toast==='function') toast('Added to the list below — set the custodian, then save.');
@@ -5123,7 +5222,7 @@ function ktAddAllPending(){
   let n = 0;
   (_ktPending||[]).forEach(r=>{
     if(!_ktVendos.some(v=>v.id===r.vendo_id)){
-      _ktVendos.push({row:++_ktSeq, id:r.vendo_id, name:r.vendo_name||('#'+r.vendo_id), area:r.area||''});
+      _ktVendos.push({row:++_ktSeq, id:r.vendo_id, name:r.vendo_name||('#'+r.vendo_id), area:r.area||'', coin_variant:ktParseVariant(r.detail)});
       n++;
     }
   });
