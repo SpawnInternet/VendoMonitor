@@ -5432,29 +5432,47 @@ function bwStartScan(){
   // a focus motor — software cannot add one to a fixed-focus camera. On such
   // phones the constraint is ignored, harmlessly. This is why "just add
   // autofocus" cannot fix a fixed-focus device.
-  const camCfg = {
-    facingMode: 'environment',
-    width:  {min: 640, ideal: 1920},
-    height: {min: 480, ideal: 1080},
-    advanced: [{focusMode: 'continuous'}]
-  };
+  const onHit = async txt=>{ await bwAddCode(txt); };
+  const box = {fps:10, qrbox:{width:220,height:140}};
 
-  _bwScanner.start(camCfg,
-    // Tighter box = he holds the tag closer = more pixels per module.
-    {fps:10, qrbox:{width:220,height:140}, aspectRatio:1.777},
-    async txt=>{ await bwAddCode(txt); },
-    ()=>{}
-  ).catch(()=>{
-    // Constraint rejected (some phones refuse 1080p) — retry plain.
-    console.warn('[Borrow] HD camera constraints rejected, retrying default');
-    _bwScanner.start({facingMode:'environment'}, {fps:10, qrbox:{width:220,height:140}},
-      async txt=>{ await bwAddCode(txt); }, ()=>{}
-    ).catch(()=>{
-      toast('Camera failed — type the code');
-      bwStopScan();
-      bwManualEntry();
-    });
-  });
+  // Some Androids show "Stop camera" but a black feed when a constraint (HD
+  // resolution or focusMode) is silently rejected — the promise resolves but no
+  // video renders, or it rejects and the old code swallowed the reason. So we
+  // try progressively simpler starts and, if all fail, surface the REAL cause
+  // instead of leaving a dead box.
+  //   1) HD + continuous autofocus (best for small codes)
+  //   2) plain environment camera (browser picks resolution)
+  //   3) enumerate cameras, start the back one by deviceId
+  const hd = {facingMode:'environment', width:{ideal:1920}, height:{ideal:1080},
+              advanced:[{focusMode:'continuous'}]};
+
+  function fail(err){
+    const msg = String(err && (err.name||err.message||err) || '');
+    console.error('[Borrow] camera start failed:', msg, err);
+    let human = 'Camera failed — type the code';
+    if(/NotAllowed|Permission/i.test(msg))          human = 'Camera blocked — allow camera in browser settings, then retry';
+    else if(/NotFound|Overconstrained/i.test(msg))  human = 'No usable camera — type the code';
+    else if(/NotReadable|TrackStart/i.test(msg))    human = 'Camera busy (another app) — close it and retry';
+    else if(/Insecure|secure context/i.test(msg))   human = 'Needs HTTPS — open the https:// link';
+    toast(human);
+    bwStopScan();
+    bwManualEntry();
+  }
+
+  _bwScanner.start(hd, box, onHit, ()=>{})
+    .catch(e1=>{
+      console.warn('[Borrow] HD rejected, retrying plain:', e1 && e1.name);
+      return _bwScanner.start({facingMode:'environment'}, box, onHit, ()=>{});
+    })
+    .catch(e2=>{
+      console.warn('[Borrow] plain rejected, trying back-camera by id:', e2 && e2.name);
+      return Html5Qrcode.getCameras().then(cams=>{
+        if(!cams || !cams.length) throw new Error('NotFound: no cameras');
+        const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
+        return _bwScanner.start(back.id, box, onHit, ()=>{});
+      });
+    })
+    .catch(fail);
 }
 async function bwStopScan(){
   if(_bwScanner){ try{ await _bwScanner.stop(); _bwScanner.clear(); }catch(e){} _bwScanner=null; }
