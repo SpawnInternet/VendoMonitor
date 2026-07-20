@@ -2901,32 +2901,15 @@ function klClearAreas(){
 
 function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// TRIAL: the keys system (dashboard forms + v4 + spawn-keys) is still being
-// validated. Reads keys_trial_mode from spawn_settings and shows a badge so
-// nobody treats key data as final. Wendell flips keys_trial_mode +
-// v4_trial_mode to false together when going live.
+// TRIAL applies ONLY to the automatic scanned entries coming from v4 and
+// spawn-keys (they stamp is_test=true). Manual entries logged here are real.
+// So there is NO tab-wide trial banner — instead each scanned/trial row is
+// badged individually in klRender(). This just clears any old tab banner.
 function klCheckTrial(){
-  const _h = {apikey:_ANON, Authorization:'Bearer '+_ANON, 'Content-Type':'application/json'};
-  fetch(_SB+'/rest/v1/spawn_settings?select=value&key=eq.keys_trial_mode', {headers:_h})
-    .then(r=>r.json())
-    .then(d=>{
-      const trial = !(Array.isArray(d) && d[0] && d[0].value === 'false'); // default trial
-      const badge = document.getElementById('keys-trial-badge');
-      if(badge) badge.style.display = trial ? '' : 'none';
-      // full-width banner at the top of the borrow pane
-      let ban = document.getElementById('keys-trial-banner');
-      const pane = document.getElementById('kv-pane-borrow');
-      if(trial){
-        if(!ban && pane){
-          ban = document.createElement('div');
-          ban.id = 'keys-trial-banner';
-          ban.style.cssText = 'background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;font-size:12px;font-weight:800;text-align:center;padding:7px 10px;letter-spacing:.3px;';
-          ban.textContent = '⚠ TRIAL MODE — the keys system is still being tested. Records here are not final yet.';
-          pane.insertBefore(ban, pane.firstChild);
-        }
-      } else if(ban){ ban.remove(); }
-    })
-    .catch(()=>{ /* if the flag can't be read, leave the static badge as-is (trial) */ });
+  const badge = document.getElementById('keys-trial-badge');
+  if(badge) badge.style.display = 'none';
+  const ban = document.getElementById('keys-trial-banner');
+  if(ban) ban.remove();
 }
 
 function klLoad(){
@@ -3321,10 +3304,14 @@ function klRender(){
   list.innerHTML = rows.map(r=>{
     const returned = !!r.returned;
     const isLM = (r.record_type==='lineman');
+    const isTrial = (r.is_test === true);   // auto data from v4 / spawn-keys, still in trial
     const bd = returned ? '#028867' : '#DF1A35';
+    const trialBadge = isTrial
+      ? '<span style="background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;padding:2px 7px;border-radius:6px;font-size:9px;font-weight:800;letter-spacing:.2px;margin-right:5px;">⚠ TRIAL SCAN</span>'
+      : '';
     const badge = returned
-      ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅</span>'
-      : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
+      ? trialBadge+'<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅</span>'
+      : trialBadge+'<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
     return '<div onclick="klDetail('+r.id+')" style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:.1s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(0,0,0,.10)\';this.style.borderColor=\'#025AC6\';this.style.borderLeftColor=\''+bd+'\';" onmouseout="this.style.boxShadow=\'none\';this.style.borderColor=\'#e5e7eb\';this.style.borderLeftColor=\''+bd+'\';">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
       +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+(isLM?'🛠️ ':'')+klEsc(r.collector_name)+'</div>'
