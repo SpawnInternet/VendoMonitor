@@ -432,6 +432,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <button id="bw-stop-btn" onclick="bwStopScan()" style="display:none;width:100%;padding:13px;border-radius:14px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">✕ Stop camera</button>
 
           <div onclick="bwManualEntry()" style="text-align:center;margin-top:11px;font-size:12px;color:#8a93a8;cursor:pointer;text-decoration:underline;text-underline-offset:2px">tag damaged? type the code</div>
+          <div onclick="bwAdminBypass()" style="text-align:center;margin-top:9px;font-size:11px;color:#c3c9d6;cursor:pointer;text-decoration:underline;text-underline-offset:2px">admin</div>
 
           <div id="bw-picked" style="margin-top:16px"></div>
 
@@ -5205,6 +5206,7 @@ async function gateAdminPrompt(){
 // is worthless: single-use, dead in 5 minutes, and generating a new one
 // cancels the old.
 let _bwRings = [];        // rings he has scanned, [{id,label,area,short_code}]
+let _bwBypass = false;    // admin bypassed borrowing this session
 let _bwScanner = null;
 let _bwToken = null;
 let _bwPoll = null;
@@ -5319,6 +5321,7 @@ async function bwRpc(fn, args){
 // Does he already hold rings? If yes, no borrow needed — he's mid-cycle.
 async function bwNeedsBorrow(){
   if(!selectedCollector) return false;
+  if(_bwBypass) return false;   // admin bypassed borrowing this session
   const r = await _keysFetch('key_rings?select=id,label,area,short_code&status=eq.out&out_to=eq.'
                         +encodeURIComponent(selectedCollector));
   if(!r.ok){
@@ -5587,6 +5590,71 @@ function bwCodeAsk(){
 async function bwManualEntry(){
   const c = await bwCodeAsk();
   if(c) bwAddCode(c);
+}
+
+// ── ADMIN BYPASS (borrow screen) ───────────────────────────────
+// Small "admin" link on the Borrow screen. PIN 101510 lets the collector
+// through WITHOUT borrowing/scanning keys — for when the keeper isn't there
+// or a fob is unreadable. The bypass lasts only this session; it is logged
+// on the dashboard as a manual override so it isn't silent.
+// PIN 101510 lets the collector through WITHOUT borrowing/scanning keys — for
+// when the keeper isn't there or a fob is unreadable. The bypass lasts only
+// this session; it is logged on the dashboard as a manual override.
+async function bwAdminBypass(){
+  const pin = await bwPinAsk('Admin bypass', 'Enter admin PIN to skip borrowing');
+  if(pin === null) return;
+  if(String(pin).trim() !== '101510'){ toast('❌ Wrong admin PIN'); return; }
+  _bwBypass = true;
+  // log it (best-effort, non-blocking) so the bypass isn't invisible.
+  // Uses the anon key path (_KEYS_HDR) — key_logs is not on the gateway allowlist.
+  try{
+    const f = window._spawnOrigFetch || window.fetch;
+    await f(SB+'/rest/v1/key_logs', {
+      method:'POST',
+      headers:{..._KEYS_HDR, Prefer:'return=minimal'},
+      body: JSON.stringify([{
+        collector_name: selectedCollector || 'unknown',
+        area: 'ADMIN BYPASS', keys_taken: 0,
+        taken_at: new Date().toISOString(),
+        key_date: new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
+        returned: true, record_type: 'collector',
+        is_test: (typeof _V4_TRIAL==='undefined') ? true : !!_V4_TRIAL,
+        notes: 'Admin bypass (PIN) — borrow skipped'
+      }])
+    });
+  }catch(_){}
+  bwHide();
+  toast('✅ Bypass — proceeding');
+  try{ showHomeScreen(); }catch(_){ location.reload(); }
+}
+
+// Branded PIN prompt (reuses the tag-code modal style). Returns the string
+// entered, or null if cancelled.
+function bwPinAsk(title, subtitle){
+  return new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
+    ov.innerHTML=`<div style="width:100%;max-width:320px;background:#fff;border-radius:19px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.34)">
+      <div style="background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;padding:17px 19px">
+        <div style="font-size:16.5px;font-weight:800">${title}</div>
+        <div style="font-size:12px;opacity:.82;margin-top:2px">${subtitle}</div>
+      </div>
+      <div style="padding:18px">
+        <input id="bw-pin-in" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••" style="width:100%;box-sizing:border-box;padding:13px 14px;border:2px solid #e0e4f0;border-radius:12px;font-size:20px;letter-spacing:4px;text-align:center;font-family:inherit;outline:none">
+        <div style="display:flex;gap:9px;margin-top:14px">
+          <button id="bw-pin-x" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
+          <button id="bw-pin-ok" style="flex:2;padding:12px;border-radius:12px;border:0;background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer">Enter</button>
+        </div>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#bw-pin-in');
+    const done=(v)=>{ ov.remove(); resolve(v); };
+    ov.querySelector('#bw-pin-x').onclick=()=>done(null);
+    ov.querySelector('#bw-pin-ok').onclick=()=>done(inp.value);
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') done(inp.value); if(e.key==='Escape') done(null); });
+    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
+    setTimeout(()=>inp.focus(),80);
+  });
 }
 
 // ══ RETURN KEYS ═══════════════════════════════════════════════════════
