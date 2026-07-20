@@ -5405,12 +5405,35 @@ async function bwAddCode(code){
 }
 
 function bwStartScan(){
+  const reader = document.getElementById('bw-reader');
+  // Show the reason ON SCREEN (not just a toast that vanishes before it's read).
+  const showErr = (human)=>{
+    if(reader){
+      reader.style.display='';
+      reader.style.minHeight='60px';
+      reader.innerHTML='<div style="padding:14px;color:#fff;background:#DF1A35;border-radius:12px;font-size:13px;font-weight:700;line-height:1.4">'+human+'</div>';
+    }
+    toast(human);
+  };
+
   if(typeof Html5Qrcode==='undefined'){
-    toast('Scanner unavailable — type the code');
+    showErr('Scanner library did not load (weak signal?). Reconnect and reload, or type the code.');
     bwManualEntry();
     return;
   }
-  document.getElementById('bw-reader').style.display='';
+  // No permission prompt ever appearing usually means one of these two:
+  if(!window.isSecureContext){
+    showErr('This page is not on HTTPS, so the browser blocks the camera. Open the https:// link.');
+    bwManualEntry(); return;
+  }
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    showErr('This browser has no camera access (getUserMedia missing). Try Chrome, or type the code.');
+    bwManualEntry(); return;
+  }
+
+  reader.style.display='';
+  reader.style.minHeight='220px';        // give the video a real box BEFORE start
+  reader.innerHTML='';                    // clear any prior error text
   document.getElementById('bw-scan-btn').style.display='none';
   document.getElementById('bw-stop-btn').style.display='';
   let cfg;
@@ -5418,61 +5441,52 @@ function bwStartScan(){
     const F = Html5QrcodeSupportedFormats;
     cfg = {formatsToSupport:[F.CODE_128, F.QR_CODE, F.DATA_MATRIX]};
   }catch(e){ cfg = undefined; }
-  _bwScanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
 
-  // CAMERA CONSTRAINTS — this is where small-code scanning is won or lost.
-  //
-  // We previously passed only {facingMode:'environment'} and let the browser
-  // choose everything else. Browsers commonly default to 640x480. At that
-  // width a 0.14mm bar maps to well under one pixel — literally unresolvable,
-  // no matter how sharp the lens. Asking for 1080p+ puts 3-4x more pixels on
-  // the code.
-  //
-  // focusMode:'continuous' asks for autofocus. It ONLY works if the phone has
-  // a focus motor — software cannot add one to a fixed-focus camera. On such
-  // phones the constraint is ignored, harmlessly. This is why "just add
-  // autofocus" cannot fix a fixed-focus device.
   const onHit = async txt=>{ await bwAddCode(txt); };
   const box = {fps:10, qrbox:{width:220,height:140}};
-
-  // Some Androids show "Stop camera" but a black feed when a constraint (HD
-  // resolution or focusMode) is silently rejected — the promise resolves but no
-  // video renders, or it rejects and the old code swallowed the reason. So we
-  // try progressively simpler starts and, if all fail, surface the REAL cause
-  // instead of leaving a dead box.
-  //   1) HD + continuous autofocus (best for small codes)
-  //   2) plain environment camera (browser picks resolution)
-  //   3) enumerate cameras, start the back one by deviceId
   const hd = {facingMode:'environment', width:{ideal:1920}, height:{ideal:1080},
               advanced:[{focusMode:'continuous'}]};
 
   function fail(err){
     const msg = String(err && (err.name||err.message||err) || '');
     console.error('[Borrow] camera start failed:', msg, err);
-    let human = 'Camera failed — type the code';
-    if(/NotAllowed|Permission/i.test(msg))          human = 'Camera blocked — allow camera in browser settings, then retry';
-    else if(/NotFound|Overconstrained/i.test(msg))  human = 'No usable camera — type the code';
-    else if(/NotReadable|TrackStart/i.test(msg))    human = 'Camera busy (another app) — close it and retry';
-    else if(/Insecure|secure context/i.test(msg))   human = 'Needs HTTPS — open the https:// link';
-    toast(human);
-    bwStopScan();
-    bwManualEntry();
+    let human = 'Camera failed: '+(msg||'unknown')+' — type the code instead';
+    if(/NotAllowed|Permission/i.test(msg))          human = 'Camera permission was denied. Tap the 🔒/⚙ icon left of the address bar → Camera → Allow, then reload.';
+    else if(/NotFound|Overconstrained/i.test(msg))  human = 'No camera found on this device — type the code.';
+    else if(/NotReadable|TrackStart/i.test(msg))    human = 'Camera is busy (another app using it). Close it and retry.';
+    else if(/Insecure|secure/i.test(msg))           human = 'Needs HTTPS — open the https:// link.';
+    showErr(human);
+    document.getElementById('bw-stop-btn').style.display='none';
+    document.getElementById('bw-scan-btn').style.display='';
+    _bwScanner=null;
   }
 
-  _bwScanner.start(hd, box, onHit, ()=>{})
-    .catch(e1=>{
-      console.warn('[Borrow] HD rejected, retrying plain:', e1 && e1.name);
-      return _bwScanner.start({facingMode:'environment'}, box, onHit, ()=>{});
-    })
-    .catch(e2=>{
-      console.warn('[Borrow] plain rejected, trying back-camera by id:', e2 && e2.name);
-      return Html5Qrcode.getCameras().then(cams=>{
-        if(!cams || !cams.length) throw new Error('NotFound: no cameras');
-        const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
-        return _bwScanner.start(back.id, box, onHit, ()=>{});
-      });
-    })
-    .catch(fail);
+  // Build the scanner and start on the NEXT frame, so the container has a
+  // measured size (starting straight after un-hiding a display:none box makes
+  // some browsers see 0×0 and fail before ever calling getUserMedia — which is
+  // exactly "no camera, no permission prompt, no error").
+  requestAnimationFrame(()=>{
+    setTimeout(()=>{
+      try{
+        _bwScanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
+      }catch(e){ return fail(e); }
+
+      _bwScanner.start(hd, box, onHit, ()=>{})
+        .catch(e1=>{
+          console.warn('[Borrow] HD rejected, retrying plain:', e1 && e1.name);
+          return _bwScanner.start({facingMode:'environment'}, box, onHit, ()=>{});
+        })
+        .catch(e2=>{
+          console.warn('[Borrow] plain rejected, trying back-camera by id:', e2 && e2.name);
+          return Html5Qrcode.getCameras().then(cams=>{
+            if(!cams || !cams.length) throw new Error('NotFound: no cameras');
+            const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
+            return _bwScanner.start(back.id, box, onHit, ()=>{});
+          });
+        })
+        .catch(fail);
+    }, 60);
+  });
 }
 async function bwStopScan(){
   if(_bwScanner){ try{ await _bwScanner.stop(); _bwScanner.clear(); }catch(e){} _bwScanner=null; }
