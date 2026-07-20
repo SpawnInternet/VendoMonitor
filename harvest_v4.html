@@ -5461,32 +5461,59 @@ function bwStartScan(){
     _bwScanner=null;
   }
 
-  // Build the scanner and start on the NEXT frame, so the container has a
-  // measured size (starting straight after un-hiding a display:none box makes
-  // some browsers see 0×0 and fail before ever calling getUserMedia — which is
-  // exactly "no camera, no permission prompt, no error").
+  // Build + start on the NEXT frame so the container has a measured size
+  // (starting right after un-hiding a display:none box makes some browsers see
+  // 0×0 and fail before ever calling getUserMedia).
+  //
+  // IMPORTANT: html5-qrcode throws "Cannot transition to a new state, already
+  // under transition" if start() is called on an instance whose previous
+  // start() is still settling. So each attempt uses a FRESH instance and we
+  // fully tear the previous one down (stop+clear) before trying the next.
   requestAnimationFrame(()=>{
-    setTimeout(()=>{
-      try{
-        _bwScanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
-      }catch(e){ return fail(e); }
-
-      _bwScanner.start(hd, box, onHit, ()=>{})
-        .catch(e1=>{
-          console.warn('[Borrow] HD rejected, retrying plain:', e1 && e1.name);
-          return _bwScanner.start({facingMode:'environment'}, box, onHit, ()=>{});
-        })
-        .catch(e2=>{
-          console.warn('[Borrow] plain rejected, trying back-camera by id:', e2 && e2.name);
-          return Html5Qrcode.getCameras().then(cams=>{
-            if(!cams || !cams.length) throw new Error('NotFound: no cameras');
-            const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
-            return _bwScanner.start(back.id, box, onHit, ()=>{});
-          });
-        })
-        .catch(fail);
-    }, 60);
+    setTimeout(()=>{ bwTryStart([hd, {facingMode:'environment'}, '__byId__'], 0, cfg, onHit, box, fail); }, 60);
   });
+}
+
+// Attempt camera start with a fresh scanner per try; tear down cleanly between.
+async function bwTryStart(sources, i, cfg, onHit, box, fail){
+  if(i >= sources.length){ return fail(new Error('NotReadable: all camera attempts failed')); }
+
+  // Fresh instance every attempt — reusing one mid-transition is what throws
+  // the "already under transition" error.
+  let scanner;
+  try{
+    scanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
+  }catch(e){ return fail(e); }
+  _bwScanner = scanner;
+
+  // Resolve source: deviceId lookup is async.
+  let source = sources[i];
+  try{
+    if(source === '__byId__'){
+      const cams = await Html5Qrcode.getCameras();
+      if(!cams || !cams.length) throw new Error('NotFound: no cameras');
+      const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
+      source = back.id;
+    }
+  }catch(e){
+    console.warn('[Borrow] getCameras failed:', e && e.name);
+    return fail(e);   // if we can't even enumerate, surface it
+  }
+
+  try{
+    await scanner.start(source, box, onHit, ()=>{});
+    return;   // success — camera live
+  }catch(err){
+    console.warn('[Borrow] attempt '+i+' failed:', err && (err.name||err.message));
+    // Fully tear this instance down before the next attempt.
+    try{ await scanner.stop(); }catch(_){}
+    try{ scanner.clear(); }catch(_){}
+    _bwScanner = null;
+    // NotAllowed / permission → no point retrying other constraints.
+    const nm = String(err && (err.name||err.message||''));
+    if(/NotAllowed|Permission/i.test(nm)) return fail(err);
+    return bwTryStart(sources, i+1, cfg, onHit, box, fail);
+  }
 }
 async function bwStopScan(){
   if(_bwScanner){ try{ await _bwScanner.stop(); _bwScanner.clear(); }catch(e){} _bwScanner=null; }
