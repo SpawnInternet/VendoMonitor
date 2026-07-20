@@ -420,6 +420,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div style="padding:20px 18px">
           <div id="bw-reader" style="display:none;border-radius:14px;overflow:hidden;margin-bottom:14px;background:#000"></div>
 
+          <!-- Big immediate confirmation of the last tag scanned — sits right
+               under the camera so it's read without scrolling. -->
+          <div id="bw-lastscan" style="display:none;margin-bottom:14px;border-radius:14px;padding:14px 16px;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">
+            <div style="font-size:11px;font-weight:700;opacity:.85;letter-spacing:.4px">JUST SCANNED</div>
+            <div id="bw-lastscan-area" style="font-size:22px;font-weight:800;line-height:1.1;margin-top:2px">—</div>
+            <div id="bw-lastscan-code" style="font-size:12.5px;font-weight:600;opacity:.9;margin-top:2px"></div>
+          </div>
+
           <button id="bw-scan-btn" onclick="bwStartScan()" style="width:100%;padding:15px;border-radius:14px;border:0;background:linear-gradient(135deg,#025AC6,#1565c0);color:#fff;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(2,90,198,.3)">📷 Scan area tag</button>
           <button id="bw-stop-btn" onclick="bwStopScan()" style="display:none;width:100%;padding:13px;border-radius:14px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">✕ Stop camera</button>
 
@@ -5333,6 +5341,7 @@ let _bwHeld = [];
 
 function bwShow(){
   _bwRings = [];
+  const _ls=document.getElementById('bw-lastscan'); if(_ls) _ls.style.display='none';
   document.getElementById('bw-who').textContent = (selectedCollector||'') + ' · scan the tags you are taking';
   document.getElementById('bw-scan-card').style.display='';
   document.getElementById('bw-qr-card').style.display='none';
@@ -5365,7 +5374,19 @@ function bwRenderPicked(){
   go.style.display='';
   go.disabled = false;
 }
-function bwRemove(id){ _bwRings = _bwRings.filter(r=>r.id!==id); bwRenderPicked(); }
+function bwRemove(id){
+  _bwRings = _bwRings.filter(r=>r.id!==id);
+  bwRenderPicked();
+  const b=document.getElementById('bw-lastscan');
+  if(!_bwRings.length){ if(b) b.style.display='none'; }
+  else {
+    const last=_bwRings[_bwRings.length-1];
+    const a=document.getElementById('bw-lastscan-area');
+    const cc=document.getElementById('bw-lastscan-code');
+    if(a) a.textContent='✅ '+(last.area||last.label||'');
+    if(cc) cc.textContent=(last.short_code? last.short_code+' · ':'')+(last.label||'')+'  ·  '+_bwRings.length+' key'+(_bwRings.length>1?'s':'')+' scanned';
+  }
+}
 
 async function bwAddCode(code){
   const c = String(code||'').trim().toUpperCase();
@@ -5391,6 +5412,15 @@ async function bwAddCode(code){
   }
   _bwRings.push(ring);
   bwRenderPicked();
+  // Big, no-scroll confirmation of what was just scanned.
+  try{
+    const b=document.getElementById('bw-lastscan');
+    const a=document.getElementById('bw-lastscan-area');
+    const cc=document.getElementById('bw-lastscan-code');
+    if(a) a.textContent='✅ '+(ring.area||ring.label||'');
+    if(cc) cc.textContent=(ring.short_code? ring.short_code+' · ':'')+(ring.label||'')+'  ·  '+_bwRings.length+' key'+(_bwRings.length>1?'s':'')+' scanned';
+    if(b) b.style.display='';
+  }catch(_){}
   try{ navigator.vibrate && navigator.vibrate(40); }catch(e){}
   toast('✅ '+ring.label);
   }finally{ _bwBusy = false; }
