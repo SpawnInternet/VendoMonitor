@@ -1887,6 +1887,12 @@ async function pinSubmit(){
 function pinLogout(){
   selectedCollector=null; selectedTeam=null;
   _pinSelectedName=null;
+  // Logout re-locks everything: clear the admin bypass and the gate pass so
+  // the next login must borrow (scan) tags again — a bypass never carries over.
+  try{ _bwBypass=false; }catch(_){}
+  try{ _gateOK=false; }catch(_){}
+  try{ _bwRings=[]; _bwHeld=[]; }catch(_){}
+  try{ localStorage.removeItem('harvest_session'); }catch(_){}
   try{ sessionStorage.removeItem('col_name'); sessionStorage.removeItem('col_team'); sessionStorage.removeItem('col_id'); sessionStorage.removeItem('col_pin'); }catch(e){}
   spawnClearSession();
   document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
