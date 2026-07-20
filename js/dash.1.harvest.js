@@ -3444,7 +3444,7 @@ let _kvPane = 'borrow';
 
 function kvPane(p, btn){
   _kvPane = p;
-  ['borrow','overview','changes','installs','transfer'].forEach(t=>{
+  ['borrow','overview','changes','installs','transfer','genqr'].forEach(t=>{
     const el = document.getElementById('kv-pane-'+t);
     if(el) el.style.display = (t===p) ? (t==='overview'?'flex':'block') : 'none';
     const b = document.getElementById('kvp-'+t);
@@ -3460,6 +3460,129 @@ function kvPane(p, btn){
   if(p==='changes')  kcLoad();
   if(p==='installs') viLoad();
   if(p==='transfer') { kcEnsureNames(); ktLoad(); }
+  if(p==='genqr')    gqLoad();
+}
+
+/* ── GENERATE QR: self-serve batch of vendo key fobs ───────────────────────
+   Random 5-letter codes (no I/O), 3 per vendo (duplicate/pungpung/board),
+   registered in vendo_key_qr via the anon path, then a print page opens in a
+   new tab. Uses bwip-js (loaded from CDN on demand) for the Data Matrix. */
+const GQ_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, no O
+let _gqQrLoading = null;
+
+function gqLoad(){
+  // show current counts
+  fetch(_SB+'/rest/v1/vendo_key_qr?select=id,vendo_id', {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}})
+    .then(r=>r.json())
+    .then(rows=>{
+      const arr = Array.isArray(rows)?rows:[];
+      const total = arr.length;
+      const unbound = arr.filter(x=>x.vendo_id==null).length;
+      const t=document.getElementById('gq-total'); if(t) t.textContent=total;
+      const u=document.getElementById('gq-unbound'); if(u) u.textContent=unbound;
+    })
+    .catch(()=>{});
+}
+
+function gqLoadQr(){
+  if(window.QRCode && window.QRCode.toDataURL) return Promise.resolve();
+  if(_gqQrLoading) return _gqQrLoading;
+  _gqQrLoading = new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js';
+    s.onload=()=>res(); s.onerror=()=>rej(new Error('Could not load QR library (need internet)'));
+    document.head.appendChild(s);
+  });
+  return _gqQrLoading;
+}
+
+function gqRandCode(used){
+  let c;
+  do { c=''; for(let i=0;i<5;i++) c+=GQ_ALPHA[Math.floor(Math.random()*GQ_ALPHA.length)]; }
+  while(used.has(c));
+  used.add(c); return c;
+}
+
+// QR -> PNG data URL (proven scannable, generated fully client-side)
+function gqQrPng(text){
+  return QRCode.toDataURL(text, {margin:2, scale:8, errorCorrectionLevel:'M'});
+}
+
+async function gqGenerate(){
+  const btn=document.getElementById('gq-btn');
+  const status=document.getElementById('gq-status');
+  const n=parseInt(document.getElementById('gq-count').value,10)||50;
+  btn.disabled=true; btn.style.opacity='.6';
+  status.textContent='Loading QR library…';
+  try{
+    await gqLoadQr();
+
+    // pull existing codes so new ones never collide
+    status.textContent='Checking existing codes…';
+    const ex=await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code', {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}}).then(r=>r.json());
+    const used=new Set((Array.isArray(ex)?ex:[]).map(r=>r.qr_code));
+
+    // build codes: n vendos x 3 types
+    const TYPES=[['duplicate','Dup','#C01176'],['pungpung','Pung','#311A8E'],['board','Board','#028867']];
+    const rows=[]; const fobs=[];
+    status.textContent='Generating '+(n*3)+' codes…';
+    for(let i=0;i<n;i++){
+      for(const [ktype,label,color] of TYPES){
+        const code=gqRandCode(used);
+        rows.push({qr_code:code, key_type:ktype});
+        const url=await gqQrPng(code);
+        fobs.push(
+          '<div class="fob"><img src="'+url+'">'
+          +'<div class="meta"><span class="code">'+code+'</span>'
+          +'<span class="lbl" style="background:'+color+'">'+label+'</span></div>'
+          +'<div class="free"></div></div>'
+        );
+      }
+    }
+
+    // register in DB (anon path; vendo_key_qr has anon insert policy)
+    status.textContent='Registering '+rows.length+' codes…';
+    const reg=await fetch(_SB+'/rest/v1/vendo_key_qr', {
+      method:'POST',
+      headers:{apikey:_ANON,Authorization:'Bearer '+_ANON,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify(rows)
+    });
+    if(!reg.ok){ const t=await reg.text(); throw new Error('DB register failed: '+t.slice(0,120)); }
+
+    // build + open the print page
+    status.textContent='Opening print page…';
+    const html=gqPrintPage(fobs, n);
+    const w=window.open('', '_blank');
+    if(!w){ status.textContent='⚠ Popup blocked — allow popups for this site, then retry.'; }
+    else { w.document.open(); w.document.write(html); w.document.close(); status.textContent='✅ '+rows.length+' fobs generated & registered.'; }
+    gqLoad(); // refresh counts
+  }catch(e){
+    status.textContent='❌ '+(e.message||e);
+  }finally{
+    btn.disabled=false; btn.style.opacity='1';
+  }
+}
+
+function gqPrintPage(fobs, n){
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Spawn Vendo Key Fobs</title><style>'
+    +'@page{size:A4;margin:8mm}'
+    +"body{font-family:'Plus Jakarta Sans',-apple-system,Segoe UI,sans-serif;background:#eef1fa;margin:0;padding:16px;color:#111}"
+    +'h1{color:#025AC6;font-size:19px;margin:0 0 3px}.sub{color:#5a6478;font-size:12px;margin:0 0 14px}'
+    +'.sheet{background:#fff;border-radius:13px;padding:15px;box-shadow:0 4px 18px rgba(2,90,198,.1)}'
+    +'.grid{display:flex;flex-wrap:wrap;gap:4mm}'
+    +'.fob{width:19mm;height:37mm;border:0.25mm dashed #b9c4dc;display:flex;flex-direction:column;align-items:center;padding:0.5mm;box-sizing:border-box;background:#fff}'
+    +'.fob img{width:18mm;height:18mm;image-rendering:pixelated;display:block;margin-top:0.4mm}'
+    +'.meta{display:flex;align-items:center;gap:1.2mm;margin-top:0.8mm;line-height:1}'
+    +'.code{font-size:7pt;font-weight:800;color:#000;letter-spacing:1px}'
+    +'.lbl{font-size:5pt;font-weight:800;color:#fff;padding:0.3mm 1mm;border-radius:1mm;line-height:1}'
+    +'.free{flex:1}'
+    +'@media print{body{background:#fff;padding:0}h1,.sub{display:none}.sheet{box-shadow:none;padding:0}}'
+    +'</style></head><body>'
+    +'<h1>🔑 Spawn Vendo Key Fobs — blank, bind later</h1>'
+    +'<div class="sub">'+n+' vendos × 3 = '+(n*3)+' fobs. Free space to write the vendo name. Print at 100% / Actual size. Cut on the dashed line.</div>'
+    +'<div class="sheet"><div class="grid">'+fobs.join('')+'</div></div>'
+    +'<script>setTimeout(function(){window.print();},600);<\/script>'
+    +'</body></html>';
 }
 
 /* ── OVERVIEW: merged view of key_logs + key_changes, search per day or by name ── */
