@@ -114,6 +114,8 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
     <div id="home-keeper"></div>
     <button class="btn btn-gray" onclick="openPull(null)" style="width:100%;margin-bottom:16px">
       🔍 Pull single key (no QR)</button>
+    <button class="btn btn-gray" onclick="openBind()" style="width:100%;margin-bottom:16px">
+      🏷️ Bind vendo key QR</button>
     <div class="lbl">Rings</div>
     <div id="ring-list"><div class="empty">Loading…</div></div>
     <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;margin-top:14px;color:#DF1A35">
@@ -169,6 +171,29 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
         Confirm — key taken</button>
     </div>
     <button class="btn btn-gray" onclick="go('home')" style="width:100%">← Back</button>
+  </div>
+</div>
+
+<!-- BIND vendo key QR -->
+<div class="screen" id="screen-bind">
+  <div class="wrap">
+    <div style="background:#EEF1FA;border:1px solid #cdd8f0;border-radius:11px;padding:11px 13px;font-size:12px;color:#3b4a66;margin-bottom:12px;line-height:1.5">
+      🏷️ <b>Bind a QR fob to a vendo.</b> Works for new <i>and</i> existing vendos.
+      Search the vendo, then scan its fob. One fob at a time.
+    </div>
+    <div class="card">
+      <div class="lbl">1 · Find vendo</div>
+      <input id="bind-q" placeholder="Type a name…" oninput="bindSearch()" autocomplete="off">
+      <div id="bind-res" style="max-height:260px;overflow-y:auto;margin-top:8px"></div>
+    </div>
+    <div class="card" id="bind-step2" style="display:none">
+      <div class="lbl">2 · Scan the fob</div>
+      <div id="bind-vendo" style="font-weight:800;margin-bottom:4px"></div>
+      <div id="bind-vendo-meta" style="font-size:12px;color:#7a869c;margin-bottom:12px"></div>
+      <button class="btn btn-pri" onclick="bindStartScan()" style="width:100%">📷 Scan fob QR</button>
+      <div id="bind-result" style="margin-top:12px"></div>
+    </div>
+    <button class="btn btn-gray" onclick="bindStopScan();go('home')" style="width:100%">← Back</button>
   </div>
 </div>
 
@@ -618,6 +643,99 @@ async function confirmPull(){
   toast('Logged — '+(PULL_VENDO.sheet_name||'key')+' ('+PULL_KT.replace('_',' ')+')');
   go('home'); loadRings();
 }
+
+// ── BIND vendo key QR (works for new + existing vendos) ──
+let BIND_VENDO=null, BIND_ST=null;
+function openBind(){
+  BIND_VENDO=null;
+  document.getElementById('bind-q').value='';
+  document.getElementById('bind-res').innerHTML='';
+  document.getElementById('bind-step2').style.display='none';
+  document.getElementById('bind-result').innerHTML='';
+  go('bind');
+  setTimeout(()=>document.getElementById('bind-q').focus(),250);
+}
+function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
+async function bindRunSearch(){
+  const q=document.getElementById('bind-q').value.trim();
+  if(q.length<2){document.getElementById('bind-res').innerHTML='';return;}
+  const like='*'+q.replace(/[(),*]/g,'')+'*';
+  const f='or=(sheet_name.ilike.'+like+',tg_name.ilike.'+like+',owner_name.ilike.'+like+',excel_name.ilike.'+like+')';
+  const d=await sbGet('vendos?'+f+'&select=id,sheet_name,tg_name,owner_name,area,vendo_code&limit=25');
+  if(!Array.isArray(d)){document.getElementById('bind-res').innerHTML='<div class="empty">Search failed.</div>';return;}
+  document.getElementById('bind-res').innerHTML = d.length? d.map(v=>`
+    <div class="vrow" onclick='bindPickVendo(${JSON.stringify(v)})'>
+      <div class="vname">${esc(v.sheet_name||v.tg_name||('#'+v.id))}</div>
+      <div class="vmeta">${esc(v.area||'')}${v.vendo_code?' · '+esc(v.vendo_code):''}${v.owner_name?' · '+esc(v.owner_name):''}</div>
+    </div>`).join('') : '<div class="empty">No match.</div>';
+}
+function bindPickVendo(v){
+  BIND_VENDO=v;
+  document.getElementById('bind-vendo').textContent=v.sheet_name||v.tg_name||('#'+v.id);
+  document.getElementById('bind-vendo-meta').textContent=(v.area||'')+(v.vendo_code?' · '+v.vendo_code:'');
+  document.getElementById('bind-result').innerHTML='';
+  document.getElementById('bind-step2').style.display='block';
+  document.getElementById('bind-step2').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function bindStartScan(){
+  if(!BIND_VENDO){toast('Pick a vendo first');return;}
+  go('scan');
+  startScannerHD(null,{width:250,height:250},
+    async txt=>{
+      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+      go('bind');
+      bindOnCode(String(txt||'').trim());
+    },
+    ()=>{toast('Camera failed');go('bind');});
+}
+async function bindStopScan(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+}
+async function bindCall(qr,force){
+  const body={p_qr:qr, p_vendo_id:BIND_VENDO.id, p_account:ME.name, p_force:!!force};
+  const r=await fetch(SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:HDR,body:JSON.stringify(body)});
+  return r.json();
+}
+async function bindOnCode(qr){
+  if(!BIND_VENDO){toast('Pick a vendo first');return;}
+  const res=document.getElementById('bind-result');
+  res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Saving…</div>';
+  let d=await bindCall(qr,false);
+  if(d && d.already_bound){
+    // warn + offer rebind
+    res.innerHTML=`<div class="banner">⚠ ${esc(d.error)}.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-gray" style="flex:1" onclick="bindCancelResult()">Cancel</button>
+        <button class="btn btn-ok" style="flex:1" onclick="bindForce('${esc(qr)}')">Rebind here</button>
+      </div>`;
+    return;
+  }
+  bindShow(d,qr);
+}
+async function bindForce(qr){
+  const res=document.getElementById('bind-result');
+  res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Rebinding…</div>';
+  const d=await bindCall(qr,true);
+  bindShow(d,qr);
+}
+function bindShow(d,qr){
+  const res=document.getElementById('bind-result');
+  if(!d || !d.ok){
+    res.innerHTML='<div class="banner">❌ '+esc((d&&d.error)||'Bind failed')+'</div>';
+    return;
+  }
+  const kt=(d.key_type||'').charAt(0).toUpperCase()+(d.key_type||'').slice(1);
+  const same=d.already_bound_same?' (already bound)':'';
+  res.innerHTML=`<div style="background:#E6F7F0;border:1px solid #9fe1cb;border-radius:11px;padding:12px 13px">
+      <div style="font-weight:800;color:#028867">✅ Bound${same}</div>
+      <div style="font-size:13px;margin-top:3px">${esc(d.vendo||BIND_VENDO.sheet_name||'')} · <b>${esc(kt)} key</b></div>
+      <div style="font-size:11px;color:#7a869c;margin-top:2px;font-family:monospace">${esc(qr)}${d.by?' · by '+esc(d.by):''}</div>
+    </div>
+    <button class="btn btn-pri" style="width:100%;margin-top:10px" onclick="bindStartScan()">📷 Scan another fob for this vendo</button>
+    <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="openBind()">Bind a different vendo</button>`;
+  loadRings&&0;
+}
+function bindCancelResult(){ document.getElementById('bind-result').innerHTML=''; }
 
 async function resetTrial(){
   if(!confirm('Clear all trial data?\n\nEvery ring goes back to IN and the test log is wiped.')) return;
