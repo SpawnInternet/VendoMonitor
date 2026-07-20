@@ -2901,9 +2901,38 @@ function klClearAreas(){
 
 function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// TRIAL: the keys system (dashboard forms + v4 + spawn-keys) is still being
+// validated. Reads keys_trial_mode from spawn_settings and shows a badge so
+// nobody treats key data as final. Wendell flips keys_trial_mode +
+// v4_trial_mode to false together when going live.
+function klCheckTrial(){
+  const _h = {apikey:_ANON, Authorization:'Bearer '+_ANON, 'Content-Type':'application/json'};
+  fetch(_SB+'/rest/v1/spawn_settings?select=value&key=eq.keys_trial_mode', {headers:_h})
+    .then(r=>r.json())
+    .then(d=>{
+      const trial = !(Array.isArray(d) && d[0] && d[0].value === 'false'); // default trial
+      const badge = document.getElementById('keys-trial-badge');
+      if(badge) badge.style.display = trial ? '' : 'none';
+      // full-width banner at the top of the borrow pane
+      let ban = document.getElementById('keys-trial-banner');
+      const pane = document.getElementById('kv-pane-borrow');
+      if(trial){
+        if(!ban && pane){
+          ban = document.createElement('div');
+          ban.id = 'keys-trial-banner';
+          ban.style.cssText = 'background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;font-size:12px;font-weight:800;text-align:center;padding:7px 10px;letter-spacing:.3px;';
+          ban.textContent = '⚠ TRIAL MODE — the keys system is still being tested. Records here are not final yet.';
+          pane.insertBefore(ban, pane.firstChild);
+        }
+      } else if(ban){ ban.remove(); }
+    })
+    .catch(()=>{ /* if the flag can't be read, leave the static badge as-is (trial) */ });
+}
+
 function klLoad(){
   const list = document.getElementById('kl-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  klCheckTrial();
   klBuildAreas();
   // default date to today
   const dEl = document.getElementById('kl-date');
