@@ -476,7 +476,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="topbar-logout" id="topbar-install" onclick="promptInstall()" style="display:none;margin-right:6px">⬇️ Install</button>
-    <button class="topbar-logout" id="topbar-logout" onclick="pinLogout()">🚪 Logout</button>
+    <button class="topbar-logout" id="topbar-logout" onclick="pinLogoutConfirm()">🚪 Logout</button>
     <div class="sync-badge">
       <div class="sync-dot" id="sync-dot"></div>
       <span id="sync-label">Online</span>
@@ -663,7 +663,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Loading…</div></div>
   </div>
 
-  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+  <button class="btn btn-gray" onclick="pinLogoutConfirm()" style="margin-top:4px">← Logout</button>
 </div>
 
 <!-- ── SCREEN: AREAS (kept for navigation) ── -->
@@ -710,7 +710,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card-title">Recent Harvests Today</div>
     <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div></div>
   </div>
-  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
+  <button class="btn btn-gray" onclick="pinLogoutConfirm()" style="margin-top:4px">← Logout</button>
 </div>
 
 <div class="screen" id="screen-areas">
@@ -1882,6 +1882,17 @@ async function pinSubmit(){
       pinCheckReady();
     }
   }
+}
+
+// Logout now requires the collector's PIN — so no one can log out (and re-lock
+// the app / drop the borrow state) without the collector authorizing it.
+async function pinLogoutConfirm(){
+  const who = selectedCollector || sessionStorage.getItem('col_name') || '';
+  const pin = await bwPinAsk('Confirm logout', who ? ('Enter '+who+"'s PIN to log out") : 'Enter your PIN to log out');
+  if(pin === null) return;                    // cancelled
+  const ok = await pulloutValidatePin(String(pin).trim());
+  if(!ok){ toast('❌ Wrong PIN — not logged out'); return; }
+  pinLogout();
 }
 
 function pinLogout(){
