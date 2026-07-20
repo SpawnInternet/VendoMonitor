@@ -282,15 +282,67 @@ const CAM_HD = {
   advanced: [{focusMode: 'continuous'}]
 };
 
-// Start a scanner with HD constraints, falling back to defaults if the phone
-// rejects them (some refuse 1080p outright).
+// Start a scanner with a fresh instance per attempt. html5-qrcode throws
+// "Cannot transition to a new state, already under transition" if start() is
+// retried on an instance whose previous start() is still settling — so each
+// attempt uses its OWN instance and we tear the previous one down first.
+// Also gives #reader a real size and waits a frame, because starting right
+// after a screen becomes visible can hand the library a 0×0 box (→ no camera,
+// no permission prompt, no error).
 function startScannerHD(scanner, box, onHit, onFail){
-  scanner.start(CAM_HD, {fps:10, qrbox:box, aspectRatio:1.777}, onHit, ()=>{})
-    .catch(()=>{
-      console.warn('[Keys] HD constraints rejected, retrying default');
-      scanner.start({facingMode:'environment'}, {fps:10, qrbox:box}, onHit, ()=>{})
-        .catch(onFail);
-    });
+  const rd = document.getElementById('reader');
+  if(rd){ rd.style.minHeight = (box.height||220)+'px'; rd.innerHTML=''; }
+
+  const showErr = (human)=>{
+    if(rd) rd.innerHTML='<div style="padding:14px;color:#fff;background:#DF1A35;border-radius:12px;font-size:13px;font-weight:700;line-height:1.4">'+human+'</div>';
+    try{ toast(human); }catch(_){}
+  };
+  if(!window.isSecureContext){ showErr('Not on HTTPS — the browser blocks the camera. Open the https:// link.'); if(onFail) onFail(); return; }
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ showErr('This browser has no camera access. Try Chrome.'); if(onFail) onFail(); return; }
+
+  const cfg = (()=>{ try{ const F=Html5QrcodeSupportedFormats; return {formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]}; }catch(e){ return undefined; } })();
+
+  function fail(err){
+    const msg = String(err && (err.name||err.message||err) || '');
+    console.error('[Keys] camera start failed:', msg, err);
+    let human = 'Camera failed: '+(msg||'unknown');
+    if(/NotAllowed|Permission/i.test(msg))         human='Camera permission denied. Tap the 🔒 icon left of the address bar → Camera → Allow, then reload.';
+    else if(/NotFound|Overconstrained/i.test(msg)) human='No camera found on this device.';
+    else if(/NotReadable|TrackStart/i.test(msg))   human='Camera busy (another app is using it). Close it and retry.';
+    showErr(human);
+    if(onFail) onFail(err);
+  }
+
+  const sources = [CAM_HD, {facingMode:'environment'}, '__byId__'];
+
+  async function tryStart(i){
+    if(i >= sources.length){ return fail(new Error('NotReadable: all camera attempts failed')); }
+    let s;
+    try{ s = cfg ? new Html5Qrcode('reader', cfg) : new Html5Qrcode('reader'); }
+    catch(e){ return fail(e); }
+    SCANNER = s;
+    let src = sources[i];
+    try{
+      if(src === '__byId__'){
+        const cams = await Html5Qrcode.getCameras();
+        if(!cams || !cams.length) throw new Error('NotFound: no cameras');
+        const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
+        src = back.id;
+      }
+    }catch(e){ return fail(e); }
+    try{
+      await s.start(src, {fps:10, qrbox:box}, onHit, ()=>{});
+      return; // live
+    }catch(err){
+      try{ await s.stop(); }catch(_){}
+      try{ s.clear(); }catch(_){}
+      SCANNER = null;
+      const nm = String(err && (err.name||err.message||''));
+      if(/NotAllowed|Permission/i.test(nm)) return fail(err); // no point retrying
+      return tryStart(i+1);
+    }
+  }
+  requestAnimationFrame(()=>{ setTimeout(()=>tryStart(0), 60); });
 }
 
 let APPROVE_TOKEN = null;
@@ -299,13 +351,7 @@ function startApprove(){
   if(!isKeeper()){toast('Approval is for Ailyn or Steph');return;}
   APPROVE_TOKEN = null;
   go('scan');
-  var cfg;
-  try{
-    const F=Html5QrcodeSupportedFormats;
-    cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
-  }catch(e){ cfg=undefined; }
-  SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
-  startScannerHD(SCANNER, {width:250,height:250},
+  startScannerHD(null, {width:250,height:250},
     async txt=>{
       await stopScan();
       APPROVE_TOKEN = String(txt||'').trim();
@@ -489,13 +535,7 @@ let LAST_AUTH='pin';
 function startScan(){
   if(!isKeeper()){toast('Ring scan is for Ailyn or Steph');return;}
   go('scan');
-  var cfg;
-  try{
-    const F=Html5QrcodeSupportedFormats;
-    cfg={formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]};
-  }catch(e){ cfg=undefined; }
-  SCANNER = cfg ? new Html5Qrcode('reader',cfg) : new Html5Qrcode('reader');
-  startScannerHD(SCANNER, {width:250,height:160},
+  startScannerHD(null, {width:250,height:160},
     async txt=>{
       await stopScan();
       LAST_AUTH='qr';
