@@ -1628,19 +1628,11 @@ window.addEventListener('DOMContentLoaded',()=>{
     const nm=document.getElementById('signedin-name');
     if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
     if(nm) nm.textContent=_sess.name||'Collector';
-    // On refresh: restore where the collector was, don't force a "continue" tap.
-    const _last = (()=>{ try{ return JSON.parse(localStorage.getItem('harvest_session')||'null'); }catch(_){ return null; } })();
-    if(_last && _last.groupId){
-      // was inside a group — reopen it directly (uses cache = instant)
-      // GATE: this path skips showHomeScreen(), so check here too.
-      gateCheck().then(ok=>{
-        if(!ok) return;                       // overlay is up
-        try{ startGroup(_last.groupId); }
-        catch(_){ showHomeScreen(); }
-      }).catch(()=>{ try{ startGroup(_last.groupId); }catch(_){ showHomeScreen(); } });
-    } else {
-      showHomeScreen();
-    }
+    // On refresh: stay signed in, but always land on the HOME screen (group
+    // picker). We deliberately do NOT auto-reopen the last group — the
+    // collector should choose their group each time, not be dropped straight
+    // into a harvest on reload.
+    showHomeScreen();
   } else {
     spawnClearSession();
     showScreen('screen-collector');
