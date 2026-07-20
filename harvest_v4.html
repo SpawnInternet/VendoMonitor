@@ -5209,6 +5209,13 @@ let _bwScanner = null;
 let _bwToken = null;
 let _bwPoll = null;
 let _bwTick = null;
+// Scan debounce: the camera callback fires ~10x/sec while a tag is in frame.
+// Without this, one tag held steady hammers the DB and spams toasts every
+// frame. Ignore the same code for a short window, and never run two lookups
+// at once.
+let _bwLastCode = '';
+let _bwLastAt = 0;
+let _bwBusy = false;
 
 // ══ KEY TABLES: BYPASS THE GATEWAY ════════════════════════════════════
 // v4 routes all REST through spawn-gw, which keeps its own hardcoded table
@@ -5371,7 +5378,16 @@ function bwRemove(id){ _bwRings = _bwRings.filter(r=>r.id!==id); bwRenderPicked(
 async function bwAddCode(code){
   const c = String(code||'').trim().toUpperCase();
   if(!c) return;
+  // Debounce: same code within 2.5s, or a lookup already running → ignore.
+  // Stops the 10fps camera callback from spamming toasts and DB reads while
+  // one tag sits in the frame.
+  const now = Date.now();
+  if(_bwBusy) return;
+  if(c === _bwLastCode && (now - _bwLastAt) < 2500) return;
+  _bwLastCode = c; _bwLastAt = now;
   if(_bwRings.some(r=>r.short_code===c || r.qr_code===c)){ toast('Already scanned'); return; }
+  _bwBusy = true;
+  try{
   const r = await _keysFetch('key_rings?select=id,label,area,short_code,status,out_to&or=(short_code.eq.'
             +encodeURIComponent(c)+',qr_code.eq.'+encodeURIComponent(c)+')');
   const d = await r.json();
@@ -5385,6 +5401,7 @@ async function bwAddCode(code){
   bwRenderPicked();
   try{ navigator.vibrate && navigator.vibrate(40); }catch(e){}
   toast('✅ '+ring.label);
+  }finally{ _bwBusy = false; }
 }
 
 function bwStartScan(){
