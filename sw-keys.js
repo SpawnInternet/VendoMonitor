@@ -14,13 +14,14 @@
 //     SW controls a page and the last registration wins. So we must not answer
 //     navigations that aren't ours — otherwise an offline harvest launch could
 //     be served spawn-keys.html.
-const CACHE = 'spawn-keys-v6';
+const CACHE = 'spawn-keys-v7';
 const APP_HTML = '/VendoMonitor/spawn-keys.html';
 const SHELL = [
   APP_HTML,
   '/VendoMonitor/keys-manifest.json',
-  '/VendoMonitor/spawn-mobile-192.png',
-  '/VendoMonitor/spawn-mobile-512.png'
+  '/VendoMonitor/spawn-keys-192.png',
+  '/VendoMonitor/spawn-keys-512.png',
+  '/VendoMonitor/spawn-keys-maskable-512.png'
 ];
 
 self.addEventListener('install', e => {
