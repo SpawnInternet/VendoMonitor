@@ -1,0 +1,1675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#025AC6">
+<title>Spawn Keys</title>
+<link rel="manifest" href="/VendoMonitor/keys/keys-manifest.json">
+<link rel="apple-touch-icon" href="/VendoMonitor/keys/spawn-keys-touch-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Spawn Keys">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="Spawn Keys — ring custody">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --spawn-navy:#025AC6;
+  --spawn-navy-dark:#01408f;
+  --spawn-gold:#FFB725; --spawn-teal:#028867; --spawn-blue:#025AC6;
+  --spawn-purple:#311A8E; --spawn-pink:#C01176; --spawn-red:#DF1A35;
+  --green:#16a34a;--green-light:#E6F7F5;--green-mid:#9fe1cb;
+  --red:#DF1A35;--red-light:#fef2f2;
+  --amber:#d97706;--amber-light:#FEF7E8;
+  --blue-light:#EEF1FA;--blue-mid:#C7D2FE;
+  --purple-light:#F3EEF8;
+  --border:#e5e7eb; --bg:#F7F8FC; --text:#111827; --muted:#6b7280;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
+
+.topbar{background:linear-gradient(135deg,var(--spawn-navy-dark),var(--spawn-navy));color:#fff;
+  padding:12px 16px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(2,90,198,.3);
+  padding-top:calc(12px + env(safe-area-inset-top))}
+.topbar-back{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:7px;
+  padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+  display:none;margin-right:10px}
+.topbar-back:active{background:rgba(255,255,255,.3)}
+.tb-title{font-weight:800;font-size:16px;letter-spacing:.02em}
+.tb-sub{font-size:10px;opacity:.75;margin-top:1px}
+.tb-user{font-size:12px;opacity:.9;font-weight:600;cursor:pointer}
+.trial-chip{background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;
+  border-radius:99px;margin-left:4px;vertical-align:2px}
+
+.btn{border:none;border-radius:11px;padding:13px 16px;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.btn-pri{background:var(--spawn-navy);color:#fff;width:100%}
+.btn-ok{background:var(--spawn-teal);color:#fff}
+.btn-gray{background:#fff;color:var(--text);border:1px solid var(--border)}
+.btn:active{transform:scale(.98)}
+
+.wrap{padding:16px;max-width:640px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;
+  margin-bottom:14px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.screen{display:none;padding-bottom:calc(86px + env(safe-area-inset-bottom))}.screen.active{display:block}
+.lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);margin-bottom:8px}
+input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:11px;
+  font-size:15px;font-family:inherit;background:#fff;color:var(--text)}
+
+.tab-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.tab-h1{font-size:21px;font-weight:800;letter-spacing:-.01em}
+.tab-hsub{font-size:12px;color:var(--muted);margin-top:2px}
+
+.ring{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:#fff;border:1px solid var(--border);border-left:4px solid var(--spawn-teal);
+  border-radius:0 13px 13px 0;padding:14px;margin-bottom:9px;cursor:pointer;
+  box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.ring.out{border-left-color:var(--spawn-red);background:var(--red-light)}
+.ring-l{font-weight:800;font-size:15px}
+.ring-s{font-size:12px;color:var(--muted);margin-top:2px}
+.pill{font-size:10px;font-weight:800;padding:4px 9px;border-radius:99px;text-transform:uppercase}
+.p-in{background:var(--green-light);color:var(--spawn-teal)}
+.p-out{background:#fde8ea;color:var(--spawn-red)}
+.p-qr{background:var(--green-light);color:var(--spawn-teal)}
+.p-pin{background:var(--amber-light);color:#8a5a00}
+
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.pin-k{background:#fff;border:1px solid var(--border);border-radius:13px;padding:18px;
+  font-size:20px;font-weight:800;cursor:pointer;font-family:inherit;color:var(--text)}
+.pin-k:active{background:var(--blue-light)}
+.pin-dots{display:flex;gap:10px;justify-content:center;margin:16px 0}
+.pin-dot{width:13px;height:13px;border-radius:50%;background:var(--border)}
+.pin-dot.on{background:var(--spawn-navy)}
+
+.vrow{padding:12px;border-bottom:1px solid var(--border);cursor:pointer}
+.vrow:active{background:var(--blue-light)}
+.vname{font-weight:700;font-size:14px}
+.vmeta{font-size:11px;color:var(--muted);margin-top:2px}
+
+.kt{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.kt-b{padding:14px;border:2px solid var(--border);border-radius:12px;background:#fff;
+  font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;color:var(--text)}
+.kt-b.sel{border-color:var(--spawn-navy);background:var(--blue-light);color:var(--spawn-navy)}
+
+.ev{padding:11px 0;border-bottom:1px solid var(--border)}
+.ev-t{font-weight:700;font-size:14px}
+.ev-m{font-size:11px;color:var(--muted);margin-top:3px}
+
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;
+  box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.stat-n{font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.stat-l{font-size:11px;font-weight:700;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+.stat.teal .stat-n{color:var(--spawn-teal)}
+.stat.red .stat-n{color:var(--spawn-red)}
+.stat.navy .stat-n{color:var(--spawn-navy)}
+.stat.amber .stat-n{color:var(--amber)}
+
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(90px);
+  background:#111827;color:#fff;padding:13px 20px;border-radius:12px;font-size:14px;
+  font-weight:600;transition:transform .25s, opacity .2s, visibility .2s;z-index:900;max-width:90vw;
+  opacity:0;visibility:hidden;pointer-events:none}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible}
+#reader{width:100%;border-radius:13px;overflow:hidden}
+.empty{text-align:center;padding:32px 16px;color:var(--muted);font-size:14px}
+.banner{background:var(--amber-light);border:1px solid #f5d78e;border-radius:12px;
+  padding:11px 13px;font-size:13px;margin-bottom:12px;font-weight:600;color:#8a5a00}
+
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);
+  display:none;z-index:150;box-shadow:0 -2px 12px rgba(0,0,0,.08);
+  padding-bottom:max(10px, env(safe-area-inset-bottom))}
+.bottom-nav.show{display:flex}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:9px 4px 10px;cursor:pointer;border:none;background:transparent;font-family:inherit;
+  transition:.15s;position:relative}
+.bnav-item:active{background:var(--blue-light)}
+.bnav-icon{color:var(--muted);line-height:1;display:flex}
+.bnav-label{font-size:10px;font-weight:700;color:var(--muted);margin-top:3px}
+.bnav-item.active .bnav-label{color:var(--spawn-navy)}
+.bnav-item.active .bnav-icon{color:var(--spawn-navy)}
+.bnav-badge{position:absolute;top:5px;right:calc(50% - 20px);background:var(--spawn-red);color:#fff;
+  font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;display:none}
+
+/* ── Home hero / stats / actions (v4 style) ── */
+.hero{background:linear-gradient(160deg,#025AC6 0%,#0146A0 100%);border-radius:16px;padding:20px;
+  margin-bottom:14px;color:#fff}
+.hero-label{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.08em}
+.hero-amount{font-size:34px;font-weight:800;margin-top:2px;line-height:1;letter-spacing:-.02em}
+.hero-sub{font-size:12px;opacity:.8;margin-top:4px}
+.status-strip{display:flex;align-items:center;gap:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;
+  border-radius:14px;padding:12px 14px;margin-bottom:14px;cursor:pointer}
+.status-ico{width:38px;height:38px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:18px}
+.stat-row{display:flex;background:#fff;border-radius:13px;box-shadow:0 2px 8px rgba(2,90,198,.05);
+  overflow:hidden;margin-bottom:14px}
+.stat-cell{flex:1;text-align:center;padding:12px 4px}
+.stat-cell+.stat-cell{border-left:1px solid #eef2f7}
+.stat-cell .n{font-size:18px;font-weight:800;color:#025AC6}
+.stat-cell .n.red{color:#dc2626}.stat-cell .n.amber{color:#d97706}.stat-cell .n.teal{color:#028867}
+.stat-cell .l{font-size:9px;color:#6b87a8;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.action-row{display:flex;background:#fff;border-radius:13px;box-shadow:0 2px 8px rgba(2,90,198,.05);
+  overflow:hidden;margin-bottom:16px}
+.action-btn{flex:1;text-align:center;padding:13px 4px;border:none;background:#fff;cursor:pointer;font-family:inherit}
+.action-btn+.action-btn{border-left:1px solid #eef2f7}
+.action-btn:active{background:#f7f8fc}
+.action-ico{width:40px;height:40px;border-radius:13px;background:#E7F0FB;display:flex;align-items:center;
+  justify-content:center;margin:0 auto 5px;color:#025AC6}
+.action-lbl{font-size:10px;font-weight:700;color:#083A82}
+.home-sec-title{font-size:12px;font-weight:800;color:#025AC6;letter-spacing:.04em;
+  margin:0 2px 8px;display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center">
+    <button class="topbar-back" id="tb-back" onclick="tabBack()">← Back</button>
+    <div>
+      <div class="tb-title">🔑 SPAWN KEYS<span class="trial-chip">TRIAL</span></div>
+      <div class="tb-sub" id="tb-sub">Ring custody</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="btn-install" onclick="doInstall()" style="display:none;border:0;border-radius:99px;background:#FFB725;color:#5c3d00;font-family:inherit;font-size:11px;font-weight:800;padding:6px 11px;cursor:pointer;white-space:nowrap">⬇ Install</button>
+    <div class="tb-user" id="tb-user" onclick="logout()"></div>
+  </div>
+</div>
+
+<div class="screen active" id="screen-login">
+  <div class="wrap" style="max-width:360px;padding-top:40px">
+    <div style="text-align:center;margin-bottom:8px">
+      <div style="font-size:40px">🔑</div>
+      <div style="font-size:20px;font-weight:800;margin-top:6px">Key Keeper Login</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">Enter your 4-digit PIN</div>
+    </div>
+    <div class="pin-dots" id="pin-dots"></div>
+    <div id="pin-err" style="text-align:center;color:var(--spawn-red);font-size:13px;font-weight:600;min-height:18px"></div>
+    <div class="pin-grid" id="pin-grid"></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-home">
+  <div class="wrap">
+    <div class="hero" style="margin-top:4px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div class="hero-label">Rings out now</div>
+          <div class="hero-amount" id="home-out">0</div>
+          <div class="hero-sub" id="home-out-sub">All rings in office</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.06em">Keeper</div>
+          <div style="font-size:15px;font-weight:800;margin-top:2px" id="home-keeper-name">—</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.8;margin-bottom:5px">
+        <span id="home-ring-label">Rings returned</span>
+        <span id="home-ring-pct">0%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,.25);border-radius:4px;overflow:hidden">
+        <div id="home-ring-bar" style="height:100%;width:0%;background:#FFB725;border-radius:4px;transition:.5s ease"></div>
+      </div>
+      <div style="font-size:10px;opacity:.7;margin-top:4px;text-align:right" id="home-ring-remaining">—</div>
+    </div>
+
+    <div class="status-strip" onclick="loadHome()">
+      <div class="status-ico">🔑</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#16a34a" id="home-status-title">Key custody</div>
+        <div style="font-size:11px;color:#15803d;margin-top:1px" id="home-status-sub">Tap to refresh</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-cell"><div class="n red" id="home-s-out">0</div><div class="l">Rings out</div></div>
+      <div class="stat-cell"><div class="n teal" id="home-s-bound">0</div><div class="l">Fobs bound</div></div>
+      <div class="stat-cell"><div class="n red" id="home-s-borrowed">0</div><div class="l">Key borrowed</div></div>
+    </div>
+
+    <div class="action-row">
+      <button class="action-btn" onclick="tabSwitch('rings')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.5 11.5 20 3"/><path d="m17 6 3 3"/><path d="m14 9 3 3"/></svg></div>
+        <div class="action-lbl">Rings</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('bind')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
+        <div class="action-lbl">Bind Keys</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('fobs')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7a4 4 0 1 0-4 4"/><circle cx="11" cy="7" r="1.5"/><path d="M11 11l7 7"/><path d="m18 18 2-2"/><path d="M15 15l2-2"/></svg></div>
+        <div class="action-lbl">Fobs</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('loan')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M9 12l6 6"/><path d="m15 18 2-2"/><path d="M17 20l3-3"/><path d="M14 3h7v7"/><path d="M21 3l-6 6"/></svg></div>
+        <div class="action-lbl">Borrows</div>
+      </button>
+    </div>
+    <div class="action-row">
+      <button class="action-btn" onclick="tabSwitch('handover')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
+        <div class="action-lbl">Handover</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('overview')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
+        <div class="action-lbl">Overview</div>
+      </button>
+    </div>
+
+    <div id="home-out-section" style="display:none;margin-bottom:16px">
+      <div class="home-sec-title">🔴 RINGS OUT IN THE FIELD</div>
+      <div id="home-out-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="home-recent"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-rings">
+  <div class="wrap">
+    <div class="tab-head">
+      <div><div class="tab-h1">Rings</div><div class="tab-hsub">Borrow &amp; return key rings</div></div>
+      <button class="btn btn-pri" style="width:auto;padding:10px 14px" onclick="startScan()">📷 Scan</button>
+    </div>
+    <div id="ring-list"><div class="empty">Loading rings…</div></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-bind">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Bind Keys</div><div class="tab-hsub">Attach a fob QR to a vendo</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="tabSwitch('fobs')" id="bind-view-btn">👁 View Fobs</button></div>
+    <div class="card" id="bind-bound-card" style="display:none">
+      <div class="lbl" id="bind-bound-title">Bound keys</div>
+      <div id="bind-bound-list"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">1 · Find vendo</div>
+      <input id="bind-q" placeholder="Search name / code…" oninput="bindSearch()">
+      <div id="bind-res" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="bind-step2" style="display:none">
+      <div class="lbl">2 · Scan the fob</div>
+      <div style="font-weight:800;font-size:16px" id="bind-vendo"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="bind-vendo-meta"></div>
+      <button class="btn btn-pri" onclick="bindStartScan()" style="width:100%">📷 Scan fob QR</button>
+      <button class="btn btn-gray" onclick="manualCode(q=>bindOnCode(q))" style="width:100%;margin-top:8px;font-size:13px">⌨ Type fob code instead</button>
+      <div id="bind-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-handover">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">QR Handover</div><div class="tab-hsub">Approve a collector's borrow / return</div></div></div>
+    <div class="card" style="text-align:center;padding:22px 16px">
+      <div style="font-size:40px">📲</div>
+      <div style="font-weight:800;font-size:16px;margin-top:8px">Approve collector QR</div>
+      <div style="font-size:12px;color:var(--muted);margin:6px 0 16px;line-height:1.5">
+        Scan the QR on the collector's phone with <b>your</b> phone,<br>then enter <b>your</b> PIN — never the collector's.</div>
+      <button class="btn" onclick="startApprove()" style="width:100%;background:linear-gradient(135deg,#028867,#025AC6);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">✅ Scan &amp; approve</button>
+      <button class="btn btn-gray" onclick="manualCode(t=>{APPROVE_TOKEN=t;askApprovePin();})" style="width:100%;margin-top:8px;font-size:13px">⌨ Type code instead</button>
+    </div>
+    <div class="card">
+      <div class="lbl">Recent handovers</div>
+      <div id="handover-recent"><div class="empty" style="padding:18px">No recent handovers.</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-loan">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Key Borrows</div><div class="tab-hsub">Lineman borrows an individual key</div></div></div>
+    <div class="card" style="text-align:center;padding:20px 16px">
+      <div style="font-size:38px">🔑</div>
+      <div style="font-weight:800;font-size:16px;margin-top:6px">Scan a key fob</div>
+      <div style="font-size:12px;color:var(--muted);margin:6px 0 16px">Scan to borrow a key, or return one</div>
+      <button class="btn btn-pri" onclick="loanStartScan('borrow')" style="width:100%;margin-bottom:8px">📷 Scan to borrow</button>
+      <button class="btn btn-gray" onclick="manualCode(q=>loanOnScan(q))" style="width:100%;margin-bottom:12px;font-size:13px">⌨ Type code to borrow</button>
+      <button class="btn btn-gray" onclick="loanStartScan('return')" style="width:100%;margin-bottom:8px;color:#028867;border-color:#9fe1cb">↩ Return a key (scan)</button>
+      <button class="btn btn-gray" onclick="manualCode(q=>loanDoReturn(q))" style="width:100%;font-size:13px;color:#028867;border-color:#9fe1cb">⌨ Type code to return</button>
+    </div>
+    <div id="loan-result"></div>
+    <div class="card">
+      <div class="lbl" id="loan-out-title">Keys currently out</div>
+      <div id="loan-out-list"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-fobs">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Fobs</div><div class="tab-hsub" id="fobs-sub">Bound keys per vendo</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="loadFobsList()">↻ Refresh</button></div>
+    <input id="fobs-q" placeholder="Search vendo…" oninput="fobsFilter()" style="margin-bottom:12px">
+    <div id="fobs-list"><div class="empty" style="padding:16px">Loading…</div></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-fob-detail">
+  <div class="wrap">
+    <div class="card" id="fob-detail-card"><div class="empty">Loading…</div></div>
+    <button class="btn btn-gray" onclick="tabSwitch('fobs')" style="width:100%">← Back to Fobs</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-overview">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Overview</div><div class="tab-hsub" id="ov-sub">At a glance</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="loadOverview()">↻ Refresh</button></div>
+    <div class="stat-grid">
+      <div class="stat teal"><div class="stat-n" id="ov-in">–</div><div class="stat-l">Rings in office</div></div>
+      <div class="stat red"><div class="stat-n" id="ov-out">–</div><div class="stat-l">Rings out</div></div>
+      <div class="stat navy"><div class="stat-n" id="ov-bound">–</div><div class="stat-l">Fobs bound</div></div>
+      <div class="stat amber"><div class="stat-n" id="ov-unbound">–</div><div class="stat-l">Fobs unbound</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Rings currently out</div>
+      <div id="ov-outlist"><div class="empty" style="padding:16px">None out.</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="ov-activity"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;color:var(--spawn-red);border-color:#f3c2c8;margin-top:4px">🗑 Reset trial data</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-scan">
+  <div class="wrap">
+    <div class="lbl" style="text-align:center">Point at the code</div>
+    <div id="reader" style="margin:12px 0"></div>
+    <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%">Cancel</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-ring">
+  <div class="wrap">
+    <div class="card" id="ring-hdr"></div>
+    <div class="card" id="ring-act"></div>
+    <div class="card">
+      <div class="lbl">Keys in this area</div>
+      <div id="ring-keys"><div class="empty">Loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="ring-ev"><div class="empty">No activity.</div></div>
+    </div>
+    <button class="btn btn-gray" onclick="openPull(CUR_RING)" style="width:100%;margin-bottom:10px">📤 Pull a key from a vendo</button>
+    <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%">← Back to rings</button>
+  </div>
+</div>
+
+<div class="screen" id="screen-pull">
+  <div class="wrap">
+    <div id="pull-banner"></div>
+    <div class="card">
+      <div class="lbl">Find vendo</div>
+      <input id="pull-q" placeholder="Search name / code…" oninput="doSearch()">
+      <div id="pull-res" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="pull-pick" style="display:none">
+      <div class="lbl">Key type</div>
+      <div style="font-weight:800;font-size:15px" id="pull-vendo"></div>
+      <div class="kt">
+        <button class="kt-b" onclick="pickKT('coin_original',this)">Coin original</button>
+        <button class="kt-b" onclick="pickKT('coin_duplicate',this)">Coin duplicate</button>
+        <button class="kt-b" onclick="pickKT('board',this)">Board</button>
+        <button class="kt-b" onclick="pickKT('board_duplicate',this)">Board duplicate</button>
+      </div>
+      <input id="pull-note" placeholder="Note (optional)" style="margin-top:10px">
+      <button class="btn btn-ok" onclick="confirmPull()" style="width:100%;margin-top:12px">✓ Log key pull</button>
+    </div>
+    <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%">← Back</button>
+  </div>
+</div>
+
+<div class="bottom-nav" id="bottom-nav">
+  <button class="bnav-item active" id="bnav-home" onclick="tabSwitch('home')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a1 1 0 01-1 1H5a1 1 0 01-1-1z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+    <div class="bnav-label">Home</div>
+  </button>
+  <button class="bnav-item" id="bnav-bind" onclick="tabSwitch('bind')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
+    <div class="bnav-label">Bind</div>
+  </button>
+  <button class="bnav-item" id="bnav-handover" onclick="tabSwitch('handover')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
+    <div class="bnav-label">Handover</div>
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+
+const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
+const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'};
+
+let ME=null, ACCTS=[], COLLECTORS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
+let PULL_RING=null, PULL_VENDO=null, PULL_KT=null, SEARCH_T=null;
+
+function toast(m,d=2600){const e=document.getElementById('toast');e.textContent=m;
+  e.classList.add('show');setTimeout(()=>e.classList.remove('show'),d);}
+function go(s){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-'+s).classList.add('active');window.scrollTo(0,0);}
+function isKeeper(){ return !!(ME && String(ME.role||'').toLowerCase()==='keykeeper'); }
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function ago(t){if(!t)return'';const s=(Date.now()-new Date(t))/1000;
+  if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago';
+  return Math.floor(s/86400)+'d ago';}
+async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:HDR});return r.json();}
+async function sbPost(t,b){const r=await fetch(SB+'/rest/v1/'+t,{method:'POST',
+  headers:{...HDR,Prefer:'return=representation'},body:JSON.stringify(b)});return r.json();}
+async function sbPatch(p,b){const r=await fetch(SB+'/rest/v1/'+p,{method:'PATCH',
+  headers:{...HDR,Prefer:'return=minimal'},body:JSON.stringify(b)});return r.ok;}
+
+// ── LOGIN ──
+async function loadRoster(){
+  try{
+    const c=await fetch(SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc',{headers:HDR});
+    const cd=await c.json();
+    if(Array.isArray(cd)) COLLECTORS=cd.map(x=>x.name);
+  }catch(e){ COLLECTORS=[]; }
+}
+
+function buildPad(){
+  const g=document.getElementById('pin-grid');
+  g.innerHTML=[1,2,3,4,5,6,7,8,9,'⌫',0,'✓'].map(k=>
+    `<button class="pin-k" onclick="tapPin('${k}')">${k}</button>`).join('');
+  drawDots();
+}
+function drawDots(){
+  document.getElementById('pin-dots').innerHTML=
+    [0,1,2,3].map(i=>`<div class="pin-dot ${i<PIN.length?'on':''}"></div>`).join('');
+}
+function tapPin(k){
+  if(k==='⌫'){PIN=PIN.slice(0,-1);drawDots();return;}
+  if(k==='✓'){doLogin();return;}
+  if(PIN.length<4){
+    PIN+=k; drawDots();
+    if(PIN.length===4) setTimeout(doLogin,180);
+  }
+}
+async function doLogin(){
+  if(PIN.length<4){toast('Enter your 4-digit PIN');return;}
+  const err=document.getElementById('pin-err');
+  try{
+    const r=await fetch(SB+'/rest/v1/rpc/spawn_keys_login',{method:'POST',headers:HDR,
+      body:JSON.stringify({p_pin:PIN})});
+    const d=await r.json();
+    const row=Array.isArray(d)?d[0]:d;
+    if(!(r.ok && row && row.ok)){
+      PIN='';drawDots();
+      err.textContent='Wrong PIN, or not a key keeper';
+      return;
+    }
+    ME={id:row.id,name:row.name,role:row.role};
+    err.textContent='';
+    document.getElementById('tb-user').textContent=ME.name;
+    PIN='';drawDots();
+    await loadRoster();
+    document.getElementById('bottom-nav').classList.add('show');
+    tabSwitch('home');
+  }catch(e){ PIN='';drawDots();err.textContent='Login failed — check connection'; }
+}
+
+// ── RINGS ──
+
+// ══ APPROVE A COLLECTOR'S HANDOVER QR ═════════════════════════════════
+// Steph scans the QR on the collector's phone with HER phone, then types HER
+// PIN here. Nothing secret ever crosses to his device — which is the whole
+// point. If she typed her PIN on his phone he would learn it in a week, and
+// every log line would then falsely say she approved.
+
+// Camera constraints for scanning SMALL codes.
+//
+// Previously we passed only {facingMode:'environment'} and let the browser pick
+// the resolution — commonly 640x480. At that width the narrow bars on a 12mm key
+// fob map to under one pixel: unresolvable regardless of focus. Asking for 1080p
+// puts 3-4x more pixels on the code.
+//
+// focusMode:'continuous' requests autofocus. It only does anything if the phone
+// HAS a focus motor; software cannot add one. Fixed-focus phones ignore it.
+const CAM_HD = {
+  facingMode: 'environment',
+  width:  {min: 640, ideal: 1920},
+  height: {min: 480, ideal: 1080},
+  advanced: [{focusMode: 'continuous'}]
+};
+
+// Start a scanner with a fresh instance per attempt. html5-qrcode throws
+// "Cannot transition to a new state, already under transition" if start() is
+// retried on an instance whose previous start() is still settling — so each
+// attempt uses its OWN instance and we tear the previous one down first.
+// Also gives #reader a real size and waits a frame, because starting right
+// after a screen becomes visible can hand the library a 0×0 box (→ no camera,
+// no permission prompt, no error).
+function startScannerHD(scanner, box, onHit, onFail){
+  const rd = document.getElementById('reader');
+  if(rd){ rd.style.minHeight = (box.height||220)+'px'; rd.innerHTML=''; }
+
+  const showErr = (human)=>{
+    if(rd) rd.innerHTML='<div style="padding:14px;color:#fff;background:#DF1A35;border-radius:12px;font-size:13px;font-weight:700;line-height:1.4">'+human+'</div>';
+    try{ toast(human); }catch(_){}
+  };
+  if(!window.isSecureContext){ showErr('Not on HTTPS — the browser blocks the camera. Open the https:// link.'); if(onFail) onFail(); return; }
+  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ showErr('This browser has no camera access. Try Chrome.'); if(onFail) onFail(); return; }
+
+  const cfg = (()=>{ try{ const F=Html5QrcodeSupportedFormats; return {formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]}; }catch(e){ return undefined; } })();
+
+  function fail(err){
+    const msg = String(err && (err.name||err.message||err) || '');
+    console.error('[Keys] camera start failed:', msg, err);
+    let human = 'Camera failed: '+(msg||'unknown');
+    if(/NotAllowed|Permission/i.test(msg))         human='Camera permission denied. Tap the 🔒 icon left of the address bar → Camera → Allow, then reload.';
+    else if(/NotFound|Overconstrained/i.test(msg)) human='No camera found on this device.';
+    else if(/NotReadable|TrackStart/i.test(msg))   human='Camera busy (another app is using it). Close it and retry.';
+    showErr(human);
+    if(onFail) onFail(err);
+  }
+
+  const sources = [CAM_HD, {facingMode:'environment'}, '__byId__'];
+
+  async function tryStart(i){
+    if(i >= sources.length){ return fail(new Error('NotReadable: all camera attempts failed')); }
+    let s;
+    try{ s = cfg ? new Html5Qrcode('reader', cfg) : new Html5Qrcode('reader'); }
+    catch(e){ return fail(e); }
+    SCANNER = s;
+    let src = sources[i];
+    try{
+      if(src === '__byId__'){
+        const cams = await Html5Qrcode.getCameras();
+        if(!cams || !cams.length) throw new Error('NotFound: no cameras');
+        const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
+        src = back.id;
+      }
+    }catch(e){ return fail(e); }
+    try{
+      await s.start(src, {fps:10, qrbox:box}, onHit, ()=>{});
+      return; // live
+    }catch(err){
+      try{ await s.stop(); }catch(_){}
+      try{ s.clear(); }catch(_){}
+      SCANNER = null;
+      const nm = String(err && (err.name||err.message||''));
+      if(/NotAllowed|Permission/i.test(nm)) return fail(err); // no point retrying
+      return tryStart(i+1);
+    }
+  }
+  requestAnimationFrame(()=>{ setTimeout(()=>tryStart(0), 60); });
+}
+
+let APPROVE_TOKEN = null;
+
+function startApprove(){
+  if(!isKeeper()){toast('Approval is for Ailyn or Steph');return;}
+  APPROVE_TOKEN = null;
+  go('scan');
+  startScannerHD(null, {width:250,height:250},
+    async txt=>{
+      await stopScan();
+      APPROVE_TOKEN = String(txt||'').trim();
+      askApprovePin();
+    },
+    ()=>{toast('Camera failed');tabSwitch('handover');});
+}
+
+// Branded PIN sheet. prompt() is a grey OS box that looks like a scam and
+// shows the PIN in plain text on some Androids — not what you want the person
+// holding the keys to your whole float typing into.
+function keeperPinAsk(title, subtitle){
+  return new Promise(resolve=>{
+    let val='';
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center;font-family:inherit';
+    const dots=()=>Array.from({length:4},(_,i)=>
+      `<div style="width:13px;height:13px;border-radius:50%;background:${i<val.length?'#025AC6':'#dbe2f0'};transition:.15s"></div>`).join('');
+    const keys=['1','2','3','4','5','6','7','8','9','','0','⌫'];
+    ov.innerHTML=`<div data-sheet style="width:100%;max-width:420px;background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.3);overflow:hidden">
+      <div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;padding:18px 20px;text-align:center">
+        <div style="font-size:17px;font-weight:800">${title}</div>
+        <div style="font-size:12px;opacity:.85;margin-top:2px">${subtitle||''}</div>
+      </div>
+      <div style="padding:18px">
+        <div data-dots style="display:flex;gap:11px;justify-content:center;margin-bottom:16px">${dots()}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px">
+          ${keys.map(k=>k===''
+            ? '<div></div>'
+            : `<button data-k="${k}" style="padding:15px 0;border:0;border-radius:13px;background:${k==='⌫'?'#f1f4fa':'#EEF1FA'};color:#025AC6;font-size:19px;font-weight:800;font-family:inherit;cursor:pointer">${k}</button>`).join('')}
+        </div>
+        <button data-cancel style="width:100%;margin-top:12px;padding:12px;border:2px solid #e6eaf4;border-radius:12px;background:#fff;color:#7a869c;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
+      </div>
+    </div>`;
+    const redraw=()=>{ ov.querySelector('[data-dots]').innerHTML=dots(); };
+    const done=v=>{ ov.remove(); resolve(v); };
+    ov.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+      const k=b.getAttribute('data-k');
+      if(k==='⌫'){ val=val.slice(0,-1); redraw(); return; }
+      if(val.length>=4) return;
+      val+=k; redraw();
+      try{ navigator.vibrate && navigator.vibrate(15); }catch(e){}
+      if(val.length===4) setTimeout(()=>done(val),140);
+    });
+    ov.querySelector('[data-cancel]').onclick=()=>done(null);
+    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
+    document.body.appendChild(ov);
+  });
+}
+
+async function askApprovePin(){
+  if(!APPROVE_TOKEN){ toast('No QR scanned'); return; }
+  const pin = await keeperPinAsk('Approve handover','Your PIN — not the collector\'s');
+  if(pin===null) { tabSwitch('handover'); return; }
+  try{
+    const r = await fetch(SB+'/rest/v1/rpc/spawn_handover_approve',{
+      method:'POST', headers:HDR,
+      body: JSON.stringify({p_token:APPROVE_TOKEN, p_keeper_pin:String(pin).trim()})
+    });
+    const j = await r.json();
+    const res = (Array.isArray(j)&&j.length===1) ? j[0] : j;
+    if(!res || !res.ok){
+      toast(res && res.error ? res.error : 'Approval failed');
+      tabSwitch('handover');
+      return;
+    }
+    const verb = res.kind==='borrow' ? 'took' : 'returned';
+    toast('✅ '+res.collector+' '+verb+': '+res.rings, 4200);
+    APPROVE_TOKEN=null;
+    await loadRings();
+    tabSwitch('handover'); loadHandoverRecent();
+  }catch(e){
+    toast('Error: '+e.message);
+    tabSwitch('handover');
+  }
+}
+
+async function loadRings(){
+  const d=await sbGet('key_rings?active=eq.true&order=area.asc,label.asc');
+  if(!Array.isArray(d)){document.getElementById('ring-list').innerHTML=
+    '<div class="empty">Cannot load rings — gateway may not allow key_rings yet.</div>';return;}
+  RINGS=d;
+  document.getElementById('ring-list').innerHTML = d.length? d.map(r=>`
+    <div class="ring ${r.status==='out'?'out':''}" onclick="openRing(${r.id})">
+      <div><div class="ring-l">${esc(r.label)}</div>
+        <div class="ring-s">${esc(r.area)}${r.status==='out'?' · '+esc(r.out_to||'')+' · '+ago(r.out_at):''}</div></div>
+      <span class="pill ${r.status==='out'?'p-out':'p-in'}">${r.status==='out'?'OUT':'IN'}</span>
+    </div>`).join('') : '<div class="empty">No rings yet.</div>';
+}
+async function openRing(id){
+  CUR_RING=RINGS.find(r=>r.id===id);
+  if(!CUR_RING){const d=await sbGet('key_rings?id=eq.'+id);CUR_RING=d&&d[0];}
+  if(!CUR_RING){toast('Ring not found');return;}
+  renderRing(); go('ring');
+  loadRingKeys();
+  const ev=await sbGet('key_events?select=*&ring_id=eq.'+CUR_RING.id+'&order=at.desc&limit=12');
+  document.getElementById('ring-ev').innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+    <div class="ev"><div class="ev-t">${esc(evLabel(e))}</div>
+      <div class="ev-m">${esc(e.actor)} · ${ago(e.at)}
+        <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">
+        ${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+    : '<div class="empty">No activity.</div>';
+}
+async function loadRingKeys(){
+  const el=document.getElementById('ring-keys');
+  if(!el) return;
+  el.innerHTML='<div class="empty">Loading…</div>';
+  try{
+    const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area'
+      +'&area=ilike.*'+encodeURIComponent(CUR_RING.area)+'*'
+      +'&status=not.eq.pulled_out&order=sheet_name.asc&limit=400');
+    if(!Array.isArray(v)){el.innerHTML='<div class="empty">Cannot load.</div>';return;}
+    const pulls=await sbGet('key_events?select=vendo_id,key_type,actor,at&event=eq.key_pull'
+      +'&ring_id=eq.'+CUR_RING.id+'&order=at.desc&limit=50');
+    const outMap={};
+    if(Array.isArray(pulls)) pulls.forEach(p=>{ if(p.vendo_id&&!outMap[p.vendo_id]) outMap[p.vendo_id]=p; });
+    el.innerHTML='<div style="font-size:12px;color:var(--muted);padding:6px 0 10px">'
+      +v.length+' vendos in '+esc(CUR_RING.area)+' · each has a coin key and a board key</div>'
+      + v.slice(0,120).map(x=>{
+        const o=outMap[x.id];
+        return '<div class="vrow" style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+          +'<div><div class="vname">'+esc(x.sheet_name||x.tg_name||('#'+x.id))+'</div>'
+          +'<div class="vmeta">'+esc(x.vendo_code||'')+(o?' · '+esc(o.key_type||'').replace(/_/g,' ')+' with '+esc(o.actor):'')+'</div></div>'
+          +(o?'<span class="pill p-out">OUT</span>':'')+'</div>';
+      }).join('')
+      + (v.length>120?'<div class="empty">+'+(v.length-120)+' more — use search</div>':'');
+  }catch(e){ el.innerHTML='<div class="empty">Cannot load keys.</div>'; }
+}
+
+function evLabel(e){
+  const m={ring_out:'Ring taken out',ring_in:'Ring returned',
+           key_pull:'Key pulled',key_return:'Key returned'};
+  return m[e.event]||e.event;
+}
+function renderRing(){
+  const r=CUR_RING;
+  document.getElementById('ring-hdr').innerHTML=`
+    <div style="font-size:20px;font-weight:800">${esc(r.label)}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(r.area)}</div>
+    <div style="margin-top:9px"><span class="pill ${r.status==='out'?'p-out':'p-in'}">
+      ${r.status==='out'?'OUT — '+esc(r.out_to||'')+' · '+ago(r.out_at):'IN OFFICE'}</span></div>`;
+  document.getElementById('ring-act').innerHTML = r.status==='out'
+    ? `<button class="btn btn-ok" style="width:100%" onclick="ringIn()">✓ Ring returned</button>`
+    : `<div class="lbl">Give ring to</div>
+       <select id="ring-to">${COLLECTORS.map(n=>`<option>${esc(n)}</option>`).join('')}</select>
+       <button class="btn btn-pri" style="margin-top:10px" onclick="ringOut()">Ring out →</button>`;
+}
+async function ringOut(){
+  if(!isKeeper()){toast('Only Ailyn or Steph can release a ring');return;}
+  const to=document.getElementById('ring-to').value;
+  const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
+    {status:'out',out_to:to,out_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  if(!ok){toast('Failed');return;}
+  await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_out',actor:to,
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
+    is_test:true,notes:'Released by '+ME.name}]);
+  await sbPost('key_logs',[{collector_name:to,area:CUR_RING.label,keys_taken:null,
+    taken_at:new Date().toISOString(),key_date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
+    returned:false,record_type:'collector',ring_id:CUR_RING.id,is_test:true,
+    notes:'Auto — scanned by '+ME.name}]);
+  CUR_RING.status='out';CUR_RING.out_to=to;CUR_RING.out_at=new Date().toISOString();
+  toast('Ring out to '+to); renderRing(); loadRings();
+}
+async function ringIn(){
+  if(!isKeeper()){toast('Only Ailyn or Steph can receive a ring');return;}
+  const ok=await sbPatch('key_rings?id=eq.'+CUR_RING.id,
+    {status:'in',out_to:null,out_at:null,updated_at:new Date().toISOString()});
+  if(!ok){toast('Failed');return;}
+  await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_in',actor:CUR_RING.out_to||'—',
+    auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
+    is_test:true,notes:'Received by '+ME.name}]);
+  await sbPatch('key_logs?ring_id=eq.'+CUR_RING.id+'&returned=eq.false',
+    {returned:true,returned_at:new Date().toISOString(),
+     returned_notes:'Auto — scanned by '+ME.name});
+  CUR_RING.status='in';CUR_RING.out_to=null;
+  toast('Ring returned'); renderRing(); loadRings();
+}
+
+// ── SCAN ──
+let LAST_AUTH='pin';
+function startScan(){
+  if(!isKeeper()){toast('Ring scan is for Ailyn or Steph');return;}
+  go('scan');
+  startScannerHD(null, {width:250,height:160},
+    async txt=>{
+      await stopScan();
+      LAST_AUTH='qr';
+      const c=txt.trim();
+      let d=await sbGet('key_rings?select=*&or=(qr_code.eq.'+encodeURIComponent(c)+
+                        ',short_code.eq.'+encodeURIComponent(c.toUpperCase())+')');
+      if(Array.isArray(d)&&d[0]){ RINGS=RINGS.filter(r=>r.id!==d[0].id).concat(d[0]); openRing(d[0].id); }
+      else toast('Unknown code: '+c);
+    },
+    ()=>{toast('Camera failed — use the list');tabSwitch('rings');});
+}
+async function stopScan(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+}
+
+// ── PULL ──
+function openPull(ring){
+  PULL_RING=ring; PULL_VENDO=null; PULL_KT=null;
+  document.getElementById('pull-q').value='';
+  document.getElementById('pull-res').innerHTML='';
+  document.getElementById('pull-pick').style.display='none';
+  document.getElementById('pull-banner').innerHTML = (ring&&ring.status==='out')
+    ? `<div class="banner">⚠ ${esc(ring.label)} is already out with ${esc(ring.out_to||'—')}.
+        This key is coming off a ring in the field — logged as self-reported.</div>`
+    : (ring? `<div class="banner">Ring: ${esc(ring.label)} · ${esc(ring.area)}</div>`
+           : `<div class="banner">No ring scanned — searching all vendos. Logged as self-reported.</div>`);
+  go('pull');
+  setTimeout(()=>document.getElementById('pull-q').focus(),250);
+}
+function doSearch(){
+  clearTimeout(SEARCH_T);
+  SEARCH_T=setTimeout(runSearch,280);
+}
+async function runSearch(){
+  const q=document.getElementById('pull-q').value.trim();
+  if(q.length<2){document.getElementById('pull-res').innerHTML='';return;}
+  const like='*'+q.replace(/[(),*]/g,'')+'*';
+  let f='or=(sheet_name.ilike.'+like+',tg_name.ilike.'+like+',owner_name.ilike.'+like+',excel_name.ilike.'+like+')';
+  if(PULL_RING) f+='&area=ilike.*'+encodeURIComponent(PULL_RING.area)+'*';
+  const d=await sbGet('vendos?'+f+'&status=not.eq.pulled_out&select=id,sheet_name,tg_name,owner_name,area,vendo_code&limit=25');
+  if(!Array.isArray(d)){document.getElementById('pull-res').innerHTML='<div class="empty">Search failed.</div>';return;}
+  document.getElementById('pull-res').innerHTML = d.length? d.map(v=>`
+    <div class="vrow" onclick='pickVendo(${JSON.stringify(v)})'>
+      <div class="vname">${esc(v.sheet_name||v.tg_name||('#'+v.id))}</div>
+      <div class="vmeta">${esc(v.area||'')}${v.vendo_code?' · '+esc(v.vendo_code):''}${v.owner_name?' · '+esc(v.owner_name):''}</div>
+    </div>`).join('') : '<div class="empty">No match.</div>';
+}
+function pickVendo(v){
+  PULL_VENDO=v; PULL_KT=null;
+  document.querySelectorAll('.kt-b').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('pull-vendo').textContent=v.sheet_name||v.tg_name||('#'+v.id);
+  document.getElementById('pull-pick').style.display='block';
+  document.getElementById('pull-pick').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function pickKT(k,el){
+  PULL_KT=k;
+  document.querySelectorAll('.kt-b').forEach(b=>b.classList.remove('sel'));
+  el.classList.add('sel');
+}
+async function confirmPull(){
+  if(!PULL_VENDO){toast('Pick a vendo');return;}
+  if(!PULL_KT){toast('Pick key type');return;}
+  const fieldPull = !!(PULL_RING && PULL_RING.status==='out');
+  const auth = (PULL_RING && LAST_AUTH==='qr' && !fieldPull) ? 'qr' : 'pin';
+  const row={
+    ring_id: PULL_RING?PULL_RING.id:null,
+    vendo_id: PULL_VENDO.id,
+    key_type: PULL_KT,
+    event:'key_pull',
+    is_test: true,
+    actor: ME.name,
+    auth_method: auth,
+    from_ring_out: fieldPull,
+    notes: document.getElementById('pull-note').value||null
+  };
+  if(auth==='qr'){ row.verified_by=ME.name; row.verified_at=new Date().toISOString(); }
+  const r=await sbPost('key_events',[row]);
+  if(!Array.isArray(r)){toast('Save failed');return;}
+  toast('Logged — '+(PULL_VENDO.sheet_name||'key')+' ('+PULL_KT.replace('_',' ')+')');
+  tabSwitch('rings'); loadRings();
+}
+
+// ── BIND vendo key QR (works for new + existing vendos) ──
+let BIND_VENDO=null, BIND_ST=null;
+function openBind(){
+  BIND_VENDO=null;
+  document.getElementById('bind-q').value='';
+  document.getElementById('bind-res').innerHTML='';
+  document.getElementById('bind-step2').style.display='none';
+  document.getElementById('bind-result').innerHTML='';
+  const bc=document.getElementById('bind-bound-card'); if(bc) bc.style.display='none';
+  const bb=document.getElementById('bind-view-btn'); if(bb) bb.textContent='👁 View bound';
+  BOUND_OPEN=false;
+  setTimeout(()=>document.getElementById('bind-q').focus(),250);
+}
+
+// Toggle the "vendos with bound keys" panel.
+let BOUND_OPEN=false;
+function toggleBoundList(){
+  BOUND_OPEN=!BOUND_OPEN;
+  const card=document.getElementById('bind-bound-card');
+  const btn=document.getElementById('bind-view-btn');
+  card.style.display = BOUND_OPEN ? 'block' : 'none';
+  btn.textContent = BOUND_OPEN ? '✕ Hide' : '👁 View bound';
+  if(BOUND_OPEN) loadBoundList();
+}
+
+const KT_CHIP = {
+  board:['Board','#028867','#E6F7F0'],
+  duplicate:['Dup','#C01176','#FBE9F3'],
+  pungpung:['Pung','#311A8E','#EEEAF7'],
+  coin:['Coin','#025AC6','#EEF1FA']
+};
+function ktChip(t){
+  const c=KT_CHIP[t]||[t||'?','#6b7280','#f1f2f4'];
+  return '<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;color:'+c[1]+';background:'+c[2]+'">'+esc(c[0])+'</span>';
+}
+
+async function loadBoundList(){
+  const el=document.getElementById('bind-bound-list');
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    // all bound fobs
+    const fobs=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id&vendo_id=not.is.null&order=vendo_id.asc');
+    if(!Array.isArray(fobs)||!fobs.length){
+      document.getElementById('bind-bound-title').textContent='Bound keys';
+      el.innerHTML='<div class="empty" style="padding:16px">No fobs bound yet.<br>Search a vendo below and scan a fob to start.</div>';
+      return;
+    }
+    // resolve vendo names (chunk the ids)
+    const ids=[...new Set(fobs.map(f=>f.vendo_id))];
+    const vmap={};
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area&id=in.('+chunk.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    // group fobs by vendo
+    const byVendo={};
+    fobs.forEach(f=>{ (byVendo[f.vendo_id]=byVendo[f.vendo_id]||[]).push(f); });
+    const rows=Object.keys(byVendo).map(vid=>{
+      const v=vmap[vid]||{}; const list=byVendo[vid];
+      const name=esc(v.sheet_name||v.tg_name||('#'+vid));
+      const meta=esc((v.area||'')+(v.vendo_code?' · '+v.vendo_code:''));
+      const chips=list.map(f=>'<span style="display:inline-flex;align-items:center;gap:5px;margin:3px 6px 3px 0">'
+        +ktChip(f.key_type)+'<span style="font-family:monospace;font-size:11px;color:var(--muted)">'+esc(f.qr_code)+'</span></span>').join('');
+      return '<div class="vrow" style="cursor:default">'
+        +'<div class="vname">'+name+'</div>'
+        +'<div class="vmeta">'+meta+'</div>'
+        +'<div style="margin-top:6px">'+chips+'</div></div>';
+    });
+    document.getElementById('bind-bound-title').textContent=rows.length+' vendo'+(rows.length>1?'s':'')+' with bound keys · '+fobs.length+' fob'+(fobs.length>1?'s':'');
+    el.innerHTML=rows.join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+
+// ══════════ KEY LOAN (individual keys) ══════════
+let LOAN_SCAN = null;   // pending scanned data awaiting borrower name
+function rpc(fn, body){
+  return fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:HDR,body:JSON.stringify(body||{})}).then(r=>r.json());
+}
+// Dual input: let the user TYPE a fob code instead of scanning. Routes the
+// typed code to the same handler the scanner would call.
+function manualCode(handler){
+  skModal(
+    '<div style="padding:20px 18px">'
+    + '<div style="font-weight:800;font-size:16px;margin-bottom:4px">⌨ Type the fob code</div>'
+    + '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Enter the 5-letter code printed on the fob (e.g. MJWDL).</div>'
+    + '<input id="manual-code-inp" placeholder="ABCDE" autocomplete="off" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:11px 13px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;font-family:monospace;text-transform:uppercase;letter-spacing:2px;text-align:center;box-sizing:border-box" />'
+    + '<button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="manualCodeGo()">Continue</button>'
+    + '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal()">Cancel</button>'
+    + '</div>'
+  );
+  window._manualHandler=handler;
+  setTimeout(()=>{const i=document.getElementById('manual-code-inp'); if(i){ i.focus(); i.onkeydown=e=>{ if(e.key==='Enter') manualCodeGo(); }; }},150);
+}
+function manualCodeGo(){
+  const inp=document.getElementById('manual-code-inp');
+  const code=(inp&&inp.value||'').trim().toUpperCase();
+  if(!code){ if(inp) inp.style.borderColor='#DF1A35'; return; }
+  const h=window._manualHandler;
+  skCloseModal();
+  if(typeof h==='function') h(code);
+}
+// remembered borrower names (for the future dropdown)
+function loanBorrowers(){ try{ return JSON.parse(localStorage.getItem('spawn_borrowers')||'[]'); }catch(e){ return []; } }
+function rememberBorrower(n){
+  n=(n||'').trim(); if(!n) return;
+  let a=loanBorrowers().filter(x=>x.toLowerCase()!==n.toLowerCase());
+  a.unshift(n); a=a.slice(0,20);
+  try{ localStorage.setItem('spawn_borrowers', JSON.stringify(a)); }catch(e){}
+}
+
+function loanStartScan(mode){
+  go('scan');
+  startScannerHD(null,{width:250,height:250},
+    async txt=>{
+      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+      showLoanTab();
+      if(mode==='return') loanDoReturn(String(txt||'').trim());
+      else loanOnScan(String(txt||'').trim());
+    },
+    ()=>{toast('Camera failed');showLoanTab();});
+}
+// show loan tab without resetting result
+function showLoanTab(){
+  CUR_TAB='loan';
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  const sc=document.getElementById('screen-loan'); if(sc) sc.classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const nb=document.getElementById('bnav-loan'); if(nb) nb.classList.add('active');
+  const back=document.getElementById('tb-back'); if(back) back.style.display='none';
+  const bn=document.getElementById('bottom-nav'); if(bn) bn.classList.add('show');
+  const sub=document.getElementById('tb-sub'); if(sub) sub.textContent=TAB_SUB.loan;
+}
+
+async function loanOnScan(qr){
+  const res=document.getElementById('loan-result');
+  res.innerHTML='<div class="card" style="text-align:center;color:#9aa5b5;font-size:13px">Reading fob…</div>';
+  const d=await rpc('spawn_key_scan',{p_qr:qr});
+  if(!d || !d.ok){
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc((d&&d.error)||'Unknown fob')+'</div></div>';
+    return;
+  }
+  if(!d.bound){
+    res.innerHTML='<div class="card"><div class="banner">⚠ This fob is not bound to a vendo yet. Bind it first in the Bind tab.</div></div>';
+    return;
+  }
+  if(d.loan_status==='out'){
+    res.innerHTML='<div class="card"><div class="banner">⚠ This key is already OUT with <b>'+esc(d.borrowed_by||'—')+'</b> · '+ago(d.borrowed_at)+'.<br>Use “Return a key” to bring it back.</div></div>';
+    return;
+  }
+  LOAN_SCAN = d;
+  const gps=(d.lat&&d.lng)?'<a href="https://maps.google.com/?q='+d.lat+','+d.lng+'" style="color:#025AC6;text-decoration:none">📍 '+d.lat+', '+d.lng+'</a>':'<span style="color:#9aa5b5">No GPS</span>';
+  const detail=(l,v)=> v?('<div style="display:flex;padding:6px 0;border-bottom:1px solid #f0f2f6"><div style="width:74px;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600">'+v+'</div></div>'):'';
+  const prev=loanBorrowers();
+  const datalist = prev.length ? '<datalist id="borrower-list">'+prev.map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist>' : '';
+  res.innerHTML=`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-weight:800;font-size:17px">${esc(d.vendo||'')}</div>
+        ${ktChip(d.key_type)}
+      </div>
+      ${detail('Code', d.vendo_code?esc(d.vendo_code):'')}
+      ${detail('Area', d.area?esc(d.area):'')}
+      ${detail('VLAN', (d.vlan!=null&&d.vlan!=='')?esc(d.vlan):'')}
+      ${detail('Address', d.address?esc(d.address):'')}
+      <div style="display:flex;padding:6px 0 10px"><div style="width:74px;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
+      <div class="lbl" style="margin-top:6px">Borrower name</div>
+      <input id="loan-borrower" list="borrower-list" placeholder="Type name…" autocomplete="off">
+      ${datalist}
+      <button class="btn btn-ok" style="width:100%;margin-top:12px" onclick="loanConfirm()">✓ Confirm borrow</button>
+      <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="loanCancel()">Cancel</button>
+    </div>`;
+  setTimeout(()=>{const i=document.getElementById('loan-borrower'); if(i) i.focus();},200);
+}
+
+async function loanConfirm(){
+  if(!LOAN_SCAN){toast('Scan a fob first');return;}
+  const name=(document.getElementById('loan-borrower').value||'').trim();
+  if(!name){toast('Enter the borrower name');return;}
+  const res=document.getElementById('loan-result');
+  const d=await rpc('spawn_key_loan',{p_qr:LOAN_SCAN.qr, p_borrower:name, p_account:ME?ME.name:'keeper'});
+  if(!d || !d.ok){
+    if(d && d.already_out){ toast('Already out with '+(d.borrowed_by||'—')); }
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc((d&&d.error)||'Borrow failed')+'</div></div>';
+    return;
+  }
+  rememberBorrower(name);
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  toast('✅ Borrowed by '+name, 3200);
+  res.innerHTML=`<div class="card" style="text-align:center;border:2px solid #16a34a;background:#E6F7F0">
+      <div style="font-size:38px">✅</div>
+      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">KEY BORROWED!</div>
+      <div style="font-size:14px;margin-top:6px"><b>${esc(name)}</b> took the ${esc(d.key_type)} key</div>
+      <div style="font-size:13px;color:#1f2937;margin-top:2px">${esc(d.vendo||'')}${d.vendo_code?' · '+esc(d.vendo_code):''}</div>
+      <div style="font-size:11px;color:#7a869c;margin-top:6px">To return: tap “Return a key” and scan this fob.</div>
+      <button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="loanReset()">Scan another</button>
+    </div>`;
+  LOAN_SCAN=null;
+  loadLoanOut();
+}
+
+async function loanDoReturn(qr){
+  const res=document.getElementById('loan-result');
+  res.innerHTML='<div class="card" style="text-align:center;color:#9aa5b5;font-size:13px">Returning…</div>';
+  const d=await rpc('spawn_key_return',{p_qr:qr, p_account:ME?ME.name:'keeper'});
+  if(!d || !d.ok){
+    res.innerHTML='<div class="card"><div class="banner">'+(d&&d.not_out?'ℹ ':'❌ ')+esc((d&&d.error)||'Return failed')+'</div></div>';
+    return;
+  }
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  toast('↩ Returned — '+(d.vendo||'key'), 3200);
+  res.innerHTML=`<div class="card" style="text-align:center;border:2px solid #16a34a;background:#E6F7F0">
+      <div style="font-size:38px">↩</div>
+      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">KEY RETURNED!</div>
+      <div style="font-size:14px;margin-top:6px">${esc(d.vendo||'')}${d.vendo_code?' · '+esc(d.vendo_code):''}</div>
+      <div style="font-size:12px;color:#7a869c;margin-top:4px">Was out with <b>${esc(d.was_borrowed_by||'—')}</b></div>
+      <button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="loanReset()">Done</button>
+    </div>`;
+  loadLoanOut();
+}
+
+function loanCancel(){ LOAN_SCAN=null; document.getElementById('loan-result').innerHTML=''; }
+function loanReset(){ LOAN_SCAN=null; document.getElementById('loan-result').innerHTML=''; }
+
+async function loadLoanOut(){
+  const el=document.getElementById('loan-out-list'); if(!el) return;
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    const out=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,borrowed_by,borrowed_at&loan_status=eq.out&order=borrowed_at.desc');
+    if(!Array.isArray(out)||!out.length){
+      document.getElementById('loan-out-title').textContent='Keys currently out';
+      el.innerHTML='<div class="empty" style="padding:16px">No keys out. All keys accounted for.</div>';
+      return;
+    }
+    const ids=[...new Set(out.map(f=>f.vendo_id).filter(Boolean))];
+    const vmap={};
+    if(ids.length){
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code&id=in.('+ids.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    document.getElementById('loan-out-title').textContent=out.length+' key'+(out.length>1?'s':'')+' out';
+    el.innerHTML=out.map(f=>{
+      const v=vmap[f.vendo_id]||{};
+      const vname=esc(v.sheet_name||v.tg_name||('#'+f.vendo_id));
+      const kt=(f.key_type||'').toLowerCase();
+      const ktMap={board:['🔌 BOARD','#028867','#E6F7F0'],duplicate:['🪙 DUP','#C01176','#FBE9F3'],pungpung:['🪙 PUNGPUNG','#311A8E','#EEEAF7'],coin:['🪙 COIN','#025AC6','#EEF1FA']};
+      const kc=ktMap[kt]||[kt.toUpperCase()||'KEY','#6b7280','#f1f2f4'];
+      const bigChip='<span style="display:inline-block;font-size:11px;font-weight:800;padding:3px 10px;border-radius:99px;color:'+kc[1]+';background:'+kc[2]+';">'+kc[0]+'</span>';
+      return '<div class="vrow" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">'
+        +'<div style="min-width:0">'
+        +  '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+bigChip
+        +    '<span class="vname" style="font-size:14px">'+vname+'</span></div>'
+        +  '<div class="vmeta" style="margin-top:3px">👤 <b>'+esc(f.borrowed_by||'—')+'</b> · g dala · <span style="font-family:monospace">'+esc(f.qr_code)+'</span> · '+ago(f.borrowed_at)+'</div>'
+        +'</div>'
+        +'<span class="pill p-out">OUT</span></div>';
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+
+// ══════════ FOBS TAB (bound keys per vendo, clickable) ══════════
+let FOBS_DATA = [];   // [{vendo_id, name, meta, keys:[{qr,key_type,loan_status,borrowed_by,borrowed_at}]}]
+async function loadFobsList(){
+  const el=document.getElementById('fobs-list'); if(!el) return;
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    const fobs=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status,borrowed_by,borrowed_at&vendo_id=not.is.null&order=vendo_id.asc');
+    if(!Array.isArray(fobs)||!fobs.length){
+      document.getElementById('fobs-sub').textContent='No fobs bound yet';
+      el.innerHTML='<div class="empty" style="padding:16px">No fobs bound yet.<br>Bind fobs in the Bind tab first.</div>';
+      FOBS_DATA=[]; return;
+    }
+    const ids=[...new Set(fobs.map(f=>f.vendo_id))];
+    const vmap={};
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area&id=in.('+chunk.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    const byV={};
+    fobs.forEach(f=>{ (byV[f.vendo_id]=byV[f.vendo_id]||[]).push(f); });
+    FOBS_DATA=Object.keys(byV).map(vid=>{
+      const v=vmap[vid]||{};
+      return {
+        vendo_id: +vid,
+        name: v.sheet_name||v.tg_name||('#'+vid),
+        meta: (v.area||'')+(v.vendo_code?' · '+v.vendo_code:''),
+        keys: byV[vid]
+      };
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+    document.getElementById('fobs-sub').textContent=FOBS_DATA.length+' vendo'+(FOBS_DATA.length>1?'s':'')+' · '+fobs.length+' fob'+(fobs.length>1?'s':'');
+    renderFobsList(FOBS_DATA);
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+function renderFobsList(rows){
+  const el=document.getElementById('fobs-list');
+  if(!rows.length){ el.innerHTML='<div class="empty" style="padding:16px">No match.</div>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const outCount=r.keys.filter(k=>k.loan_status==='out').length;
+    const chips=r.keys.map(k=>ktChip(k.key_type)).join(' ');
+    const outNote=outCount?`<span style="display:inline-block;margin-left:6px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px">${outCount} OUT</span>`:'';
+    return `<div class="vrow" onclick="openFobDetail(${r.vendo_id})" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="min-width:0">
+        <div class="vname">${esc(r.name)}${outNote}</div>
+        <div class="vmeta">${esc(r.meta)}</div>
+        <div style="margin-top:5px">${chips}</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c7c7c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`;
+  }).join('');
+}
+function fobsFilter(){
+  const q=(document.getElementById('fobs-q').value||'').trim().toLowerCase();
+  if(!q){ renderFobsList(FOBS_DATA); return; }
+  renderFobsList(FOBS_DATA.filter(r=>
+    r.name.toLowerCase().includes(q) || r.meta.toLowerCase().includes(q)
+    || r.keys.some(k=>(k.qr_code||'').toLowerCase().includes(q))));
+}
+
+async function openFobDetail(vid){
+  const rec=FOBS_DATA.find(r=>r.vendo_id===vid);
+  skModal('<div style="padding:24px;text-align:center;color:#9aa5b5">Loading…</div>');
+  try{
+    const v=await sbGet('vendos?select=sheet_name,tg_name,vendo_code,area,vlan,address,lat,lng,server_name,owner_name&id=eq.'+vid);
+    const x=(Array.isArray(v)&&v[0])||{};
+    const name=esc(x.sheet_name||x.tg_name||(rec&&rec.name)||('#'+vid));
+    const detail=(l,val)=> val?('<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937">'+val+'</div></div>'):'';
+    const gps=(x.lat&&x.lng)?'<a href="https://maps.google.com/?q='+x.lat+','+x.lng+'" style="color:#025AC6;text-decoration:none">📍 '+x.lat+', '+x.lng+'</a>':'<span style="color:#9aa5b5">No GPS yet</span>';
+    const keys=await sbGet('vendo_key_qr?select=qr_code,key_type,loan_status,borrowed_by,borrowed_at&vendo_id=eq.'+vid+'&order=key_type.asc');
+    const keyRows=(Array.isArray(keys)?keys:[]).map(k=>{
+      const out=k.loan_status==='out';
+      const note=out
+        ? '<div style="margin-top:3px;font-size:11px;color:#DF1A35;font-weight:700">🔴 Borrowed by '+esc(k.borrowed_by||'—')+' · '+ago(k.borrowed_at)+'</div>'
+        : '<div style="margin-top:3px;font-size:11px;color:#028867;font-weight:700">🟢 In office</div>';
+      return '<div style="padding:10px 0;border-bottom:1px solid #f0f2f6">'
+        +'<div style="display:flex;align-items:center;gap:8px">'+ktChip(k.key_type)
+        +'<span style="font-family:monospace;font-size:13px;font-weight:700">'+esc(k.qr_code)+'</span></div>'
+        +note+'</div>';
+    }).join('');
+    skModal(
+      '<div style="position:sticky;top:0;background:linear-gradient(135deg,#01408f,#025AC6);color:#fff;padding:16px 18px;border-radius:18px 18px 0 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+      + '<div><div style="font-size:19px;font-weight:800">'+name+'</div>'
+      +   '<div style="font-size:12px;opacity:.85;margin-top:2px">'+esc(x.area||'')+(x.vendo_code?' · '+esc(x.vendo_code):'')+'</div></div>'
+      + '<button onclick="skCloseModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:20px;line-height:1;width:30px;height:30px;border-radius:8px;cursor:pointer;flex-shrink:0">✕</button>'
+      + '</div>'
+      + '<div style="padding:16px 18px">'
+      +   '<div class="lbl">Vendo details</div>'
+      +   detail('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')
+      +   detail('Owner', x.owner_name?esc(x.owner_name):'')
+      +   detail('Server', x.server_name?esc(x.server_name):'')
+      +   detail('Address', x.address?esc(x.address):'')
+      +   '<div style="display:flex;padding:7px 0"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">'+gps+'</div></div>'
+      +   '<div class="lbl" style="margin-top:14px">Bound keys ('+(Array.isArray(keys)?keys.length:0)+')</div>'
+      +   (keyRows||'<div class="empty" style="padding:12px">No keys.</div>')
+      +   '<button class="btn btn-gray" style="width:100%;margin-top:14px" onclick="skCloseModal()">Close</button>'
+      + '</div>'
+    );
+  }catch(e){ skModal('<div style="padding:24px;text-align:center"><div style="color:#DF1A35">Cannot load.</div><button class="btn btn-gray" style="width:100%;margin-top:14px" onclick="skCloseModal()">Close</button></div>'); }
+}
+
+function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
+async function bindRunSearch(){
+  const q=document.getElementById('bind-q').value.trim();
+  if(q.length<2){document.getElementById('bind-res').innerHTML='';return;}
+  const like='*'+q.replace(/[(),*]/g,'')+'*';
+  const f='or=(sheet_name.ilike.'+like+',tg_name.ilike.'+like+',owner_name.ilike.'+like+',excel_name.ilike.'+like+')';
+  const d=await sbGet('vendos?'+f+'&select=id,sheet_name,tg_name,owner_name,area,vendo_code&limit=25');
+  if(!Array.isArray(d)){document.getElementById('bind-res').innerHTML='<div class="empty">Search failed.</div>';return;}
+  document.getElementById('bind-res').innerHTML = d.length? d.map(v=>`
+    <div class="vrow" onclick='bindPickVendo(${JSON.stringify(v)})'>
+      <div class="vname">${esc(v.sheet_name||v.tg_name||('#'+v.id))}</div>
+      <div class="vmeta">${esc(v.area||'')}${v.vendo_code?' · '+esc(v.vendo_code):''}${v.owner_name?' · '+esc(v.owner_name):''}</div>
+    </div>`).join('') : '<div class="empty">No match.</div>';
+}
+function bindPickVendo(v){
+  BIND_VENDO=v;
+  document.getElementById('bind-vendo').textContent=v.sheet_name||v.tg_name||('#'+v.id);
+  document.getElementById('bind-vendo-meta').textContent=(v.area||'')+(v.vendo_code?' · '+v.vendo_code:'');
+  document.getElementById('bind-result').innerHTML='';
+  document.getElementById('bind-step2').style.display='block';
+  document.getElementById('bind-step2').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function bindStartScan(){
+  if(!BIND_VENDO){toast('Pick a vendo first');return;}
+  go('scan');
+  startScannerHD(null,{width:250,height:250},
+    async txt=>{
+      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+      showBindTab();
+      bindOnCode(String(txt||'').trim());
+    },
+    ()=>{toast('Camera failed');showBindTab();});
+}
+async function bindStopScan(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+}
+async function bindCall(qr,force){
+  const body={p_qr:qr, p_vendo_id:BIND_VENDO.id, p_account:ME.name, p_force:!!force};
+  const r=await fetch(SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:HDR,body:JSON.stringify(body)});
+  return r.json();
+}
+async function bindOnCode(qr){
+  if(!BIND_VENDO){toast('Pick a vendo first');return;}
+  const res=document.getElementById('bind-result');
+  res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Saving…</div>';
+  let d=await bindCall(qr,false);
+  if(d && d.already_bound){
+    // warn + offer rebind
+    res.innerHTML=`<div class="banner">⚠ ${esc(d.error)}.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-gray" style="flex:1" onclick="bindCancelResult()">Cancel</button>
+        <button class="btn btn-ok" style="flex:1" onclick="bindForce('${esc(qr)}')">Rebind here</button>
+      </div>`;
+    return;
+  }
+  bindShow(d,qr);
+}
+async function bindForce(qr){
+  const res=document.getElementById('bind-result');
+  res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Rebinding…</div>';
+  const d=await bindCall(qr,true);
+  bindShow(d,qr);
+}
+// ── Generic modal popup ──
+function skCloseModal(){ const m=document.getElementById('sk-modal'); if(m) m.remove(); }
+function skModal(innerHtml){
+  skCloseModal();
+  const ov=document.createElement('div');
+  ov.id='sk-modal';
+  ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div onclick="event.stopPropagation()" style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);">'+innerHtml+'</div>';
+  ov.onclick=skCloseModal;
+  document.body.appendChild(ov);
+}
+
+async function bindShow(d,qr){
+  if(!d || !d.ok){
+    skModal('<div style="padding:22px 20px;text-align:center"><div style="font-size:36px">❌</div>'
+      +'<div style="font-weight:800;color:#DF1A35;font-size:17px;margin-top:6px">Bind failed</div>'
+      +'<div style="font-size:13px;color:#6b7280;margin-top:6px">'+esc((d&&d.error)||'')+'</div>'
+      +'<button class="btn btn-gray" style="width:100%;margin-top:16px" onclick="skCloseModal()">Close</button></div>');
+    return;
+  }
+  toast('✅ Binded — '+(d.vendo||BIND_VENDO.sheet_name||'key'), 3000);
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  const same=d.already_bound_same?' (already bound)':'';
+  // Confirmation popup with a placeholder for the profile (loaded async).
+  skModal(
+    '<div style="background:linear-gradient(135deg,#0f9d63,#16a34a);color:#fff;padding:22px 18px;text-align:center;border-radius:18px 18px 0 0">'
+    + '<div style="font-size:44px;line-height:1">✅</div>'
+    + '<div style="font-weight:800;font-size:22px;margin-top:6px">BINDED'+same+'!</div>'
+    + '<div style="font-size:14px;margin-top:6px;opacity:.95"><b>'+esc(d.vendo||BIND_VENDO.sheet_name||'')+'</b></div>'
+    + '<div style="display:inline-block;margin-top:10px;background:rgba(255,255,255,.25);padding:3px 12px;border-radius:99px;font-size:12px;font-weight:800;text-transform:uppercase">'+esc(d.key_type||'')+' key</div>'
+    + '<div style="font-size:12px;margin-top:10px;font-family:monospace;opacity:.9">'+esc(qr)+(d.by?' · by '+esc(d.by):'')+'</div>'
+    + '</div>'
+    + '<div style="padding:16px 18px">'
+    +   '<div id="bind-modal-profile"><div style="text-align:center;color:#9aa5b5;font-size:12px;padding:8px">Loading vendo details…</div></div>'
+    +   '<button class="btn btn-pri" style="width:100%;margin-top:14px" onclick="skCloseModal();bindStartScan()">📷 Scan another fob for this vendo</button>'
+    +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal();openBind()">Bind a different vendo</button>'
+    +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal()">Done</button>'
+    + '</div>'
+  );
+  document.getElementById('bind-result').innerHTML='';
+  if(BOUND_OPEN) loadBoundList();
+  loadBindProfile(BIND_VENDO.id);
+}
+
+// Fetch and render the full vendo profile inside the bind confirmation modal.
+async function loadBindProfile(vid){
+  const box=document.getElementById('bind-modal-profile');
+  if(!box) return;
+  try{
+    const v=await sbGet('vendos?select=sheet_name,vendo_code,vlan,area,address,lat,lng,server_name,tg_name,owner_name&id=eq.'+vid);
+    const x=Array.isArray(v)&&v[0];
+    if(!x){ box.innerHTML=''; return; }
+    const row=(label,val)=> val ? `<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6">
+        <div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;letter-spacing:.03em">${label}</div>
+        <div style="flex:1;font-size:13px;font-weight:600;color:#1f2937">${val}</div></div>` : '';
+    const gps = (x.lat&&x.lng)
+      ? `<a href="https://maps.google.com/?q=${x.lat},${x.lng}" style="color:#025AC6;text-decoration:none">📍 ${x.lat}, ${x.lng}</a>`
+      : '<span style="color:#9aa5b5">No GPS yet</span>';
+    box.innerHTML=`<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+      <div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Vendo details</div>
+      ${row('Code', x.vendo_code?esc(x.vendo_code):'')}
+      ${row('Vendo', esc(x.sheet_name||x.tg_name||''))}
+      ${row('Area', x.area?esc(x.area):'')}
+      ${row('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')}
+      ${row('Owner', x.owner_name?esc(x.owner_name):'')}
+      ${row('Server', x.server_name?esc(x.server_name):'')}
+      ${row('Address', x.address?esc(x.address):'')}
+      ${row('TG name', x.tg_name?esc(x.tg_name):'')}
+      <div style="display:flex;padding:7px 0">
+        <div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;letter-spacing:.03em">GPS</div>
+        <div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
+    </div>`;
+  }catch(e){ box.innerHTML=''; }
+}
+function bindCancelResult(){ document.getElementById('bind-result').innerHTML=''; }
+
+async function resetTrial(){
+  if(!confirm('Clear all trial data?\n\nEvery ring goes back to IN and the test log is wiped.')) return;
+  try{
+    await fetch(SB+'/rest/v1/key_events?is_test=eq.true',{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}});
+    await fetch(SB+'/rest/v1/key_logs?is_test=eq.true',{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}});
+    await fetch(SB+'/rest/v1/key_rings?status=eq.out',{method:'PATCH',
+      headers:{...HDR,Prefer:'return=minimal'},
+      body:JSON.stringify({status:'in',out_to:null,out_at:null})});
+    toast('Trial data cleared');
+    loadRings(); loadOverview();
+  }catch(e){ toast('Reset failed'); }
+}
+
+function logout(){
+  if(!ME) return;
+  if(!confirm('Log out '+ME.name+'?')) return;
+  ME=null; PIN=''; drawDots();
+  document.getElementById('tb-user').textContent='';
+  document.getElementById('bottom-nav').classList.remove('show');
+  document.getElementById('tb-back').style.display='none';
+  go('login');
+}
+
+// ── INSTALL ─────────────────────────────────────────────────────
+// Chrome fires beforeinstallprompt only when the manifest validates.
+// It was never firing before: keys-manifest.json declared spawn-globe.png
+// as 192x192 when the file is actually 512x512, so Chrome rejected the
+// icon set and offered no install. Icons now declare true dimensions.
+//
+// We stash the event and show our own button, because Chrome's mini-infobar
+// is easy to miss and Steph/Ailyn need something obvious to tap.
+let _installPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();               // suppress the mini-infobar
+  _installPrompt = e;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = '';
+});
+
+window.addEventListener('appinstalled', () => {
+  _installPrompt = null;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = 'none';
+});
+
+async function doInstall(){
+  // iOS Safari never fires beforeinstallprompt — there is no programmatic
+  // install. Tell them how to do it by hand instead of failing silently.
+  if (!_installPrompt){
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    alert(isIOS
+      ? 'To install:\n\nTap the Share button (□↑) at the bottom,\nthen "Add to Home Screen".'
+      : 'To install:\n\nOpen the browser menu (⋮),\nthen "Install app" or "Add to Home screen".');
+    return;
+  }
+  try{
+    _installPrompt.prompt();
+    await _installPrompt.userChoice;
+  }catch(_){}
+  _installPrompt = null;
+  const b = document.getElementById('btn-install');
+  if (b) b.style.display = 'none';
+}
+
+(function(){
+  const b = document.getElementById('btn-install');
+  if (!b) return;
+  const installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  if (installed){ b.style.display = 'none'; return; }
+  // iOS never fires beforeinstallprompt, so the button would stay hidden
+  // forever and the instructions unreachable. Show it there unconditionally;
+  // doInstall() falls back to the Share-sheet explanation.
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) b.style.display = '';
+})();
+
+// ── BOOT ──
+buildPad();
+if('serviceWorker' in navigator){
+  // Register AFTER the page has loaded so SW work never blocks first paint.
+  // This is critical: registering/updating during boot can, on some Android
+  // builds, make the installed PWA "fail to start" if anything in the SW
+  // lifecycle stalls the initial navigation.
+  window.addEventListener('load', ()=>{
+    // Was the app already controlled when we booted? If yes, a later
+    // controllerchange means a REAL update and we can reload once. If the app
+    // booted with NO controller (fresh install / first run), the first
+    // controllerchange is just the SW taking initial control — reloading then
+    // causes a start-up reload loop, which is what breaks the install.
+    const _hadController = !!navigator.serviceWorker.controller;
+    let _swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(!_hadController) return;      // first-ever control: do nothing
+      if(_swReloaded) return; _swReloaded = true;
+      location.reload();
+    });
+
+    navigator.serviceWorker.register('/VendoMonitor/keys/sw-keys.js', {scope:'/VendoMonitor/keys/'})
+      .then(reg=>{
+        try{ reg.update(); }catch(e){}
+        reg.addEventListener('updatefound', ()=>{
+          const nw = reg.installing;
+          if(!nw) return;
+          nw.addEventListener('statechange', ()=>{
+            // Only auto-activate a NEW worker when one was already controlling
+            // the page (a true update). Never on first install.
+            if(nw.state==='installed' && navigator.serviceWorker.controller && _hadController){
+              try{ nw.postMessage({type:'SKIP_WAITING'}); }catch(e){}
+            }
+          });
+        });
+      })
+      .catch(()=>{});
+  });
+}
+
+// ══════════ TAB NAVIGATION ══════════
+// Screens that are top-level tabs (bottom nav stays, no back button).
+const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', fobs:'screen-fobs', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview' };
+// Drill-down screens hide the nav and show a Back button.
+const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
+let CUR_TAB = 'rings';
+const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', fobs:'Bound keys per vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance' };
+
+function tabSwitch(tab){
+  const id = TAB_SCREENS[tab]; if(!id) return;
+  CUR_TAB = tab;
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const nb=document.getElementById('bnav-'+tab); if(nb) nb.classList.add('active');
+  document.getElementById('tb-back').style.display='none';
+  document.getElementById('bottom-nav').classList.add('show');
+  document.getElementById('tb-sub').textContent = TAB_SUB[tab]||'Ring custody';
+  window.scrollTo(0,0);
+  if(tab==='rings') loadRings();
+  if(tab==='handover') loadHandoverRecent();
+  if(tab==='overview') loadOverview();
+  if(tab==='home') loadHome();
+  if(tab==='fobs') loadFobsList();
+  if(tab==='loan') loadLoanOut();
+  if(tab==='bind') openBind();
+}
+
+// From a drill-down screen (ring detail / pull / scan) go back to the tab it came from.
+function tabBack(){ tabSwitch(CUR_TAB==='bind'?'bind':'rings'); }
+
+// Show the Bind tab WITHOUT resetting the form (used when returning from a fob scan
+// so the picked vendo + result stay visible).
+function showBindTab(){
+  CUR_TAB='bind';
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-bind').classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('bnav-bind').classList.add('active');
+  document.getElementById('tb-back').style.display='none';
+  document.getElementById('bottom-nav').classList.add('show');
+  document.getElementById('tb-sub').textContent=TAB_SUB.bind;
+}
+
+// When a drill-down screen is shown, hide nav + show back button.
+function enterDrill(){
+  document.getElementById('bottom-nav').classList.remove('show');
+  document.getElementById('tb-back').style.display='';
+}
+
+// Cancel out of the shared scan screen back to whatever tab we were on.
+async function stopScanToTab(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+  tabSwitch(CUR_TAB);
+}
+
+// ══════════ HANDOVER RECENT ══════════
+async function loadHandoverRecent(){
+  const el=document.getElementById('handover-recent'); if(!el) return;
+  try{
+    const d=await sbGet('key_events?select=*&or=(event.eq.ring_out,event.eq.ring_in)&auth_method=eq.qr&order=at.desc&limit=8');
+    if(!Array.isArray(d)||!d.length){ el.innerHTML='<div class="empty" style="padding:18px">No recent handovers.</div>'; return; }
+    el.innerHTML=d.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))} · ${esc(e.actor||'')}</div>
+        <div class="ev-m">${esc(e.verified_by?('by '+e.verified_by+' · '):'')}${ago(e.at)}
+          <span class="pill p-qr" style="margin-left:6px">VERIFIED</span></div></div>`).join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:18px">Cannot load.</div>'; }
+}
+
+// ══════════ OVERVIEW ══════════
+async function loadHome(){
+  document.getElementById('home-keeper-name').textContent = ME ? ME.name : '—';
+  try{
+    const rings = await sbGet('key_rings?select=id,label,area,status,out_to,out_at&active=eq.true');
+    const R = Array.isArray(rings)?rings:[];
+    const out = R.filter(r=>r.status==='out');
+    const inn = R.length - out.length;
+    const pct = R.length ? Math.round(inn/R.length*100) : 0;
+    document.getElementById('home-out').textContent = out.length;
+    document.getElementById('home-out-sub').textContent = out.length ? out.length+' ring'+(out.length>1?'s':'')+' in the field' : 'All rings in office';
+    document.getElementById('home-ring-label').textContent = 'Rings returned';
+    document.getElementById('home-ring-pct').textContent = pct+'%';
+    document.getElementById('home-ring-bar').style.width = pct+'%';
+    document.getElementById('home-ring-remaining').textContent = inn+' of '+R.length+' in office';
+    document.getElementById('home-status-title').textContent = R.length+' rings tracked';
+    document.getElementById('home-status-sub').textContent = 'Tap to refresh';
+    document.getElementById('home-s-out').textContent = out.length;
+    // rings-out section
+    const sec=document.getElementById('home-out-section');
+    const list=document.getElementById('home-out-list');
+    if(out.length){
+      sec.style.display='block';
+      list.innerHTML = out.map(r=>`
+        <div class="ring out" style="cursor:pointer" onclick="openRing(${r.id})">
+          <div><div class="ring-l">${esc(r.label)}</div>
+            <div class="ring-s">${esc(r.area)} · ${esc(r.out_to||'—')} · ${ago(r.out_at)}</div></div>
+          <span class="pill p-out">OUT</span></div>`).join('');
+    } else { sec.style.display='none'; }
+  }catch(e){}
+
+  // fob counts + borrowed count
+  try{
+    const bound = await sbCount('vendo_key_qr?vendo_id=not.is.null');
+    const borrowed = await sbCount('vendo_key_qr?loan_status=eq.out');
+    document.getElementById('home-s-bound').textContent = bound;
+    const be=document.getElementById('home-s-borrowed'); if(be) be.textContent = borrowed;
+  }catch(e){}
+
+  // recent activity
+  try{
+    const ev = await sbGet('key_events?select=*&order=at.desc&limit=6');
+    const el = document.getElementById('home-recent');
+    el.innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))}${e.actor?(' · '+esc(e.actor)):''}</div>
+        <div class="ev-m">${ago(e.at)}
+          <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+      : '<div class="empty" style="padding:16px">No activity yet.</div>';
+  }catch(e){}
+}
+
+async function loadOverview(){
+  try{
+    const rings = await sbGet('key_rings?select=id,label,area,status,out_to,out_at&active=eq.true');
+    const R = Array.isArray(rings)?rings:[];
+    const out = R.filter(r=>r.status==='out');
+    document.getElementById('ov-in').textContent  = R.length - out.length;
+    document.getElementById('ov-out').textContent = out.length;
+    document.getElementById('ov-sub').textContent = R.length+' rings tracked';
+    document.getElementById('ov-outlist').innerHTML = out.length ? out.map(r=>`
+      <div class="ring out" style="cursor:default">
+        <div><div class="ring-l">${esc(r.label)}</div>
+          <div class="ring-s">${esc(r.area)} · ${esc(r.out_to||'—')} · ${ago(r.out_at)}</div></div>
+        <span class="pill p-out">OUT</span></div>`).join('')
+      : '<div class="empty" style="padding:16px">None out — all rings in office.</div>';
+  }catch(e){}
+
+  // Fob bind counts (head=count via Prefer)
+  try{
+    const bound = await sbCount('vendo_key_qr?vendo_id=not.is.null');
+    const total = await sbCount('vendo_key_qr');
+    document.getElementById('ov-bound').textContent   = bound;
+    document.getElementById('ov-unbound').textContent = Math.max(0,total-bound);
+  }catch(e){}
+
+  // Recent activity across all events
+  try{
+    const ev = await sbGet('key_events?select=*&order=at.desc&limit=10');
+    const el = document.getElementById('ov-activity');
+    el.innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))}${e.actor?(' · '+esc(e.actor)):''}</div>
+        <div class="ev-m">${ago(e.at)}
+          <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+      : '<div class="empty" style="padding:16px">No activity yet.</div>';
+  }catch(e){}
+}
+
+// count helper — PostgREST returns total in Content-Range with Prefer:count=exact
+async function sbCount(p){
+  const r=await fetch(SB+'/rest/v1/'+p+'&select=id',{headers:{...HDR,Prefer:'count=exact',Range:'0-0'}});
+  const cr=r.headers.get('content-range')||'';
+  const m=cr.match(/\/(\d+)$/);
+  return m?parseInt(m[1],10):0;
+}
+
+// startScan / openPull / bindStartScan / startApprove enter drill mode.
+// Wrap the tab-hiding into the existing screen shows.
+const _origGo = go;
+go = function(s){
+  _origGo(s);
+  if(DRILL_SCREENS.includes('screen-'+s)) enterDrill();
+};
+
+</script>
+</body>
+</html>
