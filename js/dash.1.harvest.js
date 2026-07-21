@@ -5417,13 +5417,17 @@ function ktClearForLog(){
 
 /* ══ FOBS PANE — bind fobs + view bound fobs (per-vendo) ═══════════════════
    Shares vendo_key_qr + spawn_qr_bind with the Spawn Keys app, so binds here
-   reflect there and vice-versa. Uses _SB/_KEY (anon). */
+   reflect there and vice-versa. Uses the ANON key directly (these tables have
+   anon RLS policies) — NOT the "gw" gateway placeholder _KEY, which only works
+   through the spawn-gw-admin proxy. */
+var _FB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
+var _FB_HDR = {'apikey':_FB_KEY,'Authorization':'Bearer '+_FB_KEY,'Content-Type':'application/json'};
 var _fobRows = [];
 var _fbVendo = null;
 var _fbST = null;
 
 async function _fbGet(path){
-  const r = await fetch(_SB+'/rest/v1/'+path, {headers:_HDR});
+  const r = await fetch(_SB+'/rest/v1/'+path, {headers:_FB_HDR});
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
@@ -5596,7 +5600,7 @@ async function fbBind(force){
   msg.innerHTML='<span style="color:#6b7280;">Binding…</span>';
   try{
     const body={p_qr:code, p_vendo_id:_fbVendo.id, p_account:'dashboard', p_force:!!force};
-    const r=await fetch(_SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:_HDR,body:JSON.stringify(body)});
+    const r=await fetch(_SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:_FB_HDR,body:JSON.stringify(body)});
     const d=await r.json();
     if(d && d.already_bound){
       msg.innerHTML='<span style="color:#d97706;">⚠ '+_fbEsc(d.error)+'</span> '
