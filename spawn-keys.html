@@ -132,6 +132,34 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 .bnav-item.active .bnav-icon{color:var(--spawn-navy)}
 .bnav-badge{position:absolute;top:5px;right:calc(50% - 20px);background:var(--spawn-red);color:#fff;
   font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;display:none}
+
+/* ── Home hero / stats / actions (v4 style) ── */
+.hero{background:linear-gradient(160deg,#025AC6 0%,#0146A0 100%);border-radius:16px;padding:20px;
+  margin-bottom:14px;color:#fff}
+.hero-label{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.08em}
+.hero-amount{font-size:34px;font-weight:800;margin-top:2px;line-height:1;letter-spacing:-.02em}
+.hero-sub{font-size:12px;opacity:.8;margin-top:4px}
+.status-strip{display:flex;align-items:center;gap:12px;background:#f0fdf4;border:1.5px solid #bbf7d0;
+  border-radius:14px;padding:12px 14px;margin-bottom:14px;cursor:pointer}
+.status-ico{width:38px;height:38px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;font-size:18px}
+.stat-row{display:flex;background:#fff;border-radius:13px;box-shadow:0 2px 8px rgba(2,90,198,.05);
+  overflow:hidden;margin-bottom:14px}
+.stat-cell{flex:1;text-align:center;padding:12px 4px}
+.stat-cell+.stat-cell{border-left:1px solid #eef2f7}
+.stat-cell .n{font-size:18px;font-weight:800;color:#025AC6}
+.stat-cell .n.red{color:#dc2626}.stat-cell .n.amber{color:#d97706}.stat-cell .n.teal{color:#028867}
+.stat-cell .l{font-size:9px;color:#6b87a8;margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.action-row{display:flex;background:#fff;border-radius:13px;box-shadow:0 2px 8px rgba(2,90,198,.05);
+  overflow:hidden;margin-bottom:16px}
+.action-btn{flex:1;text-align:center;padding:13px 4px;border:none;background:#fff;cursor:pointer;font-family:inherit}
+.action-btn+.action-btn{border-left:1px solid #eef2f7}
+.action-btn:active{background:#f7f8fc}
+.action-ico{width:40px;height:40px;border-radius:13px;background:#E7F0FB;display:flex;align-items:center;
+  justify-content:center;margin:0 auto 5px;color:#025AC6}
+.action-lbl{font-size:10px;font-weight:700;color:#083A82}
+.home-sec-title{font-size:12px;font-weight:800;color:#025AC6;letter-spacing:.04em;
+  margin:0 2px 8px;display:flex;align-items:center;gap:6px}
 </style>
 </head>
 <body>
@@ -160,6 +188,76 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
     <div class="pin-dots" id="pin-dots"></div>
     <div id="pin-err" style="text-align:center;color:var(--spawn-red);font-size:13px;font-weight:600;min-height:18px"></div>
     <div class="pin-grid" id="pin-grid"></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-home">
+  <div class="wrap">
+    <div class="hero" style="margin-top:4px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div class="hero-label">Rings out now</div>
+          <div class="hero-amount" id="home-out">0</div>
+          <div class="hero-sub" id="home-out-sub">All rings in office</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:10px;opacity:.7;text-transform:uppercase;letter-spacing:.06em">Keeper</div>
+          <div style="font-size:15px;font-weight:800;margin-top:2px" id="home-keeper-name">—</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.8;margin-bottom:5px">
+        <span id="home-ring-label">Rings returned</span>
+        <span id="home-ring-pct">0%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,.25);border-radius:4px;overflow:hidden">
+        <div id="home-ring-bar" style="height:100%;width:0%;background:#FFB725;border-radius:4px;transition:.5s ease"></div>
+      </div>
+      <div style="font-size:10px;opacity:.7;margin-top:4px;text-align:right" id="home-ring-remaining">—</div>
+    </div>
+
+    <div class="status-strip" onclick="loadHome()">
+      <div class="status-ico">🔑</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#16a34a" id="home-status-title">Key custody</div>
+        <div style="font-size:11px;color:#15803d;margin-top:1px" id="home-status-sub">Tap to refresh</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-cell"><div class="n red" id="home-s-out">0</div><div class="l">Rings out</div></div>
+      <div class="stat-cell"><div class="n teal" id="home-s-bound">0</div><div class="l">Fobs bound</div></div>
+      <div class="stat-cell"><div class="n amber" id="home-s-unbound">0</div><div class="l">Fobs left</div></div>
+    </div>
+
+    <div class="action-row">
+      <button class="action-btn" onclick="tabSwitch('rings')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.5 11.5 20 3"/><path d="m17 6 3 3"/><path d="m14 9 3 3"/></svg></div>
+        <div class="action-lbl">Rings</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('bind')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
+        <div class="action-lbl">Bind Keys</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('handover')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
+        <div class="action-lbl">Handover</div>
+      </button>
+      <button class="action-btn" onclick="tabSwitch('overview')">
+        <div class="action-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
+        <div class="action-lbl">Overview</div>
+      </button>
+    </div>
+
+    <div id="home-out-section" style="display:none;margin-bottom:16px">
+      <div class="home-sec-title">🔴 RINGS OUT IN THE FIELD</div>
+      <div id="home-out-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="home-recent"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
   </div>
 </div>
 
@@ -280,7 +378,11 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 </div>
 
 <div class="bottom-nav" id="bottom-nav">
-  <button class="bnav-item active" id="bnav-rings" onclick="tabSwitch('rings')">
+  <button class="bnav-item active" id="bnav-home" onclick="tabSwitch('home')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a1 1 0 01-1 1H5a1 1 0 01-1-1z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+    <div class="bnav-label">Home</div>
+  </button>
+  <button class="bnav-item" id="bnav-rings" onclick="tabSwitch('rings')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.5 11.5 20 3"/><path d="m17 6 3 3"/><path d="m14 9 3 3"/></svg></div>
     <div class="bnav-label">Rings</div>
   </button>
@@ -373,7 +475,7 @@ async function doLogin(){
     PIN='';drawDots();
     await loadRoster();
     document.getElementById('bottom-nav').classList.add('show');
-    tabSwitch('rings');
+    tabSwitch('home');
   }catch(e){ PIN='';drawDots();err.textContent='Login failed — check connection'; }
 }
 
@@ -913,11 +1015,11 @@ if('serviceWorker' in navigator){
 
 // ══════════ TAB NAVIGATION ══════════
 // Screens that are top-level tabs (bottom nav stays, no back button).
-const TAB_SCREENS = { rings:'screen-rings', bind:'screen-bind', handover:'screen-handover', overview:'screen-overview' };
+const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', handover:'screen-handover', overview:'screen-overview' };
 // Drill-down screens hide the nav and show a Back button.
 const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
 let CUR_TAB = 'rings';
-const TAB_SUB = { rings:'Ring custody', bind:'Bind fob QR to vendo', handover:'Approve collector QR', overview:'At a glance' };
+const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', handover:'Approve collector QR', overview:'At a glance' };
 
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
@@ -933,6 +1035,7 @@ function tabSwitch(tab){
   if(tab==='rings') loadRings();
   if(tab==='handover') loadHandoverRecent();
   if(tab==='overview') loadOverview();
+  if(tab==='home') loadHome();
   if(tab==='bind') openBind();
 }
 
@@ -978,6 +1081,56 @@ async function loadHandoverRecent(){
 }
 
 // ══════════ OVERVIEW ══════════
+async function loadHome(){
+  document.getElementById('home-keeper-name').textContent = ME ? ME.name : '—';
+  try{
+    const rings = await sbGet('key_rings?select=id,label,area,status,out_to,out_at&active=eq.true');
+    const R = Array.isArray(rings)?rings:[];
+    const out = R.filter(r=>r.status==='out');
+    const inn = R.length - out.length;
+    const pct = R.length ? Math.round(inn/R.length*100) : 0;
+    document.getElementById('home-out').textContent = out.length;
+    document.getElementById('home-out-sub').textContent = out.length ? out.length+' ring'+(out.length>1?'s':'')+' in the field' : 'All rings in office';
+    document.getElementById('home-ring-label').textContent = 'Rings returned';
+    document.getElementById('home-ring-pct').textContent = pct+'%';
+    document.getElementById('home-ring-bar').style.width = pct+'%';
+    document.getElementById('home-ring-remaining').textContent = inn+' of '+R.length+' in office';
+    document.getElementById('home-status-title').textContent = R.length+' rings tracked';
+    document.getElementById('home-status-sub').textContent = 'Tap to refresh';
+    document.getElementById('home-s-out').textContent = out.length;
+    // rings-out section
+    const sec=document.getElementById('home-out-section');
+    const list=document.getElementById('home-out-list');
+    if(out.length){
+      sec.style.display='block';
+      list.innerHTML = out.map(r=>`
+        <div class="ring out" style="cursor:pointer" onclick="openRing(${r.id})">
+          <div><div class="ring-l">${esc(r.label)}</div>
+            <div class="ring-s">${esc(r.area)} · ${esc(r.out_to||'—')} · ${ago(r.out_at)}</div></div>
+          <span class="pill p-out">OUT</span></div>`).join('');
+    } else { sec.style.display='none'; }
+  }catch(e){}
+
+  // fob counts
+  try{
+    const bound = await sbCount('vendo_key_qr?vendo_id=not.is.null');
+    const total = await sbCount('vendo_key_qr');
+    document.getElementById('home-s-bound').textContent = bound;
+    document.getElementById('home-s-unbound').textContent = Math.max(0,total-bound);
+  }catch(e){}
+
+  // recent activity
+  try{
+    const ev = await sbGet('key_events?select=*&order=at.desc&limit=6');
+    const el = document.getElementById('home-recent');
+    el.innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))}${e.actor?(' · '+esc(e.actor)):''}</div>
+        <div class="ev-m">${ago(e.at)}
+          <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+      : '<div class="empty" style="padding:16px">No activity yet.</div>';
+  }catch(e){}
+}
+
 async function loadOverview(){
   try{
     const rings = await sbGet('key_rings?select=id,label,area,status,out_to,out_at&active=eq.true');
