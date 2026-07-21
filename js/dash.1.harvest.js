@@ -5519,15 +5519,14 @@ function fobsRenderList(rows){
     const chips=r.keys.map(k=>_fbKt(k.key_type)).join(' ');
     const outBadge=outN?'<span style="margin-left:8px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px;">'+outN+' OUT</span>':'';
     return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:8px;overflow:hidden;">'
-      + '<div onclick="fobToggle('+r.vendo_id+')" style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">'
+      + '<div onclick="fobOpenModal('+r.vendo_id+')" style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">'
       +   '<div style="min-width:0;">'
       +     '<div style="font-weight:800;font-size:14px;color:#111827;">'+_fbEsc(r.name)+outBadge+'</div>'
       +     '<div style="font-size:12px;color:#6b7280;margin-top:2px;">'+_fbEsc(r.area)+(r.code?' · '+_fbEsc(r.code):'')+' · '+r.keys.length+' key'+(r.keys.length===1?'':'s')+'</div>'
       +     '<div style="margin-top:5px;">'+chips+'</div>'
       +   '</div>'
-      +   '<span id="fb-caret-'+r.vendo_id+'" style="color:#c7c7c7;font-size:18px;">›</span>'
+      +   '<span style="color:#c7c7c7;font-size:18px;">›</span>'
       + '</div>'
-      + '<div id="fb-detail-'+r.vendo_id+'" style="display:none;padding:0 15px 14px;border-top:1px solid #f0f2f6;"></div>'
       + '</div>';
   }).join('');
 }
@@ -5541,15 +5540,12 @@ function fobsFilter(){
     || r.keys.some(k=>(k.qr_code||'').toLowerCase().indexOf(q)>=0)));
 }
 
-function fobToggle(vid){
-  const box=document.getElementById('fb-detail-'+vid);
-  const car=document.getElementById('fb-caret-'+vid);
-  if(!box) return;
-  if(box.style.display==='block'){ box.style.display='none'; if(car) car.textContent='›'; return; }
-  if(car) car.textContent='⌄';
+function fobCloseModal(){ const m=document.getElementById('fob-modal'); if(m) m.remove(); }
+function fobOpenModal(vid){
+  fobCloseModal();
   const r=_fobRows.filter(x=>x.vendo_id===vid)[0];
-  if(!r){ box.style.display='block'; box.innerHTML='<div style="padding:10px;color:#9ca3af;">No data.</div>'; return; }
-  const det=(l,v)=> v?('<div style="display:flex;padding:6px 0;border-bottom:1px solid #f0f2f6;"><div style="width:110px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937;">'+_fbEsc(v)+'</div></div>'):'';
+  if(!r) return;
+  const det=(l,v)=> v?('<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6;"><div style="width:110px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937;">'+_fbEsc(v)+'</div></div>'):'';
   const keyRows=r.keys.map(k=>{
     const out=k.loan_status==='out';
     const note=out
@@ -5559,12 +5555,27 @@ function fobToggle(vid){
       +'<div style="display:flex;align-items:center;gap:8px;">'+_fbKt(k.key_type)
       +'<span style="font-family:monospace;font-size:13px;font-weight:700;">'+_fbEsc(k.qr_code)+'</span></div>'+note+'</div>';
   }).join('');
-  box.style.display='block';
-  box.innerHTML='<div style="padding-top:10px;">'
-    + det('Vendo', r.name) + det('Area', r.area) + det('Code', r.code)
-    + det('Harvest group', r.group) + det('Address', r.address||'—')
-    + '<div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px;">Registered keys ('+r.keys.length+')</div>'
-    + keyRows + '</div>';
+  const outN=r.keys.filter(k=>k.loan_status==='out').length;
+  const outBadge=outN?'<span style="margin-left:8px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px;">'+outN+' OUT</span>':'';
+  const ov=document.createElement('div');
+  ov.id='fob-modal';
+  ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML=
+    '<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">'
+    + '<div style="position:sticky;top:0;background:linear-gradient(135deg,#01408f,#025AC6);color:#fff;padding:16px 18px;border-radius:16px 16px 0 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'
+    +   '<div><div style="font-size:18px;font-weight:800;">'+_fbEsc(r.name)+outBadge+'</div>'
+    +     '<div style="font-size:12px;opacity:.85;margin-top:2px;">'+_fbEsc(r.area)+(r.code?' · '+_fbEsc(r.code):'')+'</div></div>'
+    +   '<button onclick="fobCloseModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:20px;line-height:1;width:30px;height:30px;border-radius:8px;cursor:pointer;flex-shrink:0;">✕</button>'
+    + '</div>'
+    + '<div style="padding:16px 18px;">'
+    +   det('Vendo', r.name) + det('Area', r.area) + det('Code', r.code)
+    +   det('Harvest group', r.group) + det('Address', r.address||'—')
+    +   '<div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin:14px 0 4px;">Registered keys ('+r.keys.length+')</div>'
+    +   keyRows
+    + '</div>'
+    + '</div>';
+  ov.onclick=fobCloseModal;
+  document.body.appendChild(ov);
 }
 
 function fbSearch(){ clearTimeout(_fbST); _fbST=setTimeout(fbRunSearch,260); }
