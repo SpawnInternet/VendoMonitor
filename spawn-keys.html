@@ -275,7 +275,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 <div class="screen" id="screen-bind">
   <div class="wrap">
     <div class="tab-head"><div><div class="tab-h1">Bind Keys</div><div class="tab-hsub">Attach a fob QR to a vendo</div></div>
-      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="toggleBoundList()" id="bind-view-btn">👁 View bound</button></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="tabSwitch('fobs')" id="bind-view-btn">👁 View Fobs</button></div>
     <div class="card" id="bind-bound-card" style="display:none">
       <div class="lbl" id="bind-bound-title">Bound keys</div>
       <div id="bind-bound-list"><div class="empty" style="padding:16px">Loading…</div></div>
@@ -327,6 +327,22 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
       <div class="lbl" id="loan-out-title">Keys currently out</div>
       <div id="loan-out-list"><div class="empty" style="padding:16px">Loading…</div></div>
     </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-fobs">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Fobs</div><div class="tab-hsub" id="fobs-sub">Bound keys per vendo</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="loadFobsList()">↻ Refresh</button></div>
+    <input id="fobs-q" placeholder="Search vendo…" oninput="fobsFilter()" style="margin-bottom:12px">
+    <div id="fobs-list"><div class="empty" style="padding:16px">Loading…</div></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-fob-detail">
+  <div class="wrap">
+    <div class="card" id="fob-detail-card"><div class="empty">Loading…</div></div>
+    <button class="btn btn-gray" onclick="tabSwitch('fobs')" style="width:100%">← Back to Fobs</button>
   </div>
 </div>
 
@@ -413,6 +429,10 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   <button class="bnav-item" id="bnav-bind" onclick="tabSwitch('bind')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
     <div class="bnav-label">Bind</div>
+  </button>
+  <button class="bnav-item" id="bnav-fobs" onclick="tabSwitch('fobs')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7a4 4 0 1 0-4 4"/><circle cx="11" cy="7" r="1.5"/><path d="M11 11l7 7"/><path d="m18 18 2-2"/><path d="M15 15l2-2"/></svg></div>
+    <div class="bnav-label">Fobs</div>
   </button>
   <button class="bnav-item" id="bnav-loan" onclick="tabSwitch('loan')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M9 12l6 6"/><path d="m15 18 2-2"/><path d="M17 20l3-3"/><path d="M14 3h7v7"/><path d="M21 3l-6 6"/></svg></div>
@@ -1090,6 +1110,104 @@ async function loadLoanOut(){
   }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
 }
 
+// ══════════ FOBS TAB (bound keys per vendo, clickable) ══════════
+let FOBS_DATA = [];   // [{vendo_id, name, meta, keys:[{qr,key_type,loan_status,borrowed_by,borrowed_at}]}]
+async function loadFobsList(){
+  const el=document.getElementById('fobs-list'); if(!el) return;
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    const fobs=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status,borrowed_by,borrowed_at&vendo_id=not.is.null&order=vendo_id.asc');
+    if(!Array.isArray(fobs)||!fobs.length){
+      document.getElementById('fobs-sub').textContent='No fobs bound yet';
+      el.innerHTML='<div class="empty" style="padding:16px">No fobs bound yet.<br>Bind fobs in the Bind tab first.</div>';
+      FOBS_DATA=[]; return;
+    }
+    const ids=[...new Set(fobs.map(f=>f.vendo_id))];
+    const vmap={};
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area&id=in.('+chunk.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    const byV={};
+    fobs.forEach(f=>{ (byV[f.vendo_id]=byV[f.vendo_id]||[]).push(f); });
+    FOBS_DATA=Object.keys(byV).map(vid=>{
+      const v=vmap[vid]||{};
+      return {
+        vendo_id: +vid,
+        name: v.sheet_name||v.tg_name||('#'+vid),
+        meta: (v.area||'')+(v.vendo_code?' · '+v.vendo_code:''),
+        keys: byV[vid]
+      };
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+    document.getElementById('fobs-sub').textContent=FOBS_DATA.length+' vendo'+(FOBS_DATA.length>1?'s':'')+' · '+fobs.length+' fob'+(fobs.length>1?'s':'');
+    renderFobsList(FOBS_DATA);
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+function renderFobsList(rows){
+  const el=document.getElementById('fobs-list');
+  if(!rows.length){ el.innerHTML='<div class="empty" style="padding:16px">No match.</div>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const outCount=r.keys.filter(k=>k.loan_status==='out').length;
+    const chips=r.keys.map(k=>ktChip(k.key_type)).join(' ');
+    const outNote=outCount?`<span style="display:inline-block;margin-left:6px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px">${outCount} OUT</span>`:'';
+    return `<div class="vrow" onclick="openFobDetail(${r.vendo_id})" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="min-width:0">
+        <div class="vname">${esc(r.name)}${outNote}</div>
+        <div class="vmeta">${esc(r.meta)}</div>
+        <div style="margin-top:5px">${chips}</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c7c7c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`;
+  }).join('');
+}
+function fobsFilter(){
+  const q=(document.getElementById('fobs-q').value||'').trim().toLowerCase();
+  if(!q){ renderFobsList(FOBS_DATA); return; }
+  renderFobsList(FOBS_DATA.filter(r=>
+    r.name.toLowerCase().includes(q) || r.meta.toLowerCase().includes(q)
+    || r.keys.some(k=>(k.qr_code||'').toLowerCase().includes(q))));
+}
+
+async function openFobDetail(vid){
+  const rec=FOBS_DATA.find(r=>r.vendo_id===vid);
+  go('fob-detail');
+  const box=document.getElementById('fob-detail-card');
+  box.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    const v=await sbGet('vendos?select=sheet_name,tg_name,vendo_code,area,vlan,address,lat,lng,server_name,owner_name&id=eq.'+vid);
+    const x=(Array.isArray(v)&&v[0])||{};
+    const name=esc(x.sheet_name||x.tg_name||(rec&&rec.name)||('#'+vid));
+    const detail=(l,val)=> val?('<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937">'+val+'</div></div>'):'';
+    const gps=(x.lat&&x.lng)?'<a href="https://maps.google.com/?q='+x.lat+','+x.lng+'" style="color:#025AC6;text-decoration:none">📍 '+x.lat+', '+x.lng+'</a>':'<span style="color:#9aa5b5">No GPS yet</span>';
+    // fetch fresh key/loan state for this vendo
+    const keys=await sbGet('vendo_key_qr?select=qr_code,key_type,loan_status,borrowed_by,borrowed_at&vendo_id=eq.'+vid+'&order=key_type.asc');
+    const keyRows=(Array.isArray(keys)?keys:[]).map(k=>{
+      const out=k.loan_status==='out';
+      const note=out
+        ? '<div style="margin-top:3px;font-size:11px;color:#DF1A35;font-weight:700">🔴 Borrowed by '+esc(k.borrowed_by||'—')+' · '+ago(k.borrowed_at)+'</div>'
+        : '<div style="margin-top:3px;font-size:11px;color:#028867;font-weight:700">🟢 In office</div>';
+      return '<div style="padding:10px 0;border-bottom:1px solid #f0f2f6">'
+        +'<div style="display:flex;align-items:center;gap:8px">'+ktChip(k.key_type)
+        +'<span style="font-family:monospace;font-size:13px;font-weight:700">'+esc(k.qr_code)+'</span></div>'
+        +note+'</div>';
+    }).join('');
+    box.innerHTML=`
+      <div style="font-size:20px;font-weight:800">${name}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${esc(x.area||'')}${x.vendo_code?' · '+esc(x.vendo_code):''}</div>
+      <div class="lbl">Vendo details</div>
+      ${detail('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')}
+      ${detail('Owner', x.owner_name?esc(x.owner_name):'')}
+      ${detail('Server', x.server_name?esc(x.server_name):'')}
+      ${detail('Address', x.address?esc(x.address):'')}
+      <div style="display:flex;padding:7px 0"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
+      <div class="lbl" style="margin-top:14px">Bound keys (${(Array.isArray(keys)?keys.length:0)})</div>
+      ${keyRows||'<div class="empty" style="padding:12px">No keys.</div>'}
+    `;
+  }catch(e){ box.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+
+function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
 async function bindRunSearch(){
   const q=document.getElementById('bind-q').value.trim();
   if(q.length<2){document.getElementById('bind-res').innerHTML='';return;}
@@ -1293,11 +1411,11 @@ if('serviceWorker' in navigator){
 
 // ══════════ TAB NAVIGATION ══════════
 // Screens that are top-level tabs (bottom nav stays, no back button).
-const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview' };
+const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', fobs:'screen-fobs', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview' };
 // Drill-down screens hide the nav and show a Back button.
 const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
 let CUR_TAB = 'rings';
-const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance' };
+const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', fobs:'Bound keys per vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance' };
 
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
@@ -1314,6 +1432,7 @@ function tabSwitch(tab){
   if(tab==='handover') loadHandoverRecent();
   if(tab==='overview') loadOverview();
   if(tab==='home') loadHome();
+  if(tab==='fobs') loadFobsList();
   if(tab==='loan') loadLoanOut();
   if(tab==='bind') openBind();
 }
