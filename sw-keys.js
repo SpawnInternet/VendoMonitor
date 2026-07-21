@@ -14,7 +14,7 @@
 //     SW controls a page and the last registration wins. So we must not answer
 //     navigations that aren't ours — otherwise an offline harvest launch could
 //     be served spawn-keys.html.
-const CACHE = 'spawn-keys-v14';
+const CACHE = 'spawn-keys-v15';
 const APP_HTML = '/VendoMonitor/spawn-keys.html';
 const SHELL = [
   APP_HTML,
@@ -71,7 +71,25 @@ self.addEventListener('fetch', e => {
           }
           return r;
         })
-        .catch(() => caches.match(APP_HTML).then(r => r || Response.error()))
+        .catch(() =>
+          caches.match(APP_HTML).then(r => r ||
+            caches.keys().then(ks => {
+              const mine = ks.filter(k => k.startsWith('spawn-keys'));
+              return (function tryNext(i){
+                if (i >= mine.length) {
+                  return new Response(
+                    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+                    '<div style="font-family:sans-serif;padding:40px;text-align:center;color:#025AC6">'+
+                    '<h2>Spawn Keys is offline</h2><p style="color:#555">Reconnect and reopen the app.</p>'+
+                    '<button onclick="location.reload()" style="margin-top:12px;padding:10px 18px;border:0;border-radius:8px;background:#025AC6;color:#fff;font-weight:700">Retry</button></div>',
+                    { headers: { 'Content-Type': 'text/html' } });
+                }
+                return caches.open(mine[i]).then(c => c.match(APP_HTML))
+                  .then(hit => hit || tryNext(i+1));
+              })(0);
+            })
+          )
+        )
     );
     return;
   }
