@@ -312,6 +312,24 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   </div>
 </div>
 
+<div class="screen" id="screen-loan">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Key Loan</div><div class="tab-hsub">Lineman borrows an individual key</div></div></div>
+    <div class="card" style="text-align:center;padding:20px 16px">
+      <div style="font-size:38px">🔑</div>
+      <div style="font-weight:800;font-size:16px;margin-top:6px">Scan a key fob</div>
+      <div style="font-size:12px;color:var(--muted);margin:6px 0 16px">Scan to borrow a key, or return one</div>
+      <button class="btn btn-pri" onclick="loanStartScan('borrow')" style="width:100%;margin-bottom:10px">📷 Scan to borrow</button>
+      <button class="btn btn-gray" onclick="loanStartScan('return')" style="width:100%;color:#028867;border-color:#9fe1cb">↩ Return a key (scan)</button>
+    </div>
+    <div id="loan-result"></div>
+    <div class="card">
+      <div class="lbl" id="loan-out-title">Keys currently out</div>
+      <div id="loan-out-list"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
 <div class="screen" id="screen-overview">
   <div class="wrap">
     <div class="tab-head"><div><div class="tab-h1">Overview</div><div class="tab-hsub" id="ov-sub">At a glance</div></div>
@@ -394,15 +412,15 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   </button>
   <button class="bnav-item" id="bnav-bind" onclick="tabSwitch('bind')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
-    <div class="bnav-label">Bind Keys</div>
+    <div class="bnav-label">Bind</div>
+  </button>
+  <button class="bnav-item" id="bnav-loan" onclick="tabSwitch('loan')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="10" r="3"/><path d="M9 12l6 6"/><path d="m15 18 2-2"/><path d="M17 20l3-3"/><path d="M14 3h7v7"/><path d="M21 3l-6 6"/></svg></div>
+    <div class="bnav-label">Loan</div>
   </button>
   <button class="bnav-item" id="bnav-handover" onclick="tabSwitch('handover')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
     <div class="bnav-label">Handover</div>
-  </button>
-  <button class="bnav-item" id="bnav-overview" onclick="tabSwitch('overview')">
-    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
-    <div class="bnav-label">Overview</div>
   </button>
 </div>
 
@@ -918,7 +936,160 @@ async function loadBoundList(){
     el.innerHTML=rows.join('');
   }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
 }
-function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
+
+// ══════════ KEY LOAN (individual keys) ══════════
+let LOAN_SCAN = null;   // pending scanned data awaiting borrower name
+function rpc(fn, body){
+  return fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:HDR,body:JSON.stringify(body||{})}).then(r=>r.json());
+}
+// remembered borrower names (for the future dropdown)
+function loanBorrowers(){ try{ return JSON.parse(localStorage.getItem('spawn_borrowers')||'[]'); }catch(e){ return []; } }
+function rememberBorrower(n){
+  n=(n||'').trim(); if(!n) return;
+  let a=loanBorrowers().filter(x=>x.toLowerCase()!==n.toLowerCase());
+  a.unshift(n); a=a.slice(0,20);
+  try{ localStorage.setItem('spawn_borrowers', JSON.stringify(a)); }catch(e){}
+}
+
+function loanStartScan(mode){
+  go('scan');
+  startScannerHD(null,{width:250,height:250},
+    async txt=>{
+      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+      showLoanTab();
+      if(mode==='return') loanDoReturn(String(txt||'').trim());
+      else loanOnScan(String(txt||'').trim());
+    },
+    ()=>{toast('Camera failed');showLoanTab();});
+}
+// show loan tab without resetting result
+function showLoanTab(){
+  CUR_TAB='loan';
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-loan').classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('bnav-loan').classList.add('active');
+  document.getElementById('tb-back').style.display='none';
+  document.getElementById('bottom-nav').classList.add('show');
+  document.getElementById('tb-sub').textContent=TAB_SUB.loan;
+}
+
+async function loanOnScan(qr){
+  const res=document.getElementById('loan-result');
+  res.innerHTML='<div class="card" style="text-align:center;color:#9aa5b5;font-size:13px">Reading fob…</div>';
+  const d=await rpc('spawn_key_scan',{p_qr:qr});
+  if(!d || !d.ok){
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc((d&&d.error)||'Unknown fob')+'</div></div>';
+    return;
+  }
+  if(!d.bound){
+    res.innerHTML='<div class="card"><div class="banner">⚠ This fob is not bound to a vendo yet. Bind it first in the Bind tab.</div></div>';
+    return;
+  }
+  if(d.loan_status==='out'){
+    res.innerHTML='<div class="card"><div class="banner">⚠ This key is already OUT with <b>'+esc(d.borrowed_by||'—')+'</b> · '+ago(d.borrowed_at)+'.<br>Use “Return a key” to bring it back.</div></div>';
+    return;
+  }
+  LOAN_SCAN = d;
+  const gps=(d.lat&&d.lng)?'<a href="https://maps.google.com/?q='+d.lat+','+d.lng+'" style="color:#025AC6;text-decoration:none">📍 '+d.lat+', '+d.lng+'</a>':'<span style="color:#9aa5b5">No GPS</span>';
+  const detail=(l,v)=> v?('<div style="display:flex;padding:6px 0;border-bottom:1px solid #f0f2f6"><div style="width:74px;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600">'+v+'</div></div>'):'';
+  const prev=loanBorrowers();
+  const datalist = prev.length ? '<datalist id="borrower-list">'+prev.map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist>' : '';
+  res.innerHTML=`<div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-weight:800;font-size:17px">${esc(d.vendo||'')}</div>
+        ${ktChip(d.key_type)}
+      </div>
+      ${detail('Code', d.vendo_code?esc(d.vendo_code):'')}
+      ${detail('Area', d.area?esc(d.area):'')}
+      ${detail('VLAN', (d.vlan!=null&&d.vlan!=='')?esc(d.vlan):'')}
+      ${detail('Address', d.address?esc(d.address):'')}
+      <div style="display:flex;padding:6px 0 10px"><div style="width:74px;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
+      <div class="lbl" style="margin-top:6px">Borrower name</div>
+      <input id="loan-borrower" list="borrower-list" placeholder="Type name…" autocomplete="off">
+      ${datalist}
+      <button class="btn btn-ok" style="width:100%;margin-top:12px" onclick="loanConfirm()">✓ Confirm borrow</button>
+      <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="loanCancel()">Cancel</button>
+    </div>`;
+  setTimeout(()=>{const i=document.getElementById('loan-borrower'); if(i) i.focus();},200);
+}
+
+async function loanConfirm(){
+  if(!LOAN_SCAN){toast('Scan a fob first');return;}
+  const name=(document.getElementById('loan-borrower').value||'').trim();
+  if(!name){toast('Enter the borrower name');return;}
+  const res=document.getElementById('loan-result');
+  const d=await rpc('spawn_key_loan',{p_qr:LOAN_SCAN.qr, p_borrower:name, p_account:ME?ME.name:'keeper'});
+  if(!d || !d.ok){
+    if(d && d.already_out){ toast('Already out with '+(d.borrowed_by||'—')); }
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc((d&&d.error)||'Borrow failed')+'</div></div>';
+    return;
+  }
+  rememberBorrower(name);
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  toast('✅ Borrowed by '+name, 3200);
+  res.innerHTML=`<div class="card" style="text-align:center;border:2px solid #16a34a;background:#E6F7F0">
+      <div style="font-size:38px">✅</div>
+      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">KEY BORROWED!</div>
+      <div style="font-size:14px;margin-top:6px"><b>${esc(name)}</b> took the ${esc(d.key_type)} key</div>
+      <div style="font-size:13px;color:#1f2937;margin-top:2px">${esc(d.vendo||'')}${d.vendo_code?' · '+esc(d.vendo_code):''}</div>
+      <div style="font-size:11px;color:#7a869c;margin-top:6px">To return: tap “Return a key” and scan this fob.</div>
+      <button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="loanReset()">Scan another</button>
+    </div>`;
+  LOAN_SCAN=null;
+  loadLoanOut();
+}
+
+async function loanDoReturn(qr){
+  const res=document.getElementById('loan-result');
+  res.innerHTML='<div class="card" style="text-align:center;color:#9aa5b5;font-size:13px">Returning…</div>';
+  const d=await rpc('spawn_key_return',{p_qr:qr, p_account:ME?ME.name:'keeper'});
+  if(!d || !d.ok){
+    res.innerHTML='<div class="card"><div class="banner">'+(d&&d.not_out?'ℹ ':'❌ ')+esc((d&&d.error)||'Return failed')+'</div></div>';
+    return;
+  }
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  toast('↩ Returned — '+(d.vendo||'key'), 3200);
+  res.innerHTML=`<div class="card" style="text-align:center;border:2px solid #16a34a;background:#E6F7F0">
+      <div style="font-size:38px">↩</div>
+      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">KEY RETURNED!</div>
+      <div style="font-size:14px;margin-top:6px">${esc(d.vendo||'')}${d.vendo_code?' · '+esc(d.vendo_code):''}</div>
+      <div style="font-size:12px;color:#7a869c;margin-top:4px">Was out with <b>${esc(d.was_borrowed_by||'—')}</b></div>
+      <button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="loanReset()">Done</button>
+    </div>`;
+  loadLoanOut();
+}
+
+function loanCancel(){ LOAN_SCAN=null; document.getElementById('loan-result').innerHTML=''; }
+function loanReset(){ LOAN_SCAN=null; document.getElementById('loan-result').innerHTML=''; }
+
+async function loadLoanOut(){
+  const el=document.getElementById('loan-out-list'); if(!el) return;
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    const out=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,borrowed_by,borrowed_at&loan_status=eq.out&order=borrowed_at.desc');
+    if(!Array.isArray(out)||!out.length){
+      document.getElementById('loan-out-title').textContent='Keys currently out';
+      el.innerHTML='<div class="empty" style="padding:16px">No keys out. All keys accounted for.</div>';
+      return;
+    }
+    const ids=[...new Set(out.map(f=>f.vendo_id).filter(Boolean))];
+    const vmap={};
+    if(ids.length){
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code&id=in.('+ids.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    document.getElementById('loan-out-title').textContent=out.length+' key'+(out.length>1?'s':'')+' out';
+    el.innerHTML=out.map(f=>{
+      const v=vmap[f.vendo_id]||{};
+      return '<div class="vrow" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">'
+        +'<div><div class="vname">'+esc(v.sheet_name||v.tg_name||('#'+f.vendo_id))+'</div>'
+        +'<div class="vmeta">'+ktChip(f.key_type)+' <span style="font-family:monospace">'+esc(f.qr_code)+'</span> · '+esc(f.borrowed_by||'—')+' · '+ago(f.borrowed_at)+'</div></div>'
+        +'<span class="pill p-out">OUT</span></div>';
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+}
+
 async function bindRunSearch(){
   const q=document.getElementById('bind-q').value.trim();
   if(q.length<2){document.getElementById('bind-res').innerHTML='';return;}
@@ -987,12 +1158,16 @@ async function bindShow(d,qr){
     res.innerHTML='<div class="banner">❌ '+esc((d&&d.error)||'Bind failed')+'</div>';
     return;
   }
+  toast('✅ Binded — '+(d.vendo||BIND_VENDO.sheet_name||'key'), 3200);
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
   const kt=(d.key_type||'').charAt(0).toUpperCase()+(d.key_type||'').slice(1);
   const same=d.already_bound_same?' (already bound)':'';
-  res.innerHTML=`<div style="background:#E6F7F0;border:1px solid #9fe1cb;border-radius:11px;padding:12px 13px">
-      <div style="font-weight:800;color:#028867">✅ Bound${same}</div>
-      <div style="font-size:13px;margin-top:3px">${esc(d.vendo||BIND_VENDO.sheet_name||'')} · <b>${esc(kt)} key</b></div>
-      <div style="font-size:11px;color:#7a869c;margin-top:2px;font-family:monospace">${esc(qr)}${d.by?' · by '+esc(d.by):''}</div>
+  res.innerHTML=`<div style="background:#E6F7F0;border:2px solid #16a34a;border-radius:14px;padding:18px 16px;text-align:center">
+      <div style="font-size:38px;line-height:1">✅</div>
+      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">BINDED${same}!</div>
+      <div style="font-size:14px;margin-top:6px;color:#1f2937"><b>${esc(d.vendo||BIND_VENDO.sheet_name||'')}</b></div>
+      <div style="display:inline-block;margin-top:8px">${ktChip(d.key_type)}</div>
+      <div style="font-size:12px;color:#7a869c;margin-top:8px;font-family:monospace">${esc(qr)}${d.by?' · by '+esc(d.by):''}</div>
     </div>
     <div id="bind-profile" style="margin-top:10px"></div>
     <button class="btn btn-pri" style="width:100%;margin-top:10px" onclick="bindStartScan()">📷 Scan another fob for this vendo</button>
@@ -1118,11 +1293,11 @@ if('serviceWorker' in navigator){
 
 // ══════════ TAB NAVIGATION ══════════
 // Screens that are top-level tabs (bottom nav stays, no back button).
-const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', handover:'screen-handover', overview:'screen-overview' };
+const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview' };
 // Drill-down screens hide the nav and show a Back button.
 const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
 let CUR_TAB = 'rings';
-const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', handover:'Approve collector QR', overview:'At a glance' };
+const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', loan:'Lineman key loans', handover:'Approve collector QR', overview:'At a glance' };
 
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
@@ -1139,6 +1314,7 @@ function tabSwitch(tab){
   if(tab==='handover') loadHandoverRecent();
   if(tab==='overview') loadOverview();
   if(tab==='home') loadHome();
+  if(tab==='loan') loadLoanOut();
   if(tab==='bind') openBind();
 }
 
