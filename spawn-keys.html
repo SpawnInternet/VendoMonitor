@@ -1169,16 +1169,13 @@ function fobsFilter(){
 
 async function openFobDetail(vid){
   const rec=FOBS_DATA.find(r=>r.vendo_id===vid);
-  go('fob-detail');
-  const box=document.getElementById('fob-detail-card');
-  box.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  skModal('<div style="padding:24px;text-align:center;color:#9aa5b5">Loading…</div>');
   try{
     const v=await sbGet('vendos?select=sheet_name,tg_name,vendo_code,area,vlan,address,lat,lng,server_name,owner_name&id=eq.'+vid);
     const x=(Array.isArray(v)&&v[0])||{};
     const name=esc(x.sheet_name||x.tg_name||(rec&&rec.name)||('#'+vid));
     const detail=(l,val)=> val?('<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937">'+val+'</div></div>'):'';
     const gps=(x.lat&&x.lng)?'<a href="https://maps.google.com/?q='+x.lat+','+x.lng+'" style="color:#025AC6;text-decoration:none">📍 '+x.lat+', '+x.lng+'</a>':'<span style="color:#9aa5b5">No GPS yet</span>';
-    // fetch fresh key/loan state for this vendo
     const keys=await sbGet('vendo_key_qr?select=qr_code,key_type,loan_status,borrowed_by,borrowed_at&vendo_id=eq.'+vid+'&order=key_type.asc');
     const keyRows=(Array.isArray(keys)?keys:[]).map(k=>{
       const out=k.loan_status==='out';
@@ -1190,19 +1187,25 @@ async function openFobDetail(vid){
         +'<span style="font-family:monospace;font-size:13px;font-weight:700">'+esc(k.qr_code)+'</span></div>'
         +note+'</div>';
     }).join('');
-    box.innerHTML=`
-      <div style="font-size:20px;font-weight:800">${name}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${esc(x.area||'')}${x.vendo_code?' · '+esc(x.vendo_code):''}</div>
-      <div class="lbl">Vendo details</div>
-      ${detail('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')}
-      ${detail('Owner', x.owner_name?esc(x.owner_name):'')}
-      ${detail('Server', x.server_name?esc(x.server_name):'')}
-      ${detail('Address', x.address?esc(x.address):'')}
-      <div style="display:flex;padding:7px 0"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
-      <div class="lbl" style="margin-top:14px">Bound keys (${(Array.isArray(keys)?keys.length:0)})</div>
-      ${keyRows||'<div class="empty" style="padding:12px">No keys.</div>'}
-    `;
-  }catch(e){ box.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
+    skModal(
+      '<div style="position:sticky;top:0;background:linear-gradient(135deg,#01408f,#025AC6);color:#fff;padding:16px 18px;border-radius:18px 18px 0 0;display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+      + '<div><div style="font-size:19px;font-weight:800">'+name+'</div>'
+      +   '<div style="font-size:12px;opacity:.85;margin-top:2px">'+esc(x.area||'')+(x.vendo_code?' · '+esc(x.vendo_code):'')+'</div></div>'
+      + '<button onclick="skCloseModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:20px;line-height:1;width:30px;height:30px;border-radius:8px;cursor:pointer;flex-shrink:0">✕</button>'
+      + '</div>'
+      + '<div style="padding:16px 18px">'
+      +   '<div class="lbl">Vendo details</div>'
+      +   detail('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')
+      +   detail('Owner', x.owner_name?esc(x.owner_name):'')
+      +   detail('Server', x.server_name?esc(x.server_name):'')
+      +   detail('Address', x.address?esc(x.address):'')
+      +   '<div style="display:flex;padding:7px 0"><div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase">GPS</div><div style="flex:1;font-size:13px;font-weight:600">'+gps+'</div></div>'
+      +   '<div class="lbl" style="margin-top:14px">Bound keys ('+(Array.isArray(keys)?keys.length:0)+')</div>'
+      +   (keyRows||'<div class="empty" style="padding:12px">No keys.</div>')
+      +   '<button class="btn btn-gray" style="width:100%;margin-top:14px" onclick="skCloseModal()">Close</button>'
+      + '</div>'
+    );
+  }catch(e){ skModal('<div style="padding:24px;text-align:center"><div style="color:#DF1A35">Cannot load.</div><button class="btn btn-gray" style="width:100%;margin-top:14px" onclick="skCloseModal()">Close</button></div>'); }
 }
 
 function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
@@ -1268,35 +1271,54 @@ async function bindForce(qr){
   const d=await bindCall(qr,true);
   bindShow(d,qr);
 }
+// ── Generic modal popup ──
+function skCloseModal(){ const m=document.getElementById('sk-modal'); if(m) m.remove(); }
+function skModal(innerHtml){
+  skCloseModal();
+  const ov=document.createElement('div');
+  ov.id='sk-modal';
+  ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div onclick="event.stopPropagation()" style="background:#fff;border-radius:18px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);">'+innerHtml+'</div>';
+  ov.onclick=skCloseModal;
+  document.body.appendChild(ov);
+}
+
 async function bindShow(d,qr){
-  const res=document.getElementById('bind-result');
   if(!d || !d.ok){
-    res.innerHTML='<div class="banner">❌ '+esc((d&&d.error)||'Bind failed')+'</div>';
+    skModal('<div style="padding:22px 20px;text-align:center"><div style="font-size:36px">❌</div>'
+      +'<div style="font-weight:800;color:#DF1A35;font-size:17px;margin-top:6px">Bind failed</div>'
+      +'<div style="font-size:13px;color:#6b7280;margin-top:6px">'+esc((d&&d.error)||'')+'</div>'
+      +'<button class="btn btn-gray" style="width:100%;margin-top:16px" onclick="skCloseModal()">Close</button></div>');
     return;
   }
-  toast('✅ Binded — '+(d.vendo||BIND_VENDO.sheet_name||'key'), 3200);
+  toast('✅ Binded — '+(d.vendo||BIND_VENDO.sheet_name||'key'), 3000);
   try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
-  const kt=(d.key_type||'').charAt(0).toUpperCase()+(d.key_type||'').slice(1);
   const same=d.already_bound_same?' (already bound)':'';
-  res.innerHTML=`<div style="background:#E6F7F0;border:2px solid #16a34a;border-radius:14px;padding:18px 16px;text-align:center">
-      <div style="font-size:38px;line-height:1">✅</div>
-      <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">BINDED${same}!</div>
-      <div style="font-size:14px;margin-top:6px;color:#1f2937"><b>${esc(d.vendo||BIND_VENDO.sheet_name||'')}</b></div>
-      <div style="display:inline-block;margin-top:8px">${ktChip(d.key_type)}</div>
-      <div style="font-size:12px;color:#7a869c;margin-top:8px;font-family:monospace">${esc(qr)}${d.by?' · by '+esc(d.by):''}</div>
-    </div>
-    <div id="bind-profile" style="margin-top:10px"></div>
-    <button class="btn btn-pri" style="width:100%;margin-top:10px" onclick="bindStartScan()">📷 Scan another fob for this vendo</button>
-    <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="openBind()">Bind a different vendo</button>`;
+  // Confirmation popup with a placeholder for the profile (loaded async).
+  skModal(
+    '<div style="background:linear-gradient(135deg,#0f9d63,#16a34a);color:#fff;padding:22px 18px;text-align:center;border-radius:18px 18px 0 0">'
+    + '<div style="font-size:44px;line-height:1">✅</div>'
+    + '<div style="font-weight:800;font-size:22px;margin-top:6px">BINDED'+same+'!</div>'
+    + '<div style="font-size:14px;margin-top:6px;opacity:.95"><b>'+esc(d.vendo||BIND_VENDO.sheet_name||'')+'</b></div>'
+    + '<div style="display:inline-block;margin-top:10px;background:rgba(255,255,255,.25);padding:3px 12px;border-radius:99px;font-size:12px;font-weight:800;text-transform:uppercase">'+esc(d.key_type||'')+' key</div>'
+    + '<div style="font-size:12px;margin-top:10px;font-family:monospace;opacity:.9">'+esc(qr)+(d.by?' · by '+esc(d.by):'')+'</div>'
+    + '</div>'
+    + '<div style="padding:16px 18px">'
+    +   '<div id="bind-modal-profile"><div style="text-align:center;color:#9aa5b5;font-size:12px;padding:8px">Loading vendo details…</div></div>'
+    +   '<button class="btn btn-pri" style="width:100%;margin-top:14px" onclick="skCloseModal();bindStartScan()">📷 Scan another fob for this vendo</button>'
+    +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal();openBind()">Bind a different vendo</button>'
+    +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal()">Done</button>'
+    + '</div>'
+  );
+  document.getElementById('bind-result').innerHTML='';
   if(BOUND_OPEN) loadBoundList();
   loadBindProfile(BIND_VENDO.id);
 }
 
-// Fetch and render the full vendo profile under the bind result.
+// Fetch and render the full vendo profile inside the bind confirmation modal.
 async function loadBindProfile(vid){
-  const box=document.getElementById('bind-profile');
+  const box=document.getElementById('bind-modal-profile');
   if(!box) return;
-  box.innerHTML='<div style="text-align:center;color:#9aa5b5;font-size:12px;padding:8px">Loading vendo details…</div>';
   try{
     const v=await sbGet('vendos?select=sheet_name,vendo_code,vlan,area,address,lat,lng,server_name,tg_name,owner_name&id=eq.'+vid);
     const x=Array.isArray(v)&&v[0];
@@ -1307,7 +1329,7 @@ async function loadBindProfile(vid){
     const gps = (x.lat&&x.lng)
       ? `<a href="https://maps.google.com/?q=${x.lat},${x.lng}" style="color:#025AC6;text-decoration:none">📍 ${x.lat}, ${x.lng}</a>`
       : '<span style="color:#9aa5b5">No GPS yet</span>';
-    box.innerHTML=`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+    box.innerHTML=`<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px">
       <div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Vendo details</div>
       ${row('Code', x.vendo_code?esc(x.vendo_code):'')}
       ${row('Vendo', esc(x.sheet_name||x.tg_name||''))}
