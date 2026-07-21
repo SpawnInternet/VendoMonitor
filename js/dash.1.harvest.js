@@ -3444,7 +3444,7 @@ let _kvPane = 'borrow';
 
 function kvPane(p, btn){
   _kvPane = p;
-  ['borrow','overview','changes','installs','transfer','genqr'].forEach(t=>{
+  ['borrow','overview','changes','installs','transfer','genqr','fobs'].forEach(t=>{
     const el = document.getElementById('kv-pane-'+t);
     if(el) el.style.display = (t===p) ? (t==='overview'?'flex':'block') : 'none';
     const b = document.getElementById('kvp-'+t);
@@ -3461,6 +3461,7 @@ function kvPane(p, btn){
   if(p==='installs') viLoad();
   if(p==='transfer') { kcEnsureNames(); ktLoad(); }
   if(p==='genqr')    gqLoad();
+  if(p==='fobs')     fobsLoad();
 }
 
 /* ── GENERATE QR: self-serve batch of vendo key fobs ───────────────────────
@@ -5412,4 +5413,200 @@ function ktClearForLog(){
   _ktForLog = null;
   const note = document.getElementById('kt-forlog');
   if(note){ note.style.display='none'; note.innerHTML=''; }
+}
+
+/* ══ FOBS PANE — bind fobs + view bound fobs (per-vendo) ═══════════════════
+   Shares vendo_key_qr + spawn_qr_bind with the Spawn Keys app, so binds here
+   reflect there and vice-versa. Uses _SB/_KEY (anon). */
+var _fobRows = [];
+var _fbVendo = null;
+var _fbST = null;
+
+async function _fbGet(path){
+  const r = await fetch(_SB+'/rest/v1/'+path, {headers:_HDR});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+function _fbEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _fbAgo(t){ if(!t) return ''; const s=(Date.now()-new Date(t))/1000;
+  if(s<3600) return Math.floor(s/60)+'m ago'; if(s<86400) return Math.floor(s/3600)+'h ago'; return Math.floor(s/86400)+'d ago'; }
+function _fbKt(t){
+  const m={board:['Board','#028867','#E6F7F0'],duplicate:['Dup','#C01176','#FBE9F3'],pungpung:['Pung','#311A8E','#EEEAF7'],coin:['Coin','#025AC6','#EEF1FA']};
+  const c=m[t]||[t||'?','#6b7280','#f1f2f4'];
+  return '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;color:'+c[1]+';background:'+c[2]+';">'+_fbEsc(c[0])+'</span>';
+}
+
+async function fobsLoad(){
+  const pane=document.getElementById('kv-pane-fobs');
+  if(!pane) return;
+  pane.innerHTML='<div style="padding:24px;color:#6b7280;">Loading fobs…</div>';
+  try{
+    const fobs=await _fbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status,borrowed_by,borrowed_at&vendo_id=not.is.null&order=vendo_id.asc');
+    const F=Array.isArray(fobs)?fobs:[];
+    const ids=[]; F.forEach(f=>{ if(ids.indexOf(f.vendo_id)<0) ids.push(f.vendo_id); });
+    const vmap={};
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const vs=await _fbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area,address&id=in.('+chunk.join(',')+')');
+      if(Array.isArray(vs)) vs.forEach(v=>vmap[v.id]=v);
+    }
+    const gmap={};
+    if(ids.length){
+      const gi=await _fbGet('harvest_group_items?select=vendo_id,group_run_id&vendo_id=in.('+ids.join(',')+')');
+      const grpIds=[];
+      if(Array.isArray(gi)) gi.forEach(x=>{ if(x.group_run_id!=null && grpIds.indexOf(x.group_run_id)<0) grpIds.push(x.group_run_id); });
+      const gnames={};
+      if(grpIds.length){
+        const gs=await _fbGet('harvest_groups?select=id,area&id=in.('+grpIds.join(',')+')');
+        if(Array.isArray(gs)) gs.forEach(g=>gnames[g.id]=g.area);
+      }
+      if(Array.isArray(gi)) gi.forEach(x=>{ if(!gmap[x.vendo_id]) gmap[x.vendo_id]=gnames[x.group_run_id]||('Group '+x.group_run_id); });
+    }
+    const byV={};
+    F.forEach(f=>{ (byV[f.vendo_id]=byV[f.vendo_id]||[]).push(f); });
+    _fobRows=Object.keys(byV).map(vid=>{
+      const v=vmap[vid]||{};
+      return { vendo_id:+vid, name:v.sheet_name||v.tg_name||('#'+vid), area:v.area||'', code:v.vendo_code||'', address:v.address||'', group:gmap[vid]||'—', keys:byV[vid] };
+    }).sort((a,b)=>a.name.localeCompare(b.name));
+    fobsRender();
+  }catch(err){
+    pane.innerHTML='<div style="padding:20px;color:#DF1A35;font-size:13px;">Could not load fobs: '+_fbEsc(err&&err.message)+'</div>';
+  }
+}
+
+function fobsRender(){
+  const pane=document.getElementById('kv-pane-fobs');
+  if(!pane) return;
+  const total=_fobRows.reduce((n,r)=>n+r.keys.length,0);
+  pane.innerHTML =
+    '<div style="padding:12px 14px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
+    +   '<div style="font-size:13px;color:#6b7280;font-weight:700;">'+_fobRows.length+' vendo'+(_fobRows.length===1?'':'s')+' · '+total+' fob'+(total===1?'':'s')+' bound</div>'
+    +   '<button onclick="fobsLoad()" style="padding:7px 14px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>'
+    + '</div>'
+    + '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px;">'
+    +   '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#025AC6;margin-bottom:10px;">Bind a fob</div>'
+    +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+    +     '<div style="flex:1;min-width:200px;position:relative;">'
+    +       '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;">1 · Vendo</div>'
+    +       '<input id="fb-vendo-q" placeholder="Search vendo name / code…" oninput="fbSearch()" autocomplete="off" style="width:100%;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;" />'
+    +       '<div id="fb-vendo-res" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;margin-top:3px;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>'
+    +       '<div id="fb-vendo-picked" style="font-size:12px;color:#028867;font-weight:700;margin-top:5px;"></div>'
+    +     '</div>'
+    +     '<div style="flex:1;min-width:140px;">'
+    +       '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;">2 · Fob code</div>'
+    +       '<input id="fb-code" placeholder="e.g. MJWDL" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:monospace;text-transform:uppercase;box-sizing:border-box;" />'
+    +     '</div>'
+    +     '<button onclick="fbBind()" style="padding:10px 20px;background:#028867;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">Bind</button>'
+    +   '</div>'
+    +   '<div id="fb-bind-msg" style="margin-top:10px;font-size:13px;"></div>'
+    + '</div>'
+    + '<input id="fb-list-q" placeholder="Filter bound vendos…" oninput="fobsFilter()" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;" />'
+    + '<div id="fb-list"></div>'
+    + '</div>';
+  fobsRenderList(_fobRows);
+}
+
+function fobsRenderList(rows){
+  const el=document.getElementById('fb-list'); if(!el) return;
+  if(!rows.length){ el.innerHTML='<div style="text-align:center;color:#9ca3af;font-size:13px;padding:24px;">No fobs bound yet. Bind one above.</div>'; return; }
+  el.innerHTML=rows.map(r=>{
+    const outN=r.keys.filter(k=>k.loan_status==='out').length;
+    const chips=r.keys.map(k=>_fbKt(k.key_type)).join(' ');
+    const outBadge=outN?'<span style="margin-left:8px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px;">'+outN+' OUT</span>':'';
+    return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:8px;overflow:hidden;">'
+      + '<div onclick="fobToggle('+r.vendo_id+')" style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">'
+      +   '<div style="min-width:0;">'
+      +     '<div style="font-weight:800;font-size:14px;color:#111827;">'+_fbEsc(r.name)+outBadge+'</div>'
+      +     '<div style="font-size:12px;color:#6b7280;margin-top:2px;">'+_fbEsc(r.area)+(r.code?' · '+_fbEsc(r.code):'')+' · '+r.keys.length+' key'+(r.keys.length===1?'':'s')+'</div>'
+      +     '<div style="margin-top:5px;">'+chips+'</div>'
+      +   '</div>'
+      +   '<span id="fb-caret-'+r.vendo_id+'" style="color:#c7c7c7;font-size:18px;">›</span>'
+      + '</div>'
+      + '<div id="fb-detail-'+r.vendo_id+'" style="display:none;padding:0 15px 14px;border-top:1px solid #f0f2f6;"></div>'
+      + '</div>';
+  }).join('');
+}
+
+function fobsFilter(){
+  const q=(document.getElementById('fb-list-q').value||'').trim().toLowerCase();
+  if(!q){ fobsRenderList(_fobRows); return; }
+  fobsRenderList(_fobRows.filter(r=>
+    r.name.toLowerCase().indexOf(q)>=0 || (r.area||'').toLowerCase().indexOf(q)>=0
+    || (r.code||'').toLowerCase().indexOf(q)>=0
+    || r.keys.some(k=>(k.qr_code||'').toLowerCase().indexOf(q)>=0)));
+}
+
+function fobToggle(vid){
+  const box=document.getElementById('fb-detail-'+vid);
+  const car=document.getElementById('fb-caret-'+vid);
+  if(!box) return;
+  if(box.style.display==='block'){ box.style.display='none'; if(car) car.textContent='›'; return; }
+  if(car) car.textContent='⌄';
+  const r=_fobRows.filter(x=>x.vendo_id===vid)[0];
+  if(!r){ box.style.display='block'; box.innerHTML='<div style="padding:10px;color:#9ca3af;">No data.</div>'; return; }
+  const det=(l,v)=> v?('<div style="display:flex;padding:6px 0;border-bottom:1px solid #f0f2f6;"><div style="width:110px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;">'+l+'</div><div style="flex:1;font-size:13px;font-weight:600;color:#1f2937;">'+_fbEsc(v)+'</div></div>'):'';
+  const keyRows=r.keys.map(k=>{
+    const out=k.loan_status==='out';
+    const note=out
+      ? '<div style="font-size:11px;color:#DF1A35;font-weight:700;margin-top:2px;">🔴 Borrowed by '+_fbEsc(k.borrowed_by||'—')+' · '+_fbAgo(k.borrowed_at)+'</div>'
+      : '<div style="font-size:11px;color:#028867;font-weight:700;margin-top:2px;">🟢 In office</div>';
+    return '<div style="padding:9px 0;border-bottom:1px solid #f0f2f6;">'
+      +'<div style="display:flex;align-items:center;gap:8px;">'+_fbKt(k.key_type)
+      +'<span style="font-family:monospace;font-size:13px;font-weight:700;">'+_fbEsc(k.qr_code)+'</span></div>'+note+'</div>';
+  }).join('');
+  box.style.display='block';
+  box.innerHTML='<div style="padding-top:10px;">'
+    + det('Vendo', r.name) + det('Area', r.area) + det('Code', r.code)
+    + det('Harvest group', r.group) + det('Address', r.address||'—')
+    + '<div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin:12px 0 4px;">Registered keys ('+r.keys.length+')</div>'
+    + keyRows + '</div>';
+}
+
+function fbSearch(){ clearTimeout(_fbST); _fbST=setTimeout(fbRunSearch,260); }
+async function fbRunSearch(){
+  const q=(document.getElementById('fb-vendo-q').value||'').trim();
+  const box=document.getElementById('fb-vendo-res');
+  if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  const like='*'+q.replace(/[(),*]/g,'')+'*';
+  const f='or=(sheet_name.ilike.'+like+',tg_name.ilike.'+like+',owner_name.ilike.'+like+')';
+  try{
+    const d=await _fbGet('vendos?'+f+'&select=id,sheet_name,tg_name,vendo_code,area&limit=20');
+    if(!Array.isArray(d)||!d.length){ box.innerHTML='<div style="padding:9px 12px;color:#9ca3af;font-size:12px;">No match.</div>'; box.style.display='block'; return; }
+    box.innerHTML=d.map(v=>{
+      const nm=v.sheet_name||v.tg_name||('#'+v.id);
+      return '<div onclick="fbPick('+v.id+','+JSON.stringify(nm).replace(/"/g,'&quot;')+')" style="padding:9px 12px;border-bottom:1px solid #f0f2f6;cursor:pointer;font-size:13px;">'
+        +'<div style="font-weight:700;">'+_fbEsc(nm)+'</div><div style="font-size:11px;color:#9ca3af;">'+_fbEsc(v.area||'')+(v.vendo_code?' · '+_fbEsc(v.vendo_code):'')+'</div></div>';
+    }).join('');
+    box.style.display='block';
+  }catch(e){ box.innerHTML='<div style="padding:9px 12px;color:#DF1A35;font-size:12px;">Search failed.</div>'; box.style.display='block'; }
+}
+function fbPick(id,name){
+  _fbVendo={id:id,name:name};
+  document.getElementById('fb-vendo-q').value=name;
+  document.getElementById('fb-vendo-res').style.display='none';
+  document.getElementById('fb-vendo-picked').textContent='✓ '+name;
+}
+
+async function fbBind(force){
+  const msg=document.getElementById('fb-bind-msg');
+  const code=(document.getElementById('fb-code').value||'').trim().toUpperCase();
+  if(!_fbVendo){ msg.innerHTML='<span style="color:#DF1A35;">Pick a vendo first.</span>'; return; }
+  if(!code){ msg.innerHTML='<span style="color:#DF1A35;">Enter the fob code.</span>'; return; }
+  msg.innerHTML='<span style="color:#6b7280;">Binding…</span>';
+  try{
+    const body={p_qr:code, p_vendo_id:_fbVendo.id, p_account:'dashboard', p_force:!!force};
+    const r=await fetch(_SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:_HDR,body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d && d.already_bound){
+      msg.innerHTML='<span style="color:#d97706;">⚠ '+_fbEsc(d.error)+'</span> '
+        +'<button onclick="fbBind(true)" style="margin-left:8px;padding:5px 12px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Rebind here</button>';
+      return;
+    }
+    if(!d || !d.ok){ msg.innerHTML='<span style="color:#DF1A35;">❌ '+_fbEsc((d&&d.error)||'Bind failed')+'</span>'; return; }
+    const kt=(d.key_type||'').charAt(0).toUpperCase()+(d.key_type||'').slice(1);
+    msg.innerHTML='<span style="color:#028867;font-weight:800;">✅ Bound '+_fbEsc(code)+' ('+_fbEsc(kt)+') → '+_fbEsc(d.vendo||_fbVendo.name)+'</span>';
+    document.getElementById('fb-code').value='';
+    await fobsLoad();
+  }catch(e){ msg.innerHTML='<span style="color:#DF1A35;">Error: '+_fbEsc(String(e&&e.message||e))+'</span>'; }
 }
