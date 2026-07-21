@@ -1404,27 +1404,40 @@ async function doInstall(){
 // ── BOOT ──
 buildPad();
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/VendoMonitor/sw-keys.js', {scope:'/VendoMonitor/'})
-    .then(reg=>{
-      // Force an immediate update check so a stale installed SW gets replaced.
-      try{ reg.update(); }catch(e){}
-      // If a new worker installs while the app is open, activate it right away.
-      reg.addEventListener('updatefound', ()=>{
-        const nw = reg.installing;
-        if(!nw) return;
-        nw.addEventListener('statechange', ()=>{
-          if(nw.state==='installed' && navigator.serviceWorker.controller){
-            try{ nw.postMessage({type:'SKIP_WAITING'}); }catch(e){}
-          }
+  // Register AFTER the page has loaded so SW work never blocks first paint.
+  // This is critical: registering/updating during boot can, on some Android
+  // builds, make the installed PWA "fail to start" if anything in the SW
+  // lifecycle stalls the initial navigation.
+  window.addEventListener('load', ()=>{
+    // Was the app already controlled when we booted? If yes, a later
+    // controllerchange means a REAL update and we can reload once. If the app
+    // booted with NO controller (fresh install / first run), the first
+    // controllerchange is just the SW taking initial control — reloading then
+    // causes a start-up reload loop, which is what breaks the install.
+    const _hadController = !!navigator.serviceWorker.controller;
+    let _swReloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(!_hadController) return;      // first-ever control: do nothing
+      if(_swReloaded) return; _swReloaded = true;
+      location.reload();
+    });
+
+    navigator.serviceWorker.register('/VendoMonitor/sw-keys.js', {scope:'/VendoMonitor/'})
+      .then(reg=>{
+        try{ reg.update(); }catch(e){}
+        reg.addEventListener('updatefound', ()=>{
+          const nw = reg.installing;
+          if(!nw) return;
+          nw.addEventListener('statechange', ()=>{
+            // Only auto-activate a NEW worker when one was already controlling
+            // the page (a true update). Never on first install.
+            if(nw.state==='installed' && navigator.serviceWorker.controller && _hadController){
+              try{ nw.postMessage({type:'SKIP_WAITING'}); }catch(e){}
+            }
+          });
         });
-      });
-    })
-    .catch(()=>{});
-  // When control passes to a fresh SW, reload once so the new shell is served.
-  let _swReloaded=false;
-  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
-    if(_swReloaded) return; _swReloaded=true;
-    location.reload();
+      })
+      .catch(()=>{});
   });
 }
 
