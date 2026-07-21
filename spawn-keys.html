@@ -981,7 +981,7 @@ async function bindForce(qr){
   const d=await bindCall(qr,true);
   bindShow(d,qr);
 }
-function bindShow(d,qr){
+async function bindShow(d,qr){
   const res=document.getElementById('bind-result');
   if(!d || !d.ok){
     res.innerHTML='<div class="banner">❌ '+esc((d&&d.error)||'Bind failed')+'</div>';
@@ -994,9 +994,43 @@ function bindShow(d,qr){
       <div style="font-size:13px;margin-top:3px">${esc(d.vendo||BIND_VENDO.sheet_name||'')} · <b>${esc(kt)} key</b></div>
       <div style="font-size:11px;color:#7a869c;margin-top:2px;font-family:monospace">${esc(qr)}${d.by?' · by '+esc(d.by):''}</div>
     </div>
+    <div id="bind-profile" style="margin-top:10px"></div>
     <button class="btn btn-pri" style="width:100%;margin-top:10px" onclick="bindStartScan()">📷 Scan another fob for this vendo</button>
     <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="openBind()">Bind a different vendo</button>`;
   if(BOUND_OPEN) loadBoundList();
+  loadBindProfile(BIND_VENDO.id);
+}
+
+// Fetch and render the full vendo profile under the bind result.
+async function loadBindProfile(vid){
+  const box=document.getElementById('bind-profile');
+  if(!box) return;
+  box.innerHTML='<div style="text-align:center;color:#9aa5b5;font-size:12px;padding:8px">Loading vendo details…</div>';
+  try{
+    const v=await sbGet('vendos?select=sheet_name,vendo_code,vlan,area,address,lat,lng,server_name,tg_name,owner_name&id=eq.'+vid);
+    const x=Array.isArray(v)&&v[0];
+    if(!x){ box.innerHTML=''; return; }
+    const row=(label,val)=> val ? `<div style="display:flex;padding:7px 0;border-bottom:1px solid #f0f2f6">
+        <div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;letter-spacing:.03em">${label}</div>
+        <div style="flex:1;font-size:13px;font-weight:600;color:#1f2937">${val}</div></div>` : '';
+    const gps = (x.lat&&x.lng)
+      ? `<a href="https://maps.google.com/?q=${x.lat},${x.lng}" style="color:#025AC6;text-decoration:none">📍 ${x.lat}, ${x.lng}</a>`
+      : '<span style="color:#9aa5b5">No GPS yet</span>';
+    box.innerHTML=`<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+      <div style="font-size:11px;font-weight:800;color:#025AC6;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Vendo details</div>
+      ${row('Code', x.vendo_code?esc(x.vendo_code):'')}
+      ${row('Vendo', esc(x.sheet_name||x.tg_name||''))}
+      ${row('Area', x.area?esc(x.area):'')}
+      ${row('VLAN', (x.vlan!=null&&x.vlan!=='')?esc(x.vlan):'')}
+      ${row('Owner', x.owner_name?esc(x.owner_name):'')}
+      ${row('Server', x.server_name?esc(x.server_name):'')}
+      ${row('Address', x.address?esc(x.address):'')}
+      ${row('TG name', x.tg_name?esc(x.tg_name):'')}
+      <div style="display:flex;padding:7px 0">
+        <div style="width:78px;flex-shrink:0;font-size:11px;font-weight:800;color:#9aa5b5;text-transform:uppercase;letter-spacing:.03em">GPS</div>
+        <div style="flex:1;font-size:13px;font-weight:600">${gps}</div></div>
+    </div>`;
+  }catch(e){ box.innerHTML=''; }
 }
 function bindCancelResult(){ document.getElementById('bind-result').innerHTML=''; }
 
