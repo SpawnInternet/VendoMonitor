@@ -274,7 +274,12 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-bind">
   <div class="wrap">
-    <div class="tab-head"><div><div class="tab-h1">Bind Keys</div><div class="tab-hsub">Attach a fob QR to a vendo</div></div></div>
+    <div class="tab-head"><div><div class="tab-h1">Bind Keys</div><div class="tab-hsub">Attach a fob QR to a vendo</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="toggleBoundList()" id="bind-view-btn">👁 View bound</button></div>
+    <div class="card" id="bind-bound-card" style="display:none">
+      <div class="lbl" id="bind-bound-title">Bound keys</div>
+      <div id="bind-bound-list"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
     <div class="card">
       <div class="lbl">1 · Find vendo</div>
       <input id="bind-q" placeholder="Search name / code…" oninput="bindSearch()">
@@ -848,7 +853,70 @@ function openBind(){
   document.getElementById('bind-res').innerHTML='';
   document.getElementById('bind-step2').style.display='none';
   document.getElementById('bind-result').innerHTML='';
+  const bc=document.getElementById('bind-bound-card'); if(bc) bc.style.display='none';
+  const bb=document.getElementById('bind-view-btn'); if(bb) bb.textContent='👁 View bound';
+  BOUND_OPEN=false;
   setTimeout(()=>document.getElementById('bind-q').focus(),250);
+}
+
+// Toggle the "vendos with bound keys" panel.
+let BOUND_OPEN=false;
+function toggleBoundList(){
+  BOUND_OPEN=!BOUND_OPEN;
+  const card=document.getElementById('bind-bound-card');
+  const btn=document.getElementById('bind-view-btn');
+  card.style.display = BOUND_OPEN ? 'block' : 'none';
+  btn.textContent = BOUND_OPEN ? '✕ Hide' : '👁 View bound';
+  if(BOUND_OPEN) loadBoundList();
+}
+
+const KT_CHIP = {
+  board:['Board','#028867','#E6F7F0'],
+  duplicate:['Dup','#C01176','#FBE9F3'],
+  pungpung:['Pung','#311A8E','#EEEAF7'],
+  coin:['Coin','#025AC6','#EEF1FA']
+};
+function ktChip(t){
+  const c=KT_CHIP[t]||[t||'?','#6b7280','#f1f2f4'];
+  return '<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.4px;color:'+c[1]+';background:'+c[2]+'">'+esc(c[0])+'</span>';
+}
+
+async function loadBoundList(){
+  const el=document.getElementById('bind-bound-list');
+  el.innerHTML='<div class="empty" style="padding:16px">Loading…</div>';
+  try{
+    // all bound fobs
+    const fobs=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id&vendo_id=not.is.null&order=vendo_id.asc');
+    if(!Array.isArray(fobs)||!fobs.length){
+      document.getElementById('bind-bound-title').textContent='Bound keys';
+      el.innerHTML='<div class="empty" style="padding:16px">No fobs bound yet.<br>Search a vendo below and scan a fob to start.</div>';
+      return;
+    }
+    // resolve vendo names (chunk the ids)
+    const ids=[...new Set(fobs.map(f=>f.vendo_id))];
+    const vmap={};
+    for(let i=0;i<ids.length;i+=50){
+      const chunk=ids.slice(i,i+50);
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area&id=in.('+chunk.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+    }
+    // group fobs by vendo
+    const byVendo={};
+    fobs.forEach(f=>{ (byVendo[f.vendo_id]=byVendo[f.vendo_id]||[]).push(f); });
+    const rows=Object.keys(byVendo).map(vid=>{
+      const v=vmap[vid]||{}; const list=byVendo[vid];
+      const name=esc(v.sheet_name||v.tg_name||('#'+vid));
+      const meta=esc((v.area||'')+(v.vendo_code?' · '+v.vendo_code:''));
+      const chips=list.map(f=>'<span style="display:inline-flex;align-items:center;gap:5px;margin:3px 6px 3px 0">'
+        +ktChip(f.key_type)+'<span style="font-family:monospace;font-size:11px;color:var(--muted)">'+esc(f.qr_code)+'</span></span>').join('');
+      return '<div class="vrow" style="cursor:default">'
+        +'<div class="vname">'+name+'</div>'
+        +'<div class="vmeta">'+meta+'</div>'
+        +'<div style="margin-top:6px">'+chips+'</div></div>';
+    });
+    document.getElementById('bind-bound-title').textContent=rows.length+' vendo'+(rows.length>1?'s':'')+' with bound keys · '+fobs.length+' fob'+(fobs.length>1?'s':'');
+    el.innerHTML=rows.join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
 }
 function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
 async function bindRunSearch(){
@@ -928,7 +996,7 @@ function bindShow(d,qr){
     </div>
     <button class="btn btn-pri" style="width:100%;margin-top:10px" onclick="bindStartScan()">📷 Scan another fob for this vendo</button>
     <button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="openBind()">Bind a different vendo</button>`;
-  loadRings&&0;
+  if(BOUND_OPEN) loadBoundList();
 }
 function bindCancelResult(){ document.getElementById('bind-result').innerHTML=''; }
 
