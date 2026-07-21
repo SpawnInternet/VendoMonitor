@@ -1,6 +1,6 @@
 // sw-office.js — Spawn Count PWA Service Worker v1.2
 // SAFETY: Supabase requests are NEVER cached. Money figures always come from the network.
-const CACHE = 'spawn-count-v1.2';
+const CACHE = 'spawn-count-v1.3';
 const APP_HTML = '/VendoMonitor/office.html';
 const APP_SHELL = [
   '/VendoMonitor/office.html',
@@ -70,8 +70,13 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Navigation — network first, cached shell as fallback
+  // Navigation — network first, cached shell as fallback.
+  // SCOPE GUARD: only handle OUR OWN page. The /VendoMonitor/ scope is shared
+  // with Spawn Keys, harvest v3/v4, and the dashboard. Without this check the
+  // office SW would intercept (and mis-serve office's shell for) their pages —
+  // which is why Spawn Keys would install but not open.
   if (req.mode === 'navigate') {
+    if (url.pathname.indexOf('office') === -1) return;  // not ours — let it pass
     e.respondWith(
       fetch(req)
         .then(response => {
