@@ -12,40 +12,62 @@
 <meta name="apple-mobile-web-app-title" content="Spawn Keys">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="description" content="Spawn Keys — ring custody">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
+  --spawn-navy:#025AC6;
+  --spawn-navy-dark:#01408f;
   --spawn-gold:#FFB725; --spawn-teal:#028867; --spawn-blue:#025AC6;
   --spawn-purple:#311A8E; --spawn-pink:#C01176; --spawn-red:#DF1A35;
-  --spawn-navy:#2D3547;
-  --border:#e5e7eb; --bg:#f0f4f8; --text:#2D3547; --muted:#6b7280;
-  --blue-light:#EBF0FB; --green-light:#E6F7F5; --amber-light:#FEF7E8;
-  --red-light:#fef2f2; --purple-light:#F3EEF8;
+  --green:#16a34a;--green-light:#E6F7F5;--green-mid:#9fe1cb;
+  --red:#DF1A35;--red-light:#fef2f2;
+  --amber:#d97706;--amber-light:#FEF7E8;
+  --blue-light:#EEF1FA;--blue-mid:#C7D2FE;
+  --purple-light:#F3EEF8;
+  --border:#e5e7eb; --bg:#F7F8FC; --text:#111827; --muted:#6b7280;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:var(--bg);color:var(--text);font-size:15px;min-height:100vh}
-.topbar{background:linear-gradient(135deg,var(--spawn-blue) 0%,#013e8a 100%);color:#fff;
+
+.topbar{background:linear-gradient(135deg,var(--spawn-navy-dark),var(--spawn-navy));color:#fff;
   padding:12px 16px;display:flex;align-items:center;justify-content:space-between;
-  position:sticky;top:0;z-index:200;padding-top:calc(12px + env(safe-area-inset-top))}
+  position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(2,90,198,.3);
+  padding-top:calc(12px + env(safe-area-inset-top))}
+.topbar-back{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:7px;
+  padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+  display:none;margin-right:10px}
+.topbar-back:active{background:rgba(255,255,255,.3)}
 .tb-title{font-weight:800;font-size:16px;letter-spacing:.02em}
-.tb-user{font-size:12px;opacity:.9;font-weight:600}
-.btn{border:none;border-radius:10px;padding:12px 16px;font-size:14px;font-weight:700;
+.tb-sub{font-size:10px;opacity:.75;margin-top:1px}
+.tb-user{font-size:12px;opacity:.9;font-weight:600;cursor:pointer}
+.trial-chip{background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;
+  border-radius:99px;margin-left:4px;vertical-align:2px}
+
+.btn{border:none;border-radius:11px;padding:13px 16px;font-size:14px;font-weight:700;
   cursor:pointer;font-family:inherit}
-.btn-pri{background:var(--spawn-blue);color:#fff;width:100%}
+.btn-pri{background:var(--spawn-navy);color:#fff;width:100%}
 .btn-ok{background:var(--spawn-teal);color:#fff}
 .btn-gray{background:#fff;color:var(--text);border:1px solid var(--border)}
 .btn:active{transform:scale(.98)}
+
 .wrap{padding:16px;max-width:640px;margin:0 auto}
-.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
-.screen{display:none}.screen.active{display:block}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;
+  margin-bottom:14px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.screen{display:none;padding-bottom:86px}.screen.active{display:block}
 .lbl{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
   color:var(--muted);margin-bottom:8px}
-input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;
+input,select{width:100%;padding:12px;border:1px solid var(--border);border-radius:11px;
   font-size:15px;font-family:inherit;background:#fff;color:var(--text)}
+
+.tab-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.tab-h1{font-size:21px;font-weight:800;letter-spacing:-.01em}
+.tab-hsub{font-size:12px;color:var(--muted);margin-top:2px}
+
 .ring{display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:#fff;border:1px solid var(--border);border-left:4px solid var(--spawn-teal);
-  border-radius:0 12px 12px 0;padding:13px 14px;margin-bottom:8px;cursor:pointer}
+  border-radius:0 13px 13px 0;padding:14px;margin-bottom:9px;cursor:pointer;
+  box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .ring.out{border-left-color:var(--spawn-red);background:var(--red-light)}
 .ring-l{font-weight:800;font-size:15px}
 .ring-s{font-size:12px;color:var(--muted);margin-top:2px}
@@ -54,112 +76,196 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 .p-out{background:#fde8ea;color:var(--spawn-red)}
 .p-qr{background:var(--green-light);color:var(--spawn-teal)}
 .p-pin{background:var(--amber-light);color:#8a5a00}
+
 .pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
-.pin-k{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;
+.pin-k{background:#fff;border:1px solid var(--border);border-radius:13px;padding:18px;
   font-size:20px;font-weight:800;cursor:pointer;font-family:inherit;color:var(--text)}
+.pin-k:active{background:var(--blue-light)}
 .pin-dots{display:flex;gap:10px;justify-content:center;margin:16px 0}
 .pin-dot{width:13px;height:13px;border-radius:50%;background:var(--border)}
-.pin-dot.on{background:var(--spawn-blue)}
+.pin-dot.on{background:var(--spawn-navy)}
+
 .vrow{padding:12px;border-bottom:1px solid var(--border);cursor:pointer}
 .vrow:active{background:var(--blue-light)}
 .vname{font-weight:700;font-size:14px}
 .vmeta{font-size:11px;color:var(--muted);margin-top:2px}
+
 .kt{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
-.kt-b{padding:14px;border:2px solid var(--border);border-radius:11px;background:#fff;
+.kt-b{padding:14px;border:2px solid var(--border);border-radius:12px;background:#fff;
   font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;color:var(--text)}
-.kt-b.sel{border-color:var(--spawn-blue);background:var(--blue-light);color:var(--spawn-blue)}
+.kt-b.sel{border-color:var(--spawn-navy);background:var(--blue-light);color:var(--spawn-navy)}
+
 .ev{padding:11px 0;border-bottom:1px solid var(--border)}
 .ev-t{font-weight:700;font-size:14px}
 .ev-m{font-size:11px;color:var(--muted);margin-top:3px}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(90px);
-  background:var(--spawn-navy);color:#fff;padding:13px 20px;border-radius:11px;font-size:14px;
+
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--border);border-radius:16px;padding:16px;
+  box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.stat-n{font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em}
+.stat-l{font-size:11px;font-weight:700;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+.stat.teal .stat-n{color:var(--spawn-teal)}
+.stat.red .stat-n{color:var(--spawn-red)}
+.stat.navy .stat-n{color:var(--spawn-navy)}
+.stat.amber .stat-n{color:var(--amber)}
+
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%) translateY(90px);
+  background:#111827;color:#fff;padding:13px 20px;border-radius:12px;font-size:14px;
   font-weight:600;transition:transform .25s;z-index:900;max-width:90vw}
 .toast.show{transform:translateX(-50%) translateY(0)}
-#reader{width:100%;border-radius:12px;overflow:hidden}
+#reader{width:100%;border-radius:13px;overflow:hidden}
 .empty{text-align:center;padding:32px 16px;color:var(--muted);font-size:14px}
-.banner{background:var(--amber-light);border:1px solid #f5d78e;border-radius:11px;
+.banner{background:var(--amber-light);border:1px solid #f5d78e;border-radius:12px;
   padding:11px 13px;font-size:13px;margin-bottom:12px;font-weight:600;color:#8a5a00}
+
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);
+  display:none;z-index:150;box-shadow:0 -2px 12px rgba(0,0,0,.08);
+  padding-bottom:env(safe-area-inset-bottom)}
+.bottom-nav.show{display:flex}
+.bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:9px 4px 10px;cursor:pointer;border:none;background:transparent;font-family:inherit;
+  transition:.15s;position:relative}
+.bnav-item:active{background:var(--blue-light)}
+.bnav-icon{color:var(--muted);line-height:1;display:flex}
+.bnav-label{font-size:10px;font-weight:700;color:var(--muted);margin-top:3px}
+.bnav-item.active .bnav-label{color:var(--spawn-navy)}
+.bnav-item.active .bnav-icon{color:var(--spawn-navy)}
+.bnav-badge{position:absolute;top:5px;right:calc(50% - 20px);background:var(--spawn-red);color:#fff;
+  font-size:9px;font-weight:800;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;display:none}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="tb-title">🔑 SPAWN KEYS <span style="background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;border-radius:99px;margin-left:4px;vertical-align:2px">TRIAL</span></div>
+  <div style="display:flex;align-items:center">
+    <button class="topbar-back" id="tb-back" onclick="tabBack()">← Back</button>
+    <div>
+      <div class="tb-title">🔑 SPAWN KEYS<span class="trial-chip">TRIAL</span></div>
+      <div class="tb-sub" id="tb-sub">Ring custody</div>
+    </div>
+  </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button id="btn-install" onclick="doInstall()" style="display:none;border:0;border-radius:99px;background:#FFB725;color:#5c3d00;font-family:inherit;font-size:11px;font-weight:800;padding:6px 11px;cursor:pointer;white-space:nowrap">⬇ Install</button>
-    <div class="tb-user" id="tb-user" onclick="logout()" style="cursor:pointer"></div>
+    <div class="tb-user" id="tb-user" onclick="logout()"></div>
   </div>
 </div>
 
-<!-- LOGIN -->
 <div class="screen active" id="screen-login">
+  <div class="wrap" style="max-width:360px;padding-top:40px">
+    <div style="text-align:center;margin-bottom:8px">
+      <div style="font-size:40px">🔑</div>
+      <div style="font-size:20px;font-weight:800;margin-top:6px">Key Keeper Login</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">Enter your 4-digit PIN</div>
+    </div>
+    <div class="pin-dots" id="pin-dots"></div>
+    <div id="pin-err" style="text-align:center;color:var(--spawn-red);font-size:13px;font-weight:600;min-height:18px"></div>
+    <div class="pin-grid" id="pin-grid"></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-rings">
   <div class="wrap">
+    <div class="tab-head">
+      <div><div class="tab-h1">Rings</div><div class="tab-hsub">Borrow &amp; return key rings</div></div>
+      <button class="btn btn-pri" style="width:auto;padding:10px 14px" onclick="startScan()">📷 Scan</button>
+    </div>
+    <div id="ring-list"><div class="empty">Loading rings…</div></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-bind">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Bind Keys</div><div class="tab-hsub">Attach a fob QR to a vendo</div></div></div>
     <div class="card">
-      <div class="lbl">Enter your PIN</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Ailyn or Steph</div>
-      <div id="pin-err" style="color:var(--spawn-red);font-size:13px;font-weight:700;min-height:18px"></div>
-      <div class="pin-dots" id="pin-dots"></div>
-      <div class="pin-grid" id="pin-grid"></div>
+      <div class="lbl">1 · Find vendo</div>
+      <input id="bind-q" placeholder="Search name / code…" oninput="bindSearch()">
+      <div id="bind-res" style="margin-top:8px"></div>
+    </div>
+    <div class="card" id="bind-step2" style="display:none">
+      <div class="lbl">2 · Scan the fob</div>
+      <div style="font-weight:800;font-size:16px" id="bind-vendo"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px" id="bind-vendo-meta"></div>
+      <button class="btn btn-pri" onclick="bindStartScan()" style="width:100%">📷 Scan fob QR</button>
+      <div id="bind-result" style="margin-top:12px"></div>
     </div>
   </div>
 </div>
 
-<!-- HOME -->
-<div class="screen" id="screen-home">
+<div class="screen" id="screen-handover">
   <div class="wrap">
-    <div style="background:#FEF7E8;border:1px solid #f5d78e;border-radius:11px;padding:11px 13px;font-size:12px;font-weight:600;color:#8a5a00;margin-bottom:12px;line-height:1.5">
-      🧪 <b>TRIAL MODE</b> — practice freely. Nothing here is a real key record.
-      Keep using the paper log until Wendell says otherwise.
+    <div class="tab-head"><div><div class="tab-h1">QR Handover</div><div class="tab-hsub">Approve a collector's borrow / return</div></div></div>
+    <div class="card" style="text-align:center;padding:22px 16px">
+      <div style="font-size:40px">📲</div>
+      <div style="font-weight:800;font-size:16px;margin-top:8px">Approve collector QR</div>
+      <div style="font-size:12px;color:var(--muted);margin:6px 0 16px;line-height:1.5">
+        Scan the QR on the collector's phone with <b>your</b> phone,<br>then enter <b>your</b> PIN — never the collector's.</div>
+      <button class="btn" onclick="startApprove()" style="width:100%;background:linear-gradient(135deg,#028867,#025AC6);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">✅ Scan &amp; approve</button>
     </div>
-    <div id="home-keeper"></div>
-    <button class="btn btn-gray" onclick="openPull(null)" style="width:100%;margin-bottom:16px">
-      🔍 Pull single key (no QR)</button>
-    <button class="btn btn-gray" onclick="openBind()" style="width:100%;margin-bottom:16px">
-      🏷️ Bind vendo key QR</button>
-    <div class="lbl">Rings</div>
-    <div id="ring-list"><div class="empty">Loading…</div></div>
-    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;margin-top:14px;color:#DF1A35">
-      ↺ Reset trial data</button>
+    <div class="card">
+      <div class="lbl">Recent handovers</div>
+      <div id="handover-recent"><div class="empty" style="padding:18px">No recent handovers.</div></div>
+    </div>
   </div>
 </div>
 
-<!-- SCAN -->
+<div class="screen" id="screen-overview">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">Overview</div><div class="tab-hsub" id="ov-sub">At a glance</div></div>
+      <button class="btn btn-gray" style="width:auto;padding:9px 12px;font-size:12px" onclick="loadOverview()">↻ Refresh</button></div>
+    <div class="stat-grid">
+      <div class="stat teal"><div class="stat-n" id="ov-in">–</div><div class="stat-l">Rings in office</div></div>
+      <div class="stat red"><div class="stat-n" id="ov-out">–</div><div class="stat-l">Rings out</div></div>
+      <div class="stat navy"><div class="stat-n" id="ov-bound">–</div><div class="stat-l">Fobs bound</div></div>
+      <div class="stat amber"><div class="stat-n" id="ov-unbound">–</div><div class="stat-l">Fobs unbound</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Rings currently out</div>
+      <div id="ov-outlist"><div class="empty" style="padding:16px">None out.</div></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="ov-activity"><div class="empty" style="padding:16px">Loading…</div></div>
+    </div>
+    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;color:var(--spawn-red);border-color:#f3c2c8;margin-top:4px">🗑 Reset trial data</button>
+  </div>
+</div>
+
 <div class="screen" id="screen-scan">
   <div class="wrap">
-    <div class="card"><div id="reader"></div></div>
-    <button class="btn btn-gray" onclick="stopScan()" style="width:100%">Cancel</button>
+    <div class="lbl" style="text-align:center">Point at the code</div>
+    <div id="reader" style="margin:12px 0"></div>
+    <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%">Cancel</button>
   </div>
 </div>
 
-<!-- RING -->
 <div class="screen" id="screen-ring">
   <div class="wrap">
+    <div class="card" id="ring-hdr"></div>
+    <div class="card" id="ring-act"></div>
     <div class="card">
-      <div id="ring-hdr"></div>
-      <div id="ring-act" style="margin-top:14px"></div>
+      <div class="lbl">Keys in this area</div>
+      <div id="ring-keys"><div class="empty">Loading…</div></div>
     </div>
-    <button class="btn btn-gray" onclick="openPull(CUR_RING)" style="width:100%;margin-bottom:14px">
-      🔍 Pull single key from this ring</button>
-    <div class="lbl">Keys on this ring</div>
-    <div class="card" id="ring-keys"></div>
-    <div class="lbl">Recent</div>
-    <div class="card" id="ring-ev"></div>
-    <button class="btn btn-gray" onclick="go('home')" style="width:100%">← Back</button>
+    <div class="card">
+      <div class="lbl">Recent activity</div>
+      <div id="ring-ev"><div class="empty">No activity.</div></div>
+    </div>
+    <button class="btn btn-gray" onclick="openPull(CUR_RING)" style="width:100%;margin-bottom:10px">📤 Pull a key from a vendo</button>
+    <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%">← Back to rings</button>
   </div>
 </div>
 
-<!-- PULL -->
 <div class="screen" id="screen-pull">
   <div class="wrap">
     <div id="pull-banner"></div>
     <div class="card">
       <div class="lbl">Find vendo</div>
-      <input id="pull-q" placeholder="Type a name…" oninput="doSearch()" autocomplete="off">
-      <div id="pull-res" style="max-height:280px;overflow-y:auto;margin-top:8px"></div>
+      <input id="pull-q" placeholder="Search name / code…" oninput="doSearch()">
+      <div id="pull-res" style="margin-top:8px"></div>
     </div>
     <div class="card" id="pull-pick" style="display:none">
       <div class="lbl">Key type</div>
-      <div id="pull-vendo" style="font-weight:800;margin-bottom:10px"></div>
+      <div style="font-weight:800;font-size:15px" id="pull-vendo"></div>
       <div class="kt">
         <button class="kt-b" onclick="pickKT('coin_original',this)">Coin original</button>
         <button class="kt-b" onclick="pickKT('coin_duplicate',this)">Coin duplicate</button>
@@ -167,40 +273,36 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
         <button class="kt-b" onclick="pickKT('board_duplicate',this)">Board duplicate</button>
       </div>
       <input id="pull-note" placeholder="Note (optional)" style="margin-top:10px">
-      <button class="btn btn-ok" onclick="confirmPull()" style="width:100%;margin-top:12px">
-        Confirm — key taken</button>
+      <button class="btn btn-ok" onclick="confirmPull()" style="width:100%;margin-top:12px">✓ Log key pull</button>
     </div>
-    <button class="btn btn-gray" onclick="go('home')" style="width:100%">← Back</button>
+    <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%">← Back</button>
   </div>
 </div>
 
-<!-- BIND vendo key QR -->
-<div class="screen" id="screen-bind">
-  <div class="wrap">
-    <div style="background:#EEF1FA;border:1px solid #cdd8f0;border-radius:11px;padding:11px 13px;font-size:12px;color:#3b4a66;margin-bottom:12px;line-height:1.5">
-      🏷️ <b>Bind a QR fob to a vendo.</b> Works for new <i>and</i> existing vendos.
-      Search the vendo, then scan its fob. One fob at a time.
-    </div>
-    <div class="card">
-      <div class="lbl">1 · Find vendo</div>
-      <input id="bind-q" placeholder="Type a name…" oninput="bindSearch()" autocomplete="off">
-      <div id="bind-res" style="max-height:260px;overflow-y:auto;margin-top:8px"></div>
-    </div>
-    <div class="card" id="bind-step2" style="display:none">
-      <div class="lbl">2 · Scan the fob</div>
-      <div id="bind-vendo" style="font-weight:800;margin-bottom:4px"></div>
-      <div id="bind-vendo-meta" style="font-size:12px;color:#7a869c;margin-bottom:12px"></div>
-      <button class="btn btn-pri" onclick="bindStartScan()" style="width:100%">📷 Scan fob QR</button>
-      <div id="bind-result" style="margin-top:12px"></div>
-    </div>
-    <button class="btn btn-gray" onclick="bindStopScan();go('home')" style="width:100%">← Back</button>
-  </div>
+<div class="bottom-nav" id="bottom-nav">
+  <button class="bnav-item active" id="bnav-rings" onclick="tabSwitch('rings')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="5"/><path d="M11.5 11.5 20 3"/><path d="m17 6 3 3"/><path d="m14 9 3 3"/></svg></div>
+    <div class="bnav-label">Rings</div>
+  </button>
+  <button class="bnav-item" id="bnav-bind" onclick="tabSwitch('bind')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
+    <div class="bnav-label">Bind Keys</div>
+  </button>
+  <button class="bnav-item" id="bnav-handover" onclick="tabSwitch('handover')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
+    <div class="bnav-label">Handover</div>
+  </button>
+  <button class="bnav-item" id="bnav-overview" onclick="tabSwitch('overview')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></div>
+    <div class="bnav-label">Overview</div>
+  </button>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
+
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
 const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'};
@@ -270,20 +372,12 @@ async function doLogin(){
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
     await loadRoster();
-    go('home'); renderHome(); loadRings();
+    document.getElementById('bottom-nav').classList.add('show');
+    tabSwitch('rings');
   }catch(e){ PIN='';drawDots();err.textContent='Login failed — check connection'; }
 }
 
 // ── RINGS ──
-function renderHome(){
-  var el=document.getElementById('home-keeper');
-  if(!el) return;
-  // Approving a collector's QR is the thing Steph does every morning, so it
-  // leads. Scanning a ring directly is the secondary, admin-ish path.
-  el.innerHTML =
-    '<button class="btn" onclick="startApprove()" style="margin-bottom:10px;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">✅ Approve collector QR</button>'
-  + '<button class="btn btn-pri" onclick="startScan()" style="margin-bottom:10px">📷 Scan ring tag</button>';
-}
 
 // ══ APPROVE A COLLECTOR'S HANDOVER QR ═════════════════════════════════
 // Steph scans the QR on the collector's phone with HER phone, then types HER
@@ -382,7 +476,7 @@ function startApprove(){
       APPROVE_TOKEN = String(txt||'').trim();
       askApprovePin();
     },
-    ()=>{toast('Camera failed');go('home');});
+    ()=>{toast('Camera failed');tabSwitch('handover');});
 }
 
 // Branded PIN sheet. prompt() is a grey OS box that looks like a scam and
@@ -430,7 +524,7 @@ function keeperPinAsk(title, subtitle){
 async function askApprovePin(){
   if(!APPROVE_TOKEN){ toast('No QR scanned'); return; }
   const pin = await keeperPinAsk('Approve handover','Your PIN — not the collector\'s');
-  if(pin===null) { go('home'); return; }
+  if(pin===null) { tabSwitch('handover'); return; }
   try{
     const r = await fetch(SB+'/rest/v1/rpc/spawn_handover_approve',{
       method:'POST', headers:HDR,
@@ -440,17 +534,17 @@ async function askApprovePin(){
     const res = (Array.isArray(j)&&j.length===1) ? j[0] : j;
     if(!res || !res.ok){
       toast(res && res.error ? res.error : 'Approval failed');
-      go('home');
+      tabSwitch('handover');
       return;
     }
     const verb = res.kind==='borrow' ? 'took' : 'returned';
     toast('✅ '+res.collector+' '+verb+': '+res.rings, 4200);
     APPROVE_TOKEN=null;
     await loadRings();
-    go('home');
+    tabSwitch('handover'); loadHandoverRecent();
   }catch(e){
     toast('Error: '+e.message);
-    go('home');
+    tabSwitch('handover');
   }
 }
 
@@ -570,11 +664,10 @@ function startScan(){
       if(Array.isArray(d)&&d[0]){ RINGS=RINGS.filter(r=>r.id!==d[0].id).concat(d[0]); openRing(d[0].id); }
       else toast('Unknown code: '+c);
     },
-    ()=>{toast('Camera failed — use the list');go('home');});
+    ()=>{toast('Camera failed — use the list');tabSwitch('rings');});
 }
 async function stopScan(){
   if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
-  go('home');
 }
 
 // ── PULL ──
@@ -641,7 +734,7 @@ async function confirmPull(){
   const r=await sbPost('key_events',[row]);
   if(!Array.isArray(r)){toast('Save failed');return;}
   toast('Logged — '+(PULL_VENDO.sheet_name||'key')+' ('+PULL_KT.replace('_',' ')+')');
-  go('home'); loadRings();
+  tabSwitch('rings'); loadRings();
 }
 
 // ── BIND vendo key QR (works for new + existing vendos) ──
@@ -652,7 +745,6 @@ function openBind(){
   document.getElementById('bind-res').innerHTML='';
   document.getElementById('bind-step2').style.display='none';
   document.getElementById('bind-result').innerHTML='';
-  go('bind');
   setTimeout(()=>document.getElementById('bind-q').focus(),250);
 }
 function bindSearch(){ clearTimeout(BIND_ST); BIND_ST=setTimeout(bindRunSearch,280); }
@@ -683,10 +775,10 @@ function bindStartScan(){
   startScannerHD(null,{width:250,height:250},
     async txt=>{
       if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
-      go('bind');
+      showBindTab();
       bindOnCode(String(txt||'').trim());
     },
-    ()=>{toast('Camera failed');go('bind');});
+    ()=>{toast('Camera failed');showBindTab();});
 }
 async function bindStopScan(){
   if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
@@ -746,7 +838,7 @@ async function resetTrial(){
       headers:{...HDR,Prefer:'return=minimal'},
       body:JSON.stringify({status:'in',out_to:null,out_at:null})});
     toast('Trial data cleared');
-    loadRings();
+    loadRings(); loadOverview();
   }catch(e){ toast('Reset failed'); }
 }
 
@@ -755,6 +847,8 @@ function logout(){
   if(!confirm('Log out '+ME.name+'?')) return;
   ME=null; PIN=''; drawDots();
   document.getElementById('tb-user').textContent='';
+  document.getElementById('bottom-nav').classList.remove('show');
+  document.getElementById('tb-back').style.display='none';
   go('login');
 }
 
@@ -816,6 +910,126 @@ buildPad();
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('/VendoMonitor/sw-keys.js', {scope:'/VendoMonitor/'}).catch(()=>{});
 }
+
+// ══════════ TAB NAVIGATION ══════════
+// Screens that are top-level tabs (bottom nav stays, no back button).
+const TAB_SCREENS = { rings:'screen-rings', bind:'screen-bind', handover:'screen-handover', overview:'screen-overview' };
+// Drill-down screens hide the nav and show a Back button.
+const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
+let CUR_TAB = 'rings';
+const TAB_SUB = { rings:'Ring custody', bind:'Bind fob QR to vendo', handover:'Approve collector QR', overview:'At a glance' };
+
+function tabSwitch(tab){
+  const id = TAB_SCREENS[tab]; if(!id) return;
+  CUR_TAB = tab;
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  const nb=document.getElementById('bnav-'+tab); if(nb) nb.classList.add('active');
+  document.getElementById('tb-back').style.display='none';
+  document.getElementById('bottom-nav').classList.add('show');
+  document.getElementById('tb-sub').textContent = TAB_SUB[tab]||'Ring custody';
+  window.scrollTo(0,0);
+  if(tab==='rings') loadRings();
+  if(tab==='handover') loadHandoverRecent();
+  if(tab==='overview') loadOverview();
+  if(tab==='bind') openBind();
+}
+
+// From a drill-down screen (ring detail / pull / scan) go back to the tab it came from.
+function tabBack(){ tabSwitch(CUR_TAB==='bind'?'bind':'rings'); }
+
+// Show the Bind tab WITHOUT resetting the form (used when returning from a fob scan
+// so the picked vendo + result stay visible).
+function showBindTab(){
+  CUR_TAB='bind';
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.getElementById('screen-bind').classList.add('active');
+  document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('bnav-bind').classList.add('active');
+  document.getElementById('tb-back').style.display='none';
+  document.getElementById('bottom-nav').classList.add('show');
+  document.getElementById('tb-sub').textContent=TAB_SUB.bind;
+}
+
+// When a drill-down screen is shown, hide nav + show back button.
+function enterDrill(){
+  document.getElementById('bottom-nav').classList.remove('show');
+  document.getElementById('tb-back').style.display='';
+}
+
+// Cancel out of the shared scan screen back to whatever tab we were on.
+async function stopScanToTab(){
+  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+  tabSwitch(CUR_TAB);
+}
+
+// ══════════ HANDOVER RECENT ══════════
+async function loadHandoverRecent(){
+  const el=document.getElementById('handover-recent'); if(!el) return;
+  try{
+    const d=await sbGet('key_events?select=*&or=(event.eq.ring_out,event.eq.ring_in)&auth_method=eq.qr&order=at.desc&limit=8');
+    if(!Array.isArray(d)||!d.length){ el.innerHTML='<div class="empty" style="padding:18px">No recent handovers.</div>'; return; }
+    el.innerHTML=d.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))} · ${esc(e.actor||'')}</div>
+        <div class="ev-m">${esc(e.verified_by?('by '+e.verified_by+' · '):'')}${ago(e.at)}
+          <span class="pill p-qr" style="margin-left:6px">VERIFIED</span></div></div>`).join('');
+  }catch(e){ el.innerHTML='<div class="empty" style="padding:18px">Cannot load.</div>'; }
+}
+
+// ══════════ OVERVIEW ══════════
+async function loadOverview(){
+  try{
+    const rings = await sbGet('key_rings?select=id,label,area,status,out_to,out_at&active=eq.true');
+    const R = Array.isArray(rings)?rings:[];
+    const out = R.filter(r=>r.status==='out');
+    document.getElementById('ov-in').textContent  = R.length - out.length;
+    document.getElementById('ov-out').textContent = out.length;
+    document.getElementById('ov-sub').textContent = R.length+' rings tracked';
+    document.getElementById('ov-outlist').innerHTML = out.length ? out.map(r=>`
+      <div class="ring out" style="cursor:default">
+        <div><div class="ring-l">${esc(r.label)}</div>
+          <div class="ring-s">${esc(r.area)} · ${esc(r.out_to||'—')} · ${ago(r.out_at)}</div></div>
+        <span class="pill p-out">OUT</span></div>`).join('')
+      : '<div class="empty" style="padding:16px">None out — all rings in office.</div>';
+  }catch(e){}
+
+  // Fob bind counts (head=count via Prefer)
+  try{
+    const bound = await sbCount('vendo_key_qr?vendo_id=not.is.null');
+    const total = await sbCount('vendo_key_qr');
+    document.getElementById('ov-bound').textContent   = bound;
+    document.getElementById('ov-unbound').textContent = Math.max(0,total-bound);
+  }catch(e){}
+
+  // Recent activity across all events
+  try{
+    const ev = await sbGet('key_events?select=*&order=at.desc&limit=10');
+    const el = document.getElementById('ov-activity');
+    el.innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
+      <div class="ev"><div class="ev-t">${esc(evLabel(e))}${e.actor?(' · '+esc(e.actor)):''}</div>
+        <div class="ev-m">${ago(e.at)}
+          <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
+      : '<div class="empty" style="padding:16px">No activity yet.</div>';
+  }catch(e){}
+}
+
+// count helper — PostgREST returns total in Content-Range with Prefer:count=exact
+async function sbCount(p){
+  const r=await fetch(SB+'/rest/v1/'+p+'&select=id',{headers:{...HDR,Prefer:'count=exact',Range:'0-0'}});
+  const cr=r.headers.get('content-range')||'';
+  const m=cr.match(/\/(\d+)$/);
+  return m?parseInt(m[1],10):0;
+}
+
+// startScan / openPull / bindStartScan / startApprove enter drill mode.
+// Wrap the tab-hiding into the existing screen shows.
+const _origGo = go;
+go = function(s){
+  _origGo(s);
+  if(DRILL_SCREENS.includes('screen-'+s)) enterDrill();
+};
+
 </script>
 </body>
 </html>
