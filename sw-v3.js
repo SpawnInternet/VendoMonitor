@@ -1,5 +1,5 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v12.0.0';
+const CACHE = 'spawn-harvest-v3-v12.0.1';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
@@ -59,8 +59,12 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
 
-  // Navigation requests — network first (fresh HTML), cache fallback offline
+  // Navigation requests — network first (fresh HTML), cache fallback offline.
+  // SCOPE GUARD: /VendoMonitor/ is shared with Spawn Keys, harvest v4, office,
+  // and the dashboard. Only handle OUR OWN page; otherwise the v3 SW would
+  // serve harvest_v3's shell for those apps (e.g. Spawn Keys won't open).
   if (req.mode === 'navigate') {
+    if (url.pathname.indexOf('harvest_v3') === -1) return;  // not ours — pass through
     e.respondWith(
       fetch(req).then(response => {
         if (response && response.status === 200) {
