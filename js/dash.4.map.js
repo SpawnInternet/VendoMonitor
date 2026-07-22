@@ -993,6 +993,12 @@ function showP(id, btn) {
       frm.src='spawn-jobs.html';
     }
   }
+  if(id==="spawncloud"){
+    var cfrm=document.getElementById('spawncloud-frame');
+    if(cfrm && (!cfrm.src || cfrm.src==='about:blank' || cfrm.src.endsWith('about:blank'))){
+      cfrm.src='https://spawn-vendo-cloud-production-4f63.up.railway.app/';
+    }
+  }
 }
 
 function showBread(text, backFn) {
