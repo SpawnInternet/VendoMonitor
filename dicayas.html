@@ -61,6 +61,8 @@
   .card .vn{font-weight:800;font-size:14px;margin-bottom:3px;padding-right:52px;color:var(--navy)}
   .card .vlan{position:absolute;top:11px;right:12px;background:#fff3cf;color:#8a6500;border:1px solid #f0d488;border-radius:6px;padding:1px 8px;font-size:12px;font-weight:900}
   .card .meta{font-size:12px;color:var(--dim);display:flex;gap:10px;flex-wrap:wrap;margin-top:5px;font-weight:600}
+  .card .vcode{margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:#eef4ff;border:1px solid #c7d9f5;color:#1c47a0;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:800;letter-spacing:.3px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .card .vcode .vlbl{font-family:inherit;font-weight:700;color:#5a76a8}
   .flags{margin-top:6px;display:flex;gap:5px;flex-wrap:wrap}
   .flag{font-size:11px;background:#fff7e0;color:#8a6500;border:1px solid #f0d488;border-radius:5px;padding:1px 6px;font-weight:700}
   .flag.dup{background:#fdecef;color:#a31c2e;border-color:#f3b4bd}
@@ -384,6 +386,17 @@ const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
 let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
+// Freewifi voucher code per VLAN (from hotspot_vouchers, pulled live by the poller)
+let VOUCH={};
+function buildVouch(rows){
+  VOUCH={};
+  (rows||[]).forEach(v=>{
+    const key=String(v.vlan);
+    if(!key) return;
+    // prefer the row that actually has a code; keep first otherwise
+    if(!VOUCH[key] || (v.voucher_code && !VOUCH[key].voucher_code)) VOUCH[key]=v;
+  });
+}
 // Perf: normalized-name -> [vendo,...] for Dicayas-area rows only. Rebuilt on every
 // data load. Replaces a full VENDOS scan (with 2 normName calls per row) that used to
 // run once per card, per render — ~1.1M string ops per pass at 750 cards.
@@ -708,6 +721,7 @@ function cardHtml(m){
       <span>⬇${fmtBytes(rx)} ⬆${fmtBytes(tx)}</span>
     </div>
     <div class="meta"><span>📍 ${esc(areaOf(m))}</span>${noLease&&!on?'<span style="color:#7a8aa0">⚫ no lease</span>':''}</div>
+    ${(()=>{const v=VOUCH[String(m.vlan)];const code=v&&(v.voucher_code||v.username);return code?`<div class="vcode" title="Freewifi voucher code"><span class="vlbl">🎟️ code:</span>${esc(code)}</div>`:'';})()}
     ${note?`<div class="leasenote">📝 ${esc(note)}</div>`:''}
     ${fl.length?`<div class="flags">${fl.map(x=>`<span class="flag ${x.c}">⚠️ ${x.t}</span>`).join('')}</div>`:''}
   </div>`;
@@ -2200,13 +2214,15 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
-      sbRpc("sales_month_by_vendo").catch(()=>[])
+      sbRpc("sales_month_by_vendo").catch(()=>[]),
+      sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    buildVouch(vouchers);
     SALES_MONTH={};
     (salesRows||[]).forEach(r=>{ SALES_MONTH[String(r.vendo)]=Number(r.total||0); });
 
@@ -2227,11 +2243,13 @@ async function refreshStatus(){
   if(document.hidden) return;              // don't poll a backgrounded tab
   if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
   try{
-    const [status, subs] = await Promise.all([
+    const [status, subs, vouchers] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
-      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000")
+      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
+      sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[];
+    buildVouch(vouchers);
     await loadSuppress();
     render(); renderSubs();
   }catch(e){ /* transient — next tick retries */ }
