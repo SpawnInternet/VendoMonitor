@@ -9,9 +9,9 @@
   @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
   :root{
     --navy:#213040; --brand-navy:#16202c; --deep:#f1f4f8;
-    --gold:#F5BC15; --green:#28856E; --blue:#316AB0; --purple:#5A3594;
-    --magenta:#B02577; --red:#C8344A; --cyan:#2BA3B8;
-    --rainbow:linear-gradient(90deg,#F5BC15 0%,#28856E 20%,#316AB0 42%,#5A3594 60%,#B02577 80%,#C8344A 100%);
+    --gold:#FFB725; --green:#028867; --blue:#025AC6; --purple:#311A8E;
+    --magenta:#C01176; --red:#DF1A35; --cyan:#2BA3B8;
+    --rainbow:linear-gradient(90deg,#FFB725 0%,#028867 20%,#025AC6 42%,#311A8E 60%,#C01176 80%,#DF1A35 100%);
     --panel:#ffffff; --panel2:#f4f6fa; --border:#e2e8f0;
     --txt:#213040; --dim:#7a8aa0; --grn:#1f9d57; --offred:#d63a4e; --amber:#c98a00;
   }
@@ -108,6 +108,16 @@
   .lnk.lockbtn{color:#1c6b54;font-weight:800}
   .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
+  /* Connected devices — two columns, no scrolling */
+  .devgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+  @media(max-width:560px){.devgrid{grid-template-columns:1fr}}
+  .dev{border:1px solid var(--border);border-left:3px solid var(--green);border-radius:8px;padding:6px 8px;background:var(--panel2);min-width:0}
+  .dev.idle{border-left-color:var(--dim);opacity:.72}
+  .dev .dn{font-weight:800;font-size:12px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dev .dip{font-size:12px;font-weight:700;color:var(--blue);font-family:ui-monospace,monospace}
+  .dev .dmac{font-size:10px;color:var(--dim);font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dev .dexp{font-size:10px;color:var(--purple);font-weight:700}
+  .devmore{grid-column:1/-1;font-size:11px;color:var(--dim);text-align:center;padding:4px}
   .badge-on{color:var(--grn);font-weight:900} .badge-off{color:var(--offred);font-weight:900}
   .mismatch{color:var(--offred);font-weight:900}
   .cmp-tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -970,12 +980,16 @@ function renderModal(m, cands){
       const list=DEVS[String(m.vlan)]||[];
       if(!list.length) return `<div class="sec">Connected devices</div><div class="raw">No devices seen on this vendo.</div>`;
       const bound=list.filter(d=>d.lease_status==='bound').length;
-      return `<div class="sec">Connected devices (${bound} bound / ${list.length} seen)</div>`+
-        list.slice(0,40).map(d=>`<div class="row">
-          <span class="k">${d.lease_status==='bound'?'🟢':'⚪'} ${esc(d.hostname)||'(no name)'}</span>
-          <span class="v">${esc(d.ip)||'—'}<br><span style="font-size:11px;color:#7a8aa0">${esc(d.mac)||''}${d.expires_after?' · '+esc(d.expires_after):''}</span></span>
+      return `<div class="sec">Connected devices (${bound} bound / ${list.length} seen) · refreshes every 90s</div>`+
+        `<div class="devgrid">`+
+        list.slice(0,60).map(d=>`<div class="dev ${d.lease_status==='bound'?'':'idle'}">
+          <div class="dn">${d.lease_status==='bound'?'🟢':'⚪'} ${esc(d.hostname)||'(no name)'}</div>
+          <div class="dip">${esc(d.ip)||'—'}</div>
+          <div class="dmac">${esc(d.mac)||''}</div>
+          ${d.expires_after?`<div class="dexp">⏳ ${esc(d.expires_after)}</div>`:''}
         </div>`).join('')+
-        (list.length>40?`<div class="raw">…and ${list.length-40} more</div>`:'');
+        (list.length>60?`<div class="devmore">…and ${list.length-60} more</div>`:'')+
+        `</div>`;
     })()}
     <div class="sec">Router comment (raw)</div><div class="raw">${esc(m.router_comment)||'(none)'}</div>
     <button class="pullbtn" onclick='pullOut("vendo",${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
