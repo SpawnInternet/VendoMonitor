@@ -35,6 +35,7 @@
   .tab.active{background:var(--deep);color:var(--navy);border-color:var(--border)}
   .tab.active[data-tab="online"]{box-shadow:inset 0 3px 0 var(--green)}
   .tab.active[data-tab="offline"]{box-shadow:inset 0 3px 0 var(--red)}
+  .tab.active[data-tab="nolease"]{box-shadow:inset 0 3px 0 #7a8aa0}
   .tab.active[data-tab="subs"]{box-shadow:inset 0 3px 0 var(--cyan)}
   .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
   .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
@@ -222,7 +223,8 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="online">🟢 Online</div>
-  <div class="tab" data-tab="offline">🔴 Offline</div>
+  <div class="tab" data-tab="offline">🔴 Waiting</div>
+  <div class="tab" data-tab="nolease">⚫ No Lease</div>
   <div class="tab" data-tab="subs">👤 Subscribers</div>
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
   <div class="tab" data-tab="deleted">🗑 Trash</div>
@@ -248,9 +250,12 @@
   </div>
   <div id="pane-offline" class="pane" style="display:none">
     <div id="banner-offline"></div>
-    <div class="sec" style="margin-top:0">🔴 Waiting (machine connected but lease dropped — real offline)</div>
+    <div class="sec" style="margin-top:0">🔴 Waiting — machine connected but its DHCP lease dropped. These need a lineman.</div>
     <div class="grid" id="grid-off-waiting"></div>
-    <div class="sec">⚫ No lease (named vendo, no DHCP lease — check if pulled out or static)</div>
+  </div>
+  <div id="pane-nolease" class="pane" style="display:none">
+    <div id="banner-nolease"></div>
+    <div class="sec" style="margin-top:0">⚫ No lease — no DHCP lease for the vendo board. Usually a static IP (fine) or pulled out. Check customers + traffic before dispatching.</div>
     <div class="grid" id="grid-off-nolease"></div>
   </div>
   <div id="pane-subs" class="pane" style="display:none">
@@ -821,8 +826,13 @@ function render(){
   document.getElementById('grid-off-nolease').innerHTML = nolease.length?sortVendos(nolease).map(cardHtml).join(''):'<div class="empty">None without a lease</div>';
   document.getElementById('grid-empty').innerHTML = empties.length?sortVendos(empties).map(cardHtml).join(''):'<div class="empty">No empty slots</div>';
 
+  const nlCust=nolease.filter(m=>(m.user_count||0)>0).length;
+  const nlTraf=nolease.filter(m=>(m.traffic_delta||0)>0).length;
   document.getElementById('banner-offline').innerHTML =
-    `<div class="banner">🔴 ${waiting.length} waiting (real offline) · ⚫ ${nolease.length} named with no lease · ${empties.length} empty slots (own tab).</div>`;
+    `<div class="banner">🔴 ${waiting.length} waiting — lease dropped, machine likely needs a visit.</div>`;
+  const nlBan=document.getElementById('banner-nolease');
+  if(nlBan) nlBan.innerHTML =
+    `<div class="banner">⚫ ${nolease.length} with no DHCP lease · ${nlCust} still have customers connected · ${nlTraf} still passing traffic — those are working on a static IP, not dead.</div>`;
   document.getElementById('banner-online').innerHTML = '';
 
   const flagged=LIVE.filter(m=>flagsOf(m).length>0).length;
