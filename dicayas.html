@@ -74,7 +74,7 @@
   #hvOv,#pickOv,#grpOv,#delOv,#areaOv{z-index:75}
   #pwOv{z-index:90}
   .ov.show{display:flex}
-  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(33,48,64,.25)}
+  .modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;max-width:760px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(33,48,64,.25)}
   .modal .rainbow-strip{border-radius:14px 14px 0 0}
   .mh{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:sticky;top:0;background:var(--panel);z-index:2}
   .mh h2{font-size:16px;font-weight:900;color:var(--navy)}
@@ -107,6 +107,23 @@
   .lockrow .lockstate{font-size:11px;font-weight:700;color:var(--navy)}
   .lnk.lockbtn{color:#1c6b54;font-weight:800}
   .empty{text-align:center;color:var(--dim);padding:46px 20px;font-weight:600}
+  /* Compact modal stats — landscape tiles instead of tall stacked rows */
+  .hero{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:8px}
+  .hero .hstat{font-weight:900;font-size:13px;color:var(--navy);display:flex;align-items:center;gap:5px}
+  .hero .hvlan{background:var(--gold);color:#3a2a00;font-weight:900;font-size:13px;border-radius:6px;padding:2px 9px}
+  .hero .hvia{font-size:11px;font-weight:700;color:var(--blue);margin-left:auto}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+  @media(max-width:620px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:7px 9px;min-width:0}
+  .tile .tl{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile .tv{font-size:14px;font-weight:900;color:var(--navy);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tile .tv.mono{font-family:ui-monospace,monospace;font-size:12px}
+  .tile.live{border-left:3px solid var(--green)}
+  .tile.live .tv{color:var(--green)}
+  .tile.warn{border-left:3px solid var(--red)}
+  .tile.warn .tv{color:var(--red)}
+  .tile.acc{border-left:3px solid var(--blue)}
+  .notebar{background:#FFF8E6;border:1px solid var(--gold);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:12px;font-weight:700;color:#7a5c00}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
   /* Connected devices — two columns, no scrolling */
   .devgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
@@ -957,25 +974,31 @@ function renderModal(m, cands){
   </div>`;
 
   if(tab==='stats'){
+    const viaTxt = m.online_via==='lease'?'DHCP lease'
+                 : m.online_via==='users'?'customers connected'
+                 : m.online_via==='traffic'?'live traffic (static IP)':'';
     html+=`
-    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
-    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
-    <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(m.vlan)}</span></div>
-    <div class="row"><span class="k">Connected users</span><span class="v">👥 ${m.user_count??0}</span></div>
-    ${m.online&&m.online_via?`<div class="row"><span class="k">Online via</span><span class="v badge-on">${m.online_via==='lease'?'DHCP lease':m.online_via==='users'?'customers connected ('+(m.user_count||0)+')':'live traffic (static IP)'}${m.maybe_noise?' ⚡':''}</span></div>`:''}
+    <div class="hero">
+      <span class="hstat">${m.online?'🟢':'🔴'} ${m.online?'ONLINE':'OFFLINE'}${!m.online&&m.offline_since?' · '+ago(m.offline_since):''}</span>
+      <span class="hvlan">VLAN ${esc(m.vlan)}</span>
+      <span class="hstat">👥 ${m.user_count??0}</span>
+      ${viaTxt?`<span class="hvia">via ${viaTxt}${m.maybe_noise?' ⚡':''}</span>`:''}
+    </div>
+    ${m.lease_note?`<div class="notebar">📝 ${esc(m.lease_note)}</div>`:''}
     <div class="sec">Traffic</div>
-    <div class="row"><span class="k">Live down</span><span class="v ${Number(m.rx_bps||0)>0?'badge-on':''}">${fmtBps(m.rx_bps)}</span></div>
-    <div class="row"><span class="k">Live up</span><span class="v ${Number(m.tx_bps||0)>0?'badge-on':''}">${fmtBps(m.tx_bps)}</span></div>
-    <div class="row"><span class="k">Total RX (down)</span><span class="v ${rx===0?'mismatch':''}">${fmtBytes(rx)}</span></div>
-    <div class="row"><span class="k">Total TX (up)</span><span class="v">${fmtBytes(tx)}</span></div>
-    ${m.online_via==='traffic'?`<div class="row"><span class="k">Live in 4s</span><span class="v ${m.maybe_noise?'mismatch':''}">${fmtBytes(m.traffic_delta)}${m.maybe_noise?' ⚡ maybe noise':''}</span></div>`:''}
+    <div class="tiles">
+      <div class="tile ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
+      <div class="tile ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
+      <div class="tile ${rx===0?'warn':''}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
+      <div class="tile"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
+    </div>
     <div class="sec">Network</div>
-    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
-    <div class="row"><span class="k">MAC</span><span class="v">${esc(m.mac)||'—'}</span></div>
-    <div class="row"><span class="k">Last seen</span><span class="v">${m.last_seen?ago(m.last_seen)+' ago':'—'}</span></div>
-    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <div class="row"><span class="k">Lease status</span><span class="v">${esc(m.lease_status)||'⚫ no DHCP lease'}</span></div>
-    ${m.lease_note?`<div class="row"><span class="k gold">📝 Field note</span><span class="v gold">${esc(m.lease_note)}</span></div>`:''}
+    <div class="tiles">
+      <div class="tile acc"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
+      <div class="tile acc"><div class="tl">MAC</div><div class="tv mono">${esc(m.mac)||'—'}</div></div>
+      <div class="tile ${m.lease_status?'':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
+      <div class="tile"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
+    </div>
     ${(()=>{
       const list=DEVS[String(m.vlan)]||[];
       if(!list.length) return `<div class="sec">Connected devices</div><div class="raw">No devices seen on this vendo.</div>`;
