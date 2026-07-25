@@ -869,13 +869,12 @@ function render(){
   const offAll=LIVE.filter(m=>!effOnline(m));
   const empties=offAll.filter(isEmptySlot);
   const off=offAll.filter(m=>!isEmptySlot(m));
-  // Waiting = ANY machine whose DHCP lease is sitting in 'waiting' state, even if
-  // it is currently online (running on a static IP with customers on it) — the lease
-  // is still broken and still needs a lineman. Plus offline machines that hold some
-  // other lease record (e.g. bound but down).
+  // Waiting mirrors the router 1:1 — a row is Waiting if and only if RouterOS
+  // reports lease_status = 'waiting', online or not. Nothing else belongs here.
   const isWaitLease=m=>String(m.lease_status||'').toLowerCase()==='waiting';
-  const waiting=LIVE.filter(m=>isWaitLease(m) || (!effOnline(m) && !isEmptySlot(m) && m.lease_status));
-  const nolease=off.filter(m=>!m.lease_status);      // named, no DHCP lease
+  const waiting=LIVE.filter(isWaitLease);
+  // everything else that is down (incl. a stale 'bound' lease) falls through here
+  const nolease=off.filter(m=>!isWaitLease(m));
 
   // online search filter
   if(ONLINE_Q){
@@ -1483,8 +1482,8 @@ function buildNavList(mk){
   let list;
   if(active==='online') list=LIVE.filter(m=>effOnline(m));
   else if(active==='offline'){
-    // both waiting + nolease sections; waiting now also covers online machines
-    // whose lease is stuck in 'waiting', so mirror that here.
+    // both waiting + nolease sections; waiting is strictly lease_status='waiting'
+    // (online or not), nolease is everything else that is down.
     list=LIVE.filter(m=>(!effOnline(m)&&!isEmptySlot(m))
       || String(m.lease_status||'').toLowerCase()==='waiting');
   }
