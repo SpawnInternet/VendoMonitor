@@ -125,7 +125,11 @@
   .tile.warn .tv{color:var(--red)}
   .tile.acc{border-left:3px solid var(--blue)}
   .routerbar{background:linear-gradient(90deg,rgba(2,90,198,.07),rgba(2,136,103,.05));border:1px solid var(--blue);border-left:4px solid var(--blue);border-radius:8px;padding:5px 10px;margin-bottom:6px}
-  .routerbar .rl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);font-weight:900;margin-bottom:2px}
+  .routerbar .rl{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);font-weight:900;margin-bottom:2px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .routerbar .rcopy{font-family:inherit;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;font-weight:900;color:var(--blue);background:#fff;border:1px solid var(--blue);border-radius:6px;padding:3px 9px;cursor:pointer;flex:none;line-height:1.2}
+  .routerbar .rcopy:hover{background:var(--blue);color:#fff}
+  .routerbar .rcopy:active{transform:scale(.96)}
+  .routerbar .rcopy.done{background:var(--teal);border-color:var(--teal);color:#fff}
   .routerbar .rv{font-size:12px;font-weight:800;color:var(--navy);white-space:pre-wrap;word-break:break-word;line-height:1.35}
   .notebar{background:#FFF8E6;border:1px solid var(--gold);border-radius:8px;padding:4px 10px;margin-top:4px;font-size:12px;font-weight:700;color:#7a5c00}
   .raw{background:var(--panel2);border-radius:8px;padding:10px;font-size:12px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;color:var(--dim);margin-top:6px}
@@ -1072,7 +1076,7 @@ function renderModal(m, cands){
       <span class="hstat">👥 ${m.user_count??0}</span>
       ${viaTxt?`<span class="hvia">via ${viaTxt}${m.maybe_noise?' ⚡':''}</span>`:''}
     </div>
-    ${m.router_comment?`<div class="routerbar"><div class="rl">📡 Router says</div><div class="rv">${esc(m.router_comment)}</div></div>`:''}
+    ${m.router_comment?`<div class="routerbar"><div class="rl"><span>📡 Router says</span><button class="rcopy" onclick='event.stopPropagation();copyRouterSays(${attrJS(m.match_key)},this)' title="Copy VLAN + router name">⧉ Copy</button></div><div class="rv">${esc(m.router_comment)}</div></div>`:''}
     ${m.lease_note?`<div class="notebar">📝 ${esc(m.lease_note)}</div>`:''}
     <div class="sec">Traffic</div>
     <div class="tiles">
@@ -1719,6 +1723,42 @@ function pwSubmit(){
 document.getElementById('pwOk').onclick=pwSubmit;
 document.getElementById('pwInput').addEventListener('keydown',e=>{ if(e.key==='Enter')pwSubmit(); });
 document.getElementById('pwOv').addEventListener('click',e=>{if(e.target.id==='pwOv')pwCancel()});
+// ---- Copy the router comment, always prefixed with the VLAN ----
+// The VLAN is the one thing that identifies the machine to Sir Michael and to
+// the linemen, so it must travel with the name. Some router comments already
+// open with "vlan212" -- in that case we don't stutter it a second time.
+function routerCopyText(m){
+  const c=String(m.router_comment||'').trim();
+  const v=String(m.vlan||'').trim();
+  if(!v) return c;
+  if(new RegExp('^\\s*vlan\\s*'+v+'\\b','i').test(c)) return c;
+  return 'VLAN '+v+' — '+c;
+}
+
+async function copyRouterSays(mk, btn){
+  const m=STATUS.find(x=>x.match_key===mk);
+  if(!m){ toast('Machine not found'); return; }
+  const txt=routerCopyText(m);
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(txt);
+    }else{
+      // Fallback for older Android webviews with no async clipboard.
+      const ta=document.createElement('textarea');
+      ta.value=txt; ta.setAttribute('readonly','');
+      ta.style.cssText='position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, txt.length);
+      const ok=document.execCommand('copy');
+      ta.remove();
+      if(!ok) throw new Error('clipboard unavailable');
+    }
+    if(btn){ btn.classList.add('done'); btn.textContent='✓ Copied';
+      setTimeout(()=>{ btn.classList.remove('done'); btn.textContent='⧉ Copy'; },1600); }
+    toast('Copied · VLAN '+m.vlan);
+  }catch(e){ toast('Copy failed: '+e.message); }
+}
+
 function toastAction(msg, fn){
   let t=document.getElementById('_toast');
   if(!t){ t=document.createElement('div'); t.id='_toast';
