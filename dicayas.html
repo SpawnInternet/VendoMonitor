@@ -773,14 +773,16 @@ function isEmptySlot(m){
 
 // A machine marked pulled-out / not-active in its lease note or router comment
 // must never count as Online, even if a stale DHCP lease still reports it up.
+// A machine counts as pulled out ONLY when it has an explicit row in
+// mikrotik_suppress -- i.e. somebody pressed "Mark INACTIVE" on the card.
+// There is deliberately NO text heuristic on lease_note / router_comment:
+//  - a stale note like "pullout" left on the router hid a live, bound machine
+//    (VLAN 64) from every tab, and
+//  - Restore could not undo it, because deleting the suppress row left the
+//    text match still hiding the machine.
+// The router's notes are field scribbles; the button is the decision.
 function isPulledOut(m){
-  // Authoritative: an explicit suppress row wins over any text heuristic.
-  if(m.vlan!=null && SUPPRESS.some(s=>s.vlan!=null && String(s.vlan)===String(m.vlan))) return true;
-  const t=((m.lease_note||'')+' '+(m.router_comment||'')).toLowerCase();
-  // Catches pullout / pull out / pull-out / pulout / gipulout / "Gipul out kay hinay".
-  // v13 of the poller starts delivering lease notes that were previously lost, and
-  // the real notes use the one-L Bisaya spelling the old pattern missed.
-  return /\b(?:gi)?pul{1,2}\s*-?\s*out\b|\bpulled\s*out\b|\bnot?\s*active\b|\binactive\b|\bde-?activ/.test(t);
+  return m.vlan!=null && SUPPRESS.some(s=>s.vlan!=null && String(s.vlan)===String(m.vlan));
 }
 // Effective online: real link AND not pulled out / deactivated.
 function effOnline(m){ return !!m.online && !isPulledOut(m); }
