@@ -282,7 +282,7 @@
   </div>
   <div id="pane-offline" class="pane" style="display:none">
     <div id="banner-offline"></div>
-    <div class="sechd"><span class="sdot"></span>Waiting — lease dropped<span class="shint">machine connected but its DHCP lease dropped · these need a lineman</span></div>
+    <div class="sechd"><span class="sdot"></span>Waiting — lease dropped<span class="shint">DHCP lease is stuck on WAITING · listed even if the machine is still online on a static IP · ACTIVE rows are up, the rest need a lineman</span></div>
     <div class="grid" id="grid-off-waiting"></div>
   </div>
   <div id="pane-nolease" class="pane" style="display:none">
@@ -869,8 +869,12 @@ function render(){
   const offAll=LIVE.filter(m=>!effOnline(m));
   const empties=offAll.filter(isEmptySlot);
   const off=offAll.filter(m=>!isEmptySlot(m));
-  // split real offline: waiting (has lease_status) vs no-lease
-  const waiting=off.filter(m=>m.lease_status);       // connected, lease dropped
+  // Waiting = ANY machine whose DHCP lease is sitting in 'waiting' state, even if
+  // it is currently online (running on a static IP with customers on it) — the lease
+  // is still broken and still needs a lineman. Plus offline machines that hold some
+  // other lease record (e.g. bound but down).
+  const isWaitLease=m=>String(m.lease_status||'').toLowerCase()==='waiting';
+  const waiting=LIVE.filter(m=>isWaitLease(m) || (!effOnline(m) && !isEmptySlot(m) && m.lease_status));
   const nolease=off.filter(m=>!m.lease_status);      // named, no DHCP lease
 
   // online search filter
@@ -880,14 +884,16 @@ function render(){
   }
 
   document.getElementById('grid-online').innerHTML = on.length?sortVendos(on).map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
-  document.getElementById('grid-off-waiting').innerHTML = waiting.length?waitTable(sortVendos(waiting)):'<div class="empty">None waiting</div>';
+  // down machines first, still-online ones at the bottom (sort is stable)
+  const waitSorted = sortVendos(waiting).sort((a,b)=>(effOnline(a)?1:0)-(effOnline(b)?1:0));
+  document.getElementById('grid-off-waiting').innerHTML = waiting.length?waitTable(waitSorted):'<div class="empty">None waiting</div>';
   document.getElementById('grid-off-nolease').innerHTML = nolease.length?sortVendos(nolease).map(cardHtml).join(''):'<div class="empty">None without a lease</div>';
   document.getElementById('grid-empty').innerHTML = empties.length?sortVendos(empties).map(cardHtml).join(''):'<div class="empty">No empty slots</div>';
 
   const nlCust=nolease.filter(m=>(m.user_count||0)>0).length;
   const nlTraf=nolease.filter(m=>(m.traffic_delta||0)>0).length;
   document.getElementById('banner-offline').innerHTML =
-    `<div class="banner">🔴 ${waiting.length} waiting — lease dropped, machine likely needs a visit.</div>`;
+    `<div class="banner">🔴 ${waiting.length} waiting — lease dropped · ${waiting.filter(m=>!effOnline(m)).length} are down and likely need a visit · ${waiting.filter(m=>effOnline(m)).length} still online on a static IP.</div>`;
   const nlBan=document.getElementById('banner-nolease');
   if(nlBan) nlBan.innerHTML =
     `<div class="banner">⚫ ${nolease.length} with no DHCP lease · ${nlCust} still have customers connected · ${nlTraf} still passing traffic — those are working on a static IP, not dead.</div>`;
@@ -1477,8 +1483,10 @@ function buildNavList(mk){
   let list;
   if(active==='online') list=LIVE.filter(m=>effOnline(m));
   else if(active==='offline'){
-    const off=LIVE.filter(m=>!effOnline(m)).filter(m=>!isEmptySlot(m));
-    list=off; // both waiting + nolease sections
+    // both waiting + nolease sections; waiting now also covers online machines
+    // whose lease is stuck in 'waiting', so mirror that here.
+    list=LIVE.filter(m=>(!effOnline(m)&&!isEmptySlot(m))
+      || String(m.lease_status||'').toLowerCase()==='waiting');
   }
   else if(active==='empty') list=LIVE.filter(m=>!effOnline(m)).filter(isEmptySlot);
   else if(active==='search'){
