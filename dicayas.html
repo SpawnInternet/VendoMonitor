@@ -24,6 +24,10 @@
   h1{font-size:16px;font-weight:900;letter-spacing:.2px;color:var(--navy)}
   h1 .sub{font-weight:800;color:var(--blue)}
   .pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 11px;font-size:12px;color:var(--dim);font-weight:700;margin-left:auto}
+  .hbpill{margin-left:8px;cursor:default}
+  .hbpill.ok{background:#e9f7f1;border-color:#9dd8c3;color:#046b52}
+  .hbpill.warn{background:#fff6e2;border-color:#f0cf85;color:#8a5b00}
+  .hbpill.bad{background:#fdecef;border-color:#f3b4bd;color:#a31c2e}
   .summary{display:flex;gap:9px;flex-wrap:wrap;margin-top:11px}
   .stat{background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:7px 13px;min-width:84px}
   .stat .n{font-size:21px;font-weight:900;line-height:1.1;color:var(--navy)}
@@ -257,6 +261,7 @@
     <h1>Spawn · <span class="sub">Dicayas Server</span> Monitor</h1>
     <button id="refreshCacheBtn" class="cachebtn" onclick="refreshDashboardCache()" title="Rebuild the dashboard cache so name/area/group changes show there now">🔄 Sync dashboard</button>
     <span class="pill" id="lastUpd">loading…</span>
+    <span class="pill hbpill" id="pollerHb" title="Poller heartbeat">poller…</span>
   </div>
   <div class="summary" id="summary"></div>
   <div id="harvestBanner"></div>
@@ -833,6 +838,37 @@ function cardHtml(m){
     ${note?`<div class="leasenote">📝 ${esc(note)}</div>`:''}
     ${fl.length?`<div class="flags">${fl.map(x=>`<span class="flag ${x.c}">⚠️ ${x.t}</span>`).join('')}</div>`:''}
   </div>`;
+}
+
+// ---- POLLER HEARTBEAT ----
+// mikrotik_status.updated_at is NOT a liveness signal: the poller only writes
+// rows whose state changed, so a dead poller looks like a quiet network.
+// system_heartbeat is written every cycle, so that's what we watch.
+const HB_PATH="system_heartbeat?service_name=eq.mikrotik_status_poller&select=status,last_beat,cycle_count,detail,hostname&limit=1";
+
+function renderHeartbeat(rows){
+  const el=document.getElementById('pollerHb');
+  if(!el) return;
+  const hb=Array.isArray(rows)?rows[0]:rows;
+  if(!hb){ el.className='pill hbpill bad'; el.textContent='⚠ poller unknown';
+    el.title='No heartbeat row found for mikrotik_status_poller.'; return; }
+  const age=(Date.now()-new Date(hb.last_beat).getTime())/1000;
+  const det=String(hb.detail||'');
+  let cls='ok', txt;
+  if(age>180 || hb.status==='stopped'){
+    cls='bad'; txt='⚠ poller stalled '+ago(hb.last_beat);
+  }else if(hb.status==='error'){
+    cls='bad'; txt='⚠ poller error';
+  }else if(/offline_since held/i.test(det)){
+    cls='warn'; txt='⏳ offline times held';
+  }else if(age>90){
+    cls='warn'; txt='poller slow '+ago(hb.last_beat);
+  }else{
+    txt='⚡ poller ok · c'+(hb.cycle_count??'?');
+  }
+  el.className='pill hbpill '+cls;
+  el.textContent=txt;
+  el.title=(hb.hostname||'')+' · '+hb.status+'\n'+det;
 }
 
 let SORT_FIELD='vlan', SORT_ASC=true, ONLINE_Q='';
@@ -2418,15 +2454,17 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
       sbRpc("sales_month_by_vendo").catch(()=>[]),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[])
+      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
+      sb(HB_PATH).catch(()=>null)
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
     SALES_MONTH={};
@@ -2449,13 +2487,15 @@ async function refreshStatus(){
   if(document.hidden) return;              // don't poll a backgrounded tab
   if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
   try{
-    const [status, subs, vouchers, devices] = await Promise.all([
+    const [status, subs, vouchers, devices, hb] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[])
+      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
+      sb(HB_PATH).catch(()=>null)
     ]);
     STATUS=status||[]; SUBS=subs||[];
+    renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
     await loadSuppress();
