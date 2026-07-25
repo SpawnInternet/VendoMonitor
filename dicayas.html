@@ -287,7 +287,7 @@
   </div>
   <div id="pane-nolease" class="pane" style="display:none">
     <div id="banner-nolease"></div>
-    <div class="sec" style="margin-top:0">⚫ No lease — no DHCP lease for the vendo board. Usually a static IP (fine) or pulled out. Check customers + traffic before dispatching.</div>
+    <div class="sec" style="margin-top:0">⚫ No lease — no usable DHCP lease: either none at all, or a half-finished OFFERED / BUSY handshake. Usually a static IP (fine) or pulled out. Check customers + traffic before dispatching.</div>
     <div class="grid" id="grid-off-nolease"></div>
   </div>
   <div id="pane-subs" class="pane" style="display:none">
@@ -777,7 +777,10 @@ function isPulledOut(m){
   // Authoritative: an explicit suppress row wins over any text heuristic.
   if(m.vlan!=null && SUPPRESS.some(s=>s.vlan!=null && String(s.vlan)===String(m.vlan))) return true;
   const t=((m.lease_note||'')+' '+(m.router_comment||'')).toLowerCase();
-  return /\bpull\s*-?\s*out\b|\bpullout\b|\bpulled\s*out\b|\bnot?\s*active\b|\binactive\b|\bde-?activ/.test(t);
+  // Catches pullout / pull out / pull-out / pulout / gipulout / "Gipul out kay hinay".
+  // v13 of the poller starts delivering lease notes that were previously lost, and
+  // the real notes use the one-L Bisaya spelling the old pattern missed.
+  return /\b(?:gi)?pul{1,2}\s*-?\s*out\b|\bpulled\s*out\b|\bnot?\s*active\b|\binactive\b|\bde-?activ/.test(t);
 }
 // Effective online: real link AND not pulled out / deactivated.
 function effOnline(m){ return !!m.online && !isPulledOut(m); }
