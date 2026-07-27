@@ -1148,10 +1148,9 @@ function drawRoster(){
       <small>search below to attach the right one</small>`;
   }
   document.getElementById('rActs').innerHTML = (r && r.roster_name)
-    ? (r.confirmed_at
-        ? `<button class="rbtn u" data-ra="undo">Undo confirm</button>`
-        : `<button class="rbtn y" data-ra="ok">✔ Correct</button>
-           <button class="rbtn n" data-ra="no">✖ Wrong match</button>`)
+    ? lockRowHtml(CUR_PPP) + (r.confirmed_at ? ''
+        : `<div style="display:flex;gap:7px;margin-top:8px">
+             <button class="rbtn n" data-ra="no">✖ Wrong match</button></div>`)
     : '';
   drawRosterList(document.getElementById('rq').value||'');
   drawRosterDetails(r && r.roster_name);
@@ -1850,6 +1849,45 @@ function renderCompare(txByVlan){
 }
 
 
+
+// ---- SUBSCRIBER MATCH LOCK (same contract as lockVendo/unlockVendo) ----
+// A match is only final once a human locks it behind the spawn password.
+// Locked rows are never overwritten by any automated re-match.
+async function lockRoster(ppp){
+  const r=ROSTER.get(ppp);
+  if(!r || !r.roster_name){ toast('Attach a subscriber first'); return; }
+  const pwd=await askPasswordValue("Lock & finalize this subscriber match? It will show the green lock marker.");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('lock_ppp_roster',{p_ppp_name:ppp, p_pwd:pwd}); }
+  catch(e){ toast("Lock failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Lock failed')); return; }
+  ROSTER.set(ppp,{...r,match_status:'matched',confirmed_by:'lock',confirmed_at:new Date().toISOString()});
+  toast("\ud83d\udd12 Match locked & finalized");
+  renderRoster(); renderSubs(); if(CUR_PPP===ppp) drawRoster();
+}
+async function unlockRoster(ppp){
+  const pwd=await askPasswordValue("Unlock this subscriber match for editing? The lock marker will be removed until you re-lock.");
+  if(pwd===null) return;
+  let res;
+  try{ res=await sbRpc('unlock_ppp_roster',{p_ppp_name:ppp, p_pwd:pwd}); }
+  catch(e){ toast("Unlock failed: "+e.message); return; }
+  if(!res.ok){ toast("X "+(res.error||'Unlock failed')); return; }
+  ROSTER.set(ppp,{...ROSTER.get(ppp),confirmed_by:null,confirmed_at:null});
+  toast("\ud83d\udd13 Unlocked \u2014 you can edit now");
+  renderRoster(); renderSubs(); if(CUR_PPP===ppp) drawRoster();
+}
+function lockRowHtml(ppp){
+  const r=ROSTER.get(ppp), locked=!!(r&&r.confirmed_at);
+  return `<div class="lockrow ${locked?'locked':''}">
+    <span class="lockstate">${locked?'\ud83d\udd12 Locked \u2014 match finalized'
+      :'\ud83d\udd13 Not locked \u2014 lock to finalize this match'}</span>
+    ${locked
+      ? `<button class="lnk link" data-lockact="unlock" data-p="${esc(ppp)}">\ud83d\udd13 Unlock to edit</button>`
+      : `<button class="lnk lockbtn" data-lockact="lock" data-p="${esc(ppp)}">\ud83d\udd12 Lock (finalize)</button>`}
+  </div>`;
+}
+
 // ---- SUBSCRIBER INFO TAB ----
 // Joins each Dicayas PPPoE account to its subscriber record so the customer
 // profile (area, address, phone, billing, GPS) sits next to the live link state.
@@ -1912,12 +1950,10 @@ function rosterCard(m){
       <dt>GPS</dt>${gps}
       ${rec.gps_place?row('Landmark',rec.gps_place):''}
     </dl>`:''}
-    <div class="scact">
-      ${st==='confirmed'
-        ? `<button class="scb u" data-rt="undo" data-p="${esc(m.ppp_name)}">Undo confirm</button>`
-        : `<button class="scb y" data-rt="ok" data-p="${esc(m.ppp_name)}">✔ Correct</button>
-           <button class="scb n" data-rt="no" data-p="${esc(m.ppp_name)}">✖ Wrong</button>`}
-    </div>
+    ${r&&r.roster_name?lockRowHtml(m.ppp_name):''}
+    ${(r&&r.roster_name&&!r.confirmed_at)
+      ? `<div class="scact"><button class="scb n" data-rt="no" data-p="${esc(m.ppp_name)}">✖ Wrong match</button></div>`
+      : ''}
   </div>`;
 }
 document.getElementById('grid-roster').addEventListener('click', async e=>{
@@ -1939,6 +1975,10 @@ document.getElementById('grid-roster').addEventListener('click', async e=>{
     }
     renderRoster(); renderSubs();
   }catch(err){ toast('Failed: '+err.message); }
+});
+document.body.addEventListener('click', e=>{
+  const b=e.target.closest('[data-lockact]'); if(!b) return;
+  if(b.dataset.lockact==='lock') lockRoster(b.dataset.p); else unlockRoster(b.dataset.p);
 });
 document.getElementById('rsq').oninput=renderRoster;
 document.getElementById('rsf').onchange=renderRoster;
