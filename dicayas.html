@@ -165,6 +165,24 @@
   .rb-yes{background:#e6f4ee;color:#028867}
   .rb-maybe{background:#fff4e0;color:#a86a00}
   .rb-no{background:#fdeaed;color:#DF1A35}
+  .rsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .rhead{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  .rnow{font-size:14px;font-weight:700;margin-bottom:9px;word-break:break-word}
+  .rnow small{display:block;font-weight:600;color:var(--dim);font-size:11px;margin-top:2px}
+  .racts{display:flex;gap:7px;margin-bottom:10px}
+  .rbtn{flex:1;border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:800;color:#fff;cursor:pointer}
+  .rbtn.y{background:#028867}.rbtn.n{background:#DF1A35}.rbtn.u{background:#eef2f8;color:#7a8aa0}
+  #rq{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:9px;font-size:14px;margin-bottom:8px}
+  #rlist{max-height:190px;overflow:auto;margin-bottom:6px}
+  .ritem{padding:9px 11px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+  .ritem:hover{background:#eef2f8}
+  .ritem small{display:block;color:var(--dim);font-size:11px}
+  .rdet{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .rdet label{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:7px 0 3px;text-transform:uppercase;letter-spacing:.05em}
+  .rdet input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:14px}
+  .rsave{width:100%;margin-top:11px;border:none;border-radius:9px;padding:11px;background:#025AC6;color:#fff;font-weight:800;font-size:13px;cursor:pointer}
+  .revlink{display:inline-block;margin-left:8px;font-size:12px;font-weight:800;color:#025AC6;text-decoration:none;
+           border:1.5px solid #025AC6;border-radius:999px;padding:5px 12px}
   .wtbl .wst{display:inline-flex;align-items:center;gap:5px;font-weight:900;white-space:nowrap;font-size:10.5px;letter-spacing:.05em;border-radius:20px;padding:3px 10px;background:var(--panel2);color:var(--dim);border:1px solid var(--border)}
   .wtbl .wst::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
   .wtbl .wst.waiting{background:#fdecef;color:#a31c2e;border-color:#f3b4bd}
@@ -321,6 +339,7 @@
         <option value="notinlist">NOT on the roster</option>
         <option value="review">Needs confirming</option>
       </select>
+      <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Review all</a>
     </div>
     <div id="banner-roster"></div>
     <div class="sec" style="margin-top:0">🔴 Offline subscribers</div>
@@ -1004,6 +1023,8 @@ function applySearch(){
 // ppp_name -> {roster_name, match_status}. An account with NO entry is not on the
 // paying-subscriber roster at all: piso-wifi, spawn internal, test, or unbilled.
 let ROSTER=new Map();
+let SUBRECS=[];      // the subscribers table, for the in-popup picker
+let CUR_PPP=null;    // ppp_name of the subscriber popup currently open
 function buildRoster(rows){
   ROSTER=new Map();
   (rows||[]).forEach(r=>{ if(r.ppp_name) ROSTER.set(r.ppp_name, r); });
@@ -1067,9 +1088,138 @@ function openSub(mk){
     <div class="row"><span class="k">PPP name</span><span class="v">${esc(m.ppp_name)}</span></div>
     <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
     <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <button class="pullbtn" onclick='pullOut("ppp",${JSON.stringify(m.ppp_name)},${JSON.stringify(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>`;
+    <button class="pullbtn" onclick='pullOut("ppp",${JSON.stringify(m.ppp_name)},${JSON.stringify(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>
+    <div class="rsec">
+      <div class="rhead">Subscriber match</div>
+      <div class="rnow" id="rNow"></div>
+      <div class="racts" id="rActs"></div>
+      <input id="rq" placeholder="Search subscriber name…" autocomplete="off">
+      <div id="rlist"></div>
+      <div id="rdet"></div>
+    </div>`;
+  CUR_PPP = m.ppp_name;
+  drawRoster();
   document.getElementById('ov').classList.add('show');
 }
+
+// ---- in-popup roster matching ----
+function drawRoster(){
+  const r = ROSTER.get(CUR_PPP) || null;
+  const now = document.getElementById('rNow'); if(!now) return;
+  if(r && r.roster_name){
+    const ok = r.match_status==='matched' || r.confirmed_at;
+    now.innerHTML = `${esc(r.roster_name)}<small>${r.confirmed_at ? '✔ confirmed'
+      : (ok ? 'auto-matched — please confirm' : '? fuzzy guess — please confirm')}</small>`;
+  } else {
+    now.innerHTML = `<span style="color:var(--red)">not linked to a subscriber</span>
+      <small>search below to attach the right one</small>`;
+  }
+  document.getElementById('rActs').innerHTML = (r && r.roster_name)
+    ? (r.confirmed_at
+        ? `<button class="rbtn u" data-ra="undo">Undo confirm</button>`
+        : `<button class="rbtn y" data-ra="ok">✔ Correct</button>
+           <button class="rbtn n" data-ra="no">✖ Wrong match</button>`)
+    : '';
+  drawRosterList(document.getElementById('rq').value||'');
+  drawRosterDetails(r && r.roster_name);
+}
+function drawRosterList(q){
+  const el=document.getElementById('rlist'); if(!el) return;
+  q=(q||'').toLowerCase().trim();
+  if(!q){ el.innerHTML=''; return; }
+  const hits=SUBRECS.filter(x=>(x.name||'').toLowerCase().includes(q)).slice(0,40);
+  el.innerHTML = hits.length
+    ? hits.map(x=>`<div class="ritem" data-pickname="${esc(x.name)}" data-pickarea="${esc(x.area||'')}">
+         ${esc(x.name)}<small>${esc(x.area||'—')}</small></div>`).join('')
+    : '<div class="ritem" style="color:var(--dim)">no subscriber matches that</div>';
+}
+function drawRosterDetails(name){
+  const el=document.getElementById('rdet'); if(!el) return;
+  const rec = name ? SUBRECS.find(x=>x.name===name) : null;
+  if(!rec){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="rdet">
+    <div class="rhead">Details — ${esc(rec.name)}</div>
+    <label>Phone</label><input id="dPhone" value="${esc(rec.phone||'')}" placeholder="09xxxxxxxxx">
+    <label>Address</label><input id="dAddr" value="${esc(rec.address||'')}" placeholder="Purok, barangay">
+    <label>Monthly amount</label><input id="dAmt" type="number" inputmode="numeric" value="${rec.monthly_amount==null?'':esc(rec.monthly_amount)}" placeholder="e.g. 800">
+    <button class="rsave" data-saveid="${rec.id}">Save details</button>
+  </div>`;
+}
+
+async function rosterPatch(ppp, body){
+  const r=await fetch(SB+"/rest/v1/ppp_roster?ppp_name=eq."+encodeURIComponent(ppp),{
+    method:"PATCH",
+    headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+    body:JSON.stringify({...body, updated_at:new Date().toISOString()})
+  });
+  if(!r.ok) throw new Error("HTTP "+r.status);
+}
+async function rosterUpsert(ppp, body){
+  // the account may have no ppp_roster row yet (it was 'not in list')
+  if(ROSTER.has(ppp)) return rosterPatch(ppp, body);
+  const r=await fetch(SB+"/rest/v1/ppp_roster",{
+    method:"POST",
+    headers:{...H,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+    body:JSON.stringify({ppp_name:ppp, ...body, updated_at:new Date().toISOString()})
+  });
+  if(!r.ok) throw new Error("HTTP "+r.status);
+}
+
+document.getElementById('mBody').addEventListener('input', e=>{
+  if(e.target.id==='rq') drawRosterList(e.target.value);
+});
+document.getElementById('mBody').addEventListener('click', async e=>{
+  const pick=e.target.closest('[data-pickname]');
+  const act =e.target.closest('[data-ra]');
+  const save=e.target.closest('[data-saveid]');
+  if(!pick && !act && !save) return;
+  const ppp=CUR_PPP; if(!ppp) return;
+  try{
+    if(pick){
+      const name=pick.dataset.pickname, area=pick.dataset.pickarea||null;
+      await rosterUpsert(ppp,{roster_name:name,area,match_status:'matched',score:1,
+        confirmed_by:'dicayas-popup',confirmed_at:new Date().toISOString()});
+      ROSTER.set(ppp,{ppp_name:ppp,roster_name:name,area,match_status:'matched',
+        confirmed_at:new Date().toISOString()});
+      document.getElementById('rq').value='';
+      toast('Linked to '+name);
+    } else if(act){
+      const a=act.dataset.ra, cur=ROSTER.get(ppp);
+      if(a==='ok'){
+        await rosterPatch(ppp,{match_status:'matched',confirmed_by:'dicayas-popup',
+          confirmed_at:new Date().toISOString()});
+        ROSTER.set(ppp,{...cur,match_status:'matched',confirmed_at:new Date().toISOString()});
+        toast('Confirmed');
+      } else if(a==='undo'){
+        await rosterPatch(ppp,{confirmed_by:null,confirmed_at:null});
+        ROSTER.set(ppp,{...cur,confirmed_at:null});
+        toast('Reopened');
+      } else {
+        await rosterPatch(ppp,{roster_name:null,area:null,match_status:'rejected',
+          score:null,confirmed_by:null,confirmed_at:null});
+        ROSTER.set(ppp,{...cur,roster_name:null,area:null,match_status:'rejected',confirmed_at:null});
+        toast('Marked wrong — search below for the right one');
+        setTimeout(()=>{const q=document.getElementById('rq'); if(q) q.focus();},60);
+      }
+    } else if(save){
+      const id=save.dataset.saveid;
+      const amt=document.getElementById('dAmt').value;
+      const body={phone:document.getElementById('dPhone').value||null,
+                  address:document.getElementById('dAddr').value||null,
+                  monthly_amount: amt===''?null:Number(amt)};
+      const r=await fetch(SB+"/rest/v1/subscribers?id=eq."+encodeURIComponent(id),{
+        method:"PATCH",
+        headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+        body:JSON.stringify(body)
+      });
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const rec=SUBRECS.find(x=>String(x.id)===String(id));
+      if(rec) Object.assign(rec, body);
+      toast('Details saved');
+    }
+    drawRoster(); renderSubs();
+  }catch(err){ toast('Failed: '+err.message); }
+});
 
 // detect if a name appears on multiple vendo records IN THE SAME AREA; returns {total, surviving, pending}
 // Vendos in different areas that share a name (e.g. Taruc DIPOLOG vs Taruc DAPITAN) are
@@ -2495,7 +2645,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb, roster] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
@@ -2503,10 +2653,12 @@ async function boot(){
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
-      sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[])
+      sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
+      sb("subscribers?select=id,name,area,phone,address,monthly_amount&order=name&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     buildRoster(roster);
+    SUBRECS=subrecs||[];
     renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
