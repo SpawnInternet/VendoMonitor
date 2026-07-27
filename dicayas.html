@@ -1161,39 +1161,50 @@ function renderSubModal(){
     <button class="pullbtn" onclick='pullOut("ppp",${attrJS(m.ppp_name)},${attrJS(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>`;
   } else {
     // SUBSCRIBER tab — mirrors the vendo Names & Group layout
-    html+=`<div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">📡 Router says</span><span class="v gold">${esc(m.ppp_name)||'(blank)'}</span></div>`;
+    // Two different names live here, so label them unambiguously:
+    //   1. the PPPoE account on the MikroTik  (read-only from this page)
+    //   2. the paying subscriber it is linked to (editable)
+    html+=`<div class="linkrow" style="background:#fff8e8;border-radius:9px;padding:9px 11px;margin-bottom:10px">
+      <span class="k" style="color:#8a6500">📡 PPPoE account<br><small style="font-weight:600;text-transform:none;letter-spacing:0">on the router — change it in MikroTik</small></span>
+      <span class="v gold">${esc(m.ppp_name)||'(blank)'}</span>
+    </div>`;
     const rec = (r&&r.roster_name) ? SUBRECS.find(x=>x.name===r.roster_name) : null;
+    const locked = !!(r&&r.confirmed_at);
     if(r&&r.roster_name){
-      const line=(k,v,btn)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${btn||''}</div>`;
-      const val=v=>(v==null||v==='')?'<i style="color:var(--dim)">(none)</i>':esc(v);
+      const btn=(f)=>rec?`<button class="lnk link" onclick='changeSubField(${JSON.stringify(String(rec.id))},${JSON.stringify(f)})'>Edit</button>`:'';
+      const none='<i style="color:var(--dim)">(none)</i>';
+      const line=(k,v,b)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${b||''}</div>`;
+      const val=v=>(v==null||v==='')?none:esc(v);
       html+=`<div class="candbox">
-        <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}</div>
-        ${line('Subscriber', esc(r.roster_name),
-               r.confirmed_at?'':`<button class="lnk unlink" data-ra="no">Unlink</button>`)}
+        <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}${locked?' <span class="notg-ok">🔒 match locked</span>':''}</div>
+        ${line('👤 Subscriber', esc(r.roster_name),
+            locked ? ''
+                   : `<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
         ${rec?`
-          ${line('Address', val(rec.address))}
-          ${line('Phone',   val(rec.phone))}
-          ${line('Plan',    val(rec.plan_type))}
-          ${line('Monthly', rec.monthly_amount==null?'<i style="color:var(--dim)">(none)</i>':'₱'+esc(rec.monthly_amount))}
-          ${line('Due day', val(rec.due_day))}
+          ${line('Address', val(rec.address),                       btn('address'))}
+          ${line('Phone',   val(rec.phone),                         btn('phone'))}
+          ${line('Plan',    val(rec.plan_type),                     btn('plan_type'))}
+          ${line('Monthly', rec.monthly_amount==null?none:'₱'+esc(rec.monthly_amount), btn('monthly_amount'))}
+          ${line('Due day', val(rec.due_day),                       btn('due_day'))}
           ${line('GPS', rec.lat
               ? `<a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a>`
-              : '<i style="color:var(--dim)">(none)</i>')}
+              : none, btn('gps'))}
           ${rec.gps_place?line('Landmark', val(rec.gps_place)):''}
-        `:''}
+        `:`<div class="raw" style="margin:8px 0;color:var(--red);font-weight:700">Linked name is not a subscriber record — use Change.</div>`}
         ${lockRowHtml(m.ppp_name)}
       </div>`;
     } else {
       html+=`<div class="raw" style="margin:10px 0;color:var(--red);font-weight:700">
         Not linked to a subscriber — search below to attach one.</div>`;
     }
-    html+=`<div class="rsec">
-      <div class="rhead">${r&&r.roster_name?'Change subscriber':'Attach subscriber'}</div>
+    // search stays hidden until "Change" is pressed, unless nothing is linked yet
+    html+=`<div class="rsec" id="subsearch" style="display:${(r&&r.roster_name)?'none':'block'}">
+      <div class="rhead">${r&&r.roster_name?'Pick a different subscriber':'Attach subscriber'}</div>
       <div class="rnow" id="rNow" style="display:none"></div>
       <div class="racts" id="rActs" style="display:none"></div>
       <input id="rq" placeholder="Search subscriber name…" autocomplete="off">
       <div id="rlist"></div>
-      <div id="rdet"></div>
+      <div id="rdet" style="display:none"></div>
     </div>`;
   }
   document.getElementById('mBody').innerHTML=html;
@@ -1943,6 +1954,69 @@ function renderCompare(txByVlan){
 }
 
 
+
+
+// ---- SUBSCRIBER FIELD EDITING (same pattern as changeAddress on vendos) ----
+const SUB_FIELDS={
+  address:       {label:'Address',   icon:'📍', ph:'e.g. Purok 2, Upper Dicayas'},
+  phone:         {label:'Phone',     icon:'📞', ph:'09xxxxxxxxx'},
+  plan_type:     {label:'Plan',      icon:'📶', ph:'e.g. monthly'},
+  monthly_amount:{label:'Monthly',   icon:'💵', ph:'e.g. 800', num:true},
+  due_day:       {label:'Due day',   icon:'🗓️', ph:'1–31', num:true},
+  gps:           {label:'GPS',       icon:'🗺️', ph:'8.60245, 123.37160'}
+};
+async function changeSubField(subId, field){
+  const rec=SUBRECS.find(x=>String(x.id)===String(subId));
+  if(!rec){ toast('Subscriber record not loaded'); return; }
+  const cfg=SUB_FIELDS[field]; if(!cfg) return;
+  const cur = field==='gps' ? (rec.lat?`${rec.lat}, ${rec.lng}`:'') : (rec[field]==null?'':String(rec[field]));
+  const val=await prettyPrompt({title:`${cfg.icon} Change ${cfg.label.toLowerCase()}`,
+    message:`${cfg.label} for ${rec.name}:`, value:cur, placeholder:cfg.ph, okText:'Save'});
+  if(val===null) return;
+  const pwd=await askPasswordValue(`Enter password to change ${cfg.label.toLowerCase()}.`);
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+
+  let body={};
+  const t=val.trim();
+  if(field==='gps'){
+    if(t===''){ body={lat:null,lng:null,gps_updated_at:null}; }
+    else{
+      const mm=t.match(/^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+      if(!mm){ toast('Use the form: 8.60245, 123.37160'); return; }
+      const la=parseFloat(mm[1]), ln=parseFloat(mm[2]);
+      if(la<4||la>22||ln<115||ln>128){ toast('That is outside the Philippines'); return; }
+      body={lat:la,lng:ln,gps_updated_at:new Date().toISOString(),gps_source:'manual entry'};
+    }
+  } else if(cfg.num){
+    if(t===''){ body[field]=null; }
+    else{
+      const n=Number(t);
+      if(!isFinite(n)||n<0){ toast('Enter a number'); return; }
+      if(field==='due_day' && (n<1||n>31)){ toast('Due day must be 1–31'); return; }
+      body[field]=n;
+    }
+  } else {
+    body[field]= t===''?null:t;
+  }
+
+  try{
+    const r=await fetch(SB+"/rest/v1/subscribers?id=eq."+encodeURIComponent(subId),{
+      method:"PATCH",
+      headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify(body)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+  }catch(e){ toast("Failed: "+e.message); return; }
+  Object.assign(rec, body);
+  toast(`${cfg.label} updated`);
+  renderSubModal(); renderRoster();
+}
+function showSubSearch(){
+  const box=document.getElementById('subsearch');
+  if(!box) return;
+  box.style.display='block';
+  const q=document.getElementById('rq'); if(q){ q.focus(); }
+}
 
 // ---- SUBSCRIBER MATCH LOCK (same contract as lockVendo/unlockVendo) ----
 // A match is only final once a human locks it behind the spawn password.
