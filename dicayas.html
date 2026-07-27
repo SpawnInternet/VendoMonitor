@@ -160,6 +160,11 @@
   .wtbl .wnamecell{max-width:300px;min-width:190px}
   .wtbl .wname{font-weight:800;color:var(--navy);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .wtbl .warea{margin-top:3px;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
+  .rb{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;line-height:1.5}
+  .rb-yes{background:#e6f4ee;color:#028867}
+  .rb-maybe{background:#fff4e0;color:#a86a00}
+  .rb-no{background:#fdeaed;color:#DF1A35}
   .wtbl .wst{display:inline-flex;align-items:center;gap:5px;font-weight:900;white-space:nowrap;font-size:10.5px;letter-spacing:.05em;border-radius:20px;padding:3px 10px;background:var(--panel2);color:var(--dim);border:1px solid var(--border)}
   .wtbl .wst::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
   .wtbl .wst.waiting{background:#fdecef;color:#a31c2e;border-color:#f3b4bd}
@@ -312,8 +317,12 @@
         <option value="all">All subscribers</option>
         <option value="online">Online only</option>
         <option value="offline">Offline only</option>
+        <option value="inlist">On the roster</option>
+        <option value="notinlist">NOT on the roster</option>
+        <option value="review">Needs confirming</option>
       </select>
     </div>
+    <div id="banner-roster"></div>
     <div class="sec" style="margin-top:0">🔴 Offline subscribers</div>
     <div class="grid" id="grid-subs-off"></div>
     <div class="sec">🟢 Online subscribers</div>
@@ -982,9 +991,32 @@ function applySearch(){
     if(f==="nolease"&&m.lease_status)return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
+    const r=rosterOf(m);
+    if(f==="inlist"&&!r)return false;
+    if(f==="notinlist"&&r)return false;
+    if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
     return true;
   });
   document.getElementById('grid-search').innerHTML = list.length?sortVendos(list).map(cardHtml).join(''):'<div class="empty">No matches</div>';
+}
+
+// ---- ROSTER MARKER ----
+// ppp_name -> {roster_name, match_status}. An account with NO entry is not on the
+// paying-subscriber roster at all: piso-wifi, spawn internal, test, or unbilled.
+let ROSTER=new Map();
+function buildRoster(rows){
+  ROSTER=new Map();
+  (rows||[]).forEach(r=>{ if(r.ppp_name) ROSTER.set(r.ppp_name, r); });
+}
+function rosterOf(m){ return ROSTER.get(m.ppp_name)||null; }
+function rosterBadge(m){
+  const r=rosterOf(m);
+  if(!r) return `<span class="rb rb-no" title="No match on the subscriber roster — piso-wifi, internal, test, or unbilled">✖ not in list</span>`;
+  const ok = r.match_status==='matched' || r.confirmed_at;
+  const cls = ok?'rb-yes':'rb-maybe';
+  const mark = ok?'✔':'?';
+  const tip = (r.roster_name||'')+(r.confirmed_at?' (confirmed)':(ok?'':' — fuzzy match, please confirm'));
+  return `<span class="rb ${cls}" title="${esc(tip)}">${mark} ${esc(r.roster_name||'?')}</span>`;
 }
 
 function subCard(m){
@@ -995,6 +1027,7 @@ function subCard(m){
       <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
       ${m.ip?`<span>${esc(m.ip)}</span>`:''}
     </div>
+    <div class="meta">${rosterBadge(m)}</div>
   </div>`;
 }
 function renderSubs(){
@@ -1004,6 +1037,10 @@ function renderSubs(){
     if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
+    const r=rosterOf(m);
+    if(f==="inlist"&&!r)return false;
+    if(f==="notinlist"&&r)return false;
+    if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
     return true;
   });
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
@@ -1013,6 +1050,10 @@ function renderSubs(){
   const offl=SUBS.filter(m=>!m.online && m.offline_since);
   const counts={}; offl.forEach(m=>{const k=m.offline_since.slice(0,16);counts[k]=(counts[k]||0)+1;});
   const big=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  const nIn=SUBS.filter(m=>rosterOf(m)).length;
+  const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
+  const rbEl=document.getElementById('banner-roster');
+  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${SUBS.length} PPPoE accounts match your subscriber roster · ${SUBS.length-nIn} not on it · ${nRev} need confirming.</div>`;
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
@@ -2454,16 +2495,18 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb, roster] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
       sbRpc("sales_month_by_vendo").catch(()=>[]),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
-      sb(HB_PATH).catch(()=>null)
+      sb(HB_PATH).catch(()=>null),
+      sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    buildRoster(roster);
     renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
