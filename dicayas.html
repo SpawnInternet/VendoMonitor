@@ -42,7 +42,6 @@
   .tab.active[data-tab="nolease"]{box-shadow:inset 0 3px 0 #7a8aa0}
   .tab.active[data-tab="subs"]{box-shadow:inset 0 3px 0 var(--cyan)}
   .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
-  .tab.active[data-tab="roster"]{box-shadow:inset 0 3px 0 var(--teal,#028867)}
   .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
   .tab.active[data-tab="inactive"]{box-shadow:inset 0 3px 0 var(--magenta)}
   .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
@@ -161,11 +160,7 @@
   .wtbl .wnamecell{max-width:300px;min-width:190px}
   .wtbl .wname{font-weight:800;color:var(--navy);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .wtbl .warea{margin-top:3px;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
-  .rb{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
       font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px;line-height:1.5}
-  .rb-yes{background:#e6f4ee;color:#028867}
-  .rb-maybe{background:#fff4e0;color:#a86a00}
-  .rb-no{background:#fdeaed;color:#DF1A35}
   .subtabs{display:flex;gap:6px;margin:2px 0 12px;border-bottom:1px solid var(--border)}
   .subtab{padding:9px 18px;cursor:pointer;font-weight:800;font-size:13.5px;color:var(--dim);
           border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
@@ -204,13 +199,13 @@
   .rdet label{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:7px 0 3px;text-transform:uppercase;letter-spacing:.05em}
   .rdet input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:14px}
   .rsave{width:100%;margin-top:11px;border:none;border-radius:9px;padding:11px;background:#025AC6;color:#fff;font-weight:800;font-size:13px;cursor:pointer}
-  #grid-roster{align-items:start}
   .rrow{display:flex;align-items:center;gap:11px;background:var(--card,#fff);border-radius:11px;
         padding:11px 13px;box-shadow:0 1px 3px rgba(20,32,58,.07);border-left:4px solid #e3e8f0;
         cursor:pointer;align-self:start}
   .rrow:hover{box-shadow:0 2px 8px rgba(20,32,58,.13)}
   .rrow.ok{border-left-color:#028867}.rrow.rev{border-left-color:#FFB725}.rrow.no{border-left-color:#DF1A35}
   .rrow .rmain{flex:1;min-width:0}
+  .rrow .rmeta{font-size:11.5px;color:var(--dim);font-weight:600;margin-top:2px}
   .rrow .rppp{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .rsub{font-size:12.5px;font-weight:700;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .rsub.yes{color:#028867}.rrow .rsub.rev{color:#a86a00}.rrow .rsub.no{color:#DF1A35;font-style:italic}
@@ -338,7 +333,6 @@
   <div class="tab" data-tab="offline">🔴 Waiting</div>
   <div class="tab" data-tab="nolease">⚫ No Lease</div>
   <div class="tab" data-tab="subs">👤 Subscribers</div>
-  <div class="tab" data-tab="roster">🧾 Subscriber Info</div>
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
   <div class="tab" data-tab="deleted">🗑 Trash</div>
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
@@ -348,23 +342,6 @@
 </div>
 
 <div class="wrap">
-  <div id="pane-roster" class="pane" style="display:none">
-    <div class="controls">
-      <input id="rsq" placeholder="Search PPPoE account or subscriber name…">
-      <select id="rsf">
-        <option value="all">All accounts</option>
-        <option value="confirmed">✔ Confirmed</option>
-        <option value="review">? Needs confirming</option>
-        <option value="nomatch">✖ Not on roster</option>
-        <option value="gps">📍 Has GPS</option>
-        <option value="nogps">Missing GPS</option>
-        <option value="nophone">Missing phone</option>
-      </select>
-      <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Bulk review</a>
-    </div>
-    <div id="banner-rosterinfo"></div>
-    <div class="grid" id="grid-roster"></div>
-  </div>
   <div id="pane-online" class="pane">
     <div class="controls">
       <input id="onq" placeholder="Search name, VLAN, area…">
@@ -397,6 +374,10 @@
         <option value="inlist">On the roster</option>
         <option value="notinlist">NOT on the roster</option>
         <option value="review">Needs confirming</option>
+        <option value="gps">📍 Has GPS</option>
+        <option value="nogps">Missing GPS</option>
+        <option value="nophone">Missing phone</option>
+        <option value="noamount">Missing amount</option>
       </select>
       <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Review all</a>
     </div>
@@ -1075,6 +1056,11 @@ function applySearch(){
     if(f==="inlist"&&!r)return false;
     if(f==="notinlist"&&r)return false;
     if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
+    const rec=subRecOf(r&&r.roster_name);
+    if(f==="gps"      && !(rec&&rec.lat))               return false;
+    if(f==="nogps"    &&  (rec&&rec.lat))               return false;
+    if(f==="nophone"  &&  (rec&&rec.phone))             return false;
+    if(f==="noamount" &&  (rec&&rec.monthly_amount!=null)) return false;
     return true;
   });
   document.getElementById('grid-search').innerHTML = list.length?sortVendos(list).map(cardHtml).join(''):'<div class="empty">No matches</div>';
@@ -1092,25 +1078,29 @@ function buildRoster(rows){
   (rows||[]).forEach(r=>{ if(r.ppp_name) ROSTER.set(r.ppp_name, r); });
 }
 function rosterOf(m){ return ROSTER.get(m.ppp_name)||null; }
-function rosterBadge(m){
-  const r=rosterOf(m);
-  if(!r) return `<span class="rb rb-no" title="No match on the subscriber roster — piso-wifi, internal, test, or unbilled">✖ not in list</span>`;
-  const ok = r.match_status==='matched' || r.confirmed_at;
-  const cls = ok?'rb-yes':'rb-maybe';
-  const mark = ok?'✔':'?';
-  const tip = (r.roster_name||'')+(r.confirmed_at?' (confirmed)':(ok?'':' — fuzzy match, please confirm'));
-  return `<span class="rb ${cls}" title="${esc(tip)}">${mark} ${esc(r.roster_name||'?')}</span>`;
-}
 
 function subCard(m){
-  const on=m.online;
-  return `<div class="card ${on?'onl':'offl'}" onclick='openSub(${JSON.stringify(m.match_key)})'>
-    <div class="vn">${esc(m.ppp_name)||'(no name)'}</div>
-    <div class="meta">
-      <span><span class="dot ${on?'g':'r'}"></span>${on?'Online':'Offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span>
-      ${m.ip?`<span>${esc(m.ip)}</span>`:''}
+  const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
+  const st=rosterState(m);
+  const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
+  const sub = (r&&r.roster_name)
+    ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
+    : `<div class="rsub no">✖ not on the subscriber roster</div>`;
+  const gaps = rec ? `<div class="rgap">
+      <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
+      <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
+      <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>
+    </div>` : '';
+  const state = m.online ? 'Online' : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
+  return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
+    <span class="rdot" style="background:${m.online?'#028867':'#DF1A35'}"></span>
+    <div class="rmain">
+      <div class="rppp">${esc(m.ppp_name)||'(no name)'}</div>
+      <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}</div>
+      ${sub}
+      ${gaps}
     </div>
-    <div class="meta">${rosterBadge(m)}</div>
+    <span class="chev">›</span>
   </div>`;
 }
 function renderSubs(){
@@ -1124,6 +1114,11 @@ function renderSubs(){
     if(f==="inlist"&&!r)return false;
     if(f==="notinlist"&&r)return false;
     if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
+    const rec=subRecOf(r&&r.roster_name);
+    if(f==="gps"      && !(rec&&rec.lat))               return false;
+    if(f==="nogps"    &&  (rec&&rec.lat))               return false;
+    if(f==="nophone"  &&  (rec&&rec.phone))             return false;
+    if(f==="noamount" &&  (rec&&rec.monthly_amount!=null)) return false;
     return true;
   });
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
@@ -2000,8 +1995,8 @@ function renderCompare(txByVlan){
 
 
 
-// Roster membership marker for the popup. Mirrors rosterBadge() used on the grid
-// cards, but full width and shown on BOTH tabs so the state is never hidden.
+// Roster membership marker for the popup: full width, shown on BOTH tabs
+// so the state is never hidden behind a tab switch.
 function rosterStrip(m){
   const r=ROSTER.get(m.ppp_name);
   if(!r || !r.roster_name){
@@ -2070,7 +2065,7 @@ async function changeSubField(subId, field){
   }catch(e){ toast("Failed: "+e.message); return; }
   Object.assign(rec, body);
   toast(`${cfg.label} updated`);
-  renderSubModal(); renderRoster();
+  renderSubModal(); renderSubs();
 }
 function showSubSearch(){
   const box=document.getElementById('subsearch');
@@ -2093,7 +2088,7 @@ async function lockRoster(ppp){
   if(!res.ok){ toast("X "+(res.error||'Lock failed')); return; }
   ROSTER.set(ppp,{...r,match_status:'matched',confirmed_by:'lock',confirmed_at:new Date().toISOString()});
   toast("\ud83d\udd12 Match locked & finalized");
-  renderRoster(); renderSubs(); if(window._curSubMk!=null) renderSubModal();
+  renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
 async function unlockRoster(ppp){
   const pwd=await askPasswordValue("Unlock this subscriber match for editing? The lock marker will be removed until you re-lock.");
@@ -2104,7 +2099,7 @@ async function unlockRoster(ppp){
   if(!res.ok){ toast("X "+(res.error||'Unlock failed')); return; }
   ROSTER.set(ppp,{...ROSTER.get(ppp),confirmed_by:null,confirmed_at:null});
   toast("\ud83d\udd13 Unlocked \u2014 you can edit now");
-  renderRoster(); renderSubs(); if(window._curSubMk!=null) renderSubModal();
+  renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
 function lockRowHtml(ppp){
   const r=ROSTER.get(ppp), locked=!!(r&&r.confirmed_at);
@@ -2127,64 +2122,11 @@ function rosterState(m){
   if(r.confirmed_at) return 'confirmed';
   return r.match_status==='matched' ? 'review' : 'review';
 }
-function renderRoster(){
-  const q=(document.getElementById('rsq').value||'').toLowerCase().trim();
-  const f=document.getElementById('rsf').value;
-  const list=SUBS.filter(m=>{
-    const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
-    const st=rosterState(m);
-    if(f==='confirmed'&&st!=='confirmed') return false;
-    if(f==='review'   &&st!=='review')    return false;
-    if(f==='nomatch'  &&st!=='nomatch')   return false;
-    if(f==='gps'   && !(rec&&rec.lat))    return false;
-    if(f==='nogps' &&  (rec&&rec.lat))    return false;
-    if(f==='nophone'&& (rec&&rec.phone))  return false;
-    if(q){
-      const hay=((m.ppp_name||'')+' '+((r&&r.roster_name)||'')+' '+((rec&&rec.address)||'')).toLowerCase();
-      if(!hay.includes(q)) return false;
-    }
-    return true;
-  }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
-
-  const nGps=SUBS.filter(m=>{const r=ROSTER.get(m.ppp_name);const rec=subRecOf(r&&r.roster_name);return rec&&rec.lat;}).length;
-  const nRev=SUBS.filter(m=>rosterState(m)==='review').length;
-  document.getElementById('banner-rosterinfo').innerHTML =
-    `<div class="banner">🧾 ${SUBS.length} PPPoE accounts · ${nGps} with GPS · ${nRev} still need confirming.</div>`;
-
-  document.getElementById('grid-roster').innerHTML = list.length
-    ? list.map(rosterCard).join('')
-    : '<div style="padding:30px;text-align:center;color:var(--dim);font-weight:600">Nothing matches that filter</div>';
-}
-function rosterCard(m){
-  const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
-  const st=rosterState(m);
-  const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
-  const sub = (r&&r.roster_name)
-    ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
-    : `<div class="rsub no">✖ not on the subscriber roster</div>`;
-  // completeness at a glance — this is what the list is for
-  const gaps = rec ? `<div class="rgap">
-      <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
-      <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
-      <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>
-    </div>` : '';
-  return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
-    <span class="rdot" style="background:${m.online?'#028867':'#DF1A35'}"></span>
-    <div class="rmain">
-      <div class="rppp">${esc(m.ppp_name)||'(no name)'}</div>
-      ${sub}
-      ${gaps}
-    </div>
-    <span class="chev">›</span>
-  </div>`;
-}
-document.getElementById('grid-roster').addEventListener('click', e=>{
+document.addEventListener('click', e=>{
   const row=e.target.closest('[data-openppp]'); if(!row) return;
-  window._curSubTab='sub';            // land directly on the matching tab
+  window._curSubTab='sub';            // land straight on the matching tab
   openSub(row.dataset.openppp);
 });
-document.getElementById('rsq').oninput=renderRoster;
-document.getElementById('rsf').onchange=renderRoster;
 
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -2193,7 +2135,6 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.getElementById('pane-'+t.dataset.tab).style.display='block';
   if(t.dataset.tab==='compare') loadCompare();
   if(t.dataset.tab==='subs') renderSubs();
-  if(t.dataset.tab==='roster') renderRoster();
   if(t.dataset.tab==='inactive') loadSuppress();
   if(t.dataset.tab==='deleted'){ renderDeleted(); renderArchive(); }
 });
