@@ -1112,7 +1112,9 @@ function renderSubs(){
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
 function openSub(mk){
+  window._curMk=null;             // leaving vendo context
   window._curSubMk = mk;
+  buildSubNavList(mk);
   if(!window._curSubTab) window._curSubTab='stats';
   renderSubModal();
 }
@@ -1363,6 +1365,7 @@ async function loadHarvestInfo(vids){
 
 function openM(mk){
   const m=STATUS.find(x=>x.match_key===mk); if(!m)return;
+  window._curSubMk=null;          // leaving subscriber context
   window._curMk=mk;
   buildNavList(mk);
   const cands=VLAN_CANDIDATES[m.vlan]||[];
@@ -1848,7 +1851,32 @@ function buildNavList(mk){
   else list=STATUS.slice();
   window._navList=sortVendos(list).map(x=>x.match_key);
 }
+function buildSubNavList(){
+  // mirror what the Subscribers grid currently shows, in the same order
+  const f=(document.getElementById('subflt')||{}).value||'all';
+  let list=SUBS.filter(m=>{
+    if(f==='online'&&!m.online) return false;
+    if(f==='offline'&&m.online) return false;
+    const r=rosterOf(m);
+    if(f==='inlist'&&!r) return false;
+    if(f==='notinlist'&&r) return false;
+    if(f==='review'&&!(r&&r.match_status==='probable'&&!r.confirmed_at)) return false;
+    return true;
+  });
+  list.sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+  window._subNavList=list.map(x=>x.match_key);
+}
 function navVendo(dir){
+  // one pair of arrows serves both popups — route by whichever is open
+  if(window._curSubMk!=null){
+    const list=window._subNavList||[];
+    const i=list.indexOf(window._curSubMk);
+    if(i<0) return;
+    const ni=i+dir;
+    if(ni<0||ni>=list.length) return;
+    openSub(list[ni]);
+    return;
+  }
   const list=window._navList||[];
   const i=list.indexOf(window._curMk);
   if(i<0) return;
@@ -1857,13 +1885,14 @@ function navVendo(dir){
   openM(list[ni]);
 }
 function updateNavButtons(){
-  const list=window._navList||[];
-  const i=list.indexOf(window._curMk);
+  const sub=window._curSubMk!=null;
+  const list=sub?(window._subNavList||[]):(window._navList||[]);
+  const i=list.indexOf(sub?window._curSubMk:window._curMk);
   const prev=document.getElementById('navPrev'), next=document.getElementById('navNext');
   if(prev) prev.disabled = (i<=0);
   if(next) next.disabled = (i<0||i>=list.length-1);
 }
-function closeM(){document.getElementById('ov').classList.remove('show')}
+function closeM(){document.getElementById('ov').classList.remove('show');window._curMk=null;window._curSubMk=null;}
 document.getElementById('ov').addEventListener('click',e=>{if(e.target.id==='ov')closeM()});
 document.addEventListener('keydown',e=>{
   if(!document.getElementById('ov').classList.contains('show'))return;
@@ -2260,9 +2289,13 @@ function refreshVendoLocal(vid, patch){
   // Force fresh paint of grid + any open modal/dupe view so badges update immediately
   try{ if(typeof render==='function') render(); }catch(_){}
   try{
-    if(document.getElementById('ov').classList.contains('show') && window._curMk!=null){
-      const m=STATUS.find(x=>x.match_key===window._curMk);
-      if(m){ document.getElementById('mTitle').textContent=nameOf(m); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]); }
+    if(document.getElementById('ov').classList.contains('show')){
+      if(window._curSubMk!=null){
+        renderSubModal();
+      } else if(window._curMk!=null){
+        const m=STATUS.find(x=>x.match_key===window._curMk);
+        if(m){ document.getElementById('mTitle').textContent=nameOf(m); renderModal(m, VLAN_CANDIDATES[m.vlan]||[]); }
+      }
     }
   }catch(_){}
   try{ if(document.getElementById('dupeOv').classList.contains('show') && typeof renderDupes==='function') renderDupes(); }catch(_){}
