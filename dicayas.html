@@ -166,6 +166,17 @@
   .rb-yes{background:#e6f4ee;color:#028867}
   .rb-maybe{background:#fff4e0;color:#a86a00}
   .rb-no{background:#fdeaed;color:#DF1A35}
+  .liststrip{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:10px;
+             margin:0 0 12px;font-size:13px;font-weight:800}
+  .liststrip .ls-tag{font-size:11px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
+                     padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .liststrip .ls-who{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ls-yes{background:#e9f7f1;border:1px solid #b6e3d3;color:#046b52}
+  .ls-yes .ls-tag{background:#028867;color:#fff}
+  .ls-maybe{background:#fff7e6;border:1px solid #f0d488;color:#8a6500}
+  .ls-maybe .ls-tag{background:#FFB725;color:#4a3400}
+  .ls-no{background:#fdeaed;border:1px solid #f5c2ca;color:#a31c2e}
+  .ls-no .ls-tag{background:#DF1A35;color:#fff}
   .rsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .rhead{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
   .rnow{font-size:14px;font-weight:700;margin-bottom:9px;word-break:break-word}
@@ -1132,6 +1143,7 @@ function renderSubModal(){
     <div class="mtab ${tab==='stats'?'active':''}" onclick="setSubTab('stats')">📡 MikroTik Stats</div>
     <div class="mtab ${tab==='sub'?'active':''}" onclick="setSubTab('sub')">🏷️ Subscriber${r&&r.confirmed_at?' 🔒':''}</div>
   </div>`;
+  html+=rosterStrip(m);
 
   if(tab==='stats'){
     const viaTxt = m.online_via==='lease'?'DHCP lease'
@@ -1176,7 +1188,7 @@ function renderSubModal(){
       const line=(k,v,b)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${b||''}</div>`;
       const val=v=>(v==null||v==='')?none:esc(v);
       html+=`<div class="candbox">
-        <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}${locked?' <span class="notg-ok">🔒 match locked</span>':''}</div>
+        <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}</div>
         ${line('👤 Subscriber', esc(r.roster_name),
             locked ? ''
                    : `<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
@@ -1955,6 +1967,24 @@ function renderCompare(txByVlan){
 
 
 
+
+
+// Roster membership marker for the popup. Mirrors rosterBadge() used on the grid
+// cards, but full width and shown on BOTH tabs so the state is never hidden.
+function rosterStrip(m){
+  const r=ROSTER.get(m.ppp_name);
+  if(!r || !r.roster_name){
+    return `<div class="liststrip ls-no">
+      <span class="ls-tag">\u2716 not on the list</span>
+      <span class="ls-who">no subscriber linked \u2014 piso-wifi, internal, test, or unbilled</span>
+    </div>`;
+  }
+  const locked=!!r.confirmed_at;
+  return `<div class="liststrip ${locked?'ls-yes':'ls-maybe'}">
+    <span class="ls-tag">${locked?'\u2714 on the list':'? on the list'}</span>
+    <span class="ls-who">${esc(r.roster_name)}${locked?' \u00b7 \ud83d\udd12 locked':' \u00b7 not confirmed yet'}</span>
+  </div>`;
+}
 
 // ---- SUBSCRIBER FIELD EDITING (same pattern as changeAddress on vendos) ----
 const SUB_FIELDS={
