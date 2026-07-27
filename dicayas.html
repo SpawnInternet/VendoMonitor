@@ -42,6 +42,7 @@
   .tab.active[data-tab="nolease"]{box-shadow:inset 0 3px 0 #7a8aa0}
   .tab.active[data-tab="subs"]{box-shadow:inset 0 3px 0 var(--cyan)}
   .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
+  .tab.active[data-tab="roster"]{box-shadow:inset 0 3px 0 var(--teal,#028867)}
   .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
   .tab.active[data-tab="inactive"]{box-shadow:inset 0 3px 0 var(--magenta)}
   .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
@@ -181,6 +182,20 @@
   .rdet label{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:7px 0 3px;text-transform:uppercase;letter-spacing:.05em}
   .rdet input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:14px}
   .rsave{width:100%;margin-top:11px;border:none;border-radius:9px;padding:11px;background:#025AC6;color:#fff;font-weight:800;font-size:13px;cursor:pointer}
+  .sc{background:var(--card,#fff);border-radius:13px;padding:13px 15px;
+      box-shadow:0 1px 3px rgba(20,32,58,.08);border-left:4px solid #e3e8f0}
+  .sc.ok{border-left-color:#028867}.sc.rev{border-left-color:#FFB725}.sc.no{border-left-color:#DF1A35}
+  .sc .ppp{font-weight:800;font-size:14.5px;word-break:break-word}
+  .sc .who{font-size:13px;font-weight:700;color:#025AC6;margin-top:2px;word-break:break-word}
+  .sc .who.none{color:#DF1A35;font-style:italic;font-weight:600}
+  .kv{margin-top:9px;display:grid;grid-template-columns:78px 1fr;gap:3px 8px;font-size:12.5px}
+  .kv dt{color:#7a8aa0;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;padding-top:2px}
+  .kv dd{margin:0;font-weight:600;word-break:break-word}
+  .kv dd.miss{color:#c9d2df;font-style:italic;font-weight:500}
+  .scact{display:flex;gap:7px;margin-top:11px}
+  .scb{flex:1;border:none;border-radius:9px;padding:9px;font-size:12.5px;font-weight:800;color:#fff;cursor:pointer}
+  .scb.y{background:#028867}.scb.n{background:#DF1A35}.scb.u{background:#eef2f8;color:#7a8aa0}
+  .maplink{color:#025AC6;font-weight:800;text-decoration:none}
   .revlink{display:inline-block;margin-left:8px;font-size:12px;font-weight:800;color:#025AC6;text-decoration:none;
            border:1.5px solid #025AC6;border-radius:999px;padding:5px 12px}
   .wtbl .wst{display:inline-flex;align-items:center;gap:5px;font-weight:900;white-space:nowrap;font-size:10.5px;letter-spacing:.05em;border-radius:20px;padding:3px 10px;background:var(--panel2);color:var(--dim);border:1px solid var(--border)}
@@ -295,6 +310,7 @@
   <div class="tab" data-tab="offline">🔴 Waiting</div>
   <div class="tab" data-tab="nolease">⚫ No Lease</div>
   <div class="tab" data-tab="subs">👤 Subscribers</div>
+  <div class="tab" data-tab="roster">🧾 Subscriber Info</div>
   <div class="tab" data-tab="search">🔍 Search / Filter</div>
   <div class="tab" data-tab="deleted">🗑 Trash</div>
   <div class="tab" data-tab="compare">📊 vs Transactions</div>
@@ -304,6 +320,23 @@
 </div>
 
 <div class="wrap">
+  <div id="pane-roster" class="pane" style="display:none">
+    <div class="controls">
+      <input id="rsq" placeholder="Search PPPoE account or subscriber name…">
+      <select id="rsf">
+        <option value="all">All accounts</option>
+        <option value="confirmed">✔ Confirmed</option>
+        <option value="review">? Needs confirming</option>
+        <option value="nomatch">✖ Not on roster</option>
+        <option value="gps">📍 Has GPS</option>
+        <option value="nogps">Missing GPS</option>
+        <option value="nophone">Missing phone</option>
+      </select>
+      <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Bulk review</a>
+    </div>
+    <div id="banner-rosterinfo"></div>
+    <div class="grid" id="grid-roster"></div>
+  </div>
   <div id="pane-online" class="pane">
     <div class="controls">
       <input id="onq" placeholder="Search name, VLAN, area…">
@@ -1816,6 +1849,100 @@ function renderCompare(txByVlan){
     </tbody></table>`;
 }
 
+
+// ---- SUBSCRIBER INFO TAB ----
+// Joins each Dicayas PPPoE account to its subscriber record so the customer
+// profile (area, address, phone, billing, GPS) sits next to the live link state.
+function subRecOf(name){ return name ? SUBRECS.find(x=>x.name===name) : null; }
+function rosterState(m){
+  const r=ROSTER.get(m.ppp_name);
+  if(!r || !r.roster_name) return 'nomatch';
+  if(r.confirmed_at) return 'confirmed';
+  return r.match_status==='matched' ? 'review' : 'review';
+}
+function renderRoster(){
+  const q=(document.getElementById('rsq').value||'').toLowerCase().trim();
+  const f=document.getElementById('rsf').value;
+  const list=SUBS.filter(m=>{
+    const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
+    const st=rosterState(m);
+    if(f==='confirmed'&&st!=='confirmed') return false;
+    if(f==='review'   &&st!=='review')    return false;
+    if(f==='nomatch'  &&st!=='nomatch')   return false;
+    if(f==='gps'   && !(rec&&rec.lat))    return false;
+    if(f==='nogps' &&  (rec&&rec.lat))    return false;
+    if(f==='nophone'&& (rec&&rec.phone))  return false;
+    if(q){
+      const hay=((m.ppp_name||'')+' '+((r&&r.roster_name)||'')+' '+((rec&&rec.address)||'')).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+
+  const nGps=SUBS.filter(m=>{const r=ROSTER.get(m.ppp_name);const rec=subRecOf(r&&r.roster_name);return rec&&rec.lat;}).length;
+  const nRev=SUBS.filter(m=>rosterState(m)==='review').length;
+  document.getElementById('banner-rosterinfo').innerHTML =
+    `<div class="banner">🧾 ${SUBS.length} PPPoE accounts · ${nGps} with GPS · ${nRev} still need confirming.</div>`;
+
+  document.getElementById('grid-roster').innerHTML = list.length
+    ? list.map(rosterCard).join('')
+    : '<div style="padding:30px;text-align:center;color:var(--dim);font-weight:600">Nothing matches that filter</div>';
+}
+function rosterCard(m){
+  const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
+  const st=rosterState(m);
+  const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
+  const miss=v=>v==null||v===''?'<dd class="miss">—</dd>':null;
+  const row=(k,v)=>`<dt>${k}</dt>${miss(v)||`<dd>${esc(v)}</dd>`}`;
+  const gps = rec&&rec.lat
+    ? `<dd><a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a></dd>`
+    : '<dd class="miss">no GPS yet</dd>';
+  return `<div class="sc ${cls}">
+    <div class="ppp">${esc(m.ppp_name)||'(no name)'} <span style="font-weight:600;font-size:11.5px;color:${m.online?'#028867':'#DF1A35'}">● ${m.online?'online':'offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span></div>
+    ${r&&r.roster_name
+      ? `<div class="who">${esc(r.roster_name)}${r.confirmed_at?' ✔':' <span style="color:#a86a00">(unconfirmed)</span>'}</div>`
+      : `<div class="who none">not on the subscriber roster</div>`}
+    ${rec?`<dl class="kv">
+      ${row('Area',rec.area)}
+      ${row('Address',rec.address)}
+      ${row('Phone',rec.phone)}
+      ${row('Plan',rec.plan_type)}
+      ${row('Monthly',rec.monthly_amount==null?null:'₱'+rec.monthly_amount)}
+      ${row('Due day',rec.due_day)}
+      <dt>GPS</dt>${gps}
+      ${rec.gps_place?row('Landmark',rec.gps_place):''}
+    </dl>`:''}
+    <div class="scact">
+      ${st==='confirmed'
+        ? `<button class="scb u" data-rt="undo" data-p="${esc(m.ppp_name)}">Undo confirm</button>`
+        : `<button class="scb y" data-rt="ok" data-p="${esc(m.ppp_name)}">✔ Correct</button>
+           <button class="scb n" data-rt="no" data-p="${esc(m.ppp_name)}">✖ Wrong</button>`}
+    </div>
+  </div>`;
+}
+document.getElementById('grid-roster').addEventListener('click', async e=>{
+  const b=e.target.closest('[data-rt]'); if(!b) return;
+  const ppp=b.dataset.p, a=b.dataset.rt, cur=ROSTER.get(ppp);
+  try{
+    if(a==='ok'){
+      await rosterPatch(ppp,{match_status:'matched',confirmed_by:'roster-tab',confirmed_at:new Date().toISOString()});
+      ROSTER.set(ppp,{...cur,match_status:'matched',confirmed_at:new Date().toISOString()});
+      toast('Confirmed');
+    } else if(a==='undo'){
+      await rosterPatch(ppp,{confirmed_by:null,confirmed_at:null});
+      ROSTER.set(ppp,{...cur,confirmed_at:null}); toast('Reopened');
+    } else {
+      await rosterPatch(ppp,{roster_name:null,area:null,match_status:'rejected',score:null,
+                             confirmed_by:null,confirmed_at:null});
+      ROSTER.set(ppp,{...cur,roster_name:null,match_status:'rejected',confirmed_at:null});
+      toast('Marked wrong — open the card in Subscribers to re-link');
+    }
+    renderRoster(); renderSubs();
+  }catch(err){ toast('Failed: '+err.message); }
+});
+document.getElementById('rsq').oninput=renderRoster;
+document.getElementById('rsf').onchange=renderRoster;
+
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
@@ -1823,6 +1950,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.getElementById('pane-'+t.dataset.tab).style.display='block';
   if(t.dataset.tab==='compare') loadCompare();
   if(t.dataset.tab==='subs') renderSubs();
+  if(t.dataset.tab==='roster') renderRoster();
   if(t.dataset.tab==='inactive') loadSuppress();
   if(t.dataset.tab==='deleted'){ renderDeleted(); renderArchive(); }
 });
@@ -2654,7 +2782,7 @@ async function boot(){
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
-      sb("subscribers?select=id,name,area,phone,address,monthly_amount&order=name&limit=2000").catch(()=>[])
+      sb("subscribers?select=id,name,area,phone,address,monthly_amount,due_day,plan_type,status,lat,lng,gps_place&order=name&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     buildRoster(roster);
