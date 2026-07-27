@@ -205,21 +205,24 @@
   .rdet input{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;font-size:14px}
   .rsave{width:100%;margin-top:11px;border:none;border-radius:9px;padding:11px;background:#025AC6;color:#fff;font-weight:800;font-size:13px;cursor:pointer}
   #grid-roster{align-items:start}
-  .sc{align-self:start;background:var(--card,#fff);border-radius:13px;padding:13px 15px;
+  .rrow{display:flex;align-items:center;gap:11px;background:var(--card,#fff);border-radius:11px;
+        padding:11px 13px;box-shadow:0 1px 3px rgba(20,32,58,.07);border-left:4px solid #e3e8f0;
+        cursor:pointer;align-self:start}
+  .rrow:hover{box-shadow:0 2px 8px rgba(20,32,58,.13)}
+  .rrow.ok{border-left-color:#028867}.rrow.rev{border-left-color:#FFB725}.rrow.no{border-left-color:#DF1A35}
+  .rrow .rmain{flex:1;min-width:0}
+  .rrow .rppp{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rrow .rsub{font-size:12.5px;font-weight:700;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rrow .rsub.yes{color:#028867}.rrow .rsub.rev{color:#a86a00}.rrow .rsub.no{color:#DF1A35;font-style:italic}
+  .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+  .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
+            background:#fdeaed;color:#DF1A35}
+  .rrow .gp.on{background:#e6f4ee;color:#028867}
+  .rrow .rdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+  .rrow .chev{color:#c3ccda;font-weight:900;font-size:17px;flex:0 0 auto}
       box-shadow:0 1px 3px rgba(20,32,58,.08);border-left:4px solid #e3e8f0}
-  .sc.ok{border-left-color:#028867}.sc.rev{border-left-color:#FFB725}.sc.no{border-left-color:#DF1A35}
-  .sc .ppp{font-weight:800;font-size:14.5px;word-break:break-word}
-  .sc .who{font-size:13px;font-weight:700;color:#025AC6;margin-top:2px;word-break:break-word}
   .sc .who.none{color:#DF1A35;font-style:italic;font-weight:600}
-  .kv{margin-top:9px;display:grid;grid-template-columns:78px 1fr;gap:3px 8px;font-size:12.5px}
-  .kv dt{color:#7a8aa0;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10.5px;padding-top:2px}
-  .kv dd{margin:0;font-weight:600;word-break:break-word}
-  .norec{margin-top:8px;padding:9px 11px;border-radius:9px;background:#fff7e6;border:1px solid #f0d488;
          color:#8a6500;font-size:12px;font-weight:700;line-height:1.45}
-  .kv dd.miss{color:#c9d2df;font-style:italic;font-weight:500}
-  .scact{display:flex;gap:7px;margin-top:11px}
-  .scb{flex:1;border:none;border-radius:9px;padding:9px;font-size:12.5px;font-weight:800;color:#fff;cursor:pointer}
-  .scb.y{background:#028867}.scb.n{background:#DF1A35}.scb.u{background:#eef2f8;color:#7a8aa0}
   .maplink{color:#025AC6;font-weight:800;text-decoration:none}
   .revlink{display:inline-block;margin-left:8px;font-size:12px;font-weight:800;color:#025AC6;text-decoration:none;
            border:1.5px solid #025AC6;border-radius:999px;padding:5px 12px}
@@ -2156,57 +2159,29 @@ function rosterCard(m){
   const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
   const st=rosterState(m);
   const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
-  const miss=v=>v==null||v===''?'<dd class="miss">—</dd>':null;
-  const row=(k,v)=>`<dt>${k}</dt>${miss(v)||`<dd>${esc(v)}</dd>`}`;
-  const gps = rec&&rec.lat
-    ? `<dd><a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a></dd>`
-    : '<dd class="miss">no GPS yet</dd>';
-  return `<div class="sc ${cls}">
-    <div class="ppp">${esc(m.ppp_name)||'(no name)'} <span style="font-weight:600;font-size:11.5px;color:${m.online?'#028867':'#DF1A35'}">● ${m.online?'online':'offline'+(m.offline_since?' '+ago(m.offline_since):'')}</span></div>
-    ${r&&r.roster_name
-      ? `<div class="who">${esc(r.roster_name)}${r.confirmed_at?' ✔':' <span style="color:#a86a00">(unconfirmed)</span>'}</div>`
-      : `<div class="who none">not on the subscriber roster</div>`}
-    ${(!rec && r && r.roster_name)?`<div class="norec">⚠️ No subscriber record named “${esc(r.roster_name)}”.
-      It came from the pasted roster text, not the subscribers table — use ✖ Wrong match to attach a real one.</div>`:''}
-    ${rec?`<dl class="kv">
-      ${row('Area',rec.area)}
-      ${row('Address',rec.address)}
-      ${row('Phone',rec.phone)}
-      ${row('Plan',rec.plan_type)}
-      ${row('Monthly',rec.monthly_amount==null?null:'₱'+rec.monthly_amount)}
-      ${row('Due day',rec.due_day)}
-      <dt>GPS</dt>${gps}
-      ${rec.gps_place?row('Landmark',rec.gps_place):''}
-    </dl>`:''}
-    ${r&&r.roster_name?lockRowHtml(m.ppp_name):''}
-    ${(r&&r.roster_name&&!r.confirmed_at)
-      ? `<div class="scact"><button class="scb n" data-rt="no" data-p="${esc(m.ppp_name)}">✖ Wrong match</button></div>`
-      : ''}
+  const sub = (r&&r.roster_name)
+    ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
+    : `<div class="rsub no">✖ not on the subscriber roster</div>`;
+  // completeness at a glance — this is what the list is for
+  const gaps = rec ? `<div class="rgap">
+      <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
+      <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
+      <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>
+    </div>` : '';
+  return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
+    <span class="rdot" style="background:${m.online?'#028867':'#DF1A35'}"></span>
+    <div class="rmain">
+      <div class="rppp">${esc(m.ppp_name)||'(no name)'}</div>
+      ${sub}
+      ${gaps}
+    </div>
+    <span class="chev">›</span>
   </div>`;
 }
-document.getElementById('grid-roster').addEventListener('click', async e=>{
-  const b=e.target.closest('[data-rt]'); if(!b) return;
-  const ppp=b.dataset.p, a=b.dataset.rt, cur=ROSTER.get(ppp);
-  try{
-    if(a==='ok'){
-      await rosterPatch(ppp,{match_status:'matched',confirmed_by:'roster-tab',confirmed_at:new Date().toISOString()});
-      ROSTER.set(ppp,{...cur,match_status:'matched',confirmed_at:new Date().toISOString()});
-      toast('Confirmed');
-    } else if(a==='undo'){
-      await rosterPatch(ppp,{confirmed_by:null,confirmed_at:null});
-      ROSTER.set(ppp,{...cur,confirmed_at:null}); toast('Reopened');
-    } else {
-      await rosterPatch(ppp,{roster_name:null,area:null,match_status:'rejected',score:null,
-                             confirmed_by:null,confirmed_at:null});
-      ROSTER.set(ppp,{...cur,roster_name:null,match_status:'rejected',confirmed_at:null});
-      toast('Marked wrong — open the card in Subscribers to re-link');
-    }
-    renderRoster(); renderSubs();
-  }catch(err){ toast('Failed: '+err.message); }
-});
-document.body.addEventListener('click', e=>{
-  const b=e.target.closest('[data-lockact]'); if(!b) return;
-  if(b.dataset.lockact==='lock') lockRoster(b.dataset.p); else unlockRoster(b.dataset.p);
+document.getElementById('grid-roster').addEventListener('click', e=>{
+  const row=e.target.closest('[data-openppp]'); if(!row) return;
+  window._curSubTab='sub';            // land directly on the matching tab
+  openSub(row.dataset.openppp);
 });
 document.getElementById('rsq').oninput=renderRoster;
 document.getElementById('rsf').onchange=renderRoster;
