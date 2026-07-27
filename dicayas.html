@@ -172,6 +172,20 @@
                padding:1px 8px;border-radius:999px;background:#eef2f8;color:#7a8aa0}
   .subtab[data-sv="active"].active .cnt{background:#e6f4ee;color:#028867}
   .subtab[data-sv="inactive"].active .cnt{background:#fdeaed;color:#DF1A35}
+  .newbtn{width:100%;margin-top:10px;border:1.5px dashed #b6c6de;background:#f7faff;color:#025AC6;
+          border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}
+  .newbtn:hover{background:#eef4ff}
+  .newform{margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:12px 13px;background:#fbfdff}
+  .newform label{display:block;font-size:10.5px;font-weight:800;color:var(--dim);
+                 text-transform:uppercase;letter-spacing:.05em;margin:9px 0 3px}
+  .newform label:first-of-type{margin-top:0}
+  .newform input,.newform select{width:100%;padding:10px 11px;border:1.5px solid var(--border);
+                 border-radius:9px;font-size:14px;background:#fff}
+  .nf2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .newsave{width:100%;margin-top:12px;border:none;border-radius:10px;padding:12px;
+           background:#028867;color:#fff;font-weight:800;font-size:13.5px;cursor:pointer}
+  .newcancel{width:100%;margin-top:7px;border:none;border-radius:10px;padding:9px;
+             background:#eef2f8;color:#7a8aa0;font-weight:800;font-size:12.5px;cursor:pointer}
   .liststrip{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:10px;
              margin:0 0 12px;font-size:13px;font-weight:800}
   .liststrip .ls-tag{font-size:11px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
@@ -1242,6 +1256,27 @@ function renderSubModal(){
       <input id="rq" placeholder="Search subscriber name…" autocomplete="off">
       <div id="rlist"></div>
       <div id="rdet" style="display:none"></div>
+      <button class="newbtn" id="newSubBtn">➕ Not in the list? Create a new subscriber</button>
+      <div class="newform" id="newSubForm" style="display:none">
+        <label>Name *</label>
+        <input id="nfName" value="${esc(m.ppp_name||'')}" placeholder="Full name as billed">
+        <div class="nf2">
+          <div><label>Area</label>
+            <select id="nfArea">${AREA_OPTS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('')}</select>
+          </div>
+          <div><label>Due day</label><input id="nfDue" type="number" inputmode="numeric" min="1" max="31" placeholder="1–31"></div>
+        </div>
+        <label>Address</label>
+        <input id="nfAddr" placeholder="Purok, barangay">
+        <div class="nf2">
+          <div><label>Phone</label><input id="nfPhone" placeholder="09xxxxxxxxx"></div>
+          <div><label>Monthly ₱</label><input id="nfAmt" type="number" inputmode="numeric" placeholder="e.g. 800"></div>
+        </div>
+        <label>Plan</label>
+        <input id="nfPlan" value="monthly" placeholder="monthly">
+        <button class="newsave" id="nfSave">Create &amp; link to ${esc(m.ppp_name||'this account')}</button>
+        <button class="newcancel" id="nfCancel">Cancel</button>
+      </div>
     </div>`;
   }
   document.getElementById('mBody').innerHTML=html;
@@ -2011,6 +2046,75 @@ function rosterStrip(m){
     <span class="ls-who">${esc(r.roster_name)}${locked?' \u00b7 \ud83d\udd12 locked':' \u00b7 not confirmed yet'}</span>
   </div>`;
 }
+
+
+// ---- CREATE A NEW SUBSCRIBER FROM THE POPUP ----
+// For PPPoE accounts with no roster row: make the customer record and link it in
+// one step, so "not on the list" has a fix rather than just a label.
+const AREA_OPTS=['DIPOLOG','DAPITAN','ROXAS','SINDANGAN','POLANCO','MINAOG','SINAMAN','UNKNOWN'];
+
+async function createSubscriberFor(ppp){
+  const name=(document.getElementById('nfName').value||'').trim();
+  if(name.length<3){ toast('Enter the subscriber name'); return; }
+  const dup=SUBRECS.find(x=>(x.name||'').toLowerCase()===name.toLowerCase());
+  if(dup){ toast('“'+dup.name+'” already exists — use the search instead'); return; }
+
+  const due=document.getElementById('nfDue').value;
+  const amt=document.getElementById('nfAmt').value;
+  if(due!=='' && (Number(due)<1||Number(due)>31)){ toast('Due day must be 1–31'); return; }
+
+  const pwd=await askPasswordValue('Enter password to create this subscriber.');
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+
+  const body={
+    name,
+    area:      document.getElementById('nfArea').value || null,
+    address:  (document.getElementById('nfAddr').value||'').trim() || null,
+    phone:    (document.getElementById('nfPhone').value||'').trim() || null,
+    plan_type:(document.getElementById('nfPlan').value||'').trim() || null,
+    monthly_amount: amt===''?null:Number(amt),
+    due_day:  due===''?null:Number(due),
+    status:'active',
+    notes:'created from dicayas popup for PPPoE account: '+ppp
+  };
+  let rec;
+  try{
+    const r=await fetch(SB+"/rest/v1/subscribers",{
+      method:"POST",
+      headers:{...H,"Content-Type":"application/json","Prefer":"return=representation"},
+      body:JSON.stringify(body)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    rec=(await r.json())[0];
+  }catch(e){ toast("Create failed: "+e.message); return; }
+
+  SUBRECS.push(rec);
+  SUBRECS.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+
+  // link the account to the record we just made
+  try{
+    await rosterUpsert(ppp,{roster_name:rec.name, area:rec.area, match_status:'matched', score:1,
+                            confirmed_by:'created-in-popup', confirmed_at:new Date().toISOString()});
+    ROSTER.set(ppp,{ppp_name:ppp, roster_name:rec.name, area:rec.area,
+                    match_status:'matched', confirmed_at:new Date().toISOString()});
+  }catch(e){ toast('Created, but linking failed: '+e.message); }
+
+  toast('✔ '+rec.name+' created & linked');
+  renderSubModal(); renderSubs();
+}
+
+document.addEventListener('click', e=>{
+  if(e.target.id==='newSubBtn'){
+    document.getElementById('newSubForm').style.display='block';
+    e.target.style.display='none';
+    const n=document.getElementById('nfName'); if(n){ n.focus(); n.select(); }
+  } else if(e.target.id==='nfCancel'){
+    document.getElementById('newSubForm').style.display='none';
+    const b=document.getElementById('newSubBtn'); if(b) b.style.display='';
+  } else if(e.target.id==='nfSave'){
+    if(CUR_PPP) createSubscriberFor(CUR_PPP);
+  }
+});
 
 // ---- SUBSCRIBER FIELD EDITING (same pattern as changeAddress on vendos) ----
 const SUB_FIELDS={
