@@ -1112,33 +1112,98 @@ function renderSubs(){
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
 function openSub(mk){
-  const m=SUBS.find(x=>x.match_key===mk); if(!m)return;
+  window._curSubMk = mk;
+  if(!window._curSubTab) window._curSubTab='stats';
+  renderSubModal();
+}
+function setSubTab(t){ window._curSubTab=t; renderSubModal(); }
+
+function renderSubModal(){
+  const m=SUBS.find(x=>x.match_key===window._curSubMk); if(!m)return;
+  CUR_PPP = m.ppp_name;
+  const tab=window._curSubTab;
+  const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
+  const r=ROSTER.get(m.ppp_name);
   document.getElementById('mTitle').textContent=m.ppp_name||'(no name)';
-  document.getElementById('mBody').innerHTML=`
-    <div class="row"><span class="k">Type</span><span class="v">PPPoE Subscriber</span></div>
-    <div class="row"><span class="k">Status</span><span class="v ${m.online?'badge-on':'badge-off'}">${m.online?'● ONLINE':'● OFFLINE'}</span></div>
-    ${!m.online&&m.offline_since?`<div class="row"><span class="k">Offline since</span><span class="v">${ago(m.offline_since)} ago</span></div>`:''}
-    <div class="row"><span class="k">PPP name</span><span class="v">${esc(m.ppp_name)}</span></div>
-    <div class="row"><span class="k">IP</span><span class="v">${esc(m.ip)||'—'}</span></div>
-    <div class="row"><span class="k">Poller updated</span><span class="v">${ago(m.updated_at)} ago</span></div>
-    <button class="pullbtn" onclick='pullOut("ppp",${JSON.stringify(m.ppp_name)},${JSON.stringify(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>
-    <div class="rsec">
-      <div class="rhead">Subscriber match</div>
-      <div class="rnow" id="rNow"></div>
-      <div class="racts" id="rActs"></div>
+
+  let html=`<div class="mtabs">
+    <div class="mtab ${tab==='stats'?'active':''}" onclick="setSubTab('stats')">📡 MikroTik Stats</div>
+    <div class="mtab ${tab==='sub'?'active':''}" onclick="setSubTab('sub')">🏷️ Subscriber${r&&r.confirmed_at?' 🔒':''}</div>
+  </div>`;
+
+  if(tab==='stats'){
+    const viaTxt = m.online_via==='lease'?'DHCP lease'
+                 : m.online_via==='users'?'customers connected'
+                 : m.online_via==='traffic'?'live traffic (static IP)':'';
+    html+=`
+    <div class="hero">
+      <span class="hstat">${m.online?'🟢':'🔴'} ${m.online?'ONLINE':'OFFLINE'}${!m.online&&m.offline_since?' · '+ago(m.offline_since):''}</span>
+      <span class="hvlan">PPPoE</span>
+      ${viaTxt?`<span class="hvia">via ${viaTxt}</span>`:''}
+    </div>
+    ${m.router_comment?`<div class="routerbar"><div class="rl"><span>📡 Router says</span></div><div class="rv">${esc(m.router_comment)}</div></div>`:''}
+    <div class="sec">Traffic</div>
+    <div class="tiles">
+      <div class="tile ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
+      <div class="tile ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
+      <div class="tile ${rx===0?'warn':''}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
+      <div class="tile"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
+    </div>
+    <div class="sec">Network</div>
+    <div class="tiles">
+      <div class="tile acc"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
+      <div class="tile acc"><div class="tl">PPP name</div><div class="tv mono">${esc(m.ppp_name)||'—'}</div></div>
+      <div class="tile ${m.lease_status?'':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
+      <div class="tile"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
+    </div>
+    <button class="pullbtn" onclick='pullOut("ppp",${attrJS(m.ppp_name)},${attrJS(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>`;
+  } else {
+    // SUBSCRIBER tab — mirrors the vendo Names & Group layout
+    html+=`<div class="row" style="border:none;padding-bottom:2px"><span class="k" style="color:#8a6500">📡 Router says</span><span class="v gold">${esc(m.ppp_name)||'(blank)'}</span></div>`;
+    const rec = (r&&r.roster_name) ? SUBRECS.find(x=>x.name===r.roster_name) : null;
+    if(r&&r.roster_name){
+      const line=(k,v,btn)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${btn||''}</div>`;
+      const val=v=>(v==null||v==='')?'<i style="color:var(--dim)">(none)</i>':esc(v);
+      html+=`<div class="candbox">
+        <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}</div>
+        ${line('Subscriber', esc(r.roster_name),
+               r.confirmed_at?'':`<button class="lnk unlink" data-ra="no">Unlink</button>`)}
+        ${rec?`
+          ${line('Address', val(rec.address))}
+          ${line('Phone',   val(rec.phone))}
+          ${line('Plan',    val(rec.plan_type))}
+          ${line('Monthly', rec.monthly_amount==null?'<i style="color:var(--dim)">(none)</i>':'₱'+esc(rec.monthly_amount))}
+          ${line('Due day', val(rec.due_day))}
+          ${line('GPS', rec.lat
+              ? `<a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a>`
+              : '<i style="color:var(--dim)">(none)</i>')}
+          ${rec.gps_place?line('Landmark', val(rec.gps_place)):''}
+        `:''}
+        ${lockRowHtml(m.ppp_name)}
+      </div>`;
+    } else {
+      html+=`<div class="raw" style="margin:10px 0;color:var(--red);font-weight:700">
+        Not linked to a subscriber — search below to attach one.</div>`;
+    }
+    html+=`<div class="rsec">
+      <div class="rhead">${r&&r.roster_name?'Change subscriber':'Attach subscriber'}</div>
+      <div class="rnow" id="rNow" style="display:none"></div>
+      <div class="racts" id="rActs" style="display:none"></div>
       <input id="rq" placeholder="Search subscriber name…" autocomplete="off">
       <div id="rlist"></div>
       <div id="rdet"></div>
     </div>`;
-  CUR_PPP = m.ppp_name;
-  drawRoster();
+  }
+  document.getElementById('mBody').innerHTML=html;
+  if(tab==='sub') drawRoster();
   document.getElementById('ov').classList.add('show');
 }
 
 // ---- in-popup roster matching ----
 function drawRoster(){
   const r = ROSTER.get(CUR_PPP) || null;
-  const now = document.getElementById('rNow'); if(!now) return;
+  const now = document.getElementById('rNow');
+  if(!now || !document.getElementById('rq')) return;
   if(r && r.roster_name){
     const ok = r.match_status==='matched' || r.confirmed_at;
     now.innerHTML = `${esc(r.roster_name)}<small>${r.confirmed_at ? '✔ confirmed'
@@ -1864,7 +1929,7 @@ async function lockRoster(ppp){
   if(!res.ok){ toast("X "+(res.error||'Lock failed')); return; }
   ROSTER.set(ppp,{...r,match_status:'matched',confirmed_by:'lock',confirmed_at:new Date().toISOString()});
   toast("\ud83d\udd12 Match locked & finalized");
-  renderRoster(); renderSubs(); if(CUR_PPP===ppp) drawRoster();
+  renderRoster(); renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
 async function unlockRoster(ppp){
   const pwd=await askPasswordValue("Unlock this subscriber match for editing? The lock marker will be removed until you re-lock.");
@@ -1875,7 +1940,7 @@ async function unlockRoster(ppp){
   if(!res.ok){ toast("X "+(res.error||'Unlock failed')); return; }
   ROSTER.set(ppp,{...ROSTER.get(ppp),confirmed_by:null,confirmed_at:null});
   toast("\ud83d\udd13 Unlocked \u2014 you can edit now");
-  renderRoster(); renderSubs(); if(CUR_PPP===ppp) drawRoster();
+  renderRoster(); renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
 function lockRowHtml(ppp){
   const r=ROSTER.get(ppp), locked=!!(r&&r.confirmed_at);
