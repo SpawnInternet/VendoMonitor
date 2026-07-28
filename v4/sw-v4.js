@@ -2,7 +2,7 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-folder-v1';
+const CACHE = 'spawn-harvest-v4-folder-v2';
 const APP_HTML = '/VendoMonitor/v4/harvest_v4.html';
 const APP_SHELL = [
   '/VendoMonitor/v4/harvest_v4.html',
@@ -14,6 +14,7 @@ const APP_SHELL = [
   // between the two apps. v4 now caches nothing that isn't v4's.
   '/VendoMonitor/v4/icon-v4-192.png',
   '/VendoMonitor/v4/icon-v4-512.png',
+  '/VendoMonitor/v4/icon-v4-maskable-512.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
