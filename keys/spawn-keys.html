@@ -1479,7 +1479,42 @@ if('serviceWorker' in navigator){
       location.reload();
     });
 
-    navigator.serviceWorker.register('/VendoMonitor/keys/sw-keys.js', {scope:'/VendoMonitor/keys/'})
+    // ── LEGACY CLEANUP (this is why the installed app stopped opening) ──
+    // Spawn Keys used to live at /VendoMonitor/spawn-keys.html with its worker
+    // registered at the SHARED /VendoMonitor/ scope. That old registration is
+    // still alive on Steph's and Ailyn's phones, and it is actively harmful:
+    //   * its APP_HTML points at the old root page, which is now only a
+    //     redirect stub
+    //   * its navigation guard is indexOf('spawn-keys') — and the NEW path,
+    //     /VendoMonitor/keys/spawn-keys.html, CONTAINS that string, so the old
+    //     root worker happily claims our page
+    // Any time the /keys/ worker isn't controlling yet (first launch after an
+    // update, cold start, evicted worker) the root worker answers with the
+    // cached stub. The stub then deletes the keys caches and redirects here —
+    // and with the cache now empty and no network, the app dies on a blank
+    // screen. That is the "cannot open when installed" bug.
+    // This used to get cleaned up because the manifest launched THROUGH the
+    // stub. start_url now points straight at this page, so the cleanup has to
+    // happen here instead.
+    const _killLegacy = navigator.serviceWorker.getRegistrations()
+      .then(regs => Promise.all(regs.map(r => {
+        const sw = r.active || r.waiting || r.installing;
+        const isKeysScript = sw && sw.scriptURL && sw.scriptURL.indexOf('sw-keys.js') !== -1;
+        const isLegacyScope = !r.scope || r.scope.indexOf('/VendoMonitor/keys/') === -1;
+        return (isKeysScript && isLegacyScope) ? r.unregister().catch(()=>{}) : null;
+      })))
+      .then(() => caches.keys())
+      .then(ks => Promise.all(
+        // Drop the OLD keys caches (they hold the redirect stub as the app
+        // shell). Never touch the current /keys/ cache, and never touch a
+        // cache belonging to harvest, office or spawn-mobile.
+        ks.filter(k => k.indexOf('spawn-keys') !== -1 && k.indexOf('keysfolder') === -1)
+          .map(k => caches.delete(k).catch(()=>{}))
+      ))
+      .catch(()=>{});
+
+    _killLegacy
+      .then(()=> navigator.serviceWorker.register('/VendoMonitor/keys/sw-keys.js', {scope:'/VendoMonitor/keys/'}))
       .then(reg=>{
         try{ reg.update(); }catch(e){}
         reg.addEventListener('updatefound', ()=>{
@@ -1673,3 +1708,4 @@ go = function(s){
 </script>
 </body>
 </html>
+
