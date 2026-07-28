@@ -2,7 +2,7 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-trial-v7';
+const CACHE = 'spawn-harvest-v4-trial-v8';
 const APP_HTML = '/VendoMonitor/harvest_v4.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v4.html',
@@ -119,9 +119,21 @@ self.addEventListener('fetch', e => {
       }
       return response;
     }).catch(() =>
-      caches.match(req, { ignoreSearch: !isVersioned }).then(hit =>
-        hit || caches.match(APP_HTML, { ignoreSearch: true })
-      )
+      // Look ONLY inside v4's own cache. A bare caches.match() searches EVERY
+      // cache on the origin, so an offline v4 asset miss could be answered out
+      // of v3's cache — and the APP_HTML fallback would hand back the full
+      // harvest_v4.html page as the body of a JS/JSON/image request. Both of
+      // those leaks are now impossible: own cache only, and the HTML fallback
+      // is reserved for actual document requests.
+      caches.open(CACHE)
+        .then(c =>
+          c.match(req, { ignoreSearch: !isVersioned })
+            .then(hit => hit || (req.destination === 'document'
+              ? c.match(APP_HTML, { ignoreSearch: true })
+              : undefined))
+        )
+        .then(r => r || new Response('Offline', { status: 503 }))
     )
   );
 });
+
