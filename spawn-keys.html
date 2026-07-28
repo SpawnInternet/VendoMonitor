@@ -3,55 +3,52 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Spawn Keys moved</title>
+<title>Spawn Keys — reinstall needed</title>
 <style>
-  body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#025AC6;color:#fff;
-       min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px}
-  .card{max-width:340px}
-  .k{font-size:44px}
-  h1{font-size:20px;margin:10px 0 6px}
-  p{font-size:13px;opacity:.9;line-height:1.5;margin:0 0 18px}
-  a.btn{display:inline-block;background:#FFB725;color:#0b2c5e;font-weight:800;text-decoration:none;
-        padding:13px 22px;border-radius:12px;font-size:15px}
-  small{display:block;margin-top:14px;opacity:.7;font-size:11px}
+ body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#025AC6;color:#fff;
+      min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+ .card{max-width:340px;text-align:center}
+ h1{font-size:20px;margin:10px 0 6px}
+ ol{text-align:left;font-size:14px;line-height:1.8;padding-left:22px;opacity:.95}
+ a.btn{display:inline-block;background:#FFB725;color:#0b2c5e;font-weight:800;text-decoration:none;
+       padding:14px 22px;border-radius:12px;font-size:15px;margin-top:16px}
 </style>
 </head>
 <body>
-  <div class="card">
-    <div class="k">🔑</div>
-    <h1>Spawn Keys has moved</h1>
-    <p>The app now lives at a new address so it installs and opens cleanly. Cleaning up the old version…</p>
-    <a class="btn" id="go" href="/VendoMonitor/keys/spawn-keys.html">Open Spawn Keys →</a>
-    <small>If it doesn't redirect automatically, tap the button.</small>
-  </div>
+ <div class="card">
+  <div style="font-size:44px">&#128273;</div>
+  <h1>This icon is out of date</h1>
+  <p style="font-size:13px;opacity:.9;line-height:1.5">Spawn Keys moved. This shortcut cannot update itself &mdash;
+  it has to be replaced once.</p>
+  <ol>
+   <li>Delete this icon from your home screen</li>
+   <li>Tap the button below</li>
+   <li>Menu (&#8942;) &rarr; <b>Install app</b></li>
+  </ol>
+  <a class="btn" href="/VendoMonitor/keys/spawn-keys.html">Open new Spawn Keys &rarr;</a>
+ </div>
 <script>
-// Clean up the OLD service worker + caches that were registered on the shared
-// /VendoMonitor/ scope, then move to the isolated /keys/ app.
+// No auto-redirect. The old install has a different manifest id and Chrome
+// will never migrate it, so forwarding silently just produces an app that
+// half-works with the wrong identity. Show the keeper what to do instead.
+// Still clear out the retired root-scope worker and its stale caches.
 (async function(){
   try{
     if('serviceWorker' in navigator){
-      const regs = await navigator.serviceWorker.getRegistrations();
-      for(const r of regs){
-        // Only unregister SWs scoped at the shared root that belong to keys.
-        if(r.scope && r.scope.indexOf('/VendoMonitor/') !== -1 && r.scope.indexOf('/keys/') === -1){
-          // Don't nuke other apps — only unregister if this reg controls spawn-keys.
-          try{
-            const sw = r.active || r.waiting || r.installing;
-            if(sw && sw.scriptURL && sw.scriptURL.indexOf('sw-keys.js') !== -1){
-              await r.unregister();
-            }
-          }catch(_){}
+      for(const r of await navigator.serviceWorker.getRegistrations()){
+        const sw = r.active || r.waiting || r.installing;
+        if(sw && sw.scriptURL && sw.scriptURL.indexOf('sw-keys.js') !== -1 &&
+           r.scope.indexOf('/VendoMonitor/keys/') === -1){
+          try{ await r.unregister(); }catch(_){}
         }
       }
     }
     if('caches' in window){
-      const names = await caches.keys();
-      await Promise.all(names.filter(n=>n.indexOf('spawn-keys')!==-1 && n.indexOf('keysfolder')===-1)
-                             .map(n=>caches.delete(n)));
+      const ks = await caches.keys();
+      await Promise.all(ks.filter(k => k.indexOf('spawn-keys') !== -1 && k.indexOf('keysfolder') === -1)
+                          .map(k => caches.delete(k).catch(()=>{})));
     }
   }catch(_){}
-  // Go to the new app.
-  setTimeout(()=>{ location.replace('/VendoMonitor/keys/spawn-keys.html'); }, 1200);
 })();
 </script>
 </body>
