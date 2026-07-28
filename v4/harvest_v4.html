@@ -2042,10 +2042,34 @@ function _ovdIsOverdue(row, dateMap, statusMap, now){
   return lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000) : 9999;
 }
 
+// The snapshot used to live in sessionStorage, which Android throws away the
+// moment the app is closed. So every cold start recomputed from zero and the
+// group list painted 0 on every badge until the network came back — that is
+// the "everything shows zero on reload" problem. localStorage survives the
+// restart, so the last known numbers are on screen instantly and get
+// corrected in the background a moment later.
+const _OVD_KEY = 'ovd_snapshot';
+function _ovdRead(){
+  try{
+    const raw = localStorage.getItem(_OVD_KEY) || sessionStorage.getItem(_OVD_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(_){ return null; }
+}
+function _ovdWrite(obj){
+  try{ localStorage.setItem(_OVD_KEY, JSON.stringify(obj)); }catch(_){}
+  try{ sessionStorage.removeItem(_OVD_KEY); }catch(_){}   // retire the old copy
+}
+// Last known counts at ANY age. Used for the instant paint, never for truth.
+function _ovdLastKnownByGroup(){
+  const c = _ovdRead();
+  if(!c || !c.data) return null;
+  try{ return _ovdRehydrate(c.data).byGroup; }catch(_){ return null; }
+}
+
 // Returns { byGroup:{id:{overdue,oldest}}, byArea:{AREA:{overdue,oldest,groups:Set}} }
 async function computeOverdue(){
   const cached = (()=>{ try{
-    const c = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null');
+    const c = _ovdRead();
     if(c && Date.now()-c.ts < _OVD_TTL) return c.data;
   }catch(_){} return null; })();
   if(cached) return _ovdRehydrate(cached);
@@ -2058,22 +2082,40 @@ async function computeOverdue(){
     const ids = groups.map(g=>g.id).filter(x=>x!=null);
     if(!ids.length) return out;
 
-    // ONE fetch of item rows, with the fields the rules actually need.
-    const r1 = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})`+
-                           `&select=group_run_id,vendo_id,status,harvested_at&limit=8000`,{headers:HDR});
-    const items = await r1.json();
-    if(!Array.isArray(items) || !items.length) return out;
+    // Item rows. NOTE: `limit=8000` was a lie — PostgREST hard-caps every
+    // response at 1000 rows no matter what limit you ask for. There are 994
+    // item rows today, six short of silently losing data and undercounting
+    // every overdue badge in the app. Page with Range until exhausted.
+    const items = [];
+    for(let from=0; from<20000; from+=1000){
+      const rr = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})`+
+                             `&select=group_run_id,vendo_id,status,harvested_at`,
+                             {headers:{...HDR, Range:`${from}-${from+999}`}});
+      const page = await rr.json();
+      if(!Array.isArray(page) || !page.length) break;
+      items.push(...page);
+      if(page.length < 1000) break;
+    }
+    if(!items.length) return out;
 
     // ONE fetch of vendo state. Not _vendoCacheMap — that is an hourly cron snapshot and
     // is exactly why these numbers lagged behind reality.
     const vids = [...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
     const dateMap={}, statusMap={};
-    for(let i=0;i<vids.length;i+=300){
-      const chunk = vids.slice(i,i+300);
-      const r2 = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
-      const vs = await r2.json();
+    // These chunks used to run in series: 970 vendos = 4 round trips, each
+    // waiting on the one before it. On a phone that is most of the wait.
+    // They are independent, so fire them together.
+    const chunks = [];
+    for(let i=0;i<vids.length;i+=300) chunks.push(vids.slice(i,i+300));
+    const pages = await Promise.all(chunks.map(chunk =>
+      fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,
+            {headers:HDR})
+        .then(r=>r.json())
+        .catch(()=>[])
+    ));
+    pages.forEach(vs=>{
       if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=v.last_harvest_date; statusMap[v.id]=v.status; });
-    }
+    });
 
     _ovdOverlay(items, dateMap, statusMap);
 
@@ -2103,9 +2145,7 @@ async function computeOverdue(){
       if(d<9999 && d>out.byArea[area].oldest) out.byArea[area].oldest=d;
     });
 
-    try{
-      sessionStorage.setItem('ovd_snapshot', JSON.stringify({ts:Date.now(), data:_ovdDehydrate(out), counted}));
-    }catch(_){}
+    _ovdWrite({ts:Date.now(), data:_ovdDehydrate(out), counted});
     return out;
   })();
 
@@ -2124,7 +2164,7 @@ function _ovdRehydrate(o){
   Object.entries(o.byArea||{}).forEach(([k,v])=>{ a[k]={overdue:v.overdue,oldest:v.oldest,groups:new Set(v.groups||[])}; });
   return {byGroup:o.byGroup||{}, byArea:a};
 }
-function invalidateOverdue(){ try{ sessionStorage.removeItem('ovd_snapshot'); }catch(_){} }
+function invalidateOverdue(){ try{ localStorage.removeItem(_OVD_KEY); }catch(_){} try{ sessionStorage.removeItem(_OVD_KEY); }catch(_){} }
 
 // A harvest or pull-out changes exactly ONE vendo. Refetching all ~1,050 items and
 // ~1,050 vendos to learn that (≈139 KB, and 4 MB across a 30-harvest shift) is absurd
@@ -2136,7 +2176,7 @@ function invalidateOverdue(){ try{ sessionStorage.removeItem('ovd_snapshot'); }c
 function applyOverdueDelta(vendoId){
   if(vendoId==null) return;
   let snap;
-  try{ snap = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null'); }catch(_){ return; }
+  try{ snap = _ovdRead(); }catch(_){ return; }
   if(!snap || !snap.data || !snap.counted) return;
   const rows = snap.counted[vendoId];
   // Not counted (already harvested today, pulled out, or under 30 days) -> nothing moves.
@@ -2148,7 +2188,7 @@ function applyOverdueDelta(vendoId){
     if(a && a.overdue > 0) a.overdue--;
   });
   delete snap.counted[vendoId];
-  try{ sessionStorage.setItem('ovd_snapshot', JSON.stringify(snap)); }catch(_){}
+  _ovdWrite(snap);
 }
 
 async function loadCrucialAreas(){
@@ -2265,8 +2305,10 @@ async function showAllGroups(){
       el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
     });
   };
-  // 1) instant paint using group order as-is
-  renderList(withGroups, null);
+  // 1) instant paint. Use the last known counts rather than null — null makes
+  //    every badge render 0, which reads as "nothing is overdue" when the real
+  //    answer is "not loaded yet". Stale numbers beat wrong ones.
+  renderList(withGroups, _ovdLastKnownByGroup());
   // 2) warm caches right away so tapping is instant
   setTimeout(()=>prewarmGroups(withGroups),100);
   // 3) compute overdue in background, then re-sort + repaint badges
@@ -7687,6 +7729,7 @@ async function submitEodSession(){
 
 </body>
 </html>
+
 
 
 
