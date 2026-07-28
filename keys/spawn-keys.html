@@ -458,6 +458,49 @@ const HDR={apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/js
 let ME=null, ACCTS=[], COLLECTORS=[], CUR_RING=null, RINGS=[], PIN='', SCANNER=null;
 let PULL_RING=null, PULL_VENDO=null, PULL_KT=null, SEARCH_T=null;
 
+// ── SESSION (one shift = 3AM Manila to 3AM Manila) ────────────────
+// Spawn Keys had no session at all: ME lived only in memory, so every
+// refresh — and every service-worker update — dumped the keeper back on
+// the PIN pad mid-handover. A shift is not a calendar day, so we stamp
+// sessions with a BUSINESS DAY that starts at 3AM: shift the clock back
+// 3 hours and take the date. 02:30 Wednesday still counts as Tuesday, so
+// working past midnight is fine and 3AM is the single sign-out point.
+const KEYS_CUTOFF_HOUR = 3;
+
+function keysBusinessDay(){
+  const shifted = new Date(Date.now() - KEYS_CUTOFF_HOUR*3600*1000);
+  const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(shifted);
+  const g = t => parts.find(p=>p.type===t)?.value;
+  return `${g('year')}-${g('month')}-${g('day')}`;
+}
+function keysSaveSession(me){
+  try{ localStorage.setItem('spawn_keys_session', JSON.stringify({
+    id: me.id, name: me.name, role: me.role, day: keysBusinessDay()
+  })); }catch(e){}
+}
+function keysGetSession(){
+  let s; try{ s = JSON.parse(localStorage.getItem('spawn_keys_session')||'null'); }catch(e){ s=null; }
+  if(!s || !s.name) return null;
+  if(s.day !== keysBusinessDay()) return null;   // past 3AM — sign out
+  return s;
+}
+function keysClearSession(){
+  try{ localStorage.removeItem('spawn_keys_session'); }catch(e){}
+  try{ sessionStorage.removeItem('spawn_keys_tab'); }catch(e){}
+}
+// Which tab the keeper was on. sessionStorage, not localStorage: it survives
+// a refresh but is gone when the app is closed and reopened, which is exactly
+// the distinction we want — refresh resumes, fresh launch starts at Home.
+function keysRememberTab(t){ try{ sessionStorage.setItem('spawn_keys_tab', t); }catch(e){} }
+function keysLastTab(){ try{ return sessionStorage.getItem('spawn_keys_tab')||''; }catch(e){ return ''; } }
+function keysWasReload(){
+  try{
+    const n = performance.getEntriesByType('navigation')[0];
+    return !!(n && n.type === 'reload');
+  }catch(e){ return false; }
+}
+
 function toast(m,d=2600){const e=document.getElementById('toast');e.textContent=m;
   e.classList.add('show');setTimeout(()=>e.classList.remove('show'),d);}
 function go(s){document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
@@ -516,6 +559,7 @@ async function doLogin(){
       return;
     }
     ME={id:row.id,name:row.name,role:row.role};
+    keysSaveSession(ME);
     err.textContent='';
     document.getElementById('tb-user').textContent=ME.name;
     PIN='';drawDots();
@@ -1399,6 +1443,7 @@ function logout(){
   if(!ME) return;
   if(!confirm('Log out '+ME.name+'?')) return;
   ME=null; PIN=''; drawDots();
+  keysClearSession();
   document.getElementById('tb-user').textContent='';
   document.getElementById('bottom-nav').classList.remove('show');
   document.getElementById('tb-back').style.display='none';
@@ -1460,6 +1505,23 @@ async function doInstall(){
 
 // ── BOOT ──
 buildPad();
+
+// Restore the keeper's session. This runs on 'load', not inline: TAB_SCREENS
+// is declared further down the file and `const` is not hoisted, so calling
+// tabSwitch() from here directly would throw before the app ever painted.
+window.addEventListener('load', async ()=>{
+  const s = keysGetSession();
+  if(!s){ keysClearSession(); go('login'); return; }
+  ME = { id:s.id, name:s.name, role:s.role };
+  const u=document.getElementById('tb-user'); if(u) u.textContent = ME.name;
+  const bn=document.getElementById('bottom-nav'); if(bn) bn.classList.add('show');
+  try{ await loadRoster(); }catch(e){}
+  // A REFRESH resumes on the same tab. A fresh launch starts at Home.
+  // keysLastTab() reads sessionStorage, which a reload keeps and a cold
+  // start does not — so the two cases separate themselves.
+  const last = keysWasReload() ? keysLastTab() : '';
+  tabSwitch(TAB_SCREENS[last] ? last : 'home');
+});
 if('serviceWorker' in navigator){
   // Register AFTER the page has loaded so SW work never blocks first paint.
   // This is critical: registering/updating during boot can, on some Android
@@ -1544,6 +1606,7 @@ const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
   CUR_TAB = tab;
+  keysRememberTab(tab);
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
@@ -1708,4 +1771,5 @@ go = function(s){
 </script>
 </body>
 </html>
+
 
