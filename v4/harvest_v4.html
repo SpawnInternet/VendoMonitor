@@ -533,7 +533,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
 
     <div style="text-align:center;padding-top:4px">
-      <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
+      <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 3:00 AM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
       <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.7</div>
     </div>
@@ -557,7 +557,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="btn btn-gray" onclick="pinLogout()">🚪 Not you? Log out</button>
     </div>
     <div style="text-align:center;padding-top:14px">
-      <div style="font-size:11px;color:#8b99b8">🕘 Stays signed in until 9:00 PM</div>
+      <div style="font-size:11px;color:#8b99b8">🕘 Stays signed in until 3:00 AM</div>
     </div>
   </div>
 </div><!-- /screen-signedin -->
@@ -1690,11 +1690,12 @@ window.addEventListener('DOMContentLoaded',()=>{
     const nm=document.getElementById('signedin-name');
     if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
     if(nm) nm.textContent=_sess.name||'Collector';
-    // On refresh: stay signed in, but always land on the HOME screen (group
-    // picker). We deliberately do NOT auto-reopen the last group — the
-    // collector should choose their group each time, not be dropped straight
-    // into a harvest on reload.
-    showHomeScreen();
+    // Land on the SIGNED-IN card, never straight into the app.
+    // showHomeScreen() runs the keys gate and the borrow check, so calling it
+    // here meant opening the app dropped the collector directly onto the
+    // borrow-tags screen with no idea who was signed in or how to switch.
+    // Show who it is first; Continue then runs the gate and borrow checks.
+    showScreen('screen-signedin');
   } else {
     spawnClearSession();
     showScreen('screen-collector');
@@ -7661,6 +7662,7 @@ async function submitEodSession(){
 
 </body>
 </html>
+
 
 
 
