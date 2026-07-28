@@ -1554,7 +1554,27 @@ if('serviceWorker' in navigator){
     _swReloading = true;
     window.location.reload();
   });
-  navigator.serviceWorker.register('/VendoMonitor/sw-v4.js')
+  // ── SCOPE ISOLATION (v4 must never fight v3 for control) ──────────
+  // sw-v3.js and sw-v4.js both registered at the DEFAULT scope,
+  // /VendoMonitor/. Only one service worker can control a page, and the
+  // last registration wins. On a phone with both apps installed, whichever
+  // was opened most recently took control of the whole folder and began
+  // answering the other app's asset requests out of its own cache.
+  // v4 now registers at the narrow scope /VendoMonitor/harvest_v4, so it
+  // only ever controls its own pages and v3 keeps the root scope to itself.
+  // A pre-existing broad-scope sw-v4 registration must be unregistered
+  // first: registering a NARROWER scope does not replace the wide one, it
+  // just adds a second registration and the fight continues.
+  const V4_SCOPE = '/VendoMonitor/harvest_v4';
+  navigator.serviceWorker.getRegistrations()
+    .then(regs => Promise.all(regs.map(r => {
+      const sw = r.active || r.waiting || r.installing;
+      const isV4Script = sw && sw.scriptURL && sw.scriptURL.indexOf('sw-v4.js') !== -1;
+      const isBroad = !r.scope || r.scope.indexOf(V4_SCOPE) === -1;
+      return (isV4Script && isBroad) ? r.unregister().catch(()=>{}) : null;
+    })))
+    .catch(()=>{})
+    .then(()=> navigator.serviceWorker.register('/VendoMonitor/sw-v4.js', { scope: V4_SCOPE }))
     .then(reg=>{
       console.log('SW registered:', reg.scope);
       // If an updated SW is already waiting, activate it now
@@ -7566,3 +7586,4 @@ async function submitEodSession(){
 
 </body>
 </html>
+
