@@ -1323,16 +1323,56 @@ function bindStartScan(){
 async function bindStopScan(){
   if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
 }
+// Nothing in here used to be guarded. If the fetch failed, or the response
+// was not JSON, or ME had been lost, the promise rejected and the caller had
+// already painted "Saving…" — so the screen sat on "Saving…" forever with no
+// error anywhere. Every failure now returns a plain object the UI can show.
 async function bindCall(qr,force){
+  if(!BIND_VENDO || !BIND_VENDO.id){
+    return {ok:false, error:'No vendo selected — pick the vendo again.'};
+  }
+  if(!ME || !ME.name){
+    return {ok:false, error:'Session lost — log in again before binding.', _relogin:true};
+  }
   const body={p_qr:qr, p_vendo_id:BIND_VENDO.id, p_account:ME.name, p_force:!!force};
-  const r=await fetch(SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:HDR,body:JSON.stringify(body)});
-  return r.json();
+  let r;
+  try{
+    r = await fetch(SB+'/rest/v1/rpc/spawn_qr_bind',
+      {method:'POST',headers:HDR,body:JSON.stringify(body)});
+  }catch(e){
+    return {ok:false, error:'No connection — bind not saved. Try again on data.'};
+  }
+  let txt='';
+  try{ txt = await r.text(); }catch(e){ txt=''; }
+  if(!txt){
+    return {ok:false, error:'Server returned nothing (HTTP '+r.status+').'};
+  }
+  try{
+    return JSON.parse(txt);
+  }catch(e){
+    // PostgREST error pages and gateway HTML land here.
+    return {ok:false, error:'HTTP '+r.status+' — '+txt.slice(0,140)};
+  }
 }
+
 async function bindOnCode(qr){
   if(!BIND_VENDO){toast('Pick a vendo first');return;}
   const res=document.getElementById('bind-result');
   res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Saving…</div>';
-  let d=await bindCall(qr,false);
+  let d;
+  try{
+    d = await bindCall(qr,false);
+  }catch(e){
+    d = {ok:false, error:'Bind failed: '+(e && e.message ? e.message : e)};
+  }
+  if(d && d.ok === false && !d.already_bound){
+    res.innerHTML='<div class="banner">⚠ '+esc(d.error||'Bind failed')+'</div>'
+      + '<div style="display:flex;gap:8px;margin-top:8px">'
+      + '<button class="btn btn-gray" style="flex:1" onclick="bindCancelResult()">Close</button>'
+      + (d._relogin ? '<button class="btn btn-pri" style="flex:1" onclick="logout()">Log in</button>' : '')
+      + '</div>';
+    return;
+  }
   if(d && d.already_bound){
     // warn + offer rebind
     res.innerHTML=`<div class="banner">⚠ ${esc(d.error)}.</div>
@@ -1347,7 +1387,17 @@ async function bindOnCode(qr){
 async function bindForce(qr){
   const res=document.getElementById('bind-result');
   res.innerHTML='<div style="text-align:center;color:#7a869c;font-size:13px;padding:8px">Rebinding…</div>';
-  const d=await bindCall(qr,true);
+  let d;
+  try{
+    d = await bindCall(qr,true);
+  }catch(e){
+    d = {ok:false, error:'Rebind failed: '+(e && e.message ? e.message : e)};
+  }
+  if(d && d.ok === false){
+    res.innerHTML='<div class="banner">⚠ '+esc(d.error||'Rebind failed')+'</div>'
+      + '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="bindCancelResult()">Close</button>';
+    return;
+  }
   bindShow(d,qr);
 }
 // ── Generic modal popup ──
@@ -1771,5 +1821,6 @@ go = function(s){
 </script>
 </body>
 </html>
+
 
 
