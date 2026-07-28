@@ -2,14 +2,17 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-trial-v8';
+const CACHE = 'spawn-harvest-v4-trial-v9';
 const APP_HTML = '/VendoMonitor/harvest_v4.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v4.html',
   '/VendoMonitor/manifest-v4.json',
-  // Icons are shared static assets — read-only, safe to precache.
-  '/VendoMonitor/icon-192.png',
-  '/VendoMonitor/icon-512.png',
+  // v4's OWN icons. These were the shared icon-192/icon-512 until v4 got its
+  // own TRIAL artwork. Precaching the shared pair was the last place v4's
+  // cache held a file v3 also requests — the only remaining overlap surface
+  // between the two apps. v4 now caches nothing that isn't v4's.
+  '/VendoMonitor/icon-v4-192.png',
+  '/VendoMonitor/icon-v4-512.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
@@ -136,4 +139,5 @@ self.addEventListener('fetch', e => {
     )
   );
 });
+
 
