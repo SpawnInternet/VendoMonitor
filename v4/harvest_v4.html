@@ -1718,6 +1718,24 @@ window.addEventListener('DOMContentLoaded',()=>{
     if(_wasReload && _last && !_noRestore.includes(_last) && document.getElementById(_last)){
       showScreen(_last);
       try{ document.getElementById('bottom-nav').classList.add('show'); }catch(_){}
+      // Home is not just a screen — showHomeScreen() is what fills it in, and
+      // that is the ONLY caller of loadCrucialAreas(). Restoring with a bare
+      // showScreen() painted the shell with no stats, no held-keys banner and
+      // no Crucial Areas panel. Repaint those here.
+      // We deliberately do NOT call showHomeScreen() itself: it re-runs the
+      // keys gate and the borrow check, which would bounce a refresh straight
+      // back to the borrow screen — the thing refresh is supposed to avoid.
+      if(_last === 'screen-home'){
+        try{ document.getElementById('home-collector-name').textContent = selectedCollector||'—'; }catch(_){}
+        try{
+          document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
+          const _hb = document.getElementById('bnav-home');
+          if(_hb) _hb.classList.add('active');
+        }catch(_){}
+        try{ loadHomeStats(); }catch(_){}
+        try{ bwRenderHeldBanner(); }catch(_){}
+        try{ loadCrucialAreas(); }catch(_){}
+      }
     } else {
       showScreen('screen-signedin');
     }
@@ -7729,6 +7747,7 @@ async function submitEodSession(){
 
 </body>
 </html>
+
 
 
 
