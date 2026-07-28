@@ -1,111 +1,34 @@
-// sw-keys.js — Spawn Keys (keeper PWA) Service Worker.
+// sw-keys.js — RETIRED root-scope Spawn Keys worker (tombstone).
 //
-// ISOLATION RULES — read before changing:
-//  1. This SW shares an origin (spawninternet.github.io) with harvest v3/v4,
-//     spawn-mobile, office, and the dashboard. The Cache Storage API is
-//     per-ORIGIN, not per-app. Any cache we delete belongs to all of them.
-//     The previous version of this file ran:
-//         ks.filter(k => k !== CACHE).map(k => caches.delete(k))
-//     which deleted EVERY cache on the origin that wasn't ours — including
-//     'spawn-harvest-v3-v12.0.0'. Ailyn is both keeper and collector, so
-//     opening Spawn Keys would wipe her harvest app's offline cache.
-//     We now only ever delete caches whose names start with 'spawn-keys'.
-//  2. Our scope is /VendoMonitor/, which the harvest SWs also claim. Only one
-//     SW controls a page and the last registration wins. So we must not answer
-//     navigations that aren't ours — otherwise an offline harvest launch could
-//     be served spawn-keys.html.
-const CACHE = 'spawn-keys-v23';
-const APP_HTML = '/VendoMonitor/spawn-keys.html';
-const SHELL = [
-  APP_HTML,
-  '/VendoMonitor/keys-manifest.json',
-  '/VendoMonitor/spawn-keys-192.png',
-  '/VendoMonitor/spawn-keys-512.png',
-  '/VendoMonitor/spawn-keys-maskable-512.png'
-];
+// Spawn Keys now lives at /VendoMonitor/keys/ with its own worker registered
+// at the isolated scope /VendoMonitor/keys/. This file used to be registered
+// at the SHARED /VendoMonitor/ scope and is still alive on keepers' phones,
+// where it breaks the installed app:
+//
+//   * APP_HTML pointed at /VendoMonitor/spawn-keys.html, which is now just a
+//     redirect stub — so an offline launch was served the stub, the stub wiped
+//     the keys caches and redirected, and the app died on a blank screen.
+//   * The navigation guard was indexOf('spawn-keys'), and the new path
+//     /VendoMonitor/keys/spawn-keys.html CONTAINS that string, so this worker
+//     claimed pages that were never its own.
+//
+// This version does nothing but remove itself. It must not serve, cache, or
+// evict anything: harvest v3/v4, office, spawn-mobile and the dashboard all
+// share this origin and the Cache Storage API is per-ORIGIN, not per-app.
+const LEGACY_CACHE = 'spawn-keys-v23';
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE)
-      // addAll is atomic: one 404 and nothing caches at all. Cache each asset
-      // individually so a single missing icon can't leave the app with no shell.
-      .then(c => Promise.all(SHELL.map(u => c.add(u).catch(() => {}))))
-      .then(() => self.skipWaiting())
-  );
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys()
-      .then(ks => Promise.all(
-        ks.filter(k => k.startsWith('spawn-keys') && k !== CACHE)
-          .map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    // Delete ONLY this retired worker's own cache. Never a wildcard sweep:
+    // an earlier revision of this file ran caches.delete() across everything
+    // that wasn't its own cache and wiped harvest v3's offline shell out from
+    // under a working collector.
+    try { await caches.delete(LEGACY_CACHE); } catch (_) {}
+    try { await self.registration.unregister(); } catch (_) {}
+  })());
 });
 
-self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
-});
-
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-
-  let url;
-  try { url = new URL(req.url); } catch (_) { return; }
-
-  // Never touch Supabase — scans and approvals must always hit the network.
-  if (url.hostname.indexOf('supabase.co') !== -1) return;
-
-  // Navigations: only handle our own. Anything else belongs to another app.
-  if (req.mode === 'navigate') {
-    if (url.pathname.indexOf('spawn-keys') === -1) return;
-    e.respondWith(
-      fetch(req)
-        .then(r => {
-          if (r && r.ok) {
-            const cp = r.clone();
-            caches.open(CACHE).then(c => c.put(APP_HTML, cp)).catch(() => {});
-          }
-          return r;
-        })
-        .catch(() =>
-          caches.match(APP_HTML).then(r => r ||
-            caches.keys().then(ks => {
-              const mine = ks.filter(k => k.startsWith('spawn-keys'));
-              return (function tryNext(i){
-                if (i >= mine.length) {
-                  return new Response(
-                    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
-                    '<div style="font-family:sans-serif;padding:40px;text-align:center;color:#025AC6">'+
-                    '<h2>Spawn Keys is offline</h2><p style="color:#555">Reconnect and reopen the app.</p>'+
-                    '<button onclick="location.reload()" style="margin-top:12px;padding:10px 18px;border:0;border-radius:8px;background:#025AC6;color:#fff;font-weight:700">Retry</button></div>',
-                    { headers: { 'Content-Type': 'text/html' } });
-                }
-                return caches.open(mine[i]).then(c => c.match(APP_HTML))
-                  .then(hit => hit || tryNext(i+1));
-              })(0);
-            })
-          )
-        )
-    );
-    return;
-  }
-
-  // Same-origin static assets: network first, fall back to cache offline.
-  if (url.origin !== location.origin) return;
-
-  e.respondWith(
-    fetch(req)
-      .then(r => {
-        if (r && r.ok) {
-          const cp = r.clone();
-          caches.open(CACHE).then(c => c.put(req, cp)).catch(() => {});
-        }
-        return r;
-      })
-      .catch(() => caches.match(req))
-  );
-});
+// No fetch handler at all. Every request goes straight to the network or to
+// whichever worker legitimately owns that scope.
