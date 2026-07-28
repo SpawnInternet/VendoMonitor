@@ -1690,12 +1690,37 @@ window.addEventListener('DOMContentLoaded',()=>{
     const nm=document.getElementById('signedin-name');
     if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
     if(nm) nm.textContent=_sess.name||'Collector';
-    // Land on the SIGNED-IN card, never straight into the app.
-    // showHomeScreen() runs the keys gate and the borrow check, so calling it
-    // here meant opening the app dropped the collector directly onto the
-    // borrow-tags screen with no idea who was signed in or how to switch.
-    // Show who it is first; Continue then runs the gate and borrow checks.
-    showScreen('screen-signedin');
+    // Two different situations, two different landings:
+    //
+    //  FRESH LAUNCH  -> the signed-in card. showHomeScreen() runs the keys
+    //                   gate and the borrow check, so going there directly
+    //                   dropped the collector onto borrow-tags with no idea
+    //                   who was signed in. Show who it is; Continue proceeds.
+    //
+    //  REFRESH       -> back to the screen he was already on. Reloading
+    //                   mid-job and being thrown to the start is the thing
+    //                   that made refresh feel like a logout.
+    //
+    // navigation type separates them, and sessionStorage backs it up: a
+    // reload keeps it, closing and reopening the app does not.
+    let _wasReload = false;
+    try{
+      const _n = performance.getEntriesByType('navigation')[0];
+      _wasReload = !!(_n && _n.type === 'reload');
+    }catch(_){}
+    const _last = (()=>{ try{ return sessionStorage.getItem('last_screen')||''; }catch(_){ return ''; } })();
+
+    // Screens rebuilt from in-memory state that a reload destroys — the
+    // harvest form, the camera, the pickers mid-flow. Landing on these after
+    // a refresh shows an empty shell, so they fall back to home instead.
+    const _noRestore = ['screen-camera','screen-form','screen-collector','screen-signedin'];
+
+    if(_wasReload && _last && !_noRestore.includes(_last) && document.getElementById(_last)){
+      showScreen(_last);
+      try{ document.getElementById('bottom-nav').classList.add('show'); }catch(_){}
+    } else {
+      showScreen('screen-signedin');
+    }
   } else {
     spawnClearSession();
     showScreen('screen-collector');
@@ -7662,6 +7687,7 @@ async function submitEodSession(){
 
 </body>
 </html>
+
 
 
 
