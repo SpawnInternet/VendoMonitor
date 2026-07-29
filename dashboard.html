@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="preload" href="js/dash.1.harvest.js?v=split101" as="script">
-<link rel="preload" href="js/dash.4.map.js?v=split101" as="script">
+<link rel="preload" href="js/dash.1.harvest.js?v=split102" as="script">
+<link rel="preload" href="js/dash.4.map.js?v=split102" as="script">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -233,7 +233,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="sl-footer" id="sl-device-id-display"></div>
   </div>
 </div>
-<script defer src="js/dash.0.core.js?v=split101"></script>
+<script defer src="js/dash.0.core.js?v=split102"></script>
 
 <!-- GLOBAL FLOATING BACK BUTTON -->
 <style>
@@ -923,6 +923,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       <button class="hv-hvtab on" id="hbtn-htable"  onclick="hvNewTab('htable',this)">📋 Vendos</button>
       <button class="hv-hvtab"    id="hbtn-livefeed" onclick="hvNewTab('livefeed',this)">📜 Records</button>
       <button class="hv-hvtab"    id="hbtn-recon"    onclick="hvNewTab('recon',this);rcInitDates()">🔍 Recon</button>
+      <button class="hv-hvtab"    id="hbtn-expected" onclick="hvNewTab('expected',this);exLoad()">💰 Expected</button>
       <button class="hv-hvtab"    id="hbtn-receipt"  onclick="hvNewTab('receipt',this)">🧾 Receipt</button>
       <button class="hv-hvtab"    id="hbtn-progress" onclick="hvNewTab('progress',this);loadProgress()">📱 Progress</button>
       <button class="hv-hvtab"    id="hbtn-names" onclick="hvNewTab('names',this);nmLoad()">🔗 Names</button>
@@ -1092,8 +1093,22 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 </div>
 
-<script defer src="js/dash.1.harvest.js?v=split101"></script>
+<script defer src="js/dash.1.harvest.js?v=split102"></script>
 
+</div>
+
+<div id="hvt-expected" style="display:none;padding:14px;overflow-y:auto;height:calc(100vh - 88px);">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+    <span style="font-weight:800;color:#025AC6;font-size:15px;">&#128176; Expected next harvest</span>
+    <span style="font-size:11px;color:var(--mu);">what should be in each coin box right now</span>
+  </div>
+  <div class="tab-row">
+    <button class="tab-btn active" onclick="exSetState('ok',this)">With a figure</button>
+    <button class="tab-btn" onclick="exSetState('nolink',this)">&#9888; No income link</button>
+    <button class="tab-btn" onclick="exSetState('never',this)">Never harvested</button>
+    <button class="tab-btn" onclick="exSetState('all',this)">All</button>
+  </div>
+  <div id="ex-body"><div class="rc" style="padding:20px">Loading&hellip;</div></div>
 </div>
 
 <div id="hvt-receipt" style="display:none;padding:14px;overflow-y:auto;height:calc(100vh - 88px);">
@@ -1273,7 +1288,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 </div>
-<script defer src="js/dash.2.ledger.js?v=split101"></script>
+<script defer src="js/dash.2.ledger.js?v=split102"></script>
 
 <div id="hvt-gps" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -2394,6 +2409,124 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     }
   };
 })();
+
+(function(){
+  var SB = window.__SPAWN_SB || 'https://cviraqfhphhsonjmrtvu.supabase.co';
+  var _rows = [], _state = 'ok', _area = '';
+
+  function peso(n){ return '\u20b1' + Number(n||0).toLocaleString('en-PH',{maximumFractionDigits:0}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  window.exLoad = async function(){
+    var el = document.getElementById('ex-body');
+    if(!el) return;
+    el.innerHTML = '<div class="rc" style="padding:20px">Calculating expected income for every active vendo\u2026</div>';
+    try{
+      var r = await fetch(SB + '/rest/v1/rpc/spawn_expected_harvest', {
+        method:'POST', headers:{ apikey:'gw', 'Content-Type':'application/json' }, body:'{}' });
+      if(!r.ok) throw new Error(await r.text());
+      var j = await r.json();
+      if(Array.isArray(j) && j.length===1 && Array.isArray(j[0])) j = j[0];
+      _rows = Array.isArray(j) ? j : [];
+      exRender();
+    }catch(e){
+      el.innerHTML = '<div class="rc" style="padding:20px;color:var(--red)">Could not load: ' + esc(e.message) + '</div>';
+    }
+  };
+
+  window.exSetState = function(s, btn){
+    _state = s;
+    var bs = btn.parentNode.querySelectorAll('.tab-btn');
+    for(var i=0;i<bs.length;i++) bs[i].classList.remove('active');
+    btn.classList.add('active');
+    exRender();
+  };
+  window.exSetArea = function(v){ _area = v; exRender(); };
+
+  function exRender(){
+    var el = document.getElementById('ex-body');
+    if(!el) return;
+    var ok=0, nolink=0, never=0, totalOk=0, over30=0;
+    var areas = {};
+    for(var i=0;i<_rows.length;i++){
+      var r = _rows[i];
+      if(r.area) areas[r.area] = 1;
+      if(r.state === 'ok'){ ok++; totalOk += Number(r.expected||0);
+        if(Number(r.days_open||0) > 30) over30++; }
+      else if(r.state === 'never_harvested') never++;
+      else nolink++;
+    }
+    var show = _rows.filter(function(r){
+      if(_area && r.area !== _area) return false;
+      if(_state === 'ok') return r.state === 'ok';
+      if(_state === 'nolink') return r.state === 'no_tg_name' || r.state === 'tg_name_broken';
+      if(_state === 'never') return r.state === 'never_harvested';
+      return true;
+    });
+
+    var rows = show.slice(0, 400).map(function(r){
+      var cloud = Number(r.cloud_income||0);
+      if(r.state === 'ok'){
+        var d = Number(r.days_open||0);
+        var dc = d > 45 ? '#dc2626' : d > 30 ? '#b45309' : 'var(--mu)';
+        return '<tr>'
+          + '<td style="font-weight:600">' + esc(r.sheet_name||'\u2014')
+            + (r.vendo_code ? ' <span style="color:var(--mu);font-size:10px">' + esc(r.vendo_code) + '</span>' : '') + '</td>'
+          + '<td>' + esc(r.area||'\u2014') + '</td>'
+          + '<td style="color:var(--mu);font-size:10px">' + esc(r.since||'\u2014') + '</td>'
+          + '<td style="text-align:right;color:' + dc + ';font-weight:600">' + (r.days_open!=null ? r.days_open + 'd' : '\u2014') + '</td>'
+          + '<td style="text-align:right">' + peso(r.tg_income) + '</td>'
+          + '<td style="text-align:right;color:#028867;font-weight:' + (cloud?600:400) + '">'
+            + (cloud ? peso(cloud) : '<span style="color:#d1d5db">\u2014</span>') + '</td>'
+          + '<td style="text-align:right;font-weight:800;color:#025AC6">' + peso(r.expected) + '</td>'
+          + '</tr>';
+      }
+      var why = r.state === 'never_harvested' ? 'never harvested \u2014 no window yet'
+              : r.state === 'no_tg_name' ? 'no TG name linked'
+              : 'TG name matches no income rows';
+      return '<tr style="background:#fffbeb">'
+        + '<td style="font-weight:600">' + esc(r.sheet_name||'\u2014')
+          + (r.vendo_code ? ' <span style="color:var(--mu);font-size:10px">' + esc(r.vendo_code) + '</span>' : '') + '</td>'
+        + '<td>' + esc(r.area||'\u2014') + '</td>'
+        + '<td style="color:var(--mu);font-size:10px">' + esc(r.since||'\u2014') + '</td>'
+        + '<td style="text-align:right;color:var(--mu)">' + (r.days_open!=null ? r.days_open + 'd' : '\u2014') + '</td>'
+        + '<td colspan="3" style="color:#b45309;font-size:11px">\u26a0 ' + why + '</td>'
+        + '</tr>';
+    }).join('');
+
+    var opts = ['<option value="">All areas</option>'];
+    Object.keys(areas).sort().forEach(function(a){
+      opts.push('<option value="' + esc(a) + '"' + (_area===a?' selected':'') + '>' + esc(a) + '</option>');
+    });
+
+    el.innerHTML =
+      '<div class="stats">'
+      + '<div class="stat" style="border-bottom-color:#025AC6"><div class="sl">Expected in all boxes</div>'
+        + '<div class="sv" style="color:#025AC6">' + peso(totalOk) + '</div></div>'
+      + '<div class="stat" style="border-bottom-color:#028867"><div class="sl">Vendos with a figure</div>'
+        + '<div class="sv" style="color:#028867">' + ok + '</div></div>'
+      + '<div class="stat" style="border-bottom-color:#DF1A35"><div class="sl">Open over 30 days</div>'
+        + '<div class="sv" style="color:#DF1A35">' + over30 + '</div></div>'
+      + '<div class="stat" style="border-bottom-color:#b45309"><div class="sl">No income link</div>'
+        + '<div class="sv" style="color:#b45309">' + nolink + '</div></div>'
+      + '<div class="stat" style="border-bottom-color:#888780"><div class="sl">Never harvested</div>'
+        + '<div class="sv" style="color:#888780">' + never + '</div></div>'
+      + '</div>'
+      + '<div class="tb">'
+      + '<select onchange="exSetArea(this.value)" style="flex:0 0 auto">' + opts.join('') + '</select>'
+      + '<span style="flex:1"></span>'
+      + '<button class="btn sm" onclick="exLoad()">\u21bb Refresh</button>'
+      + '</div>'
+      + '<div class="rc">' + show.length + ' vendos \u00b7 office view only \u2014 collectors must count blind</div>'
+      + '<div class="tw"><table><thead><tr>'
+      + '<th>Vendo</th><th>Area</th><th>Since</th><th style="text-align:right">Open</th>'
+      + '<th style="text-align:right">TG income</th><th style="text-align:right">\u2601 Cloud</th>'
+      + '<th style="text-align:right">Expected</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + (show.length > 400 ? '<div class="rc">showing first 400 of ' + show.length + '</div>' : '');
+  }
+})();
 </script>
 
 <!-- ══ IMPORT PANEL ══ -->
@@ -2754,7 +2887,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 </div>
 
-<script defer src="js/dash.3.import.js?v=split101"></script>
+<script defer src="js/dash.3.import.js?v=split102"></script>
 
 </div><!-- end .w -->
 <!-- Floating back button — top right, shown on all sub-pages -->
@@ -2763,7 +2896,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   ← Back
 </button>
 
-<script defer src="js/dash.4.map.js?v=split101"></script>
+<script defer src="js/dash.4.map.js?v=split102"></script>
 
 <!-- HARVEST HISTORY POPUP -->
 <div class="hv-popbg" id="hv-hist-pop">
@@ -3373,15 +3506,15 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 
 <!-- ── SHARED HELPERS (from js/shared.js) ── -->
-<script defer src="js/dash.5.fmt.js?v=split101"></script>
+<script defer src="js/dash.5.fmt.js?v=split102"></script>
 
 
 <!-- ── OVERVIEW TAB (from tabs/overview.js) ── -->
-<script defer src="js/dash.6.overview.js?v=split101"></script>
+<script defer src="js/dash.6.overview.js?v=split102"></script>
 
 <!-- ── HARVEST TAB SUMMARY (from tabs/harvest.js) ── -->
-<script defer src="js/dash.7.harvest_summary.js?v=split101"></script>
-<script defer src="js/dash.8.spawnkeys.js?v=split101"></script>
+<script defer src="js/dash.7.harvest_summary.js?v=split102"></script>
+<script defer src="js/dash.8.spawnkeys.js?v=split102"></script>
 
 </body>
 </html>
