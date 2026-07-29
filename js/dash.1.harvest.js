@@ -1506,6 +1506,21 @@ async function rcRun(){
     }
   }catch(e){ console.warn('[rcRun] time-aware RPC failed, falling back to date-only fetch',e); }
 
+  // Spawn Cloud coin income per harvest (cloud-linked vendos only).
+  // Same window rule as spawn_tg_recon; merged so total income = TG + cloud.
+  const cloudById={};
+  try{
+    const cr=await fetch(`${_SB}/rest/v1/rpc/spawn_cloud_recon_income`,{
+      method:'POST', headers:{..._HDR}, body:JSON.stringify({})
+    });
+    let cj=await cr.json();
+    if(Array.isArray(cj) && cj.length===1 && Array.isArray(cj[0])) cj = cj[0];
+    else if(cj && !Array.isArray(cj) && Array.isArray(cj.spawn_cloud_recon_income)) cj = cj.spawn_cloud_recon_income;
+    if(Array.isArray(cj)){
+      cj.forEach(o=>{ if(o && o.harvest_id!=null) cloudById[o.harvest_id]=Number(o.cloud_income||0); });
+    }
+  }catch(e){ console.warn('[rcRun] cloud income RPC failed',e); }
+
   // Fallback fetch (date-only) — used only for windows the RPC didn't cover.
   async function fetchWindowTotal(w){
     let total=0,off2=0;
@@ -1556,8 +1571,12 @@ async function rcRun(){
       tgInc=(tgRowIncomeMap[rowKey]??null);
     }
     const coins=Number(row.coins_total||0);
-    // coins_total already includes saloy — compare directly with TG income
-    const gap=tgInc!=null?tgInc-coins:null; // gap = TG - coins. positive=TG>coins, negative=coins>TG (surplus of coins)
+    const cloudInc=cloudById[row.id]!==undefined?Number(cloudById[row.id]):null;
+    // Total expected income = Telegram feed + Spawn Cloud coin drops (cloud-linked vendos).
+    // Without the cloud term a migrated vendo shows a false surplus.
+    const totalInc=(tgInc!=null||cloudInc!=null)?Number(tgInc||0)+Number(cloudInc||0):null;
+    // coins_total already includes saloy — compare directly with total income
+    const gap=totalInc!=null?totalInc-coins:null; // gap = income - coins. positive=short, negative=surplus
     const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
     // OK only within ±20 pesos. Beyond that: flag by direction.
     //   gap >  20  => TG more than coins   => SHORT (coins may be missing) => 'alert'
@@ -1570,7 +1589,7 @@ async function rcRun(){
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
     return {...row,
       collector:row.actual_collector||row.collector||'Unknown',
-      tg_name:tg,tg_income:tgInc,gap,gap_pct:gapPct,flag,
+      tg_name:tg,tg_income:tgInc,cloud_income:cloudInc,total_income:totalInc,gap,gap_pct:gapPct,flag,
       rpc_audited:rpcAudited,
       rpc_window_start:rpcWinStart,
       rpc_submitted_at:rpcSubmit,
@@ -2230,6 +2249,8 @@ function rcFilter(){
             <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Window</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Coins</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">TG Income</th>
+            <th style="padding:5px 8px;text-align:right;color:#028867;font-weight:600;border-bottom:1px solid #f3f4f6;">&#9729; Cloud</th>
+            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Total Income</th>
             <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">True Gap</th>
             <th style="padding:5px 8px;text-align:center;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Flag</th>
             <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Confirm / Note</th>
@@ -2258,6 +2279,8 @@ function rcFilter(){
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${(h.rpc_window_start && h.rpc_submitted_at) ? `${h.rpc_window_start}<br>\u2192 ${h.rpc_submitted_at}` : `${h.harvest_window_start||'—'} \u2192 ${h.harvest_date||'—'}`}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtP(h.coins_total)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;color:#028867;font-weight:${h.cloud_income?600:400};">${h.cloud_income!=null?fmtP(h.cloud_income):'<span style="color:#d1d5db;">&#8212;</span>'}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${h.total_income!=null?fmtP(h.total_income):'<span style="color:#d1d5db;">&#8212;</span>'}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag,h.window_estimated)}${h.window_estimated?`<div style="font-size:8px;color:#9ca3af;margin-top:2px;line-height:1.1;" title="First harvest for this vendo — no previous submission to chain from, so the window is a 30-day estimate. Reconciles exactly once it has a second harvest.">\u26a0 est. window</div>`:''}</td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;min-width:180px;">
