@@ -308,6 +308,13 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </div>
       <span class="nl">Vendos</span>
     </button>
+    <!-- Spawn Cloud (Railway) -->
+    <button onclick="showP('spawncloud',this);scLoad()" data-panel="spawncloud">
+      <div class="ni" style="background:#f0fdf4">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M6 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 18 18H6Z" stroke="#028867" stroke-width="2" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="nl" style="color:#028867">Spawn Cloud</span>
+    </button>
     <!-- Harvest -->
     <button data-panel="harvest" onclick="showP('harvest',this)">
       <div class="ni" style="background:#d1fae5">
@@ -343,13 +350,6 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="2" stroke="#2563eb" stroke-width="2"/><path d="M3 9h18M8 4v3m8-3v3" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/></svg>
       </div>
       <span class="nl" style="color:#2563eb">Spawn Jobs</span>
-    </button>
-    <!-- Spawn Cloud (Railway) -->
-    <button onclick="showP('spawncloud',this)" data-panel="spawncloud">
-      <div class="ni" style="background:#f0fdf4">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M6 18a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6-1.5A4 4 0 0 1 18 18H6Z" stroke="#028867" stroke-width="2" stroke-linejoin="round"/></svg>
-      </div>
-      <span class="nl" style="color:#028867">Spawn Cloud</span>
     </button>
     <!-- Analytics -->
     <button onclick="showP('analytics',this)" data-panel="analytics">
@@ -2122,18 +2122,185 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     title="Spawn Jobs"></iframe>
 </div>
 
-<!-- ══ SPAWN CLOUD (embedded) PANEL ══ -->
-<div id="panel-spawncloud" class="panel" style="padding:0;">
-  <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;">
-    <span style="font-weight:800;color:#028867;font-size:14px;">☁️ Spawn Cloud — Railway</span>
+<!-- ══ SPAWN CLOUD PANEL ══ -->
+<div id="panel-spawncloud" class="panel">
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f0fdf4;border-bottom:1px solid #bbf7d0;margin:-14px -14px 14px;">
+    <span style="font-weight:800;color:#028867;font-size:14px;">&#9729; Spawn Cloud</span>
     <span style="flex:1"></span>
-    <button onclick="document.getElementById('spawncloud-frame').contentWindow.location.reload()" style="padding:4px 12px;border:1px solid #86efac;border-radius:7px;background:#fff;color:#028867;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Reload</button>
-    <a href="https://spawn-vendo-cloud-production-4f63.up.railway.app/" target="_blank" style="padding:4px 12px;border:1px solid #86efac;border-radius:7px;background:#fff;color:#028867;font-size:12px;font-weight:700;text-decoration:none;">Open full ↗</a>
+    <button onclick="scLoad()" style="padding:4px 12px;border:1px solid #86efac;border-radius:7px;background:#fff;color:#028867;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">&#8635; Refresh</button>
+    <a href="https://spawn-vendo-cloud-production-4f63.up.railway.app/admin/" target="_blank" style="padding:4px 12px;border:1px solid #86efac;border-radius:7px;background:#fff;color:#028867;font-size:12px;font-weight:700;text-decoration:none;">Open Railway &#8599;</a>
   </div>
-  <iframe id="spawncloud-frame" src="about:blank"
-    style="width:100%;height:calc(100vh - 130px);border:none;display:block;background:#fff;"
-    title="Spawn Cloud"></iframe>
+  <div id="sc-body"><div style="padding:24px;color:#6b7394;font-size:13px;">Click Refresh to load.</div></div>
 </div>
+<script>
+(function(){
+  var SB = window.__SPAWN_SB || 'https://cviraqfhphhsonjmrtvu.supabase.co';
+  var H  = { apikey:'gw' };
+  var _links = [], _txns = [], _cur = null;
+
+  function peso(n){ return '\u20b1' + Number(n||0).toLocaleString('en-PH',{maximumFractionDigits:0}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function dur(sec){
+    sec = Number(sec||0);
+    if(sec < 60) return sec + 's';
+    var m = Math.round(sec/60);
+    if(m < 60) return m + 'm';
+    var h = Math.floor(m/60), r = m%60;
+    return h + 'h' + (r ? ' ' + r + 'm' : '');
+  }
+  function fmtDate(iso){ try{ return new Date(iso).toLocaleDateString('en-CA'); }catch(e){ return ''; } }
+  function fmtTime(iso){ try{
+    return new Date(iso).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }catch(e){ return ''; } }
+
+  async function q(path){
+    var r = await fetch(SB + '/rest/v1/' + path, { headers: H });
+    if(!r.ok) throw new Error(await r.text());
+    return await r.json();
+  }
+
+  window.scLoad = async function(){
+    var el = document.getElementById('sc-body');
+    if(!el) return;
+    el.innerHTML = '<div style="padding:24px;color:#6b7394;font-size:13px;">Loading Spawn Cloud\u2026</div>';
+    try{
+      _links = await q('cloud_links?select=cloud_device_id,device_name,vendo_id,link_status,evidence&order=device_name.asc');
+      _txns  = await q('cloud_transactions?select=cloud_device_id,vendo_id,amount,collected_at&limit=20000');
+      scList();
+    }catch(e){
+      el.innerHTML = '<div style="padding:24px;color:#dc2626;font-size:13px;">Could not load: '
+        + esc(e.message) + '</div>';
+    }
+  };
+
+  function agg(devId){
+    var t=0,u=0,c=0;
+    for(var i=0;i<_txns.length;i++){
+      if(_txns[i].cloud_device_id === devId){
+        t += Number(_txns[i].amount); c++;
+        if(!_txns[i].collected_at) u += Number(_txns[i].amount);
+      }
+    }
+    return { total:t, uncollected:u, count:c };
+  }
+
+  function scList(){
+    var el = document.getElementById('sc-body');
+    var gt=0, gu=0;
+    var rows = _links.map(function(L){
+      var a = agg(L.cloud_device_id);
+      gt += a.total; gu += a.uncollected;
+      var badge = L.link_status === 'linked'
+        ? '<span style="background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">LINKED</span>'
+        : (L.link_status === 'excluded'
+          ? '<span style="background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">EXCLUDED</span>'
+          : '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">PENDING</span>');
+      return '<tr style="border-top:1px solid #eef2f7;cursor:pointer;" onclick="scOpen(\''
+        + L.cloud_device_id + '\')">'
+        + '<td style="padding:10px 8px;font-weight:700;color:#1565c0;">' + esc(L.device_name) + '</td>'
+        + '<td style="padding:10px 8px;">' + badge + '</td>'
+        + '<td style="padding:10px 8px;color:#6b7394;">' + (L.vendo_id ? ('vendo ' + L.vendo_id) : '\u2014') + '</td>'
+        + '<td style="padding:10px 8px;text-align:right;font-weight:700;">' + peso(a.total) + '</td>'
+        + '<td style="padding:10px 8px;text-align:right;color:' + (a.uncollected>0?'#b45309':'#6b7394') + ';font-weight:700;">' + peso(a.uncollected) + '</td>'
+        + '<td style="padding:10px 8px;text-align:right;color:#6b7394;">' + a.count + '</td>'
+        + '</tr>';
+    }).join('');
+
+    el.innerHTML =
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
+      + '<div style="flex:1;min-width:150px;background:#f8faff;border-radius:10px;padding:12px 14px;">'
+        + '<div style="font-size:11px;color:#6b7394;font-weight:600;">DEVICES MAPPED</div>'
+        + '<div style="font-size:22px;font-weight:800;color:#025AC6;">' + _links.length + '</div></div>'
+      + '<div style="flex:1;min-width:150px;background:#f8faff;border-radius:10px;padding:12px 14px;">'
+        + '<div style="font-size:11px;color:#6b7394;font-weight:600;">CLOUD COIN TOTAL</div>'
+        + '<div style="font-size:22px;font-weight:800;color:#028867;">' + peso(gt) + '</div></div>'
+      + '<div style="flex:1;min-width:150px;background:#fffbeb;border-radius:10px;padding:12px 14px;">'
+        + '<div style="font-size:11px;color:#92400e;font-weight:600;">UNCOLLECTED</div>'
+        + '<div style="font-size:22px;font-weight:800;color:#b45309;">' + peso(gu) + '</div></div>'
+      + '</div>'
+      + (_links.length === 0
+        ? '<div style="padding:24px;color:#6b7394;font-size:13px;">No cloud devices linked yet.</div>'
+        : '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+          + '<tr style="color:#6b7394;text-align:left;font-size:11px;">'
+          + '<th style="padding:6px 8px;font-weight:600;">DEVICE</th>'
+          + '<th style="padding:6px 8px;font-weight:600;">STATUS</th>'
+          + '<th style="padding:6px 8px;font-weight:600;">LINKED TO</th>'
+          + '<th style="padding:6px 8px;font-weight:600;text-align:right;">TOTAL</th>'
+          + '<th style="padding:6px 8px;font-weight:600;text-align:right;">UNCOLLECTED</th>'
+          + '<th style="padding:6px 8px;font-weight:600;text-align:right;">COINS</th></tr>'
+          + rows + '</table>');
+  }
+
+  window.scBack = function(){ scList(); };
+
+  window.scOpen = async function(devId){
+    var L = _links.filter(function(x){ return x.cloud_device_id === devId; })[0];
+    if(!L) return;
+    _cur = L;
+    var el = document.getElementById('sc-body');
+    el.innerHTML = '<div style="padding:24px;color:#6b7394;font-size:13px;">Loading transactions\u2026</div>';
+    try{
+      var b = await q('v_cloud_coin_batches?select=*&cloud_device_id=eq.' + devId
+                      + '&order=started_at.desc&limit=500');
+      var a = agg(devId);
+      var avg = a.count ? (a.total / b.length) : 0;
+      var big = 0;
+      for(var i=0;i<b.length;i++){ if(Number(b[i].batch_amount) > big) big = Number(b[i].batch_amount); }
+
+      var rows = b.map(function(x){
+        return '<tr style="border-top:1px solid #eef2f7;">'
+          + '<td style="padding:8px;">' + fmtDate(x.started_at) + '</td>'
+          + '<td style="padding:8px;color:#6b7394;">' + fmtTime(x.started_at) + '</td>'
+          + '<td style="padding:8px;font-weight:700;">' + peso(x.batch_amount) + '</td>'
+          + '<td style="padding:8px;font-family:ui-monospace,monospace;font-size:11px;color:#6b7394;">' + esc(x.client_mac) + '</td>'
+          + '<td style="padding:8px;">' + dur(x.seconds_given) + '</td>'
+          + '<td style="padding:8px;text-align:center;color:#6b7394;">' + x.coin_count + '</td>'
+          + '<td style="padding:8px;color:' + (x.collected ? '#15803d' : '#b45309') + ';font-weight:600;">'
+          + (x.collected ? 'yes' : 'no') + '</td></tr>';
+      }).join('');
+
+      el.innerHTML =
+        '<button onclick="scBack()" style="padding:5px 14px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:12px;">\u2190 Back</button>'
+        + '<div style="font-size:18px;font-weight:800;color:#025AC6;">' + esc(L.device_name) + '</div>'
+        + '<div style="font-size:12px;color:#6b7394;margin-bottom:12px;">'
+          + (L.vendo_id ? ('linked to vendo ' + L.vendo_id) : 'not linked') + '</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'
+        + '<div style="flex:1;min-width:120px;background:#f8faff;border-radius:10px;padding:10px 12px;">'
+          + '<div style="font-size:10px;color:#6b7394;font-weight:600;">TOTAL SALES</div>'
+          + '<div style="font-size:19px;font-weight:800;">' + peso(a.total) + '</div></div>'
+        + '<div style="flex:1;min-width:120px;background:#f8faff;border-radius:10px;padding:10px 12px;">'
+          + '<div style="font-size:10px;color:#6b7394;font-weight:600;">SESSIONS</div>'
+          + '<div style="font-size:19px;font-weight:800;">' + b.length + '</div></div>'
+        + '<div style="flex:1;min-width:120px;background:#f8faff;border-radius:10px;padding:10px 12px;">'
+          + '<div style="font-size:10px;color:#6b7394;font-weight:600;">AVG/SESSION</div>'
+          + '<div style="font-size:19px;font-weight:800;">' + peso(avg) + '</div></div>'
+        + '<div style="flex:1;min-width:120px;background:#f8faff;border-radius:10px;padding:10px 12px;">'
+          + '<div style="font-size:10px;color:#6b7394;font-weight:600;">BIGGEST</div>'
+          + '<div style="font-size:19px;font-weight:800;">' + peso(big) + '</div></div>'
+        + '<div style="flex:1;min-width:120px;background:#fffbeb;border-radius:10px;padding:10px 12px;">'
+          + '<div style="font-size:10px;color:#92400e;font-weight:600;">UNCOLLECTED</div>'
+          + '<div style="font-size:19px;font-weight:800;color:#b45309;">' + peso(a.uncollected) + '</div></div>'
+        + '</div>'
+        + '<div style="font-size:11px;color:#6b7394;margin-bottom:6px;">'
+          + b.length + ' sessions from ' + a.count + ' coin drops \u00b7 coins within 2 minutes from the same phone are one session</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        + '<tr style="color:#6b7394;text-align:left;font-size:11px;">'
+        + '<th style="padding:6px 8px;font-weight:600;">DATE</th>'
+        + '<th style="padding:6px 8px;font-weight:600;">TIME</th>'
+        + '<th style="padding:6px 8px;font-weight:600;">AMOUNT</th>'
+        + '<th style="padding:6px 8px;font-weight:600;">MAC</th>'
+        + '<th style="padding:6px 8px;font-weight:600;">TIME GIVEN</th>'
+        + '<th style="padding:6px 8px;font-weight:600;text-align:center;">COINS</th>'
+        + '<th style="padding:6px 8px;font-weight:600;">COLLECTED</th></tr>'
+        + rows + '</table>';
+    }catch(e){
+      el.innerHTML = '<button onclick="scBack()" style="padding:5px 14px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">\u2190 Back</button>'
+        + '<div style="padding:20px;color:#dc2626;font-size:13px;">Could not load: ' + esc(e.message) + '</div>';
+    }
+  };
+})();
+</script>
 
 <!-- ══ IMPORT PANEL ══ -->
 <div id="panel-import" class="panel">
