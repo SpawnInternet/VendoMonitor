@@ -35,6 +35,8 @@ async function overviewLoad() {
     }
   } catch(e){ console.warn('apiLoad failed', e && e.message); data = {}; }
 
+  try { overdueCardLoad(); systemCheckLoad(); } catch(e){ console.warn('side cards', e); }
+
   try { overviewRender(ov||{}, data||{}); }
   catch(e){
     console.error('overviewRender error', e);
@@ -335,4 +337,90 @@ function _gvFilter(q){
   q=(q||'').toLowerCase();
   const list=(window._gvRows||[]).filter(v=>v.name.toLowerCase().includes(q));
   _gvRender(list);
+}
+
+
+// ── Front-page Overdue Vendos + System Check ───────────────────────────────
+// Both read one RPC each; fired from overviewLoad so they never block the
+// main render. Failures degrade to a dash, never an exception.
+const OVD_COLORS = { '31–60d':'#FFB725', '61–90d':'#C01176', '91–180d':'#DF1A35', '180d+':'#8B0F22', 'never':'#311A8E' };
+
+async function _sysRpc(fn){
+  const base = (typeof _SB!=='undefined'?_SB:'https://cviraqfhphhsonjmrtvu.supabase.co');
+  const hdr  = (typeof _HDR!=='undefined'?_HDR:{apikey:'gw','Content-Type':'application/json','x-spawn-gw':'1'});
+  const r = await fetch(`${base}/rest/v1/rpc/${fn}`, { method:'POST', headers:hdr, body:'{}' });
+  if(!r.ok) throw new Error(await r.text());
+  let j = await r.json();
+  if (Array.isArray(j) && j.length===1 && (Array.isArray(j[0]) || typeof j[0]==='object')) j = j[0];
+  if (j && j[fn]) j = j[fn];
+  return j;
+}
+
+function _ago(ts){
+  if(!ts) return '—';
+  const t = (typeof ts==='string' && !/[zZ]|[+-]\d\d:?\d\d$/.test(ts)) ? new Date(ts.replace(' ','T')+'+08:00') : new Date(ts);
+  const mins = Math.max(0, Math.round((Date.now()-t.getTime())/60000));
+  if (mins < 60) return mins + 'm ago';
+  if (mins < 1440) return Math.round(mins/60) + 'h ago';
+  return Math.round(mins/1440) + 'd ago';
+}
+function _fresh(ts, okMins){
+  if(!ts) return false;
+  const t = (typeof ts==='string' && !/[zZ]|[+-]\d\d:?\d\d$/.test(ts)) ? new Date(ts.replace(' ','T')+'+08:00') : new Date(ts);
+  return (Date.now()-t.getTime())/60000 <= okMins;
+}
+
+async function overdueCardLoad(){
+  const el = document.getElementById('ovd-body'); if(!el) return;
+  try{
+    const d = await _sysRpc('spawn_overdue_breakdown');
+    const buckets = (d && d.by_bucket) || [];
+    const cols    = (d && d.by_collector) || [];
+    const total   = buckets.reduce((a,b)=>a+Number(b.overdue||0),0);
+    const max     = Math.max(1, ...buckets.map(b=>Number(b.overdue||0)));
+    const tEl = document.getElementById('ovd-total');
+    if(tEl) tEl.textContent = _fmtNum(total) + ' machines';
+    const rows = buckets.map(b=>{
+      const n = Number(b.overdue||0), c = OVD_COLORS[b.bucket] || '#888';
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px">'
+        + '<span style="width:52px;color:var(--mu);flex-shrink:0">'+b.bucket+'</span>'
+        + '<span style="flex:1;height:6px;background:#eef1f5;border-radius:3px;overflow:hidden">'
+        +   '<span style="display:block;height:100%;border-radius:3px;width:'+Math.round(n/max*100)+'%;background:'+c+'"></span>'
+        + '</span>'
+        + '<span style="width:30px;text-align:right;font-weight:700">'+_fmtNum(n)+'</span></div>';
+    }).join('');
+    const chips = cols.slice(0,6).map(c=>{
+      const warn = /unassigned/i.test(c.collector);
+      return '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:'
+        + (warn?'#fdecee':'#f1f3f5') + ';color:'+(warn?'#DF1A35':'#495057')+';margin:0 4px 4px 0">'
+        + c.collector + ' <b>' + _fmtNum(c.overdue) + '</b></span>';
+    }).join('');
+    el.innerHTML = rows + (chips ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)">'+chips+'</div>' : '');
+  }catch(e){
+    el.innerHTML = '<div style="padding:14px;color:var(--mu);font-size:11px">Overdue unavailable</div>';
+    console.warn('overdueCardLoad', e && e.message);
+  }
+}
+
+async function systemCheckLoad(){
+  const el = document.getElementById('sys-body'); if(!el) return;
+  try{
+    const d = await _sysRpc('spawn_system_check');
+    const row = (ok,label,val)=>
+      '<div style="display:flex;align-items:center;gap:7px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--bd)">'
+      + '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:'+(ok?'#028867':'#DF1A35')+'"></span>'
+      + '<span style="flex:1;color:var(--mu)">'+label+'</span>'
+      + '<span style="font-weight:700;color:'+(ok?'inherit':'#DF1A35')+'">'+val+'</span></div>';
+    el.innerHTML =
+        row(_fresh(d.tg_last,60),    'Telegram feed',      _fmtNum(d.tg_vendos)+' vendos · '+_ago(d.tg_last))
+      + row(_fresh(d.mt_last,15),    'MikroTik poller',    _fmtNum(d.mt_routers)+' routers · '+_ago(d.mt_last))
+      + row(!d.cloud_error && _fresh(d.cloud_last,30), 'Spawn Cloud sync', _fmtNum(d.cloud_devices)+' devices · '+_ago(d.cloud_last))
+      + row(true,                    'Harvests today',     _fmtNum(d.harvests_today))
+      + row(Number(d.open_jobs)===0, 'Open job orders',    _fmtNum(d.open_jobs))
+      + row(false,                   'Unreconcilable',     _fmtNum(d.unmatched)+' this month');
+    const w = document.getElementById('sys-when'); if(w) w.textContent = 'live';
+  }catch(e){
+    el.innerHTML = '<div style="padding:14px;color:var(--mu);font-size:11px">System check unavailable</div>';
+    console.warn('systemCheckLoad', e && e.message);
+  }
 }
