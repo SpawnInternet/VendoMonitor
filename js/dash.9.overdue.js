@@ -586,19 +586,30 @@ function ovdCopyList(){
 /* ══════════════════════════════════════════════════════════════════════════
    CYCLE PLAN VIEW  —  Harvest ▸ ⏳ Overdue ▸ 🗓 Cycle plan
    ------------------------------------------------------------------------
-   Same route rules as the Excel sheet Wendell has been running by hand:
-   groups are harvested in group_id order (A1…A6 = Team A, B1…B3 = Team B),
-   each group gets consecutive working days at a fixed vendos/day, the next
-   group starts the next working day, and Sundays are rest days. Fed with the
-   same live machine counts as the overdue list, so the two can never drift.
+   HOW THE REAL ROUTE WORKS (confirmed with Wendell, Jul 2026)
+
+   Two teams. Gilbert + Daryl take everything except Dapitan (697 machines);
+   Tandoy takes Dapitan alone (256). Within a team the collectors work the
+   queue TOGETHER — combined throughput, not one group each — except that a
+   group can be marked SOLO: one collector peels off and runs it alone while
+   the rest of the team carries on down the queue. Sindangan is the solo run.
+
+   So daily capacity on the main queue is (collectors − solo runners) × rate,
+   and it rises again the day the solo group finishes. Splitting costs nothing
+   in total throughput; it only changes routing.
+
+   Everything here is a planning overlay. It reads live machine counts and
+   180 days of harvest history, and writes NOTHING to the database — group
+   order, collector counts, rates and solo flags live in localStorage.
    ══════════════════════════════════════════════════════════════════════════ */
 
 var _ovdAvgSpawn = null;   // vendo_id -> mean spawn_share (last 180d), fetched lazily
 var _ovdPlanBusy = false;
+var _ovdPlanLast = null;   // last computed schedule, for CSV
 
 const _OVP_TEAM = {
-  A:{label:'Team A', areas:'Dipolog · Sindangan · Polanco · Roxas', bg:'#025AC6'},
-  B:{label:'Team B', areas:'Dapitan',                               bg:'#028867'}
+  A:{label:'Team A', who:'Gilbert + Daryl', areas:'Dipolog · Sindangan · Polanco · Roxas', bg:'#025AC6'},
+  B:{label:'Team B', who:'Tandoy',          areas:'Dapitan',                               bg:'#028867'}
 };
 const _OVP_HUE = {A1:'#025AC6',A2:'#1E7BE8',A3:'#311A8E',A4:'#C01176',A5:'#B45309',A6:'#DF1A35',
                   B1:'#028867',B2:'#0E9F7B',B3:'#116149'};
@@ -609,7 +620,58 @@ const _ovpIso  = d => d.toISOString().slice(0,10);
 const _ovpMk   = s => { const p=(s||'').split('-').map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2])); };
 const _ovpAdd  = (d,n) => new Date(d.getTime()+n*86400000);
 const _ovpSun  = d => d.getUTCDay()===0;
-const _ovpFmt  = d => _OVP_DOW[(d.getUTCDay()+6)%7]+' '+d.getUTCDate()+' '+_OVP_MON[d.getUTCMonth()].slice(0,3);
+const _ovpFmt  = d => d ? _OVP_DOW[(d.getUTCDay()+6)%7]+' '+d.getUTCDate()+' '+_OVP_MON[d.getUTCMonth()].slice(0,3) : '—';
+
+/* ── settings (localStorage; NOT the 'spawn_' prefix, which dash.1 wipes on version bump) ── */
+const _OVP_CFG_KEY = 'ovd_plan_cfg_v1';
+var _ovdPlanCfg = (function(){
+  const dflt = {
+    order: ['A1','A4','A2','A5','A3','A6','B1','B2','B3'],  // the rotation Wendell described
+    solo:  {A4:true},                                       // Sindangan runs solo, in parallel
+    col:   {A:2, B:1},
+    rate:  {A:14, B:10}
+  };
+  try{
+    const s=JSON.parse(localStorage.getItem(_OVP_CFG_KEY)||'null');
+    if(s && s.order && s.col && s.rate) return Object.assign(dflt, s);
+  }catch(_){}
+  return dflt;
+})();
+function _ovdPlanSave(){ try{ localStorage.setItem(_OVP_CFG_KEY, JSON.stringify(_ovdPlanCfg)); }catch(_){} }
+
+function ovdPlanReset(){
+  try{ localStorage.removeItem(_OVP_CFG_KEY); }catch(_){}
+  _ovdPlanCfg = {order:['A1','A4','A2','A5','A3','A6','B1','B2','B3'], solo:{A4:true}, col:{A:2,B:1}, rate:{A:14,B:10}};
+  _ovdPlanSyncInputs();
+  ovdPlanRender();
+  if(typeof toast==='function') toast('Plan settings reset');
+}
+function _ovdPlanSyncInputs(){
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.value=v; };
+  set('ovp-col-a',_ovdPlanCfg.col.A); set('ovp-rate-a',_ovdPlanCfg.rate.A);
+  set('ovp-col-b',_ovdPlanCfg.col.B); set('ovp-rate-b',_ovdPlanCfg.rate.B);
+}
+function ovdPlanCfgFromInputs(){
+  const n=(id,d)=>{ const e=document.getElementById(id); const v=e?parseInt(e.value,10):NaN; return isNaN(v)||v<1?d:v; };
+  _ovdPlanCfg.col.A=Math.min(9,n('ovp-col-a',2)); _ovdPlanCfg.rate.A=Math.min(80,n('ovp-rate-a',14));
+  _ovdPlanCfg.col.B=Math.min(9,n('ovp-col-b',1)); _ovdPlanCfg.rate.B=Math.min(80,n('ovp-rate-b',10));
+  _ovdPlanSave(); ovdPlanRender();
+}
+function ovdPlanToggleSolo(code){
+  if(_ovdPlanCfg.solo[code]) delete _ovdPlanCfg.solo[code]; else _ovdPlanCfg.solo[code]=true;
+  _ovdPlanSave(); ovdPlanRender();
+}
+function ovdPlanMove(code, dir){
+  const o=_ovdPlanCfg.order.slice();
+  const i=o.indexOf(code); if(i<0) return;
+  // only swap with the neighbour on the same team, so A and B queues stay separate
+  const team=c=>c.charAt(0);
+  let j=i+dir;
+  while(j>=0 && j<o.length && team(o[j])!==team(code)) j+=dir;
+  if(j<0 || j>=o.length) return;
+  o[i]=o[j]; o[j]=code;
+  _ovdPlanCfg.order=o; _ovdPlanSave(); ovdPlanRender();
+}
 
 function ovdSetView(v){
   _ovdView = v;
@@ -623,11 +685,11 @@ function ovdSetView(v){
   });
   if(v==='plan'){
     const s=document.getElementById('ovp-start');
-    if(s && !s.value){                       // default: next Monday
-      const t=new Date(); t.setUTCHours(12,0,0,0);
-      const d=_ovpAdd(t, ((8-t.getUTCDay())%7)||7);
-      s.value=_ovpIso(d);
+    if(s && !s.value){                       // default: the 1st of next month
+      const t=new Date();
+      s.value=_ovpIso(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth()+1, 1)));
     }
+    _ovdPlanSyncInputs();
     ovdPlanLoad();
   }
 }
@@ -668,122 +730,179 @@ async function ovdPlanLoad(){
   ovdPlanRender();
 }
 
-/* group rows in route order, with live machine counts + projected money */
+/* group rows in the configured route order, with live counts + projected money */
 function _ovdPlanGroups(){
+  const ord=_ovdPlanCfg.order;
+  const rank=c=>{ const i=ord.indexOf(c); return i<0 ? 900+c.charCodeAt(1) : i; };
   return Object.entries(_ovdGroup)
     .map(([gid,g]) => {
       const code=(g.code||'').toUpperCase();
-      const team=code.charAt(0)==='B' ? 'B' : 'A';
       let sum=0, hist=0;
-      (g.members||[]).forEach(vid=>{
-        const a=_ovdAvgSpawn && _ovdAvgSpawn[vid];
-        if(a){ sum+=a; hist++; }
-      });
+      (g.members||[]).forEach(vid=>{ const a=_ovdAvgSpawn && _ovdAvgSpawn[vid]; if(a){ sum+=a; hist++; } });
       const avg = hist ? sum/hist : 0;
-      const bgys = Object.entries(g.bgy||{}).sort((a,b)=>b[1]-a[1]);
-      return {gid:+gid, code, team, label:g.label, machines:g.total, overdue:g.overdue,
-              avg, hist, proj:avg*g.total, bgys};
+      return {gid:+gid, code, team: code.charAt(0)==='B' ? 'B' : 'A', label:g.label,
+              machines:g.total, overdue:g.overdue, avg, hist, proj:avg*g.total,
+              bgys:Object.entries(g.bgy||{}).sort((a,b)=>b[1]-a[1])};
     })
     .filter(g => g.machines > 0)
-    .sort((a,b) => a.code < b.code ? -1 : a.code > b.code ? 1 : 0);
+    .sort((a,b) => rank(a.code) - rank(b.code));
 }
 
-function _ovdPlanSchedule(){
+/* ── THE MODEL ───────────────────────────────────────────────────────────
+   Per team: `col` collectors at `rate` machines/day each, working the queue
+   together. Groups flagged solo are pulled onto their own single-collector
+   track running from day 1; while a solo track is active the main queue only
+   has (col − 1) collectives on it. With one collector a solo flag is
+   meaningless, so it is ignored.                                          */
+function _ovdPlanSchedule(over){
   const startEl=document.getElementById('ovp-start');
   const start=_ovpMk(startEl && startEl.value ? startEl.value : _ovpIso(new Date()));
   if(isNaN(start.getTime())) return null;
   const skip=!!document.getElementById('ovp-sun')?.checked;
-  const rate={A:Math.max(1,+document.getElementById('ovp-rate-a')?.value||18),
-              B:Math.max(1,+document.getElementById('ovp-rate-b')?.value||12)};
-  const groups=_ovdPlanGroups(), byDay={}, out=[];
+  const cfg=_ovdPlanCfg;
+  const MAXD=400;
+
+  // working-day calendar
+  const DAYS=[]; let d=new Date(start.getTime());
+  while(DAYS.length<MAXD){ if(!(skip && _ovpSun(d))) DAYS.push(new Date(d.getTime())); d=_ovpAdd(d,1); }
+
+  const all=_ovdPlanGroups(), byDay={}, rows=[], teams={};
   ['A','B'].forEach(t=>{
-    let cur=new Date(start.getTime());
-    groups.filter(g=>g.team===t).forEach(g=>{
-      let left=g.machines, days=0, first=null, last=null, guard=0;
-      while(left>0 && guard++ < 400){
-        if(skip && _ovpSun(cur)){ cur=_ovpAdd(cur,1); continue; }
-        const take=Math.min(rate[t], left);
-        left-=take; days++;
-        if(!first) first=new Date(cur.getTime());
-        last=new Date(cur.getTime());
-        (byDay[_ovpIso(cur)]=byDay[_ovpIso(cur)]||[]).push({code:g.code,n:take});
-        cur=_ovpAdd(cur,1);
+    const G=all.filter(g=>g.team===t); if(!G.length) return;
+    const N=Math.max(1, (over&&over.col&&over.col[t]) || cfg.col[t] || 1);
+    const R=Math.max(1, (over&&over.rate&&over.rate[t]) || cfg.rate[t] || 12);
+    const soloOn = N>1;
+    const solo = soloOn ? G.filter(g=>cfg.solo[g.code]) : [];
+    const main = G.filter(g=>!(soloOn && cfg.solo[g.code]));
+
+    const busy=new Array(MAXD).fill(0);   // collectors tied up on solo runs, per working day
+    let lastIdx=-1;
+
+    // solo track — one collector, sequential
+    let si=0;
+    solo.forEach(g=>{
+      let left=g.machines, days=0, first=null, last=null;
+      while(left>0 && si<MAXD){
+        const take=Math.min(R,left); left-=take; days++;
+        busy[si]=Math.min(N-1, (busy[si]||0)+1);
+        if(!first) first=DAYS[si];
+        last=DAYS[si];
+        (byDay[_ovpIso(DAYS[si])]=byDay[_ovpIso(DAYS[si])]||[]).push({code:g.code,n:take,solo:true});
+        si++;
       }
-      out.push(Object.assign({}, g, {days, first, last}));
+      lastIdx=Math.max(lastIdx, si-1);
+      rows.push(Object.assign({}, g, {days, first, last, solo:true, rate:R, hands:1}));
     });
+
+    // main queue — (N − busy) collectors that day
+    let mi=0;
+    main.forEach(g=>{
+      let left=g.machines, days=0, first=null, last=null, guard=0;
+      while(left>0 && mi<MAXD && guard++<MAXD){
+        const hands=N-(busy[mi]||0);
+        if(hands<=0){ mi++; continue; }
+        const take=Math.min(hands*R, left); left-=take; days++;
+        if(!first) first=DAYS[mi];
+        last=DAYS[mi];
+        (byDay[_ovpIso(DAYS[mi])]=byDay[_ovpIso(DAYS[mi])]||[]).push({code:g.code,n:take,solo:false});
+        mi++;
+      }
+      lastIdx=Math.max(lastIdx, mi-1);
+      rows.push(Object.assign({}, g, {days, first, last, solo:false, rate:R, hands:N}));
+    });
+
+    teams[t]={N, R, used:lastIdx+1, machines:G.reduce((a,g)=>a+g.machines,0),
+              soloCodes:solo.map(g=>g.code), end:DAYS[Math.max(0,lastIdx)]};
   });
-  return {rows:out, byDay, start, skip, rate};
+  return {rows, byDay, start, skip, teams, DAYS};
 }
 
 function _ovpWorkingDaysLeft(start, skip){
   const y=start.getUTCFullYear(), m=start.getUTCMonth();
   const dim=new Date(Date.UTC(y,m+1,0)).getUTCDate();
   let n=0;
-  for(let d=start.getUTCDate(); d<=dim; d++){
-    if(!(skip && _ovpSun(new Date(Date.UTC(y,m,d))))) n++;
-  }
+  for(let dd=start.getUTCDate(); dd<=dim; dd++) if(!(skip && _ovpSun(new Date(Date.UTC(y,m,dd))))) n++;
   return n;
+}
+/* smallest rate/collector that clears the team inside W working days */
+function _ovpNeededRate(t, W){
+  for(let r=1;r<=80;r++){
+    const s=_ovdPlanSchedule({rate:{[t]:r}});
+    if(s && s.teams[t] && s.teams[t].used<=W) return r;
+  }
+  return null;
 }
 
 function ovdPlanRender(){
   if(!_ovdRaw || !_ovdAvgSpawn) return;
   const S=_ovdPlanSchedule(); if(!S) return;
-  const {rows, byDay, start, skip, rate} = S;
-
-  /* ── advisory: can this even fit in a month? ── */
+  _ovdPlanLast=S;
+  const {rows, byDay, start, skip, teams} = S;
   const wd=_ovpWorkingDaysLeft(start, skip);
-  const tot={}, used={}, need={};
-  ['A','B'].forEach(t=>{
-    tot[t] =rows.filter(r=>r.team===t).reduce((a,r)=>a+r.machines,0);
-    used[t]=rows.filter(r=>r.team===t).reduce((a,r)=>a+r.days,0);
-    need[t]=wd ? Math.ceil(tot[t]/wd) : 0;
-  });
-  const over=['A','B'].filter(t=>used[t]>wd && tot[t]>0);
-  document.getElementById('ovd-plan-advice').innerHTML = over.length
-    ? `<div style="margin-bottom:12px;padding:10px 14px;border-radius:11px;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #FFB725;font-size:12.5px;color:#1e293b;line-height:1.6;">
-         <b>${over.map(t=>_OVP_TEAM[t].label).join(' and ')}</b> ${over.length>1?'run':'runs'} past ${_OVP_MON[start.getUTCMonth()]}.
-         There are <b>${wd} working days</b> left in the month from this start —
-         finishing inside it needs <b>${need.A}/day for Team A</b> and <b>${need.B}/day for Team B</b>
-         (set to ${rate.A} and ${rate.B}).
-         ${used.A>wd?`<br>At ${rate.A}/day Team A's cycle is <b>${used.A} working days</b>, so a 30-day overdue rule can never be met — the earliest machines are already late before anyone returns.`:''}
-       </div>`
-    : `<div style="margin-bottom:12px;padding:10px 14px;border-radius:11px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:4px solid #028867;font-size:12.5px;color:#1e293b;line-height:1.6;">
-         Both teams finish inside ${_OVP_MON[start.getUTCMonth()]} — Team A in <b>${used.A}</b> of ${wd} working days, Team B in <b>${used.B}</b>.
-         That leaves <b>${Math.max(0,wd-Math.max(used.A,used.B))} spare days</b> for callbacks and deferred machines.
-       </div>`;
+  const monthName=_OVP_MON[start.getUTCMonth()];
 
-  /* ── per-team schedule tables ── */
-  const th=(t,a)=>`<th style="padding:8px;text-align:${a||'center'};font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${t}</th>`;
+  /* ── verdict: does the month clear? ── */
+  let verdict='';
+  ['A','B'].forEach(t=>{
+    const T=teams[t]; if(!T) return;
+    const ok=T.used<=wd;
+    const need=ok?null:_ovpNeededRate(t, wd);
+    const meta=_OVP_TEAM[t];
+    verdict += `<div style="flex:1;min-width:290px;padding:11px 14px;border-radius:11px;border:1px solid ${ok?'#a7f3d0':'#fde68a'};border-left:4px solid ${ok?'#028867':'#FFB725'};background:${ok?'#ecfdf5':'#fffbeb'};font-size:12.5px;line-height:1.6;color:#1e293b;">
+      <div style="font-weight:800;font-size:13px;margin-bottom:2px;">${ok?'✅':'⚠️'} ${meta.label} — ${ok?'clears '+monthName:'does not clear '+monthName}</div>
+      ${T.machines} machines · ${T.N} collector${T.N>1?'s':''} × ${T.R}/day
+      ${T.soloCodes.length?' · '+T.soloCodes.join(', ')+' run solo':''}<br>
+      needs <b>${T.used} working days</b>, month has <b>${wd}</b>${ok?` — <b>${wd-T.used} spare</b>`:` — <b>${T.used-wd} over</b>`}
+      ${need?`<br>Clears at <b>${need}/day each</b> (${need*T.N}/day combined).`:''}
+      ${!ok&&!need?'<br>No rate up to 80/day clears it — add a collector.':''}
+    </div>`;
+  });
+  document.getElementById('ovd-plan-advice').innerHTML =
+    `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">${verdict}</div>`;
+
+  /* ── per-team tables ── */
+  const th=(x,a)=>`<th style="padding:8px;text-align:${a||'center'};font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${x}</th>`;
   let html='';
   ['A','B'].forEach(t=>{
     const R=rows.filter(r=>r.team===t); if(!R.length) return;
-    const T=R.reduce((a,r)=>({m:a.m+r.machines,o:a.o+r.overdue,d:a.d+r.days,p:a.p+r.proj}),{m:0,o:0,d:0,p:0});
-    const meta=_OVP_TEAM[t];
+    const T=teams[t], meta=_OVP_TEAM[t];
+    const tot=R.reduce((a,r)=>({m:a.m+r.machines,o:a.o+r.overdue,p:a.p+r.proj}),{m:0,o:0,p:0});
+    const ends=R.map(r=>r.last).filter(Boolean).sort((a,b)=>a-b);
     html += `<div style="margin-bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
       <div style="padding:9px 13px;background:${meta.bg};color:#fff;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
         <span style="font-size:14px;font-weight:800;">${meta.label}</span>
-        <span style="font-size:11px;opacity:.9;font-weight:600;">${meta.areas} · ${R.length} groups · ${T.m} machines</span>
+        <span style="font-size:11px;opacity:.9;font-weight:600;">${meta.who} · ${meta.areas} · ${tot.m} machines</span>
         <span style="flex:1"></span>
-        <span style="font-size:12px;font-weight:800;">${_ovpFmt(R[0].first)} → ${_ovpFmt(R[R.length-1].last)} · ${T.d} working days</span>
+        <span style="font-size:12px;font-weight:800;">${_ovpFmt(R[0].first)} → ${_ovpFmt(ends[ends.length-1])} · ${T.used} working days</span>
       </div>
       <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
         <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">
-          ${th('Group','left')}${th('Barangays covered','left')}${th('Machines')}${th('Overdue')}${th('Days')}${th('Projected Spawn','right')}${th('Start','right')}${th('End','right')}
+          ${th('#','center')}${th('Group','left')}${th('Barangays covered','left')}${th('Machines')}${th('Overdue')}${th('Hands')}${th('Days')}${th('Projected Spawn','right')}${th('Start','right')}${th('End','right')}
         </tr></thead><tbody>
-        ${R.map(r=>{
+        ${R.map((r,i)=>{
           const listed=r.bgys.reduce((a,b)=>a+b[1],0), rest=r.machines-listed;
           const thin=r.hist < r.machines*0.6;
-          return `<tr style="border-bottom:1px solid #f1f5f9;">
+          const soloOn=!!_ovdPlanCfg.solo[r.code];
+          return `<tr style="border-bottom:1px solid #f1f5f9;background:${r.solo?'#fdf4ff':'#fff'};">
+            <td style="padding:7px 4px;text-align:center;white-space:nowrap;vertical-align:top;">
+              <button onclick="ovdPlanMove('${r.code}',-1)" title="Move earlier" style="border:1px solid #e5e7eb;background:#fff;border-radius:4px;cursor:pointer;font-size:9px;padding:1px 4px;line-height:1.3;font-family:inherit;">▲</button>
+              <button onclick="ovdPlanMove('${r.code}',1)" title="Move later" style="border:1px solid #e5e7eb;background:#fff;border-radius:4px;cursor:pointer;font-size:9px;padding:1px 4px;line-height:1.3;font-family:inherit;">▼</button>
+            </td>
             <td style="padding:7px 8px;vertical-align:top;">
               <span style="font:700 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#fff;background:${_ovpHue(r.code)};padding:3px 6px;border-radius:3px;">${_ovdEsc(r.code)}</span>
               <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:3px;">${_ovdEsc(r.label)}</div>
+              <button onclick="ovdPlanToggleSolo('${r.code}')" title="One collector peels off and runs this group alone"
+                style="margin-top:4px;border:1px solid ${soloOn?'#C01176':'#e5e7eb'};background:${soloOn?'#C01176':'#fff'};color:${soloOn?'#fff':'#6b7280'};border-radius:5px;cursor:pointer;font-size:9.5px;font-weight:800;padding:2px 7px;font-family:inherit;">
+                ${soloOn?'☝ SOLO RUN':'+ solo run'}</button>
+              ${soloOn&&T.N<2?'<div style="font-size:9px;color:#a16207;font-weight:700;margin-top:2px;">needs 2+ collectors</div>':''}
             </td>
-            <td style="padding:7px 8px;font-size:11px;color:#6b7280;line-height:1.5;max-width:290px;">
+            <td style="padding:7px 8px;font-size:11px;color:#6b7280;line-height:1.5;max-width:280px;">
               ${r.bgys.slice(0,6).map(b=>`<span style="color:#1e293b;font-weight:600;">${_ovdEsc(b[0])}</span>&#8202;${b[1]}`).join(' · ')}
               ${rest>0?` · <span style="color:#1e293b;font-weight:600;">+${rest}</span>&#8202;elsewhere`:''}
             </td>
             <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:#374151;">${r.machines}</td>
             <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:${r.overdue>=50?'#DF1A35':'#9ca3af'};">${r.overdue}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:11px;font-weight:700;color:${r.solo?'#C01176':'#6b7280'};white-space:nowrap;">${r.hands}×${r.rate}</td>
             <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:#374151;">${r.days}</td>
             <td style="padding:7px 8px;text-align:right;font-size:12px;font-weight:800;color:#028867;white-space:nowrap;">${_php(r.proj)}
               ${thin?`<div style="font-size:9.5px;font-weight:600;color:#a16207;">only ${r.hist}/${r.machines} with history</div>`:''}</td>
@@ -792,12 +911,13 @@ function ovdPlanRender(){
           </tr>`;}).join('')}
         </tbody>
         <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;">
-          <td colspan="2" style="padding:8px;font-size:12px;font-weight:800;color:#1e293b;">Subtotal · ${meta.label}</td>
-          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${T.m}</td>
-          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;color:#DF1A35;">${T.o}</td>
-          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${T.d}</td>
-          <td style="padding:8px;text-align:right;font-size:12.5px;font-weight:800;color:#028867;">${_php(T.p)}</td>
-          <td colspan="2" style="padding:8px;text-align:right;font-size:11.5px;font-weight:700;color:#6b7280;">${_ovpFmt(R[0].first)} → ${_ovpFmt(R[R.length-1].last)}</td>
+          <td colspan="3" style="padding:8px;font-size:12px;font-weight:800;color:#1e293b;">Subtotal · ${meta.label} · ${T.N}×${T.R} = ${T.N*T.R}/day combined</td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${tot.m}</td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;color:#DF1A35;">${tot.o}</td>
+          <td></td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${T.used}</td>
+          <td style="padding:8px;text-align:right;font-size:12.5px;font-weight:800;color:#028867;">${_php(tot.p)}</td>
+          <td colspan="2" style="padding:8px;text-align:right;font-size:11.5px;font-weight:700;color:#6b7280;">${_ovpFmt(R[0].first)} → ${_ovpFmt(ends[ends.length-1])}</td>
         </tr></tfoot>
       </table></div></div>`;
   });
@@ -814,16 +934,17 @@ function ovdPlanRender(){
     const lead=(new Date(Date.UTC(y,m,1)).getUTCDay()+6)%7;
     let cells='';
     for(let i=0;i<lead;i++) cells+='<div></div>';
-    for(let d=1;d<=dim;d++){
-      const dt=new Date(Date.UTC(y,m,d));
+    for(let dd=1;dd<=dim;dd++){
+      const dt=new Date(Date.UTC(y,m,dd));
       const jobs=byDay[_ovpIso(dt)]||[];
       const rest=skip && _ovpSun(dt) && !jobs.length;
-      cells+=`<div style="background:${rest?'repeating-linear-gradient(135deg,#fff,#fff 5px,#f1f5f9 5px,#f1f5f9 10px)':'#fff'};border:1px solid #e5e7eb;border-radius:7px;min-height:70px;padding:5px 6px;">
-        <div style="font-size:10.5px;font-weight:800;color:${rest?'#cbd5e1':'#9ca3af'};">${d}</div>
+      const inMonth = m===start.getUTCMonth() && y===start.getUTCFullYear();
+      cells+=`<div style="background:${rest?'repeating-linear-gradient(135deg,#fff,#fff 5px,#f1f5f9 5px,#f1f5f9 10px)':'#fff'};border:1px solid ${!inMonth?'#f1f5f9':'#e5e7eb'};border-radius:7px;min-height:70px;padding:5px 6px;">
+        <div style="font-size:10.5px;font-weight:800;color:${rest?'#cbd5e1':'#9ca3af'};">${dd}</div>
         ${rest?'<div style="font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#cbd5e1;">rest</div>':''}
         ${jobs.map(j=>`<div style="display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;margin-top:2px;">
             <span style="width:3px;height:14px;border-radius:1px;background:${_ovpHue(j.code)};flex:0 0 3px;"></span>
-            <span style="color:#1e293b;">${_ovdEsc(j.code)}</span>
+            <span style="color:#1e293b;">${_ovdEsc(j.code)}${j.solo?'<span title="solo run" style="color:#C01176;">☝</span>':''}</span>
             <span style="margin-left:auto;color:#9ca3af;font-size:10px;">${j.n}</span></div>`).join('')}
       </div>`;
     }
@@ -835,8 +956,8 @@ function ovdPlanRender(){
     cur=new Date(Date.UTC(y,m+1,1));
   }
   cal+=`<div style="display:flex;flex-wrap:wrap;gap:11px;font-size:10.5px;color:#6b7280;padding:9px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:11px;">
-    ${rows.map(r=>`<span style="display:inline-flex;align-items:center;gap:5px;color:#1e293b;"><span style="width:9px;height:9px;border-radius:2px;background:${_ovpHue(r.code)};display:inline-block;"></span>${_ovdEsc(r.code)} ${_ovdEsc(r.label)}</span>`).join('')}
-    <span style="margin-left:auto;">Projected Spawn = each group's mean share per machine over 180 days × its machine count. Not a target.</span>
+    ${rows.map(r=>`<span style="display:inline-flex;align-items:center;gap:5px;color:#1e293b;"><span style="width:9px;height:9px;border-radius:2px;background:${_ovpHue(r.code)};display:inline-block;"></span>${_ovdEsc(r.code)}${r.solo?' ☝':''} ${_ovdEsc(r.label)}</span>`).join('')}
+    <span style="margin-left:auto;">☝ = solo run, one collector alone while the rest work the queue. Numbers are machines that day. Nothing here is written to the database.</span>
   </div>`;
   document.getElementById('ovd-plan-cal').innerHTML = cal;
 }
@@ -844,23 +965,27 @@ function ovdPlanRender(){
 function ovdPlanFit(){
   const S=_ovdPlanSchedule(); if(!S) return;
   const wd=_ovpWorkingDaysLeft(S.start, S.skip); if(!wd) return;
+  let msg=[];
   ['A','B'].forEach(t=>{
-    const tot=S.rows.filter(r=>r.team===t).reduce((a,r)=>a+r.machines,0);
-    const el=document.getElementById(t==='A'?'ovp-rate-a':'ovp-rate-b');
-    if(el && tot) el.value=Math.ceil(tot/wd);
+    if(!S.teams[t]) return;
+    const need=_ovpNeededRate(t, wd);
+    if(need){ _ovdPlanCfg.rate[t]=need; msg.push(_OVP_TEAM[t].label+' '+need+'/day'); }
+    else msg.push(_OVP_TEAM[t].label+' cannot fit');
   });
-  ovdPlanRender();
+  _ovdPlanSave(); _ovdPlanSyncInputs(); ovdPlanRender();
+  if(typeof toast==='function') toast('Set to '+msg.join(' · '));
 }
 
 function ovdPlanCsv(){
-  const S=_ovdPlanSchedule(); if(!S){ if(typeof toast==='function') toast('Nothing to export'); return; }
+  const S=_ovdPlanLast || _ovdPlanSchedule();
+  if(!S){ if(typeof toast==='function') toast('Nothing to export'); return; }
   const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const head=['Team','Code','Group','Barangays','Machines','Overdue','Days','Projected Spawn','Start','End'];
-  const csv=[head.join(',')].concat(S.rows.map(r=>[
-    'Team '+r.team, r.code, r.label,
+  const head=['Team','Order','Code','Group','Solo run','Collectors','Rate/day each','Barangays','Machines','Overdue','Days','Projected Spawn','Start','End'];
+  const csv=[head.join(',')].concat(S.rows.map((r,i)=>[
+    'Team '+r.team, i+1, r.code, r.label, r.solo?'yes':'no', r.hands, r.rate,
     r.bgys.map(b=>b[0]+' '+b[1]).join(' | '),
     r.machines, r.overdue, r.days, Math.round(r.proj),
-    _ovpIso(r.first), _ovpIso(r.last)].map(esc).join(','))).join('\n');
+    r.first?_ovpIso(r.first):'', r.last?_ovpIso(r.last):''].map(esc).join(','))).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
   a.download='spawn_cycle_plan_'+_ovpIso(S.start)+'.csv';
