@@ -373,33 +373,42 @@ function _fresh(ts, okMins){
 async function overdueCardLoad(){
   const el = document.getElementById('ovd-body'); if(!el) return;
   try{
-    const d = await _sysRpc('spawn_overdue_breakdown');
-    const buckets = (d && d.by_bucket) || [];
-    const cols    = (d && d.by_collector) || [];
-    const total   = buckets.reduce((a,b)=>a+Number(b.overdue||0),0);
-    const max     = Math.max(1, ...buckets.map(b=>Number(b.overdue||0)));
+    const d = await _sysRpc('spawn_overdue_by_group');
+    const gs = (d && d.groups) || [];
     const tEl = document.getElementById('ovd-total');
-    if(tEl) tEl.textContent = _fmtNum(total) + ' machines';
-    const rows = buckets.map(b=>{
-      const n = Number(b.overdue||0), c = OVD_COLORS[b.bucket] || '#888';
-      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px">'
-        + '<span style="width:52px;color:var(--mu);flex-shrink:0">'+b.bucket+'</span>'
+    if(tEl) tEl.textContent = _fmtNum(d.total_overdue) + ' of ' + _fmtNum(d.total_active);
+    const max = Math.max(1, ...gs.map(g=>Number(g.overdue||0)));
+    el.innerHTML = gs.map(g=>{
+      const n = Number(g.overdue||0), pct = Number(g.pct||0), un = Number(g.gid) === -1;
+      const c = un ? '#DF1A35' : (pct>=50 ? '#C01176' : pct>=30 ? '#FFB725' : '#028867');
+      const oldest = g.oldest_days!=null ? (' · oldest '+_fmtNum(g.oldest_days)+'d') : '';
+      return '<div onclick="event.stopPropagation();ovdOpen('+g.gid+')" title="'+(g.area||'')+' · '
+        + _fmtNum(g.total)+' active'+oldest+'" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;cursor:pointer">'
+        + '<span style="width:104px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:'
+        +   (un?'#DF1A35':'var(--tx)')+';font-weight:'+(un?'700':'600')+'">'+g.label+'</span>'
         + '<span style="flex:1;height:6px;background:#eef1f5;border-radius:3px;overflow:hidden">'
         +   '<span style="display:block;height:100%;border-radius:3px;width:'+Math.round(n/max*100)+'%;background:'+c+'"></span>'
         + '</span>'
-        + '<span style="width:30px;text-align:right;font-weight:700">'+_fmtNum(n)+'</span></div>';
+        + '<span style="width:52px;text-align:right;font-weight:700">'+_fmtNum(n)
+        +   '<span style="color:var(--mu);font-weight:400;font-size:10px"> '+pct+'%</span></span></div>';
     }).join('');
-    const chips = cols.slice(0,6).map(c=>{
-      const warn = /unassigned/i.test(c.collector);
-      return '<span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:10px;background:'
-        + (warn?'#fdecee':'#f1f3f5') + ';color:'+(warn?'#DF1A35':'#495057')+';margin:0 4px 4px 0">'
-        + c.collector + ' <b>' + _fmtNum(c.overdue) + '</b></span>';
-    }).join('');
-    el.innerHTML = rows + (chips ? '<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--bd)">'+chips+'</div>' : '');
   }catch(e){
     el.innerHTML = '<div style="padding:14px;color:var(--mu);font-size:11px">Overdue unavailable</div>';
     console.warn('overdueCardLoad', e && e.message);
   }
+}
+
+// Jump to Harvest -> Overdue. Harvest JS loads late, so wait for it if needed.
+function ovdOpen(gid){
+  if (typeof ensureHarvestJs === 'function') ensureHarvestJs();
+  showP('harvest', document.querySelector('[data-panel="harvest"]'));
+  let tries = 0;
+  (function go(){
+    if (typeof hvNewTab === 'function') {
+      hvNewTab('overdue', document.getElementById('hbtn-overdue'));
+      if (gid != null && gid !== -1 && typeof window.ovdFocusGroup === 'function') window.ovdFocusGroup(gid);
+    } else if (tries++ < 40) setTimeout(go, 100);
+  })();
 }
 
 async function systemCheckLoad(){
