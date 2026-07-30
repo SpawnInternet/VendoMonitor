@@ -376,7 +376,7 @@ async function overdueCardLoad(){
     const d = await _sysRpc('spawn_overdue_by_group');
     const gs = (d && d.groups) || [];
     const tEl = document.getElementById('ovd-total');
-    if(tEl) tEl.textContent = _fmtNum(d.total_overdue) + ' of ' + _fmtNum(d.total_active);
+    if(tEl) tEl.textContent = _fmtNum(d.total_overdue) + ' of ' + _fmtNum(d.total_active) + ' on route';
     const max = Math.max(1, ...gs.map(g=>Number(g.overdue||0)));
     el.innerHTML = gs.map(g=>{
       const n = Number(g.overdue||0), pct = Number(g.pct||0), un = Number(g.gid) === -1;
