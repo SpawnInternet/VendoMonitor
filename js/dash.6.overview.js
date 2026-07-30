@@ -71,6 +71,11 @@ function overviewRender(ov, data) {
       <div class="sl">Harvest Spawn · Today</div>
       <div class="sv" style="color:${BRAND.magenta}">${_php(ov.harvest_today)}</div>
     </div>
+    <div class="stat" style="border-bottom-color:${BRAND.purple};cursor:pointer" onclick="showP('spawncloud')" title="Spawn Cloud coin income this month">
+      <div class="sl">Spawn Cloud &middot; Month</div>
+      <div class="sv" style="color:${BRAND.purple}">${_php(ov.cloud_month)}</div>
+      <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">${_fmtNum(ov.cloud_machines||0)} machines &middot; ${_php(ov.cloud_today)} today</div>
+    </div>
     <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15);cursor:pointer" onclick="showP('suspicious')">
       <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
