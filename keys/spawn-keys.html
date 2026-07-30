@@ -818,10 +818,10 @@ async function ringOut(){
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_out',actor:to,
     auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
-    is_test:true,notes:'Released by '+ME.name}]);
+    is_test:false,notes:'Released by '+ME.name}]);
   await sbPost('key_logs',[{collector_name:to,area:CUR_RING.label,keys_taken:null,
     taken_at:new Date().toISOString(),key_date:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
-    returned:false,record_type:'collector',ring_id:CUR_RING.id,is_test:true,
+    returned:false,record_type:'collector',ring_id:CUR_RING.id,is_test:false,
     notes:'Auto — scanned by '+ME.name}]);
   CUR_RING.status='out';CUR_RING.out_to=to;CUR_RING.out_at=new Date().toISOString();
   toast('Ring out to '+to); renderRing(); loadRings();
@@ -833,7 +833,7 @@ async function ringIn(){
   if(!ok){toast('Failed');return;}
   await sbPost('key_events',[{ring_id:CUR_RING.id,event:'ring_in',actor:CUR_RING.out_to||'—',
     auth_method:LAST_AUTH,verified_by:ME.name,verified_at:new Date().toISOString(),
-    is_test:true,notes:'Received by '+ME.name}]);
+    is_test:false,notes:'Received by '+ME.name}]);
   await sbPatch('key_logs?ring_id=eq.'+CUR_RING.id+'&returned=eq.false',
     {returned:true,returned_at:new Date().toISOString(),
      returned_notes:'Auto — scanned by '+ME.name});
@@ -916,7 +916,7 @@ async function confirmPull(){
     vendo_id: PULL_VENDO.id,
     key_type: PULL_KT,
     event:'key_pull',
-    is_test: true,
+    is_test: false,
     actor: ME.name,
     auth_method: auth,
     from_ring_out: fieldPull,
