@@ -128,7 +128,9 @@ function _ovdComputeFrom(raw, thresh){
   gs.forEach(g => {
     byGroup[g.id] = {
       overdue: 0, oldest: 0, total: 0,
+      never: 0, d181: 0, d91: 0, dle90: 0,   // severity split of the overdue machines
       label: g.group_label || g.group_id || ('Group '+g.id),
+      code: g.group_id || '',
       area: (g.area||'').toUpperCase(),
       collector: g.collector || ''
     };
@@ -155,6 +157,10 @@ function _ovdComputeFrom(raw, thresh){
     if(days <= thresh) return;
 
     gb.overdue++;
+    if(days >= 9999)     gb.never++;
+    else if(days > 180)  gb.d181++;
+    else if(days > 90)   gb.d91++;
+    else                 gb.dle90++;
     byArea[area].overdue++;
     const v = V[row.vendo_id] || {};
     rows.push({
@@ -284,24 +290,93 @@ function ovdRenderCards(){
 
 function ovdRenderGroups(){
   const el = document.getElementById('ovd-groups'); if(!el) return;
-  if(!_ovdSelArea){ el.innerHTML = ''; return; }
-  const list = Object.entries(_ovdGroup)
-    .filter(([gid,g]) => g.area === _ovdSelArea)
+  let list = Object.entries(_ovdGroup)
     .map(([gid,g]) => Object.assign({gid:+gid}, g))
-    .sort((a,b) => b.overdue - a.overdue);
+    .filter(g => g.total > 0);
+  if(_ovdSelArea) list = list.filter(g => g.area === _ovdSelArea);
   if(!list.length){ el.innerHTML = ''; return; }
+  list.sort((a,b) => b.overdue - a.overdue || b.total - a.total);
 
-  const chip = (label, active, onclick, badge, tone) =>
-    `<button onclick="${onclick}" style="padding:7px 12px;border-radius:9px;border:1.5px solid ${active?'#025AC6':'#e5e7eb'};background:${active?'#025AC6':'#fff'};color:${active?'#fff':'#1e293b'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px;">
-       ${_ovdEsc(label)}<span style="font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:${active?'rgba(255,255,255,.22)':tone.bg};color:${active?'#fff':tone.fg};">${badge}</span></button>`;
+  const SEG = [
+    {k:'never', c:'#311A8E', t:'never harvested'},
+    {k:'d181',  c:'#DF1A35', t:'180d+'},
+    {k:'d91',   c:'#ea580c', t:'91–180d'},
+    {k:'dle90', c:'#FFB725', t:'up to 90d'}
+  ];
+
+  const bar = g => {
+    const segs = SEG.filter(s => g[s.k] > 0).map(s =>
+      `<div title="${g[s.k]} ${s.t}" style="width:${(g[s.k]/g.total*100).toFixed(2)}%;background:${s.c};"></div>`).join('');
+    const ok = g.total - g.overdue;
+    return `<div style="display:flex;height:9px;border-radius:5px;overflow:hidden;background:#e8f5ef;min-width:90px;">
+      ${segs}${ok>0?`<div title="${ok} on time" style="flex:1;background:#d1fae5;"></div>`:''}</div>`;
+  };
+  const num = (v, color) => `<td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:${v?'800':'400'};color:${v?color:'#d1d5db'};">${v||'·'}</td>`;
+
+  const rows = list.map(g => {
+    const on  = _ovdSelGroup === String(g.gid);
+    const pct = Math.round(g.overdue/g.total*100);
+    const tone = pct>=50 ? '#DF1A35' : pct>=30 ? '#c2410c' : '#a16207';
+    return `<tr onclick="ovdPickGroup('${g.gid}','${g.area}')" style="cursor:pointer;border-bottom:1px solid #f1f5f9;background:${on?'#eff6ff':'#fff'};">
+      <td style="padding:7px 8px;">
+        <div style="font-size:12.5px;font-weight:800;color:${on?'#025AC6':'#1e293b'};">${on?'▸ ':''}${_ovdEsc(g.label)}</div>
+        <div style="font-size:10.5px;color:#9ca3af;">${_ovdEsc(g.code)}${g.collector?' · '+_ovdEsc(g.collector):''}</div>
+      </td>
+      <td style="padding:7px 8px;font-size:11.5px;color:#6b7280;">${_ovdTitle(g.area)}</td>
+      <td style="padding:7px 8px;text-align:center;font-size:12px;color:#374151;">${g.total}</td>
+      <td style="padding:7px 8px;text-align:center;">
+        <span style="display:inline-block;min-width:34px;padding:3px 9px;border-radius:7px;font-size:12.5px;font-weight:800;color:#fff;background:${_ovdTier(g.overdue)};">${g.overdue}</span>
+      </td>
+      <td style="padding:7px 8px;text-align:right;font-size:12px;font-weight:800;color:${tone};white-space:nowrap;">${pct}%</td>
+      <td style="padding:7px 10px 7px 4px;min-width:110px;">${bar(g)}</td>
+      ${num(g.dle90,'#a16207')}${num(g.d91,'#ea580c')}${num(g.d181,'#DF1A35')}${num(g.never,'#311A8E')}
+      <td style="padding:7px 8px;text-align:right;font-size:11.5px;color:#6b7280;white-space:nowrap;">${g.oldest?_ovdFmtDays(g.oldest):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  const T = list.reduce((a,g) => {
+    ['total','overdue','dle90','d91','d181','never'].forEach(k => a[k] = (a[k]||0)+g[k]);
+    a.oldest = Math.max(a.oldest||0, g.oldest||0); return a;
+  }, {});
+  const Tpct = T.total ? Math.round(T.overdue/T.total*100) : 0;
+
+  const th = (t, align) => `<th style="padding:7px 8px;text-align:${align||'center'};font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${t}</th>`;
+  const tf = (v, color) => `<td style="padding:8px;text-align:center;font-size:12px;font-weight:800;color:${v?color:'#d1d5db'};">${v||'·'}</td>`;
 
   el.innerHTML =
-    `<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:12px 0 2px;">
-       <span style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-right:3px;">${_ovdTitle(_ovdSelArea)} groups</span>
-       ${chip('All groups', !_ovdSelGroup, "ovdPickGroup('')", list.reduce((s,g)=>s+g.overdue,0), {bg:'#fef2f2',fg:'#DF1A35'})}
-       ${list.map(g => chip(g.label, _ovdSelGroup === String(g.gid), `ovdPickGroup('${g.gid}')`, g.overdue+'/'+g.total, g.overdue>=20?{bg:'#fef2f2',fg:'#DF1A35'}:{bg:'#fffbeb',fg:'#a16207'})).join('')}
-       <button onclick="ovdPickArea('')" style="padding:7px 11px;border-radius:9px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">✕ clear area</button>
-     </div>`;
+  `<div style="margin-top:14px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+    <div style="padding:10px 13px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+      <span style="font-size:13px;font-weight:800;color:#1e293b;">Breakdown by harvest group</span>
+      <span style="font-size:10.5px;color:#9ca3af;">${_ovdSelArea ? _ovdTitle(_ovdSelArea)+' only' : 'all '+list.length+' groups'} · click a row to filter the list below</span>
+      <span style="flex:1"></span>
+      ${_ovdSelGroup ? `<button onclick="event.stopPropagation();ovdPickGroup('')" style="padding:4px 10px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ clear group</button>` : ''}
+      ${_ovdSelArea ? `<button onclick="event.stopPropagation();ovdPickArea('')" style="padding:4px 10px;border-radius:7px;border:1px solid #e5e7eb;background:#fff;color:#6b7280;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✕ clear area</button>` : ''}
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">
+          ${th('Group','left')}${th('Area','left')}${th('Machines')}${th('Overdue')}${th('Share','right')}${th('Severity mix','left')}
+          ${th('≤90d')}${th('91–180d')}${th('180d+')}${th('Never')}${th('Oldest','right')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;">
+          <td style="padding:8px;font-size:12px;font-weight:800;color:#1e293b;">Total</td>
+          <td></td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;color:#374151;">${T.total||0}</td>
+          <td style="padding:8px;text-align:center;font-size:12.5px;font-weight:800;color:#DF1A35;">${T.overdue||0}</td>
+          <td style="padding:8px;text-align:right;font-size:12px;font-weight:800;color:#DF1A35;">${Tpct}%</td>
+          <td></td>
+          ${tf(T.dle90,'#a16207')}${tf(T.d91,'#ea580c')}${tf(T.d181,'#DF1A35')}${tf(T.never,'#311A8E')}
+          <td style="padding:8px;text-align:right;font-size:11.5px;font-weight:700;color:#6b7280;">${T.oldest?_ovdFmtDays(T.oldest):'—'}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div style="padding:7px 13px;border-top:1px solid #f1f5f9;display:flex;gap:13px;flex-wrap:wrap;font-size:10px;color:#6b7280;">
+      ${SEG.map(s=>`<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:${s.c};display:inline-block;"></span>${s.t}</span>`).join('')}
+      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:9px;height:9px;border-radius:2px;background:#d1fae5;display:inline-block;"></span>on time</span>
+      <span style="margin-left:auto;">“Machines” = active, not pulled out. Collector shown is the group’s nominal assignment, not who harvested last.</span>
+    </div>
+  </div>`;
 }
 
 function _ovdVisible(){
@@ -360,10 +435,18 @@ function ovdPickArea(a){
   _ovdSelArea = (_ovdSelArea === a) ? '' : a;
   _ovdSelGroup = '';
   ovdRender();
-  const t = document.getElementById('ovd-table-wrap');
-  if(t && _ovdSelArea) t.scrollIntoView({behavior:'smooth', block:'start'});
+  const t = document.getElementById('ovd-groups');
+  if(t && _ovdSelArea) t.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
-function ovdPickGroup(g){ _ovdSelGroup = String(g||''); ovdRender(); }
+function ovdPickGroup(g, area){
+  const s = String(g||'');
+  if(s && _ovdSelGroup === s){ _ovdSelGroup = ''; }   // re-click clears
+  else {
+    _ovdSelGroup = s;
+    if(s && area) _ovdSelArea = area;                 // keep the area cards in step
+  }
+  ovdRender();
+}
 function ovdSort(k){
   if(_ovdSort.k === k) _ovdSort.dir = -_ovdSort.dir;
   else _ovdSort = {k, dir: k==='days' ? -1 : 1};
