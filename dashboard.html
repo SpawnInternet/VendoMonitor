@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="preload" href="js/dash.1.harvest.js?v=split105" as="script">
-<link rel="preload" href="js/dash.4.map.js?v=split105" as="script">
+<link rel="preload" href="js/dash.1.harvest.js?v=split106" as="script">
+<link rel="preload" href="js/dash.4.map.js?v=split106" as="script">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -233,8 +233,8 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <div class="sl-footer" id="sl-device-id-display"></div>
   </div>
 </div>
-<script defer src="js/dash.5.fmt.js?v=split105"></script>
-<script defer src="js/dash.0.core.js?v=split105"></script>
+<script defer src="js/dash.5.fmt.js?v=split106"></script>
+<script defer src="js/dash.0.core.js?v=split106"></script>
 
 <!-- GLOBAL FLOATING BACK BUTTON -->
 <style>
@@ -1095,7 +1095,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 </div>
 
-<script defer src="js/dash.1.harvest.js?v=split105"></script>
+<script defer src="js/dash.1.harvest.js?v=split106"></script>
 
 </div>
 
@@ -1290,7 +1290,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 </div>
-<script defer src="js/dash.2.ledger.js?v=split105"></script>
+<script defer src="js/dash.2.ledger.js?v=split106"></script>
 
 <div id="hvt-gps" style="display:none;padding:12px;overflow-y:auto;height:calc(100vh - 88px);">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -2263,7 +2263,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     <span style="font-weight:800;color:#028867;font-size:15px;">&#9729; Spawn Cloud</span>
     <span style="font-size:11px;color:var(--mu);">coin income from cloud vendos</span>
     <span style="flex:1"></span>
-    <button class="btn sm" onclick="scLoad()">&#8635; Refresh</button>
+    <button class="btn sm" onclick="scLoad(true)">&#8635; Refresh</button>
     <a class="btn sm" href="https://spawn-vendo-cloud-production-4f63.up.railway.app/admin/" target="_blank" style="text-decoration:none">Railway &#8599;</a>
   </div>
   <div id="sc-body"><div class="rc" style="padding:20px">Loading&hellip;</div></div>
@@ -2272,7 +2272,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 (function(){
   var SB = window.__SPAWN_SB || 'https://cviraqfhphhsonjmrtvu.supabase.co';
   var H  = { apikey:'gw' };
-  var _links = [], _txns = [], _cur = null, _batches = [], _tab = 'sessions';
+  var _links = [], _totals = {}, _pend = [], _cur = null, _batches = [], _tab = 'sessions';
   var _f = { q:'', from:'', to:'' };
 
   function peso(n){ return '\u20b1' + Number(n||0).toLocaleString('en-PH',{maximumFractionDigits:0}); }
@@ -2308,28 +2308,33 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     return await r.json();
   }
 
-  window.scLoad = async function(){
+  window.scLoad = async function(force){
     var el = document.getElementById('sc-body');
     if(!el) return;
+    // Re-opening the tab reuses what we already have; Refresh passes force=true.
+    if(!force && _links.length){ scList(_pend); return; }
     el.innerHTML = '<div class="rc" style="padding:20px">Loading Spawn Cloud\u2026</div>';
     try{
-      _links = await q('cloud_links?select=cloud_device_id,device_name,vendo_id,link_status,evidence&order=device_name.asc');
-      _txns  = await q('cloud_transactions?select=cloud_device_id,vendo_id,amount,collected_at&limit=20000');
-      var pend = [];
-      try { pend = await rpc('spawn_cloud_pending'); } catch(e){ pend = []; }
-      scList(pend);
+      var ov = await rpc('spawn_cloud_overview');
+      if(Array.isArray(ov)) ov = ov[0];
+      if(ov && ov.spawn_cloud_overview) ov = ov.spawn_cloud_overview;
+      var devs = (ov && ov.devices) || [];
+      _links = devs; _totals = {}; _pend = [];
+      devs.forEach(function(d){
+        _totals[d.cloud_device_id] = { total:Number(d.total||0), count:Number(d.cnt||0) };
+        if(d.expected_in_box != null){
+          _pend.push({ vendo_id:d.vendo_id, device_name:d.device_name, sheet_name:d.sheet_name,
+                       area:d.area, since:d.since, days_open:d.days_open,
+                       expected_in_box:Number(d.expected_in_box||0) });
+        }
+      });
+      scList(_pend);
     }catch(e){
       el.innerHTML = '<div class="rc" style="padding:20px;color:var(--red)">Could not load: ' + esc(e.message) + '</div>';
     }
   };
 
-  function agg(devId){
-    var t=0,c=0;
-    for(var i=0;i<_txns.length;i++){
-      if(_txns[i].cloud_device_id === devId){ t += Number(_txns[i].amount); c++; }
-    }
-    return { total:t, count:c };
-  }
+  function agg(devId){ return _totals[devId] || { total:0, count:0 }; }
 
   function scList(pend){
     var el = document.getElementById('sc-body');
@@ -3007,7 +3012,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 </div>
 </div>
 
-<script defer src="js/dash.3.import.js?v=split105"></script>
+<script defer src="js/dash.3.import.js?v=split106"></script>
 
 </div><!-- end .w -->
 <!-- Floating back button — top right, shown on all sub-pages -->
@@ -3016,7 +3021,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   ← Back
 </button>
 
-<script defer src="js/dash.4.map.js?v=split105"></script>
+<script defer src="js/dash.4.map.js?v=split106"></script>
 
 <!-- HARVEST HISTORY POPUP -->
 <div class="hv-popbg" id="hv-hist-pop">
@@ -3630,13 +3635,13 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
 
 <!-- ── OVERVIEW TAB (from tabs/overview.js) ── -->
-<script defer src="js/dash.6.overview.js?v=split105"></script>
+<script defer src="js/dash.6.overview.js?v=split106"></script>
 
 <!-- ── HARVEST TAB SUMMARY (from tabs/harvest.js) ── -->
-<script defer src="js/dash.7.harvest_summary.js?v=split105"></script>
-<script defer src="js/dash.8.spawnkeys.js?v=split105"></script>
-<script defer src="js/dash.9.overdue.js?v=split105"></script>
-<script defer src="js/dash.10.backup.js?v=split105"></script>
+<script defer src="js/dash.7.harvest_summary.js?v=split106"></script>
+<script defer src="js/dash.8.spawnkeys.js?v=split106"></script>
+<script defer src="js/dash.9.overdue.js?v=split106"></script>
+<script defer src="js/dash.10.backup.js?v=split106"></script>
 
 </body>
 </html>
