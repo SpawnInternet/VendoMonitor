@@ -60,7 +60,7 @@ let hvNewActiveTab = 'htable';
 
 function hvNewTab(id, btn){
   document.querySelectorAll('#panel-harvest .hv-hvtab').forEach(b=>b.classList.remove('on'));
-  ['htable','livefeed','recon','expected','receipt','settings','perf','progress','names','ledger','gps','keys','spawnkeys','harveststats'].forEach(t=>{
+  ['htable','overdue','livefeed','recon','expected','receipt','settings','perf','progress','names','ledger','gps','keys','spawnkeys','harveststats'].forEach(t=>{
     const el = document.getElementById('hvt-'+t);
     if(el) el.style.display = t===id ? 'block' : 'none';
   });
@@ -75,6 +75,7 @@ function hvNewTab(id, btn){
   // close any open Keys modals when leaving the keys sub-tab
   if(id!=='keys'){ ['kl-detail-modal','kl-return-modal','kl-lineman-modal','kc-remit-modal','ki-pw-modal','vi-give-modal','kt-modal'].forEach(m=>{ const e=document.getElementById(m); if(e) e.remove(); }); }
   if(id==='htable'){ htLoad(); }
+  if(id==='overdue'){ if(typeof ovdLoad==='function') ovdLoad(); }
   if(id==='livefeed'){ lfConnect(); lfLoadToday(); lfSetMode('today'); }
   if(id==='recon'){ rcInitDates(); rcSetMode('recent'); setTimeout(rcRun, 50); }
   if(id==='receipt'){ rcptInit(); }
