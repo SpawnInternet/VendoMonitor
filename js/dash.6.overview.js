@@ -172,13 +172,13 @@ function overviewRender(ov, data) {
   // ── Top 10 strongest / weakest by this month's spawn share ──
   const top = ov.top_spawn || [], bot = ov.bottom_spawn || [];
   const mkRow = (v,i,low) => `
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 8px 6px 4px;border-bottom:1px solid #f1f5f9;">
-      <div style="width:20px;text-align:center;font-weight:800;font-size:12px;color:${low?BRAND.red:BRAND.gold};">${i+1}</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:11px 10px 11px 6px;border-bottom:1px solid #f1f5f9;">
+      <div style="width:24px;text-align:center;font-weight:800;font-size:15px;color:${low?BRAND.red:BRAND.gold};">${i+1}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.vendo||'—'}</div>
-        <div style="font-size:9px;color:var(--mu);">${v.area||''}</div>
+        <div style="font-size:15px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.vendo||'—'}</div>
+        <div style="font-size:11px;color:var(--mu);margin-top:1px;">${v.area||''}</div>
       </div>
-      <div style="font-weight:800;font-size:13px;color:${low?BRAND.red:BRAND.teal};white-space:nowrap;">${_php(v.spawn)}</div>
+      <div style="font-weight:800;font-size:16px;color:${low?BRAND.red:BRAND.teal};white-space:nowrap;">${_php(v.spawn)}</div>
     </div>`;
   const th=document.getElementById("top10-high"); if(th) th.innerHTML = top.map((v,i)=>mkRow(v,i,false)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
   const tl=document.getElementById("top10-low");  if(tl) tl.innerHTML = bot.map((v,i)=>mkRow(v,i,true)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
@@ -189,9 +189,9 @@ function overviewRender(ov, data) {
   const susp = (data && data.suspicious) || [];
   const ssb=document.getElementById("suspicious-sidebar");
   if(ssb) ssb.innerHTML = susp.slice(0, 10).map(h => `
-    <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid #fee2e2">
-      <span style="color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">${h.vendo||"—"}</span>
-      <span style="color:${BRAND.red};font-weight:600;white-space:nowrap">${_fmtNum(h.txn_count)} skip</span>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:7px 0;border-bottom:1px solid #fee2e2">
+      <span style="color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${h.vendo||"—"}</span>
+      <span style="color:${BRAND.red};font-weight:700;white-space:nowrap;font-size:13px">${_fmtNum(h.txn_count)} skip</span>
     </div>`).join("") || '<div style="font-size:11px;color:var(--mu);padding:8px">No suspicious transactions</div>';
 }
 
