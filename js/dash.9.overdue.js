@@ -19,6 +19,7 @@
    Read-only. No writes anywhere in this file.
    ══════════════════════════════════════════════════════════════════════════ */
 
+var _ovdView   = 'list';
 var _ovdRaw    = null;          // {gs, items, V} — one fetch, reused when threshold changes
 var _ovdTs     = 0;
 var _ovdRows   = [];            // one row per overdue (vendo, group)
@@ -104,6 +105,96 @@ async function _ovdFetchAll(){
   return {gs, items, V, missing};
 }
 
+/* Free-text address -> barangay. Ported from the SQL used to verify these counts.
+   Order matters: DIPOLOG is tested before DAPITAN because "dipolog" contains the
+   substring "polo", which otherwise tags 47 Dipolog machines as Dapitan's Polo. */
+const _OVD_BGY_RULES = [
+  // DIPOLOG
+  ['Dicayas',      ['dicayas','diccayas','lalawan','reloc','bayugo','talipapa','slaughter','kan-anan','city jail','sinay','beracha','cedric','ruth 2','kalye','gemilina']],
+  ['Minaog',       ['minaog','minao','tonggo','tunggo','tungo','catalina','cacao','bulitong','bantay dagat','tabok']],
+  ['Miputak',      ['miputak','quezon ave','lee plaza','velasco','cagatan','lapu-lapu']],
+  ['Sta. Isabel',  ['isabel']],
+  ['Estaka',       ['estaka','igot','egot','lailay','padre ramon','tabiliran']],
+  ['Gulayon',      ['gulayon','bauno','balabag','lumangkad']],
+  ['Turno',        ['turno','d.b.p']],
+  ['Cogon',        ['cogon','diwan','tingcogas','tingkugas','gusawan']],
+  ['Punta',        ['punta','balintawak']],
+  ['Sinaman',      ['sinaman']],
+  ['Sangkol',      ['sangkol']],
+  ['Olingan',      ['olingan']],
+  ['Galas',        ['galas']],
+  ['Katipunan',    ['katipunan','new tambo']],
+  ['Laoy',         ['laoy']],
+  // POLANCO
+  ['Bandera',      ['bandera']],
+  ['Guinles',      ['guinle']],
+  ['San Antonio',  ['san antonio','san. antonio','mahogany']],
+  ['Maralag',      ['maralag']],
+  ['Obay',         ['obay']],
+  ['Isis',         ['isis']],
+  ['Villahermosa', ['villahermosa']],
+  ['Pob. North',   ['north polanco','pob. north','conacon','pon north']],
+  ['Polanco',      ['taub','polanco']],
+  // ROXAS
+  ['Dohinob',      ['dohinob']],
+  ['Galukso',      ['galukso','galokso']],
+  ['Upper Irasan', ['irasan']],
+  ['Roxas',        ['roxas']],
+  // SINDANGAN
+  ['Goleo',        ['goleo','tansyang','magallanes']],
+  ['Dapaon',       ['dapaon']],
+  ['Disud',        ['disud']],
+  ['Mandih',       ['mandih']],
+  ['Bantayan',     ['bantayan']],
+  ['Magsaysay',    ['magsaysay']],
+  ['Balik-Balik',  ['balik']],
+  ['Datu Tangkilan',['tangkilan']],
+  ['Piao',         ['piao','piano','piso','lalangan']],
+  ['Upper Inuman', ['inuman']],
+  ['Tanjay',       ['tanjay']],
+  ['Sivilino',     ['sivilino']],
+  ['Calatunan',    ['calatunan']],
+  ['Lawis',        ['lawis']],
+  ['Poblacion',    ['poblacion','burgos','hluillier','jsb']],
+  // DAPITAN
+  ['Cawa-Cawa',    ['cawa','palaran']],
+  ['Sta. Cruz',    ['sta. cruz','sta.cruz','sta cruz','santa cruz','jrmsu','ochotorena']],
+  ['Talisay',      ['talisay','maasim','maasin','parki','jerusalem','jerosalim','mahayahay','matagobtob','linao']],
+  ['Taguilon',     ['taguilon','taguion','bayanihan','balao','balaw','gemelina','gemalina','lipata','bagong silang','tuyac']],
+  ['Sto. Niño',    ['niño','nino','tabiong','biyasong','patag','lucas']],
+  ['Banonong',     ['banonong','tambak','dapdap','agriculture','ultimo adios']],
+  ['Potol',        ['potol','lourdes','lamatik','punong']],
+  ['Canlucani',    ['canlucani','lucktosand','lactusan']],
+  ['Lawaan',       ['lawaan','dampa']],
+  ['Linabo',       ['linabo','sinonoc']],
+  ['Dawo',         ['dawo','mango drive','boulevard','city hall']],
+  ['Bagting',      ['bagting','vallecer']],
+  ['San Pedro',    ['san pedro']],
+  ['Pantalan',     ['pantalan']],
+  ['San Vicente',  ['san vicente','kawayan']],
+  ['Maria Cristina',['maria cristina']],
+  ['Sudlunon',     ['sudlunon']]
+];
+// Short names that are substrings of other place names. These need a word boundary
+// AND must be tested before the generic rules, or "Pian, Polanco" reads as plain
+// Polanco and "Polo, Dapitan" loses to nothing at all.
+const _OVD_BGY_PRE  = [['Polo','polo'], ['Pian','pian']];
+// Tested last: "gusawan" belongs to Cogon, so Gusa must not win first.
+const _OVD_BGY_POST = [['Gusa','gusa']];
+const _ovdWord = (s,w) => new RegExp('\\b'+w+'\\b').test(s);
+
+function _ovdNormBgy(raw){
+  const s = (raw||'').toLowerCase().trim();
+  if(!s) return null;
+  for(const [name, w] of _OVD_BGY_PRE)  if(_ovdWord(s,w)) return name;
+  for(const [name, keys] of _OVD_BGY_RULES){
+    for(const k of keys) if(s.indexOf(k) >= 0) return name;
+  }
+  for(const [name, w] of _OVD_BGY_POST) if(_ovdWord(s,w)) return name;
+  if(s.indexOf('pasil')>=0 || s.indexOf('lagbas')>=0 || s.indexOf('lukon')>=0 || s.indexOf('lucon')>=0 || s.indexOf('island')>=0) return 'Polo';
+  return null;
+}
+
 /* ── 2. COMPUTE ───────────────────────────────────────────────────────── */
 function _ovdComputeFrom(raw, thresh){
   const {gs, items, V} = raw;
@@ -129,6 +220,7 @@ function _ovdComputeFrom(raw, thresh){
     byGroup[g.id] = {
       overdue: 0, oldest: 0, total: 0,
       never: 0, d181: 0, d91: 0, dle90: 0,   // severity split of the overdue machines
+      members: [], bgy: {},                  // for the cycle-plan view
       label: g.group_label || g.group_id || ('Group '+g.id),
       code: g.group_id || '',
       area: (g.area||'').toUpperCase(),
@@ -144,6 +236,12 @@ function _ovdComputeFrom(raw, thresh){
     if(st && st !== 'active') return;              // gone
     if(row.status === 'pulled_out') return;        // gone
     gb.total++;
+    if(gb.members.indexOf(row.vendo_id) < 0){
+      gb.members.push(row.vendo_id);
+      const b = _ovdNormBgy(bgyMap[row.vendo_id] || (V[row.vendo_id]||{}).address);
+      const key = b || '(no address)';
+      gb.bgy[key] = (gb.bgy[key]||0) + 1;
+    }
 
     const lhd  = dateMap[row.vendo_id];
     const days = lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000) : 9999;
@@ -200,6 +298,7 @@ async function ovdLoad(force){
   const tb = document.getElementById('ovd-tbody');
   if(!_ovdRaw || force || (Date.now() - _ovdTs > _OVD_TTL)){
     _ovdBusy = true;
+    if(force) _ovdAvgSpawn = null;
     const cards = document.getElementById('ovd-cards');
     if(cards) cards.innerHTML = '<div style="padding:22px;color:#6b7280;font-size:13px;">Computing overdue from live vendo state…</div>';
     if(tb) tb.innerHTML = '<tr><td colspan="8" style="padding:26px;text-align:center;color:#9ca3af;font-size:12px;">Loading…</td></tr>';
@@ -237,6 +336,7 @@ function ovdRender(){
   ovdRenderCards();
   ovdRenderGroups();
   ovdRenderTable();
+  if(_ovdView === 'plan' && _ovdAvgSpawn) { try{ ovdPlanRender(); }catch(_){} }
   const age = document.getElementById('ovd-age');
   if(age) age.textContent = _ovdTs ? 'live · '+Math.max(0, Math.round((Date.now()-_ovdTs)/60000))+'min ago' : '';
 }
@@ -481,4 +581,289 @@ function ovdCopyList(){
   navigator.clipboard.writeText(txt).then(
     () => { if(typeof toast==='function') toast('Copied '+rows.length+' machines'); },
     () => { if(typeof toast==='function') toast('Copy blocked by browser'); });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CYCLE PLAN VIEW  —  Harvest ▸ ⏳ Overdue ▸ 🗓 Cycle plan
+   ------------------------------------------------------------------------
+   Same route rules as the Excel sheet Wendell has been running by hand:
+   groups are harvested in group_id order (A1…A6 = Team A, B1…B3 = Team B),
+   each group gets consecutive working days at a fixed vendos/day, the next
+   group starts the next working day, and Sundays are rest days. Fed with the
+   same live machine counts as the overdue list, so the two can never drift.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+var _ovdAvgSpawn = null;   // vendo_id -> mean spawn_share (last 180d), fetched lazily
+var _ovdPlanBusy = false;
+
+const _OVP_TEAM = {
+  A:{label:'Team A', areas:'Dipolog · Sindangan · Polanco · Roxas', bg:'#025AC6'},
+  B:{label:'Team B', areas:'Dapitan',                               bg:'#028867'}
+};
+const _OVP_HUE = {A1:'#025AC6',A2:'#1E7BE8',A3:'#311A8E',A4:'#C01176',A5:'#B45309',A6:'#DF1A35',
+                  B1:'#028867',B2:'#0E9F7B',B3:'#116149'};
+const _OVP_DOW = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const _OVP_MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const _ovpHue  = c => _OVP_HUE[c] || '#6b7280';
+const _ovpIso  = d => d.toISOString().slice(0,10);
+const _ovpMk   = s => { const p=(s||'').split('-').map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2])); };
+const _ovpAdd  = (d,n) => new Date(d.getTime()+n*86400000);
+const _ovpSun  = d => d.getUTCDay()===0;
+const _ovpFmt  = d => _OVP_DOW[(d.getUTCDay()+6)%7]+' '+d.getUTCDate()+' '+_OVP_MON[d.getUTCMonth()].slice(0,3);
+
+function ovdSetView(v){
+  _ovdView = v;
+  const L=document.getElementById('ovd-view-list'), P=document.getElementById('ovd-view-plan');
+  if(L) L.style.display = v==='list' ? 'block' : 'none';
+  if(P) P.style.display = v==='plan' ? 'block' : 'none';
+  [['list','ovd-vb-list'],['plan','ovd-vb-plan']].forEach(([k,id])=>{
+    const b=document.getElementById(id); if(!b) return;
+    b.style.background = k===v ? '#025AC6' : '#fff';
+    b.style.color      = k===v ? '#fff'    : '#025AC6';
+  });
+  if(v==='plan'){
+    const s=document.getElementById('ovp-start');
+    if(s && !s.value){                       // default: next Monday
+      const t=new Date(); t.setUTCHours(12,0,0,0);
+      const d=_ovpAdd(t, ((8-t.getUTCDay())%7)||7);
+      s.value=_ovpIso(d);
+    }
+    ovdPlanLoad();
+  }
+}
+
+/* mean spawn share per machine — one lazy fetch, reused */
+async function _ovdLoadAvgSpawn(){
+  if(_ovdAvgSpawn) return _ovdAvgSpawn;
+  const since = _ovpIso(_ovpAdd(new Date(), -180));
+  const sum={}, cnt={};
+  for(let off=0; off<20000; off+=900){
+    const b = await _ovdGet(`${_SB}/rest/v1/harvests?select=vendo_id,spawn_share&harvest_date=gte.${since}`+
+                            `&spawn_share=gt.0&is_test=is.false&order=id.asc&limit=900&offset=${off}`, 'harvests');
+    if(!b.length) break;
+    b.forEach(h=>{ if(h.vendo_id==null) return;
+      sum[h.vendo_id]=(sum[h.vendo_id]||0)+Number(h.spawn_share); cnt[h.vendo_id]=(cnt[h.vendo_id]||0)+1; });
+    if(b.length<900) break;
+  }
+  _ovdAvgSpawn={}; Object.keys(sum).forEach(k=>{ _ovdAvgSpawn[k]=sum[k]/cnt[k]; });
+  return _ovdAvgSpawn;
+}
+
+async function ovdPlanLoad(){
+  if(_ovdPlanBusy) return;
+  const adv=document.getElementById('ovd-plan-advice');
+  if(!_ovdRaw || !_ovdAvgSpawn){
+    _ovdPlanBusy=true;
+    if(adv) adv.innerHTML='<div style="padding:16px;color:#6b7280;font-size:13px;">Reading machine counts and 180 days of harvest history…</div>';
+    try{
+      if(!_ovdRaw){ _ovdRaw = await _ovdFetchAll(); _ovdTs=Date.now(); ovdRecompute(); }
+      await _ovdLoadAvgSpawn();
+    }catch(e){
+      _ovdPlanBusy=false;
+      if(adv) adv.innerHTML='<div style="padding:16px;border-radius:11px;background:#fef2f2;border:1px solid #fecaca;color:#DF1A35;font-size:13px;font-weight:700;">Load failed — nothing below is real.<br><span style="font-weight:600;font-size:12px;color:#991b1b;">'+_ovdEsc(e.message)+'</span></div>';
+      return;
+    }
+    _ovdPlanBusy=false;
+  }
+  ovdPlanRender();
+}
+
+/* group rows in route order, with live machine counts + projected money */
+function _ovdPlanGroups(){
+  return Object.entries(_ovdGroup)
+    .map(([gid,g]) => {
+      const code=(g.code||'').toUpperCase();
+      const team=code.charAt(0)==='B' ? 'B' : 'A';
+      let sum=0, hist=0;
+      (g.members||[]).forEach(vid=>{
+        const a=_ovdAvgSpawn && _ovdAvgSpawn[vid];
+        if(a){ sum+=a; hist++; }
+      });
+      const avg = hist ? sum/hist : 0;
+      const bgys = Object.entries(g.bgy||{}).sort((a,b)=>b[1]-a[1]);
+      return {gid:+gid, code, team, label:g.label, machines:g.total, overdue:g.overdue,
+              avg, hist, proj:avg*g.total, bgys};
+    })
+    .filter(g => g.machines > 0)
+    .sort((a,b) => a.code < b.code ? -1 : a.code > b.code ? 1 : 0);
+}
+
+function _ovdPlanSchedule(){
+  const startEl=document.getElementById('ovp-start');
+  const start=_ovpMk(startEl && startEl.value ? startEl.value : _ovpIso(new Date()));
+  if(isNaN(start.getTime())) return null;
+  const skip=!!document.getElementById('ovp-sun')?.checked;
+  const rate={A:Math.max(1,+document.getElementById('ovp-rate-a')?.value||18),
+              B:Math.max(1,+document.getElementById('ovp-rate-b')?.value||12)};
+  const groups=_ovdPlanGroups(), byDay={}, out=[];
+  ['A','B'].forEach(t=>{
+    let cur=new Date(start.getTime());
+    groups.filter(g=>g.team===t).forEach(g=>{
+      let left=g.machines, days=0, first=null, last=null, guard=0;
+      while(left>0 && guard++ < 400){
+        if(skip && _ovpSun(cur)){ cur=_ovpAdd(cur,1); continue; }
+        const take=Math.min(rate[t], left);
+        left-=take; days++;
+        if(!first) first=new Date(cur.getTime());
+        last=new Date(cur.getTime());
+        (byDay[_ovpIso(cur)]=byDay[_ovpIso(cur)]||[]).push({code:g.code,n:take});
+        cur=_ovpAdd(cur,1);
+      }
+      out.push(Object.assign({}, g, {days, first, last}));
+    });
+  });
+  return {rows:out, byDay, start, skip, rate};
+}
+
+function _ovpWorkingDaysLeft(start, skip){
+  const y=start.getUTCFullYear(), m=start.getUTCMonth();
+  const dim=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+  let n=0;
+  for(let d=start.getUTCDate(); d<=dim; d++){
+    if(!(skip && _ovpSun(new Date(Date.UTC(y,m,d))))) n++;
+  }
+  return n;
+}
+
+function ovdPlanRender(){
+  if(!_ovdRaw || !_ovdAvgSpawn) return;
+  const S=_ovdPlanSchedule(); if(!S) return;
+  const {rows, byDay, start, skip, rate} = S;
+
+  /* ── advisory: can this even fit in a month? ── */
+  const wd=_ovpWorkingDaysLeft(start, skip);
+  const tot={}, used={}, need={};
+  ['A','B'].forEach(t=>{
+    tot[t] =rows.filter(r=>r.team===t).reduce((a,r)=>a+r.machines,0);
+    used[t]=rows.filter(r=>r.team===t).reduce((a,r)=>a+r.days,0);
+    need[t]=wd ? Math.ceil(tot[t]/wd) : 0;
+  });
+  const over=['A','B'].filter(t=>used[t]>wd && tot[t]>0);
+  document.getElementById('ovd-plan-advice').innerHTML = over.length
+    ? `<div style="margin-bottom:12px;padding:10px 14px;border-radius:11px;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #FFB725;font-size:12.5px;color:#1e293b;line-height:1.6;">
+         <b>${over.map(t=>_OVP_TEAM[t].label).join(' and ')}</b> ${over.length>1?'run':'runs'} past ${_OVP_MON[start.getUTCMonth()]}.
+         There are <b>${wd} working days</b> left in the month from this start —
+         finishing inside it needs <b>${need.A}/day for Team A</b> and <b>${need.B}/day for Team B</b>
+         (set to ${rate.A} and ${rate.B}).
+         ${used.A>wd?`<br>At ${rate.A}/day Team A's cycle is <b>${used.A} working days</b>, so a 30-day overdue rule can never be met — the earliest machines are already late before anyone returns.`:''}
+       </div>`
+    : `<div style="margin-bottom:12px;padding:10px 14px;border-radius:11px;background:#ecfdf5;border:1px solid #a7f3d0;border-left:4px solid #028867;font-size:12.5px;color:#1e293b;line-height:1.6;">
+         Both teams finish inside ${_OVP_MON[start.getUTCMonth()]} — Team A in <b>${used.A}</b> of ${wd} working days, Team B in <b>${used.B}</b>.
+         That leaves <b>${Math.max(0,wd-Math.max(used.A,used.B))} spare days</b> for callbacks and deferred machines.
+       </div>`;
+
+  /* ── per-team schedule tables ── */
+  const th=(t,a)=>`<th style="padding:8px;text-align:${a||'center'};font-size:10px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${t}</th>`;
+  let html='';
+  ['A','B'].forEach(t=>{
+    const R=rows.filter(r=>r.team===t); if(!R.length) return;
+    const T=R.reduce((a,r)=>({m:a.m+r.machines,o:a.o+r.overdue,d:a.d+r.days,p:a.p+r.proj}),{m:0,o:0,d:0,p:0});
+    const meta=_OVP_TEAM[t];
+    html += `<div style="margin-bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <div style="padding:9px 13px;background:${meta.bg};color:#fff;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:14px;font-weight:800;">${meta.label}</span>
+        <span style="font-size:11px;opacity:.9;font-weight:600;">${meta.areas} · ${R.length} groups · ${T.m} machines</span>
+        <span style="flex:1"></span>
+        <span style="font-size:12px;font-weight:800;">${_ovpFmt(R[0].first)} → ${_ovpFmt(R[R.length-1].last)} · ${T.d} working days</span>
+      </div>
+      <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">
+          ${th('Group','left')}${th('Barangays covered','left')}${th('Machines')}${th('Overdue')}${th('Days')}${th('Projected Spawn','right')}${th('Start','right')}${th('End','right')}
+        </tr></thead><tbody>
+        ${R.map(r=>{
+          const listed=r.bgys.reduce((a,b)=>a+b[1],0), rest=r.machines-listed;
+          const thin=r.hist < r.machines*0.6;
+          return `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:7px 8px;vertical-align:top;">
+              <span style="font:700 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.06em;color:#fff;background:${_ovpHue(r.code)};padding:3px 6px;border-radius:3px;">${_ovdEsc(r.code)}</span>
+              <div style="font-size:12.5px;font-weight:800;color:#1e293b;margin-top:3px;">${_ovdEsc(r.label)}</div>
+            </td>
+            <td style="padding:7px 8px;font-size:11px;color:#6b7280;line-height:1.5;max-width:290px;">
+              ${r.bgys.slice(0,6).map(b=>`<span style="color:#1e293b;font-weight:600;">${_ovdEsc(b[0])}</span>&#8202;${b[1]}`).join(' · ')}
+              ${rest>0?` · <span style="color:#1e293b;font-weight:600;">+${rest}</span>&#8202;elsewhere`:''}
+            </td>
+            <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:#374151;">${r.machines}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:${r.overdue>=50?'#DF1A35':'#9ca3af'};">${r.overdue}</td>
+            <td style="padding:7px 8px;text-align:center;font-size:12px;font-weight:700;color:#374151;">${r.days}</td>
+            <td style="padding:7px 8px;text-align:right;font-size:12px;font-weight:800;color:#028867;white-space:nowrap;">${_php(r.proj)}
+              ${thin?`<div style="font-size:9.5px;font-weight:600;color:#a16207;">only ${r.hist}/${r.machines} with history</div>`:''}</td>
+            <td style="padding:7px 8px;text-align:right;font-size:11.5px;font-weight:600;color:#374151;white-space:nowrap;">${_ovpFmt(r.first)}</td>
+            <td style="padding:7px 8px;text-align:right;font-size:11.5px;font-weight:600;color:#374151;white-space:nowrap;">${_ovpFmt(r.last)}</td>
+          </tr>`;}).join('')}
+        </tbody>
+        <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;">
+          <td colspan="2" style="padding:8px;font-size:12px;font-weight:800;color:#1e293b;">Subtotal · ${meta.label}</td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${T.m}</td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;color:#DF1A35;">${T.o}</td>
+          <td style="padding:8px;text-align:center;font-size:12px;font-weight:800;">${T.d}</td>
+          <td style="padding:8px;text-align:right;font-size:12.5px;font-weight:800;color:#028867;">${_php(T.p)}</td>
+          <td colspan="2" style="padding:8px;text-align:right;font-size:11.5px;font-weight:700;color:#6b7280;">${_ovpFmt(R[0].first)} → ${_ovpFmt(R[R.length-1].last)}</td>
+        </tr></tfoot>
+      </table></div></div>`;
+  });
+  document.getElementById('ovd-plan-teams').innerHTML = html;
+
+  /* ── month grids ── */
+  const days=Object.keys(byDay).sort();
+  if(!days.length){ document.getElementById('ovd-plan-cal').innerHTML=''; return; }
+  const lastDay=_ovpMk(days[days.length-1]);
+  let cur=new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)), cal='', guard=0;
+  while(cur<=lastDay && guard++<18){
+    const y=cur.getUTCFullYear(), m=cur.getUTCMonth();
+    const dim=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+    const lead=(new Date(Date.UTC(y,m,1)).getUTCDay()+6)%7;
+    let cells='';
+    for(let i=0;i<lead;i++) cells+='<div></div>';
+    for(let d=1;d<=dim;d++){
+      const dt=new Date(Date.UTC(y,m,d));
+      const jobs=byDay[_ovpIso(dt)]||[];
+      const rest=skip && _ovpSun(dt) && !jobs.length;
+      cells+=`<div style="background:${rest?'repeating-linear-gradient(135deg,#fff,#fff 5px,#f1f5f9 5px,#f1f5f9 10px)':'#fff'};border:1px solid #e5e7eb;border-radius:7px;min-height:70px;padding:5px 6px;">
+        <div style="font-size:10.5px;font-weight:800;color:${rest?'#cbd5e1':'#9ca3af'};">${d}</div>
+        ${rest?'<div style="font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#cbd5e1;">rest</div>':''}
+        ${jobs.map(j=>`<div style="display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;margin-top:2px;">
+            <span style="width:3px;height:14px;border-radius:1px;background:${_ovpHue(j.code)};flex:0 0 3px;"></span>
+            <span style="color:#1e293b;">${_ovdEsc(j.code)}</span>
+            <span style="margin-left:auto;color:#9ca3af;font-size:10px;">${j.n}</span></div>`).join('')}
+      </div>`;
+    }
+    cal+=`<div style="font-size:14px;font-weight:800;color:#1e293b;margin:4px 0 7px;">${_OVP_MON[m]} ${y}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">
+        ${_OVP_DOW.map(x=>`<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#9ca3af;text-align:center;">${x}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:16px;">${cells}</div>`;
+    cur=new Date(Date.UTC(y,m+1,1));
+  }
+  cal+=`<div style="display:flex;flex-wrap:wrap;gap:11px;font-size:10.5px;color:#6b7280;padding:9px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:11px;">
+    ${rows.map(r=>`<span style="display:inline-flex;align-items:center;gap:5px;color:#1e293b;"><span style="width:9px;height:9px;border-radius:2px;background:${_ovpHue(r.code)};display:inline-block;"></span>${_ovdEsc(r.code)} ${_ovdEsc(r.label)}</span>`).join('')}
+    <span style="margin-left:auto;">Projected Spawn = each group's mean share per machine over 180 days × its machine count. Not a target.</span>
+  </div>`;
+  document.getElementById('ovd-plan-cal').innerHTML = cal;
+}
+
+function ovdPlanFit(){
+  const S=_ovdPlanSchedule(); if(!S) return;
+  const wd=_ovpWorkingDaysLeft(S.start, S.skip); if(!wd) return;
+  ['A','B'].forEach(t=>{
+    const tot=S.rows.filter(r=>r.team===t).reduce((a,r)=>a+r.machines,0);
+    const el=document.getElementById(t==='A'?'ovp-rate-a':'ovp-rate-b');
+    if(el && tot) el.value=Math.ceil(tot/wd);
+  });
+  ovdPlanRender();
+}
+
+function ovdPlanCsv(){
+  const S=_ovdPlanSchedule(); if(!S){ if(typeof toast==='function') toast('Nothing to export'); return; }
+  const esc=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['Team','Code','Group','Barangays','Machines','Overdue','Days','Projected Spawn','Start','End'];
+  const csv=[head.join(',')].concat(S.rows.map(r=>[
+    'Team '+r.team, r.code, r.label,
+    r.bgys.map(b=>b[0]+' '+b[1]).join(' | '),
+    r.machines, r.overdue, r.days, Math.round(r.proj),
+    _ovpIso(r.first), _ovpIso(r.last)].map(esc).join(','))).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download='spawn_cycle_plan_'+_ovpIso(S.start)+'.csv';
+  a.click();
+  if(typeof toast==='function') toast('Exported cycle plan');
 }
