@@ -3853,9 +3853,17 @@ async function loadSystemStatus() {
   // 3. Today's stats
   try {
     const today = new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Manila"});
-    const r = await fetch(`${SB_URL}/rest/v1/transactions?select=amount,area&is_skipped=eq.false&date=eq.${today}`, { headers: HDR });
-    const rows = await r.json();
-    if (rows?.length > 0) {
+    // PostgREST caps a response at 1000 rows. Without paging this card silently
+    // reported exactly 1,000 txns and an undercounted peso total every busy day.
+    let rows = [];
+    for (let off = 0; off < 200000; off += 1000) {
+      const r = await fetch(`${SB_URL}/rest/v1/transactions?select=amount,area&is_skipped=eq.false&date=eq.${today}&order=id.asc&limit=1000&offset=${off}`, { headers: HDR });
+      const page = await r.json();
+      if (!Array.isArray(page) || !page.length) break;
+      rows.push(...page);
+      if (page.length < 1000) break;
+    }
+    if (rows.length > 0) {
       const total = rows.reduce((s,r) => s+parseFloat(r.amount||0), 0);
       document.getElementById("sys-today").textContent = rows.length.toLocaleString();
       document.getElementById("sys-sales").textContent = fmt(total);
