@@ -204,3 +204,31 @@ window.markAdminPwWrong = function(){
 
   slCheck();
 })();
+
+
+// ── Lazy loader for dash.1.harvest.js (354 KB) ────────────────────────────
+// It was loading on every page view even when nobody opened Harvest.
+// Now: fetched on demand when a harvest surface is opened, and otherwise
+// pulled in quietly once the browser goes idle, so click handlers defined
+// there are ready long before anyone reaches them.
+window.__harvestPromise = null;
+window.ensureHarvest = function(){
+  if (window.__harvestPromise) return window.__harvestPromise;
+  window.__harvestPromise = new Promise(function(resolve, reject){
+    var s = document.createElement('script');
+    s.src = 'js/dash.1.harvest.js?v=split108';
+    s.async = false;
+    s.onload = function(){ resolve(true); };
+    s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
+    document.head.appendChild(s);
+  });
+  return window.__harvestPromise;
+};
+(function(){
+  function warm(){ try { window.ensureHarvest(); } catch(e){} }
+  if ('requestIdleCallback' in window) {
+    window.addEventListener('load', function(){ requestIdleCallback(warm, { timeout: 4000 }); });
+  } else {
+    window.addEventListener('load', function(){ setTimeout(warm, 2500); });
+  }
+})();
