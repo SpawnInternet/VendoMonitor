@@ -1718,12 +1718,17 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 
   <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px;">
     <div style="font-size:16px;font-weight:800;color:#025AC6;">⏳ Overdue Machines</div>
+    <div style="display:flex;gap:0;border:1.5px solid #dbeafe;border-radius:9px;overflow:hidden;">
+      <button id="ovd-vb-list" onclick="ovdSetView('list')" style="padding:6px 14px;border:none;background:#025AC6;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">⏳ Overdue list</button>
+      <button id="ovd-vb-plan" onclick="ovdSetView('plan')" style="padding:6px 14px;border:none;background:#fff;color:#025AC6;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗓 Cycle plan</button>
+    </div>
     <span style="font-size:10px;font-weight:700;color:#6b7280;background:#f1f5f9;padding:3px 8px;border-radius:5px;">same rule as Spawn Harvest · live vendo state</span>
     <span style="flex:1"></span>
     <span id="ovd-age" style="font-size:10px;color:var(--mu);"></span>
     <button onclick="ovdLoad(true)" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;cursor:pointer;font-family:inherit;height:30px;">↺ Refresh</button>
   </div>
 
+<div id="ovd-view-list">
   <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px;">
     <label style="font-size:11.5px;font-weight:700;color:#6b7280;">Overdue after
       <select id="ovd-thresh" onchange="ovdRecompute()" style="margin-left:5px;padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
@@ -1775,7 +1780,31 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       </table>
     </div>
   </div>
-</div>
+</div><!-- /ovd-view-list -->
+
+<div id="ovd-view-plan" style="display:none;">
+  <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+    <label style="font-size:11.5px;font-weight:700;color:#6b7280;">Cycle starts<br>
+      <input type="date" id="ovp-start" onchange="ovdPlanRender()" style="margin-top:4px;padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;">
+    </label>
+    <label style="font-size:11.5px;font-weight:700;color:#025AC6;">Team A · vendos/day<br>
+      <input type="number" id="ovp-rate-a" value="18" min="1" max="80" onchange="ovdPlanRender()" style="margin-top:4px;padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;width:86px;">
+    </label>
+    <label style="font-size:11.5px;font-weight:700;color:#028867;">Team B · vendos/day<br>
+      <input type="number" id="ovp-rate-b" value="12" min="1" max="80" onchange="ovdPlanRender()" style="margin-top:4px;padding:5px 9px;border:1px solid var(--bd);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;height:30px;width:86px;">
+    </label>
+    <label style="font-size:11.5px;font-weight:700;color:#6b7280;display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding-bottom:6px;">
+      <input type="checkbox" id="ovp-sun" checked onchange="ovdPlanRender()" style="cursor:pointer;"> Sunday is a rest day
+    </label>
+    <span style="flex:1"></span>
+    <button onclick="ovdPlanFit()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--bd);background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;height:30px;">⤢ Fit inside the month</button>
+    <button onclick="ovdPlanCsv()" style="padding:5px 12px;border-radius:7px;border:none;background:#028867;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;height:30px;">⬇ CSV</button>
+  </div>
+
+  <div id="ovd-plan-advice"></div>
+  <div id="ovd-plan-teams"></div>
+  <div id="ovd-plan-cal"></div>
+</div><!-- /ovd-view-plan -->
 
 <!-- ══ HARVEST STATS (per-area, per-month) ══ -->
 <div id="hvt-spawnkeys" style="display:none;padding:14px;overflow-y:auto;height:calc(100vh - 88px);">
