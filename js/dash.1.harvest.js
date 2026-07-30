@@ -11,8 +11,8 @@ const DASH_VERSION = '2026-06-15-v1';
 })();
 
 // Aliases — var to avoid redeclaration errors
-var _SB  = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var _KEY = "gw";
+// _SB moved to js/dash.5.fmt.js
+// _KEY moved to js/dash.5.fmt.js
 
 // ── Time-aware reconciliation helpers ──────────────────────────────
 // Transactions store date (date) + time (text like "02:08:32 PM"), Manila local.
@@ -48,9 +48,9 @@ function _rcSubmitLocalMs(harvestedAt, harvestDate){
   if(d) return Date.UTC(+d[1], +d[2]-1, +d[3], 23,59,59);
   return null;
 }
-var _HDR = {'apikey':_KEY,'Authorization':'Bearer '+_KEY,'Content-Type':'application/json'};
+// _HDR moved to js/dash.5.fmt.js
 // anon key — used ONLY for the realtime websocket (read-only live feed; cannot write data)
-var _ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM0MDQ4MDIsImV4cCI6MjA1ODk4MDgwMn0.1Nf1cVMSnFkFMDFRzDFUsxbvZy2vBFJnFOdOthHxq9k";
+// _ANON moved to js/dash.5.fmt.js
 
 // _php moved to js/dash.5.fmt.js (loads first) so this file can be deferred.
 const _fmt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—';
