@@ -51,13 +51,24 @@ const _ovdEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;',
 const _ovdTitle = a => a ? a.charAt(0)+a.slice(1).toLowerCase() : '—';
 
 /* ── 1. FETCH ─────────────────────────────────────────────────────────── */
+// A non-array reply means PostgREST rejected the query (bad column, bad filter,
+// gateway ALLOW miss). Swallowing it produces a screen full of "vendo #4 / never"
+// and badly inflated counts, which looks like real data. Fail loudly instead.
+async function _ovdGet(url, what){
+  const r = await fetch(url, {headers:_HDR});
+  const b = await r.json().catch(() => null);
+  if(!Array.isArray(b)){
+    const why = (b && (b.message || b.hint || b.error)) || ('HTTP '+r.status);
+    throw new Error(what+': '+why);
+  }
+  return b;
+}
+
 async function _ovdFetchAll(){
-  const SB = _SB, H = _HDR;
+  const SB = _SB;
 
   // groups — treated as permanent defs, deduped per (group_id, area) like the PWA
-  const rg = await fetch(`${SB}/rest/v1/harvest_groups?select=id,group_id,group_label,area,collector&order=area.asc,group_id.asc,id.asc&limit=200`, {headers:H});
-  const graw = await rg.json();
-  if(!Array.isArray(graw)) throw new Error('harvest_groups fetch failed');
+  const graw = await _ovdGet(`${SB}/rest/v1/harvest_groups?select=id,group_id,group_label,area,collector&order=area.asc,group_id.asc,id.asc&limit=200`, 'harvest_groups');
   const seen = {}, gs = [];
   graw.forEach(r => {
     const k = (r.group_id||r.id)+'__'+(r.area||'');
@@ -66,15 +77,17 @@ async function _ovdFetchAll(){
   const ids = gs.map(g=>g.id).filter(x=>x!=null);
   if(!ids.length) return {gs:[], items:[], V:{}};
 
-  // items — PostgREST caps at 1000 rows, so page it
+  // items — PostgREST caps at 1000 rows, so page it.
+  // NOTE: `barangay` lives on harvest_group_items, NOT on vendos. Asking vendos for
+  // it 400s the whole request and leaves every machine unresolved.
   const items = [];
   for(let off = 0; off < 20000; off += 900){
-    const r = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,status,harvested_at&order=id.asc&limit=900&offset=${off}`, {headers:H});
-    const b = await r.json();
-    if(!Array.isArray(b) || !b.length) break;
+    const b = await _ovdGet(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})&select=group_run_id,vendo_id,status,harvested_at,barangay&order=id.asc&limit=900&offset=${off}`, 'harvest_group_items');
+    if(!b.length) break;
     items.push(...b);
     if(b.length < 900) break;
   }
+  if(!items.length) return {gs, items:[], V:{}};
 
   // live vendo state — NOT the vendos_table cache (that is a nightly cron snapshot
   // and is exactly why these counts used to lag reality)
@@ -82,17 +95,20 @@ async function _ovdFetchAll(){
   const V = {};
   for(let i = 0; i < vids.length; i += 250){
     const chunk = vids.slice(i, i+250);
-    const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,barangay,address,vlan,last_harvest_date,status,contact_number,is_online&limit=300`, {headers:H});
-    const b = await r.json();
-    if(Array.isArray(b)) b.forEach(v => V[v.id] = v);
+    const b = await _ovdGet(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,address,vlan,last_harvest_date,status,contact_number,is_online&limit=300`, 'vendos');
+    b.forEach(v => V[v.id] = v);
   }
-  return {gs, items, V};
+  // a vendo missing from V would silently read as "active, never harvested" —
+  // count it so the UI can say so out loud rather than inventing overdue machines
+  const missing = vids.filter(id => !V[id]).length;
+  return {gs, items, V, missing};
 }
 
 /* ── 2. COMPUTE ───────────────────────────────────────────────────────── */
 function _ovdComputeFrom(raw, thresh){
   const {gs, items, V} = raw;
-  const dateMap = {}, statusMap = {};
+  const dateMap = {}, statusMap = {}, bgyMap = {};
+  items.forEach(row => { if(row.barangay && !bgyMap[row.vendo_id]) bgyMap[row.vendo_id] = row.barangay; });
   Object.values(V).forEach(v => { dateMap[v.id] = v.last_harvest_date; statusMap[v.id] = v.status; });
 
   // item rows are fresher than any vendo snapshot — let them win
@@ -121,6 +137,7 @@ function _ovdComputeFrom(raw, thresh){
   items.forEach(row => {
     const g = gmap[row.group_run_id]; if(!g) return;
     const gb = byGroup[g.id]; if(!gb) return;
+    if(!V[row.vendo_id]) return;                   // orphan item row — no vendo behind it
     const st = statusMap[row.vendo_id];
     if(st && st !== 'active') return;              // gone
     if(row.status === 'pulled_out') return;        // gone
@@ -146,7 +163,7 @@ function _ovdComputeFrom(raw, thresh){
       name: v.sheet_name || v.tg_name || v.owner_name || ('vendo #'+row.vendo_id),
       tg:   v.tg_name || '',
       owner: v.owner_name || '',
-      area, barangay: v.barangay || v.address || '',
+      area, barangay: bgyMap[row.vendo_id] || v.address || '',
       vlan: v.vlan == null ? '' : v.vlan,
       lhd: lhd || '',
       days,
@@ -184,9 +201,11 @@ async function ovdLoad(force){
       _ovdRaw = await _ovdFetchAll();
       _ovdTs = Date.now();
     }catch(e){
-      _ovdBusy = false;
-      if(cards) cards.innerHTML = '<div style="padding:18px;color:#DF1A35;font-size:13px;font-weight:700;">Load failed: '+_ovdEsc(e.message)+'</div>';
-      if(tb) tb.innerHTML = '';
+      _ovdBusy = false; _ovdRaw = null; _ovdTs = 0;
+      if(cards) cards.innerHTML = '<div style="padding:16px;border-radius:11px;background:#fef2f2;border:1px solid #fecaca;color:#DF1A35;font-size:13px;font-weight:700;">Load failed — nothing below is real. <br><span style="font-weight:600;font-size:12px;color:#991b1b;">'+_ovdEsc(e.message)+'</span></div>';
+      if(tb) tb.innerHTML = '<tr><td colspan="8" style="padding:22px;text-align:center;color:#9ca3af;font-size:12px;">No data.</td></tr>';
+      const g = document.getElementById('ovd-groups'); if(g) g.innerHTML = '';
+      const c = document.getElementById('ovd-count'); if(c) c.textContent = '';
       return;
     }
     _ovdBusy = false;
@@ -250,7 +269,10 @@ function ovdRenderCards(){
     </div>`;
   }).join('');
 
-  el.innerHTML =
+  const orphan = (_ovdRaw && _ovdRaw.missing) || 0;
+  const warn = orphan ? `<div style="margin-bottom:10px;padding:8px 12px;border-radius:9px;background:#fffbeb;border:1px solid #fde68a;color:#a16207;font-size:11.5px;font-weight:700;">⚠ ${orphan} group item row${orphan===1?'':'s'} point at a vendo that no longer exists — excluded from these counts.</div>` : '';
+
+  el.innerHTML = warn +
     `<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:12px;">
        ${stat('Overdue &gt;'+_ovdThresh+'d', total, '#DF1A35')}
        ${stat('Never harvested', never, '#311A8E')}
