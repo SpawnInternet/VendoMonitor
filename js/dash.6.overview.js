@@ -172,13 +172,13 @@ function overviewRender(ov, data) {
   // ── Top 10 strongest / weakest by this month's spawn share ──
   const top = ov.top_spawn || [], bot = ov.bottom_spawn || [];
   const mkRow = (v,i,low) => `
-    <div style="display:flex;align-items:center;gap:10px;padding:11px 10px 11px 6px;border-bottom:1px solid #f1f5f9;">
-      <div style="width:24px;text-align:center;font-weight:800;font-size:15px;color:${low?BRAND.red:BRAND.gold};">${i+1}</div>
+    <div style="display:flex;align-items:center;gap:9px;padding:8px 9px 8px 5px;border-bottom:1px solid #f1f5f9;">
+      <div style="width:22px;text-align:center;font-weight:800;font-size:13px;color:${low?BRAND.red:BRAND.gold};">${i+1}</div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:15px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.vendo||'—'}</div>
-        <div style="font-size:11px;color:var(--mu);margin-top:1px;">${v.area||''}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.vendo||'—'}</div>
+        <div style="font-size:10px;color:var(--mu);">${v.area||''}</div>
       </div>
-      <div style="font-weight:800;font-size:16px;color:${low?BRAND.red:BRAND.teal};white-space:nowrap;">${_php(v.spawn)}</div>
+      <div style="font-weight:800;font-size:14px;color:${low?BRAND.red:BRAND.teal};white-space:nowrap;">${_php(v.spawn)}</div>
     </div>`;
   const th=document.getElementById("top10-high"); if(th) th.innerHTML = top.map((v,i)=>mkRow(v,i,false)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
   const tl=document.getElementById("top10-low");  if(tl) tl.innerHTML = bot.map((v,i)=>mkRow(v,i,true)).join("") || '<div style="padding:10px;color:var(--mu);font-size:11px;">No data</div>';
@@ -383,14 +383,14 @@ async function overdueCardLoad(){
       const c = un ? '#DF1A35' : (pct>=50 ? '#C01176' : pct>=30 ? '#FFB725' : '#028867');
       const oldest = g.oldest_days!=null ? (' · oldest '+_fmtNum(g.oldest_days)+'d') : '';
       return '<div onclick="event.stopPropagation();ovdOpen('+g.gid+')" title="'+(g.area||'')+' · '
-        + _fmtNum(g.total)+' active'+oldest+'" style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;cursor:pointer">'
-        + '<span style="width:104px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:'
+        + _fmtNum(g.total)+' active'+oldest+'" style="display:flex;align-items:center;gap:9px;margin-bottom:8px;font-size:13px;cursor:pointer">'
+        + '<span style="width:126px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:'
         +   (un?'#DF1A35':'var(--tx)')+';font-weight:'+(un?'700':'600')+'">'+g.label+'</span>'
-        + '<span style="flex:1;height:6px;background:#eef1f5;border-radius:3px;overflow:hidden">'
-        +   '<span style="display:block;height:100%;border-radius:3px;width:'+Math.round(n/max*100)+'%;background:'+c+'"></span>'
+        + '<span style="flex:1;height:10px;background:#eef1f5;border-radius:5px;overflow:hidden">'
+        +   '<span style="display:block;height:100%;border-radius:5px;width:'+Math.round(n/max*100)+'%;background:'+c+'"></span>'
         + '</span>'
-        + '<span style="width:52px;text-align:right;font-weight:700">'+_fmtNum(n)
-        +   '<span style="color:var(--mu);font-weight:400;font-size:10px"> '+pct+'%</span></span></div>';
+        + '<span style="width:60px;text-align:right;font-weight:700;font-size:14px">'+_fmtNum(n)
+        +   '<span style="color:var(--mu);font-weight:400;font-size:11px"> '+pct+'%</span></span></div>';
     }).join('');
   }catch(e){
     el.innerHTML = '<div style="padding:14px;color:var(--mu);font-size:11px">Overdue unavailable</div>';
@@ -416,8 +416,8 @@ async function systemCheckLoad(){
   try{
     const d = await _sysRpc('spawn_system_check');
     const row = (ok,label,val)=>
-      '<div style="display:flex;align-items:center;gap:7px;font-size:11px;padding:3px 0;border-bottom:1px solid var(--bd)">'
-      + '<span style="width:7px;height:7px;border-radius:50%;flex-shrink:0;background:'+(ok?'#028867':'#DF1A35')+'"></span>'
+      '<div style="display:flex;align-items:center;gap:9px;font-size:13px;padding:8px 0;border-bottom:1px solid var(--bd)">'
+      + '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:'+(ok?'#028867':'#DF1A35')+'"></span>'
       + '<span style="flex:1;color:var(--mu)">'+label+'</span>'
       + '<span style="font-weight:700;color:'+(ok?'inherit':'#DF1A35')+'">'+val+'</span></div>';
     el.innerHTML =
