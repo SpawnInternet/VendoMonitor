@@ -983,6 +983,10 @@ function showP(id, btn) {
   if(id==="analytics") loadAnalytics();
   if(id==="vendos")     loadVendos();
   if(id==="skipped")    loadSkipped();
+  if(id==="harvest" && typeof ensureHarvest === 'function'){
+    ensureHarvest().then(function(){ if(typeof htLoad === 'function') htLoad(); })
+                   .catch(function(e){ console.warn('harvest module failed', e); });
+  }
   if(id==="notsus")     loadNotSuspicious();
   if(id==="status")     loadSystemStatus();
   if(id==="suspicious") loadSuspicious();
