@@ -994,10 +994,10 @@ function showP(id, btn) {
     }
   }
   if(id==="spawncloud"){
-    var cfrm=document.getElementById('spawncloud-frame');
-    if(cfrm && (!cfrm.src || cfrm.src==='about:blank' || cfrm.src.endsWith('about:blank'))){
-      cfrm.src='https://spawn-vendo-cloud-production-4f63.up.railway.app/';
-    }
+    // Panel is rendered natively into #sc-body (the old iframe is gone).
+    // Load here so every entry point works: sidebar, top nav, and the
+    // Spawn Cloud KPI card on the dashboard.
+    if(typeof scLoad==='function') scLoad();
   }
 }
 
