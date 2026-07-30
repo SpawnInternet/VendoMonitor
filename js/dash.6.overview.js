@@ -188,7 +188,7 @@ function overviewRender(ov, data) {
   if (typeof refreshRecentTxns === 'function') { try { refreshRecentTxns(); } catch(e){} }
   const susp = (data && data.suspicious) || [];
   const ssb=document.getElementById("suspicious-sidebar");
-  if(ssb) ssb.innerHTML = susp.slice(0, 10).map(h => `
+  if(ssb) ssb.innerHTML = susp.slice(0, 30).map(h => `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:7px 0;border-bottom:1px solid #fee2e2">
       <span style="color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${h.vendo||"—"}</span>
       <span style="color:${BRAND.red};font-weight:700;white-space:nowrap;font-size:13px">${_fmtNum(h.txn_count)} skip</span>
