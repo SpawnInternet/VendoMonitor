@@ -3306,6 +3306,61 @@ function klDelete(id){
     .catch(e=>alert('Delete failed: '+e.message));
 }
 
+function klAgo(t){
+  if(!t) return '';
+  const sec=(Date.now()-new Date(t))/1000;
+  if(sec<60) return 'just now';
+  if(sec<3600) return Math.floor(sec/60)+'m ago';
+  if(sec<86400) return Math.floor(sec/3600)+'h ago';
+  return Math.floor(sec/86400)+'d ago';
+}
+
+/* fob_borrow rows carry "Fob CODE (type) - Vendo Name" in notes */
+function klFobParse(r){
+  if(!r) return null;
+  const m = /^Fob\s+(\S+)\s*\(([^)]+)\)\s*[\u2014\u2013-]\s*(.+)$/.exec(r.notes||'');
+  if(!m) return null;
+  return { code:m[1], type:(m[2]||'').toLowerCase().trim(), vendo:m[3].trim() };
+}
+const KL_KT = {
+  board:['Board','#028867','#E6F7F0'], duplicate:['Duplicate','#C01176','#FBE9F3'],
+  pungpung:['Pungpung','#311A8E','#EEEAF7'], coin:['Coin','#025AC6','#EEF1FA']
+};
+function klKtChip(t){
+  const k = KL_KT[(t||'').toLowerCase()] || [(t||'Key'),'#5F5E5A','#F1EFE8'];
+  return '<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;color:'
+    + k[1]+';background:'+k[2]+';flex:none;white-space:nowrap;">'+klEsc(k[0])+'</span>';
+}
+
+/* tick a fob key back in. Routes through spawn_key_return so the fob itself
+   flips to loan_status=in and can be borrowed again. */
+async function klFobReturn(logId, cb){
+  const r = _klRows.find(x=>x.id===logId);
+  const f = klFobParse(r);
+  if(!r || !f){ if(cb) cb.checked=false; return; }
+  if(r.returned){ if(cb) cb.checked=true; return; }
+  if(!confirm('Mark this key RETURNED?\n\n'+f.vendo+'\nFob '+f.code+' ('+f.type+')\nHeld by '+(r.collector_name||'-'))){
+    if(cb) cb.checked=false; return;
+  }
+  try{
+    const res = await fetch(_SB+'/rest/v1/rpc/spawn_key_return', {
+      method:'POST', headers:_HDR,
+      body: JSON.stringify({ p_qr:f.code, p_account:'dashboard' })
+    });
+    const d = await res.json().catch(()=>null);
+    if(!res.ok || !d || d.ok===false){
+      const msg = (d && (d.error||d.message)) || ('HTTP '+res.status);
+      alert('Return failed: '+msg+'\n\nIf this mentions the RPC not being allowed, spawn_key_return must be added to the spawn-gw-admin RPC_ALLOW list.');
+      if(cb) cb.checked=false;
+      return;
+    }
+    klLoad();
+  }catch(e){
+    alert('Return failed: '+e.message);
+    if(cb) cb.checked=false;
+  }
+}
+
 function klRender(){
   const list = document.getElementById('kl-list');
   const lbl  = document.getElementById('kl-count-lbl');
@@ -3321,32 +3376,80 @@ function klRender(){
 
   const out = _klRows.filter(r=>!r.returned).length;
   const outKeys = _klRows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||0),0);
-  if(lbl) lbl.textContent = rows.length+' record(s) shown · '+out+' out ('+outKeys+' keys not yet returned)';
-
+  if(lbl) lbl.textContent = rows.length+' record(s) shown \u00b7 '+out+' out ('+outKeys+' keys not yet returned)';
   if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
 
-  list.innerHTML = rows.map(r=>{
-    const returned = !!r.returned;
-    const isLM = (r.record_type==='lineman');
-    const isTrial = (r.is_test === true);   // auto data from v4 / spawn-keys, still in trial
-    const bd = returned ? '#028867' : '#DF1A35';
-    const trialBadge = isTrial
-      ? '<span style="background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;padding:2px 7px;border-radius:6px;font-size:9px;font-weight:800;letter-spacing:.2px;margin-right:5px;">⚠ TRIAL SCAN</span>'
-      : '';
-    const badge = returned
-      ? trialBadge+'<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅</span>'
-      : trialBadge+'<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 OUT</span>';
-    return '<div onclick="klDetail('+r.id+')" style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:.1s;" onmouseover="this.style.boxShadow=\'0 3px 10px rgba(0,0,0,.10)\';this.style.borderColor=\'#025AC6\';this.style.borderLeftColor=\''+bd+'\';" onmouseout="this.style.boxShadow=\'none\';this.style.borderColor=\'#e5e7eb\';this.style.borderLeftColor=\''+bd+'\';">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+(isLM?'🛠️ ':'')+klEsc(r.collector_name)+'</div>'
-      +   badge
+  /* one card per person: the name is printed once, not once per key */
+  const groups = new Map();
+  rows.forEach(r=>{
+    const who = String(r.collector_name || r.lineman || '\u2014').trim();
+    const k = who.toLowerCase();
+    if(!groups.has(k)) groups.set(k, { who:who, rows:[] });
+    groups.get(k).rows.push(r);
+  });
+
+  const glist = Array.from(groups.values());
+  glist.forEach(g=>{
+    g.openN = g.rows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||1),0);
+    g.areas = Array.from(new Set(g.rows.map(r=>r.area).filter(Boolean)));
+    g.last  = Math.max.apply(null, g.rows.map(r=>+new Date(r.taken_at||0)));
+    /* area first, then key type, so a collector working two areas still reads cleanly */
+    g.rows.sort((a,b)=>{
+      const A = String(a.area||'').localeCompare(String(b.area||'')); if(A) return A;
+      const fa = klFobParse(a), fb = klFobParse(b);
+      const ta = (fa&&fa.type)||'zz', tb = (fb&&fb.type)||'zz';
+      if(ta!==tb) return ta.localeCompare(tb);
+      return (+new Date(b.taken_at||0)) - (+new Date(a.taken_at||0));
+    });
+  });
+  glist.sort((a,b)=> (b.openN>0)-(a.openN>0) || b.last-a.last);
+
+  list.innerHTML = glist.map(g=>{
+    const hot = g.openN > 0;
+    const bd  = hot ? '#DF1A35' : '#028867';
+    const ini = (g.who.charAt(0)||'?').toUpperCase();
+    const areaTxt = g.areas.length ? klEsc(g.areas.join(' \u00b7 ')) : '\u2014';
+    const pill = hot
+      ? '<span style="background:#DF1A35;color:#fff;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;flex:none;">'+g.openN+' OUT</span>'
+      : '<span style="background:#028867;color:#fff;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;flex:none;">ALL BACK</span>';
+
+    let body = '';
+    g.rows.forEach(r=>{
+      const f = klFobParse(r);
+      if(f){
+        const done = !!r.returned;
+        body += '<div style="display:flex;align-items:center;gap:9px;padding:7px 13px;border-top:1px solid #f4f5f7;">'
+          + '<input type="checkbox" '+(done?'checked disabled':'')+' onclick="event.stopPropagation();klFobReturn('+r.id+',this)" style="width:15px;height:15px;flex:none;cursor:'+(done?'default':'pointer')+';">'
+          + '<div style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+          +   (done?'color:#9ca3af;text-decoration:line-through;':'font-weight:600;color:#111;')+'">'+klEsc(f.vendo)+'</div>'
+          + klKtChip(f.type)
+          + '<span style="font-family:monospace;font-size:11px;color:#9ca3af;flex:none;">'+klEsc(f.code)+'</span>'
+          + '<span onclick="event.stopPropagation();klDetail('+r.id+')" style="font-size:12px;color:#025AC6;cursor:pointer;flex:none;padding:0 2px;" title="Details">\u203a</span>'
+          + '</div>';
+      } else if(r.record_type==='lineman'){
+        body += '<div onclick="klDetail('+r.id+')" style="padding:8px 13px;border-top:1px solid #f4f5f7;cursor:pointer;">'
+          + '<div style="font-size:12px;color:#025AC6;font-weight:600;">\ud83d\udcf6 '+klEsc(r.wifi_key||'\u2014')+(r.key_date?(' \u00b7 '+klEsc(r.key_date)):'')+'</div>'
+          + (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">\ud83d\udcac '+klEsc(r.lineman_reason)+'</div>':'')
+          + klItemBoxes(r.id)
+          + '</div>';
+      } else {
+        body += '<div onclick="klDetail('+r.id+')" style="display:flex;align-items:center;gap:9px;padding:7px 13px;border-top:1px solid #f4f5f7;cursor:pointer;">'
+          + '<span style="font-size:12px;color:#374151;flex:1;min-width:0;">\ud83d\udccd '+klEsc(r.area||'\u2014')+' \u00b7 \ud83d\udd11 '+(r.keys_taken||0)+(r.key_date?(' \u00b7 '+klEsc(r.key_date)):'')+'</span>'
+          + '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;flex:none;background:'+(r.returned?'#E6F7F5;color:#028867':'#fde8ea;color:#DF1A35')+';">'+(r.returned?'BACK':'OUT')+'</span>'
+          + '</div>';
+      }
+    });
+
+    return '<div style="background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:0 10px 10px 0;margin-bottom:9px;overflow:hidden;">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:'+(hot?'#fffafa':'#f8fbfa')+';">'
+      +   '<div style="width:32px;height:32px;border-radius:50%;background:#EEF1FA;color:#025AC6;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;">'+klEsc(ini)+'</div>'
+      +   '<div style="flex:1;min-width:0;">'
+      +     '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(g.who)+'</div>'
+      +     '<div style="font-size:11px;color:#6b7280;margin-top:2px;">'+areaTxt+' \u00b7 '+g.rows.length+' key'+(g.rows.length===1?'':'s')+' \u00b7 '+klAgo(g.last)+'</div>'
+      +   '</div>'
+      +   pill
       + '</div>'
-      + (isLM
-          ? '<div style="font-size:12px;color:#025AC6;margin-top:3px;font-weight:600;">📶 '+klEsc(r.wifi_key||'—')+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>'
-            + (r.lineman_reason?'<div style="font-size:11px;color:#C01176;margin-top:2px;">💬 '+klEsc(r.lineman_reason)+'</div>':'')
-            + klItemBoxes(r.id)
-          : '<div style="font-size:12px;color:#374151;margin-top:3px;">📍 '+klEsc(r.area||'—')+' · 🔑 '+(r.keys_taken||0)+(r.key_date?(' · 📅 '+klEsc(r.key_date)):'')+'</div>')
-      + '<div style="font-size:10px;color:#9ca3af;margin-top:4px;">Tap for details ›</div>'
+      + body
       + '</div>';
   }).join('');
 }
