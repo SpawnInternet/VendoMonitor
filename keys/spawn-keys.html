@@ -1324,27 +1324,56 @@ async function loadLoanOut(){
       el.innerHTML='<div class="empty" style="padding:16px">No keys out. All keys accounted for.</div>';
       return;
     }
-    const ids=[...new Set(out.map(f=>f.vendo_id).filter(Boolean))];
+    const ids=Array.from(new Set(out.map(f=>f.vendo_id).filter(Boolean)));
     const vmap={};
     if(ids.length){
-      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code&id=in.('+ids.join(',')+')');
-      if(Array.isArray(v)) v.forEach(x=>vmap[x.id]=x);
+      const v=await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code,area&id=in.('+ids.join(',')+')');
+      if(Array.isArray(v)) v.forEach(x=>{vmap[x.id]=x;});
     }
     document.getElementById('loan-out-title').textContent=out.length+' key'+(out.length>1?'s':'')+' out';
-    el.innerHTML=out.map(f=>{
-      const v=vmap[f.vendo_id]||{};
-      const vname=esc(v.sheet_name||v.tg_name||('#'+f.vendo_id));
-      const kt=(f.key_type||'').toLowerCase();
-      const ktMap={board:['🔌 BOARD','#028867','#E6F7F0'],duplicate:['🪙 DUP','#C01176','#FBE9F3'],pungpung:['🪙 PUNGPUNG','#311A8E','#EEEAF7'],coin:['🪙 COIN','#025AC6','#EEF1FA']};
-      const kc=ktMap[kt]||[kt.toUpperCase()||'KEY','#6b7280','#f1f2f4'];
-      const bigChip='<span style="display:inline-block;font-size:11px;font-weight:800;padding:3px 10px;border-radius:99px;color:'+kc[1]+';background:'+kc[2]+';">'+kc[0]+'</span>';
-      return '<div class="vrow" style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:default">'
-        +'<div style="min-width:0">'
-        +  '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+bigChip
-        +    '<span class="vname" style="font-size:14px">'+vname+'</span></div>'
-        +  '<div class="vmeta" style="margin-top:3px">👤 <b>'+esc(f.borrowed_by||'—')+'</b> · g dala · <span style="font-family:monospace">'+esc(f.qr_code)+'</span> · '+ago(f.borrowed_at)+'</div>'
-        +'</div>'
-        +'<span class="pill p-out">OUT</span></div>';
+
+    /* one card per borrower, matching the dashboard borrow log */
+    const groups=new Map();
+    out.forEach(f=>{
+      const who=String(f.borrowed_by||'\u2014').trim(), k=who.toLowerCase();
+      if(!groups.has(k)) groups.set(k,{who:who,rows:[]});
+      groups.get(k).rows.push(f);
+    });
+    const gl=Array.from(groups.values());
+    gl.forEach(g=>{
+      g.last=Math.max.apply(null,g.rows.map(f=>+new Date(f.borrowed_at||0)));
+      g.areas=Array.from(new Set(g.rows.map(f=>(vmap[f.vendo_id]||{}).area).filter(Boolean)));
+      g.rows.sort((a,b)=>{
+        const A=String((vmap[a.vendo_id]||{}).area||'').localeCompare(String((vmap[b.vendo_id]||{}).area||''));
+        if(A) return A;
+        return String(a.key_type||'').localeCompare(String(b.key_type||''));
+      });
+    });
+    gl.sort((a,b)=>b.last-a.last);
+
+    el.innerHTML=gl.map(function(g){
+      const ini=(g.who.charAt(0)||'?').toUpperCase();
+      const areaTxt=g.areas.length?esc(g.areas.join(' \u00b7 ')):'\u2014';
+      const body=g.rows.map(function(f){
+        const v=vmap[f.vendo_id]||{};
+        const vname=esc(v.sheet_name||v.tg_name||('#'+f.vendo_id));
+        return '<div style="display:flex;align-items:center;gap:8px;padding:7px 11px;border-top:1px solid #f4f5f7">'
+          + '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+vname+'</span>'
+          + ktChip(f.key_type)
+          + '<span style="font-family:monospace;font-size:11px;color:#9aa5b5;flex:none">'+esc(f.qr_code)+'</span>'
+          + '</div>';
+      }).join('');
+      return '<div style="border:1px solid #eef0f3;border-left:4px solid #DF1A35;border-radius:0 10px 10px 0;margin-bottom:9px;overflow:hidden">'
+        + '<div style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:#fffafa">'
+        +   '<div style="width:30px;height:30px;border-radius:50%;background:#EEF1FA;color:#025AC6;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none">'+esc(ini)+'</div>'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-size:14px;font-weight:800;color:#311A8E">'+esc(g.who)+'</div>'
+        +     '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+areaTxt+' \u00b7 '+g.rows.length+' key'+(g.rows.length===1?'':'s')+' \u00b7 '+ago(new Date(g.last).toISOString())+'</div>'
+        +   '</div>'
+        +   '<span style="background:#DF1A35;color:#fff;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:800;flex:none">'+g.rows.length+' OUT</span>'
+        + '</div>'
+        + body
+        + '</div>';
     }).join('');
   }catch(e){ el.innerHTML='<div class="empty" style="padding:16px">Cannot load.</div>'; }
 }
