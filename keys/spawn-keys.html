@@ -1824,7 +1824,10 @@ async function loadOverview(){
 
 // count helper — PostgREST returns total in Content-Range with Prefer:count=exact
 async function sbCount(p){
-  const r=await fetch(SB+'/rest/v1/'+p+'&select=id',{headers:{...HDR,Prefer:'count=exact',Range:'0-0'}});
+  // p may or may not already carry a query string; '&select=id' on a bare
+  // table name produced an invalid URL and silently counted 0.
+  const sep = p.indexOf('?') >= 0 ? '&' : '?';
+  const r=await fetch(SB+'/rest/v1/'+p+sep+'select=id',{headers:{...HDR,Prefer:'count=exact',Range:'0-0'}});
   const cr=r.headers.get('content-range')||'';
   const m=cr.match(/\/(\d+)$/);
   return m?parseInt(m[1],10):0;
