@@ -41,8 +41,6 @@ body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'
 .tb-title{font-weight:800;font-size:16px;letter-spacing:.02em}
 .tb-sub{font-size:10px;opacity:.75;margin-top:1px}
 .tb-user{font-size:12px;opacity:.9;font-weight:600;cursor:pointer}
-.trial-chip{background:#FFB725;color:#5c3d00;font-size:9px;font-weight:800;padding:2px 6px;
-  border-radius:99px;margin-left:4px;vertical-align:2px}
 
 .btn{border:none;border-radius:11px;padding:13px 16px;font-size:14px;font-weight:700;
   cursor:pointer;font-family:inherit}
@@ -169,7 +167,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   <div style="display:flex;align-items:center">
     <button class="topbar-back" id="tb-back" onclick="tabBack()">← Back</button>
     <div>
-      <div class="tb-title">🔑 SPAWN KEYS<span class="trial-chip">TRIAL</span></div>
+      <div class="tb-title">🔑 SPAWN KEYS</div>
       <div class="tb-sub" id="tb-sub">Ring custody</div>
     </div>
   </div>
@@ -378,7 +376,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
       <div class="lbl">Recent activity</div>
       <div id="ov-activity"><div class="empty" style="padding:16px">Loading…</div></div>
     </div>
-    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;color:var(--spawn-red);border-color:#f3c2c8;margin-top:4px">🗑 Reset trial data</button>
+    <button class="btn btn-gray" onclick="resetTrial()" style="width:100%;color:var(--spawn-red);border-color:#f3c2c8;margin-top:4px">🗑 Clear test data (admin)</button>
   </div>
 </div>
 
@@ -1477,14 +1475,19 @@ async function loadBindProfile(vid){
 function bindCancelResult(){ document.getElementById('bind-result').innerHTML=''; }
 
 async function resetTrial(){
-  if(!confirm('Clear all trial data?\n\nEvery ring goes back to IN and the test log is wiped.')) return;
+  // LIVE SYSTEM: this only ever touches rows flagged is_test=true, and needs
+  // the admin PIN. It must never reset a ring that is genuinely out on a route.
+  const pin = prompt('Admin PIN required to clear test data:');
+  if(pin === null) return;
+  if(String(pin).trim() !== '101510'){ toast('Wrong PIN'); return; }
+  if(!confirm('Clear TEST data only?\n\nLive scans and rings that are really out are NOT affected.')) return;
   try{
     await fetch(SB+'/rest/v1/key_events?is_test=eq.true',{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}});
     await fetch(SB+'/rest/v1/key_logs?is_test=eq.true',{method:'DELETE',headers:{...HDR,Prefer:'return=minimal'}});
-    await fetch(SB+'/rest/v1/key_rings?status=eq.out',{method:'PATCH',
+    await fetch(SB+'/rest/v1/key_rings?status=eq.out&is_test=eq.true',{method:'PATCH',
       headers:{...HDR,Prefer:'return=minimal'},
       body:JSON.stringify({status:'in',out_to:null,out_at:null})});
-    toast('Trial data cleared');
+    toast('Test data cleared');
     loadRings(); loadOverview();
   }catch(e){ toast('Reset failed'); }
 }
