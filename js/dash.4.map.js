@@ -373,11 +373,23 @@ async function gpsSaveCoords(vendoId){
       headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify({lat,lng,gps:lat+', '+lng})});
     if(r.ok){
-      toast('✅ GPS saved!');
       const v=_gpsAllVendos.find(x=>x.id===vendoId);
       if(v){ v.lat=lat; v.lng=lng; v.gps=lat+', '+lng; v.gps_updated_at=new Date().toISOString(); }
       document.getElementById('gps-editor')?.remove();
       gpsInitMap(); gpsTraceFilter();
+      // The collector PWA reads vendo-cache/vendos.json, whose cron only runs
+      // at 21:00. Without this rebuild a new pin stays invisible on the phones
+      // until the next night.
+      toast('✅ GPS saved — refreshing collector cache…');
+      try{
+        const cr = await fetch(`${SB_URL}/functions/v1/spawn-gw-admin`, {
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-gw-token': window.__ADMIN_GW_TOKEN||''},
+          body: JSON.stringify({ kind:'cache', fns:['write-vendo-cache','write-vendos-cache'] })
+        });
+        toast(cr.ok ? '✅ GPS saved — collectors will see it on next refresh'
+                    : '⚠ GPS saved, but cache rebuild failed — it will appear after 21:00');
+      }catch(_){ toast('⚠ GPS saved, but cache rebuild failed — it will appear after 21:00'); }
     } else { const t=await r.text(); toast('Save failed: '+t.slice(0,60)); }
   }catch(e){ toast('Error: '+e.message); }
 }
