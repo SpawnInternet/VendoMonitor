@@ -1957,15 +1957,62 @@ async function loadOverview(){
     document.getElementById('ov-unbound').textContent = Math.max(0,total-bound);
   }catch(e){}
 
-  // Recent activity across all events
+  // Recent activity, grouped by person so a name appears once
   try{
-    const ev = await sbGet('key_events?select=*&order=at.desc&limit=10');
+    const ev = await sbGet('key_events?select=*&order=at.desc&limit=60');
     const el = document.getElementById('ov-activity');
-    el.innerHTML = (Array.isArray(ev)&&ev.length)? ev.map(e=>`
-      <div class="ev"><div class="ev-t">${esc(evLabel(e))}${e.actor?(' · '+esc(e.actor)):''}</div>
-        <div class="ev-m">${ago(e.at)}
-          <span class="pill ${e.auth_method==='pin'?'p-pin':'p-qr'}" style="margin-left:6px">${e.auth_method==='pin'?'SELF-REPORTED':'VERIFIED'}</span></div></div>`).join('')
-      : '<div class="empty" style="padding:16px">No activity yet.</div>';
+    const rows = Array.isArray(ev)?ev:[];
+    if(!rows.length){
+      el.innerHTML = '<div class="empty" style="padding:16px">No activity yet.</div>';
+    } else {
+      // resolve vendo names in a single lookup
+      const ids = Array.from(new Set(rows.map(r=>r.vendo_id).filter(Boolean)));
+      const vmap = {};
+      if(ids.length){
+        try{
+          const vs = await sbGet('vendos?select=id,sheet_name,tg_name,vendo_code&id=in.('+ids.join(',')+')');
+          (Array.isArray(vs)?vs:[]).forEach(v=>{ vmap[v.id]=v; });
+        }catch(e){}
+      }
+      const groups = new Map();
+      rows.forEach(r=>{
+        const who = String(r.actor||'\u2014').trim(), k = who.toLowerCase();
+        if(!groups.has(k)) groups.set(k, {who:who, rows:[]});
+        groups.get(k).rows.push(r);
+      });
+      const gl = Array.from(groups.values());
+      gl.forEach(g=>{ g.last = Math.max.apply(null, g.rows.map(r=>+new Date(r.at||0))); });
+      gl.sort((a,b)=>b.last-a.last);
+
+      el.innerHTML = gl.map(function(g){
+        const ini = (g.who.charAt(0)||'?').toUpperCase();
+        const body = g.rows.map(function(r){
+          const m  = /fob\s+(\S+)\s*\(([^)]+)\)/i.exec(r.notes||'');
+          const v  = vmap[r.vendo_id];
+          const nm = v ? (v.sheet_name || v.tg_name || ('#'+r.vendo_id)) : (r.vendo_id ? ('#'+r.vendo_id) : '');
+          return '<div style="padding:6px 11px;border-top:1px solid #f4f5f7">'
+            + '<div style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+            +   '<b>'+esc(evLabel(r))+'</b>'+(nm?(' \u00b7 '+esc(nm)):'')+'</div>'
+            + '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">'
+            +   '<span style="font-size:10px;color:var(--muted)">'+ago(r.at)+'</span>'
+            +   '<span class="pill '+(r.auth_method==='pin'?'p-pin':'p-qr')+'">'+(r.auth_method==='pin'?'SELF-REPORTED':'VERIFIED')+'</span>'
+            +   (m?ktChip(m[2]):'')
+            +   (m?('<span style="font-family:monospace;font-size:10px;color:#9aa5b5">'+esc(m[1])+'</span>'):'')
+            + '</div>'
+            + '</div>';
+        }).join('');
+        return '<div style="border:1px solid #eef0f3;border-radius:10px;margin-bottom:9px;overflow:hidden">'
+          + '<div style="display:flex;align-items:center;gap:9px;padding:8px 11px;background:#f7f9fc">'
+          +   '<div style="width:28px;height:28px;border-radius:50%;background:#EEF1FA;color:#025AC6;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex:none">'+esc(ini)+'</div>'
+          +   '<div style="flex:1;min-width:0">'
+          +     '<div style="font-size:13px;font-weight:800">'+esc(g.who)+'</div>'
+          +     '<div style="font-size:11px;color:var(--muted)">'+g.rows.length+' action'+(g.rows.length===1?'':'s')+' \u00b7 '+ago(new Date(g.last).toISOString())+'</div>'
+          +   '</div>'
+          + '</div>'
+          + body
+          + '</div>';
+      }).join('');
+    }
   }catch(e){}
 }
 
