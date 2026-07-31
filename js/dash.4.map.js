@@ -375,6 +375,10 @@ async function gpsSaveCoords(vendoId){
     if(r.ok){
       const v=_gpsAllVendos.find(x=>x.id===vendoId);
       if(v){ v.lat=lat; v.lng=lng; v.gps=lat+', '+lng; v.gps_updated_at=new Date().toISOString(); }
+      // the collector PWA reads lat/lng from harvest_group_items — keep both in sync
+      await fetch(`${SB_URL}/rest/v1/harvest_group_items?vendo_id=eq.${vendoId}`,{method:'PATCH',
+        headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({lat,lng})}).catch(()=>{});
       document.getElementById('gps-editor')?.remove();
       gpsInitMap(); gpsTraceFilter();
       // The collector PWA reads vendo-cache/vendos.json, whose cron only runs
