@@ -324,7 +324,9 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-loan">
   <div class="wrap">
-    <div class="tab-head"><div><div class="tab-h1">Key Borrows</div><div class="tab-hsub">Lineman borrows an individual key</div></div></div>
+    <div class="tab-head"><div><div class="tab-h1">Key Borrows</div><div class="tab-hsub">One person, as many keys as they need</div></div></div>
+    <div class="card" id="loan-who-card" style="padding:12px 14px"></div>
+    <div id="loan-basket"></div>
     <div class="card" style="text-align:center;padding:20px 16px">
       <div style="font-size:38px">🔑</div>
       <div style="font-weight:800;font-size:16px;margin-top:6px">Scan a key fob</div>
@@ -385,6 +387,7 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%;margin-bottom:10px">&#8592; Back</button>
     <div class="lbl" style="text-align:center">Point at ONE fob &mdash; cover the others</div>
     <div id="reader" style="margin:12px 0"></div>
+    <div id="scan-live" style="display:none"></div>
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%">Cancel</button>
   </div>
 </div>
@@ -1055,14 +1058,156 @@ function rememberBorrower(n){
   try{ localStorage.setItem('spawn_borrowers', JSON.stringify(a)); }catch(e){}
 }
 
+/* ══ BORROW SESSION ═══════════════════════════════════════════
+   One borrower is chosen once and remembered. The camera then stays
+   open so a person can take as many keys as they need in one go. */
+let LOAN_WHO   = null;      // current session borrower
+let LOAN_BASKET = [];       // [{qr, vendo, key_type}]
+let LOAN_BUSY  = false;     // guards against a second decode mid-RPC
+let _nameCache = null;
+
+const LOAN_WHO_SLOT = 'spawnkeys_last_borrower';
+
+async function loanNames(){
+  if(_nameCache) return _nameCache;
+  let a=[], b=[];
+  try{ a = await sbGet('collectors?select=name&active=eq.true&order=name.asc'); }catch(e){}
+  try{ b = await sbGet('technicians?select=name&active=eq.true&order=name.asc'); }catch(e){}
+  const known = [].concat(Array.isArray(a)?a:[], Array.isArray(b)?b:[]).map(x=>x&&x.name).filter(Boolean);
+  const hist  = (typeof loanBorrowers==='function') ? loanBorrowers() : [];
+  _nameCache = Array.from(new Set(known.concat(hist)));
+  return _nameCache;
+}
+
+function loanSetWho(n){
+  LOAN_WHO = (n||'').trim() || null;
+  try{ LOAN_WHO ? localStorage.setItem(LOAN_WHO_SLOT, LOAN_WHO) : localStorage.removeItem(LOAN_WHO_SLOT); }catch(e){}
+  if(LOAN_WHO && typeof rememberBorrower==='function') rememberBorrower(LOAN_WHO);
+  loanRenderWho();
+}
+
+function loanRestoreWho(){
+  if(LOAN_WHO) return;
+  try{ const v=localStorage.getItem(LOAN_WHO_SLOT); if(v) LOAN_WHO=v; }catch(e){}
+}
+
+function loanRenderWho(){
+  const el = document.getElementById('loan-who-card');
+  if(!el) return;
+  if(!LOAN_WHO){
+    el.innerHTML = '<div style="font-size:13px;color:var(--muted);margin-bottom:9px">Who is borrowing?</div>'
+      + '<button class="btn btn-pri" style="width:100%" onclick="loanEditWho()">Choose borrower</button>';
+    return;
+  }
+  const ini = (LOAN_WHO.charAt(0)||'?').toUpperCase();
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px">'
+    + '<div style="width:34px;height:34px;border-radius:50%;background:#EEF1FA;color:#025AC6;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex:none">'+esc(ini)+'</div>'
+    + '<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted)">Borrowing as</div>'
+    +   '<div style="font-size:16px;font-weight:800;color:#025AC6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(LOAN_WHO)+'</div></div>'
+    + '<button class="btn btn-gray" style="width:auto;padding:7px 13px;font-size:12px;flex:none" onclick="loanEditWho()">Change</button>'
+    + '</div>';
+}
+
+async function loanEditWho(){
+  const el = document.getElementById('loan-who-card');
+  if(!el) return;
+  const names = await loanNames();
+  el.innerHTML = '<div class="lbl">Borrower</div>'
+    + '<input id="loan-who-inp" list="loan-who-list" placeholder="Pick or type a name…" autocomplete="off" value="'+esc(LOAN_WHO||'')+'">'
+    + '<datalist id="loan-who-list">'+names.map(n=>'<option value="'+esc(n)+'">').join('')+'</datalist>'
+    + '<button class="btn btn-ok" style="width:100%;margin-top:10px" onclick="loanSaveWho()">Use this name</button>'
+    + (LOAN_WHO?'<button class="btn btn-gray" style="width:100%;margin-top:7px" onclick="loanRenderWho()">Cancel</button>':'');
+  setTimeout(()=>{const i=document.getElementById('loan-who-inp'); if(i) i.focus();},150);
+}
+
+function loanSaveWho(){
+  const v=(document.getElementById('loan-who-inp')||{}).value||'';
+  if(!v.trim()){ toast('Type a name first'); return; }
+  loanSetWho(v);
+  toast('Borrowing as '+LOAN_WHO);
+}
+
+function loanBasketRender(){
+  const el = document.getElementById('loan-basket');
+  if(!el) return;
+  if(!LOAN_BASKET.length){ el.innerHTML=''; return; }
+  el.innerHTML = '<div class="card">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
+    +   '<div class="lbl" style="margin:0">Taken this session</div>'
+    +   '<span style="font-size:11px;font-weight:800;padding:2px 10px;border-radius:99px;background:#E6F7F0;color:#028867">'+LOAN_BASKET.length+' key'+(LOAN_BASKET.length===1?'':'s')+'</span>'
+    + '</div>'
+    + LOAN_BASKET.map(function(it){
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #f0f2f6">'
+          + '<span style="color:#028867;flex:none">\u2713</span>'
+          + '<span style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(it.vendo||it.qr)+'</span>'
+          + ktChip(it.key_type)
+          + '<span onclick="loanUndo(\''+esc(it.qr)+'\')" style="flex:none;color:#DF1A35;font-size:15px;cursor:pointer;padding:0 4px" title="Undo">\u2715</span>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+}
+
+function loanScanLive(){
+  const el=document.getElementById('scan-live');
+  if(!el) return;
+  el.style.display='block';
+  const last = LOAN_BASKET.length ? LOAN_BASKET[LOAN_BASKET.length-1] : null;
+  el.innerHTML = '<div style="background:#E6F7F0;border-radius:10px;padding:9px 11px;margin-bottom:10px;text-align:center">'
+    + '<div style="font-size:12px;color:#028867;font-weight:800">'+esc(LOAN_WHO||'')+' \u00b7 '+LOAN_BASKET.length+' key'+(LOAN_BASKET.length===1?'':'s')+' taken</div>'
+    + (last?'<div style="font-size:12px;color:#1f2937;margin-top:3px">last: '+esc(last.vendo||last.qr)+'</div>':'')
+    + '</div>'
+    + '<button class="btn btn-ok" style="width:100%;margin-bottom:8px" onclick="stopScanToTab()">\u2713 Done \u2014 '+LOAN_BASKET.length+' key'+(LOAN_BASKET.length===1?'':'s')+'</button>';
+}
+
+/* borrow one fob without leaving the camera */
+async function loanQuickBorrow(qr){
+  if(LOAN_BUSY) return;
+  LOAN_BUSY = true;
+  try{
+    const d = await rpc('spawn_key_scan',{p_qr:qr});
+    if(!d || !d.ok){ toast('\u274c '+((d&&d.error)||'Unknown fob'), 2600); return; }
+    if(!d.bound){ toast('\u26a0 Fob not bound to a vendo yet', 3000); return; }
+    if(d.loan_status==='out'){ toast('\u26a0 Already out with '+(d.borrowed_by||'\u2014'), 3000); return; }
+    const r = await rpc('spawn_key_loan',{p_qr:qr, p_borrower:LOAN_WHO, p_account:ME?ME.name:'keeper'});
+    if(!r || !r.ok){ toast('\u274c '+((r&&r.error)||'Borrow failed'), 2800); return; }
+    LOAN_BASKET.push({qr:d.qr||qr, vendo:d.vendo, key_type:d.key_type});
+    try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+    toast('\u2713 '+(d.vendo||qr), 1800);
+    loanScanLive(); loanBasketRender();
+  } finally { LOAN_BUSY = false; }
+}
+
+async function loanUndo(qr){
+  const it = LOAN_BASKET.find(x=>x.qr===qr);
+  if(!it) return;
+  if(!confirm('Undo this key?\n\n'+(it.vendo||qr))) return;
+  const d = await rpc('spawn_key_return',{p_qr:qr, p_account:ME?ME.name:'keeper'});
+  if(!d || !d.ok){ toast('\u274c '+((d&&d.error)||'Undo failed'), 2800); return; }
+  LOAN_BASKET = LOAN_BASKET.filter(x=>x.qr!==qr);
+  toast('Undone \u2014 '+(it.vendo||qr));
+  loanBasketRender(); loadLoanOut();
+}
+
 function loanStartScan(mode){
+  if(mode==='borrow'){
+    loanRestoreWho();
+    if(!LOAN_WHO){ showLoanTab(); loanEditWho(); toast('Choose the borrower first'); return; }
+    LOAN_BASKET = [];
+    go('scan');
+    loanScanLive();
+    // camera stays open: each fob is taken and we keep waiting for the next
+    startScannerHD(null,{width:250,height:250},
+      txt=>{ loanQuickBorrow(String(txt||'').trim()); },
+      ()=>{toast('Camera failed');showLoanTab();});
+    return;
+  }
+  const live=document.getElementById('scan-live'); if(live) live.style.display='none';
   go('scan');
   startScannerHD(null,{width:250,height:250},
     async txt=>{
       if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
       showLoanTab();
-      if(mode==='return') loanDoReturn(String(txt||'').trim());
-      else loanOnScan(String(txt||'').trim());
+      loanDoReturn(String(txt||'').trim());
     },
     ()=>{toast('Camera failed');showLoanTab();});
 }
@@ -1076,6 +1221,8 @@ function showLoanTab(){
   const back=document.getElementById('tb-back'); if(back) back.style.display='none';
   const bn=document.getElementById('bottom-nav'); if(bn) bn.classList.add('show');
   const sub=document.getElementById('tb-sub'); if(sub) sub.textContent=TAB_SUB.loan;
+  const live=document.getElementById('scan-live'); if(live) live.style.display='none';
+  loanRestoreWho(); loanRenderWho(); loanBasketRender();
 }
 
 async function loanOnScan(qr){
