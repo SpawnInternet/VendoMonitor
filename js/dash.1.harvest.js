@@ -3390,7 +3390,7 @@ function klRender(){
 
   const glist = Array.from(groups.values());
   glist.forEach(g=>{
-    g.openN = g.rows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken||1),0);
+    g.openN = g.rows.filter(r=>!r.returned).reduce((s,r)=>s+(r.keys_taken==null?1:Number(r.keys_taken)||0),0);
     g.areas = Array.from(new Set(g.rows.map(r=>r.area).filter(Boolean)));
     g.last  = Math.max.apply(null, g.rows.map(r=>+new Date(r.taken_at||0)));
     /* area first, then key type, so a collector working two areas still reads cleanly */
@@ -3445,7 +3445,7 @@ function klRender(){
       +   '<div style="width:32px;height:32px;border-radius:50%;background:#EEF1FA;color:#025AC6;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;">'+klEsc(ini)+'</div>'
       +   '<div style="flex:1;min-width:0;">'
       +     '<div style="font-size:14px;font-weight:800;color:#311A8E;">'+klEsc(g.who)+'</div>'
-      +     '<div style="font-size:11px;color:#6b7280;margin-top:2px;">'+areaTxt+' \u00b7 '+g.rows.length+' key'+(g.rows.length===1?'':'s')+' \u00b7 '+klAgo(g.last)+'</div>'
+      +     '<div style="font-size:11px;color:#6b7280;margin-top:2px;">'+areaTxt+' \u00b7 '+g.rows.length+' entr'+(g.rows.length===1?'y':'ies')+' \u00b7 '+klAgo(g.last)+'</div>'
       +   '</div>'
       +   pill
       + '</div>'
