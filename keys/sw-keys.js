@@ -14,7 +14,7 @@
 //     SW controls a page and the last registration wins. So we must not answer
 //     navigations that aren't ours — otherwise an offline harvest launch could
 //     be served spawn-keys.html.
-const CACHE = 'spawn-keys-keysfolder-v2';
+const CACHE = 'spawn-keys-keysfolder-v3';
 const APP_HTML = '/VendoMonitor/keys/spawn-keys.html';
 const SHELL = [
   APP_HTML,
