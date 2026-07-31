@@ -382,7 +382,8 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-scan">
   <div class="wrap">
-    <div class="lbl" style="text-align:center">Point at the code</div>
+    <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%;margin-bottom:10px">&#8592; Back</button>
+    <div class="lbl" style="text-align:center">Point at ONE fob &mdash; cover the others</div>
     <div id="reader" style="margin:12px 0"></div>
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%">Cancel</button>
   </div>
@@ -598,7 +599,18 @@ const CAM_HD = {
 // Also gives #reader a real size and waits a frame, because starting right
 // after a screen becomes visible can hand the library a 0×0 box (→ no camera,
 // no permission prompt, no error).
-function startScannerHD(scanner, box, onHit, onFail){
+let _scanLockCode = null, _scanLockAt = 0;
+function startScannerHD(scanner, box, rawOnHit, onFail){
+  // Guard against the library firing the same frame twice (fast fobs were
+  // double-submitting) without blocking a genuine re-scan later.
+  _scanLockCode = null; _scanLockAt = 0;
+  const onHit = function(txt, result){
+    const code = String(txt||'').trim();
+    const now = Date.now();
+    if(code && code === _scanLockCode && (now - _scanLockAt) < 1500) return;
+    _scanLockCode = code; _scanLockAt = now;
+    return rawOnHit(txt, result);
+  };
   const rd = document.getElementById('reader');
   if(rd){ rd.style.minHeight = (box.height||220)+'px'; rd.innerHTML=''; }
 
@@ -609,7 +621,12 @@ function startScannerHD(scanner, box, onHit, onFail){
   if(!window.isSecureContext){ showErr('Not on HTTPS — the browser blocks the camera. Open the https:// link.'); if(onFail) onFail(); return; }
   if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ showErr('This browser has no camera access. Try Chrome.'); if(onFail) onFail(); return; }
 
-  const cfg = (()=>{ try{ const F=Html5QrcodeSupportedFormats; return {formatsToSupport:[F.QR_CODE,F.CODE_128,F.DATA_MATRIX]}; }catch(e){ return undefined; } })();
+  // QR ONLY. CODE_128/DATA_MATRIX were letting the camera lock onto a
+  // neighbouring tag in frame and return the wrong fob. useBarCodeDetectorIfSupported
+  // hands decoding to the OS, which is markedly faster on worn/curved fobs.
+  const cfg = (()=>{ try{ const F=Html5QrcodeSupportedFormats;
+      return {formatsToSupport:[F.QR_CODE], experimentalFeatures:{useBarCodeDetectorIfSupported:true}};
+    }catch(e){ return undefined; } })();
 
   function fail(err){
     const msg = String(err && (err.name||err.message||err) || '');
@@ -640,7 +657,7 @@ function startScannerHD(scanner, box, onHit, onFail){
       }
     }catch(e){ return fail(e); }
     try{
-      await s.start(src, {fps:10, qrbox:box}, onHit, ()=>{});
+      await s.start(src, {fps:15, qrbox:box}, onHit, ()=>{});
       return; // live
     }catch(err){
       try{ await s.stop(); }catch(_){}
