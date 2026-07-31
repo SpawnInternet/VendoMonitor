@@ -454,6 +454,11 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%;margin-bottom:10px">&#8592; Back</button>
     <div class="lbl" style="text-align:center">Point at ONE fob &mdash; cover the others</div>
     <div id="reader" style="margin:12px 0"></div>
+    <div style="display:flex;gap:7px;margin-bottom:10px">
+      <input id="scan-type-inp" placeholder="…or type the code" autocomplete="off"
+             oninput="this.value=this.value.toUpperCase()" style="flex:1;margin:0">
+      <button class="btn btn-pri" style="width:auto;padding:11px 16px;flex:none" onclick="scanTypeGo()">Go</button>
+    </div>
     <div id="scan-live" style="display:none"></div>
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%">Cancel</button>
   </div>
@@ -685,6 +690,12 @@ function startScannerHD(scanner, box, rawOnHit, onFail){
     _scanLockCode = code; _scanLockAt = now;
     return rawOnHit(txt, result);
   };
+  window._scanHandler = onHit;   // typed codes go through the same path as a decode
+  const ti = document.getElementById('scan-type-inp');
+  if(ti){
+    ti.value='';
+    ti.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); scanTypeGo(); } };
+  }
   const rd = document.getElementById('reader');
   if(rd){ rd.style.minHeight = (box.height||220)+'px'; rd.innerHTML=''; }
 
@@ -2092,15 +2103,21 @@ const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
 let CUR_TAB = 'rings';
 const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', fobs:'Bound keys per vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance', install:'Log a new install' };
 
+let _tabHist = [], _tabNoPush = false;
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
+  if(!_tabNoPush && CUR_TAB && CUR_TAB !== tab){
+    _tabHist.push(CUR_TAB);
+    if(_tabHist.length > 20) _tabHist.shift();
+  }
   CUR_TAB = tab;
   keysRememberTab(tab);
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
   const nb=document.getElementById('bnav-'+tab); if(nb) nb.classList.add('active');
-  document.getElementById('tb-back').style.display='none';
+  const _bk=document.getElementById('tb-back');
+  if(_bk) _bk.style.display = _tabHist.length ? '' : 'none';
   document.getElementById('bottom-nav').classList.add('show');
   document.getElementById('tb-sub').textContent = TAB_SUB[tab]||'Ring custody';
   window.scrollTo(0,0);
@@ -2115,7 +2132,27 @@ function tabSwitch(tab){
 }
 
 // From a drill-down screen (ring detail / pull / scan) go back to the tab it came from.
-function tabBack(){ tabSwitch(CUR_TAB==='bind'?'bind':'rings'); }
+function tabBack(){
+  // walk back through the tabs actually visited, not a fixed destination
+  const prev = _tabHist.pop();
+  if(!prev){ tabSwitch('home'); return; }
+  _tabNoPush = true;
+  try{ tabSwitch(prev); } finally { _tabNoPush = false; }
+  const bk=document.getElementById('tb-back');
+  if(bk) bk.style.display = _tabHist.length ? '' : 'none';
+}
+
+/* submit a typed code without closing the camera */
+function scanTypeGo(){
+  const inp=document.getElementById('scan-type-inp');
+  const code=((inp&&inp.value)||'').trim().toUpperCase();
+  if(!code){ if(inp) inp.style.borderColor='#DF1A35'; return; }
+  if(inp){ inp.style.borderColor=''; inp.value=''; }
+  _scanLockCode=null; _scanLockAt=0;          // a deliberate submit always fires
+  const h=window._scanHandler;
+  if(typeof h==='function') h(code);
+  else toast('Scanner not ready');
+}
 
 // Show the Bind tab WITHOUT resetting the form (used when returning from a fob scan
 // so the picked vendo + result stay visible).
