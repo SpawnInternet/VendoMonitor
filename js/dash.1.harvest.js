@@ -3512,12 +3512,23 @@ function gqLoad(){
 function gqLoadQr(){
   if(window.QRCode && window.QRCode.toDataURL) return Promise.resolve();
   if(_gqQrLoading) return _gqQrLoading;
-  _gqQrLoading = new Promise((res,rej)=>{
-    const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js';
-    s.onload=()=>res(); s.onerror=()=>rej(new Error('Could not load QR library (need internet)'));
-    document.head.appendChild(s);
-  });
+  // Self-hosted copy first (works with no external internet), CDN last resort.
+  const SRCS = [
+    'js/qrcode.min.js',
+    '/VendoMonitor/js/qrcode.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js'
+  ];
+  function tryOne(i){
+    if(i >= SRCS.length) return Promise.reject(new Error('QR library not found (js/qrcode.min.js missing)'));
+    return new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src=SRCS[i];
+      s.onload=()=>{ (window.QRCode && window.QRCode.toDataURL) ? res() : rej(new Error('bad build')); };
+      s.onerror=()=>rej(new Error('load fail'));
+      document.head.appendChild(s);
+    }).catch(()=>tryOne(i+1));
+  }
+  _gqQrLoading = tryOne(0).catch(e=>{ _gqQrLoading=null; throw e; });
   return _gqQrLoading;
 }
 
