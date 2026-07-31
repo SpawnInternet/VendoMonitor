@@ -382,6 +382,73 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   </div>
 </div>
 
+<div class="screen" id="screen-install">
+  <div class="wrap">
+    <div class="tab-head"><div><div class="tab-h1">New Install</div><div class="tab-hsub">Create the vendo and log keys received</div></div></div>
+    <div class="card">
+      <div class="lbl">Sheet name *</div>
+      <input id="ni-name" placeholder="Owner / display name…" autocomplete="off">
+
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <div style="flex:1">
+          <div class="lbl">Area *</div>
+          <select id="ni-area" onchange="niGroups()"></select>
+        </div>
+        <div style="width:110px">
+          <div class="lbl">VLAN</div>
+          <input id="ni-vlan" type="number" inputmode="numeric" placeholder="e.g. 32">
+        </div>
+      </div>
+
+      <div class="lbl" style="margin-top:10px">Harvest group</div>
+      <select id="ni-group"></select>
+
+      <div class="lbl" style="margin-top:10px">Server name</div>
+      <input id="ni-srv" placeholder="Optional" autocomplete="off">
+
+      <div class="lbl" style="margin-top:10px">Address</div>
+      <input id="ni-addr" placeholder="Optional" autocomplete="off">
+    </div>
+
+    <div class="card">
+      <div class="lbl">Keys received</div>
+      <label style="display:flex;align-items:center;gap:9px;padding:7px 0;font-size:14px">
+        <input type="checkbox" id="ni-k-co" style="width:17px;height:17px">&#129689; Coins (Not Duplicate)</label>
+      <label style="display:flex;align-items:center;gap:9px;padding:7px 0;font-size:14px;border-top:1px solid #f0f2f6">
+        <input type="checkbox" id="ni-k-cd" style="width:17px;height:17px">&#129689; Coins (Duplicate)</label>
+      <label style="display:flex;align-items:center;gap:9px;padding:7px 0;font-size:14px;border-top:1px solid #f0f2f6">
+        <input type="checkbox" id="ni-k-bd" style="width:17px;height:17px">&#128268; Board</label>
+    </div>
+
+    <div class="card">
+      <div class="lbl">GPS</div>
+      <input id="ni-gps" placeholder="lat, lng" autocomplete="off">
+      <button class="btn btn-gray" style="width:100%;margin-top:8px;font-size:13px" onclick="niLocate()">&#128205; Use my location</button>
+      <div class="lbl" style="margin-top:12px">Site photo</div>
+      <input type="file" id="ni-photo" accept="image/*" style="font-size:13px">
+      <div id="ni-photo-state" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;gap:8px">
+        <div style="flex:1">
+          <div class="lbl">Installed by</div>
+          <input id="ni-by" placeholder="Name" autocomplete="off">
+        </div>
+        <div style="width:140px">
+          <div class="lbl">Date</div>
+          <input id="ni-date" type="date">
+        </div>
+      </div>
+      <div class="lbl" style="margin-top:10px">Notes</div>
+      <input id="ni-notes" placeholder="Optional" autocomplete="off">
+    </div>
+
+    <div id="ni-result"></div>
+    <button class="btn btn-ok" style="width:100%" onclick="niSave()">&#10003; Save install</button>
+  </div>
+</div>
+
 <div class="screen" id="screen-scan">
   <div class="wrap">
     <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%;margin-bottom:10px">&#8592; Back</button>
@@ -441,6 +508,10 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
   <button class="bnav-item" id="bnav-bind" onclick="tabSwitch('bind')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M17 21h4v-4M21 14v.01M14 21v.01"/></svg></div>
     <div class="bnav-label">Bind</div>
+  </button>
+  <button class="bnav-item" id="bnav-install" onclick="tabSwitch('install')">
+    <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
+    <div class="bnav-label">Install</div>
   </button>
   <button class="bnav-item" id="bnav-handover" onclick="tabSwitch('handover')">
     <div class="bnav-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/><path d="M9 5H5v14h4"/></svg></div>
@@ -1056,6 +1127,178 @@ function rememberBorrower(n){
   let a=loanBorrowers().filter(x=>x.toLowerCase()!==n.toLowerCase());
   a.unshift(n); a=a.slice(0,20);
   try{ localStorage.setItem('spawn_borrowers', JSON.stringify(a)); }catch(e){}
+}
+
+/* ══ NEW INSTALL ══════════════════════════════════════════════
+   Creates the vendo via spawn_log_install_and_create_vendo, then attaches
+   GPS and photo best-effort. The vendos INSERT trigger rebuilds the collector
+   cache, so a new machine reaches the phones without waiting for 21:00. */
+const NI_AREAS = ['DIPOLOG','DAPITAN','SINDANGAN','SINAMAN','ROXAS','POLANCO','MINAOG','MIX AREAS'];
+let _niGroups = null;
+
+async function niInit(){
+  const a = document.getElementById('ni-area');
+  if(a && !a.options.length){
+    a.innerHTML = '<option value="">— Select area —</option>'
+      + NI_AREAS.map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join('');
+  }
+  const d = document.getElementById('ni-date');
+  if(d && !d.value){
+    const n=new Date();
+    d.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+  }
+  const by = document.getElementById('ni-by');
+  if(by && !by.value && ME && ME.name) by.value = ME.name;
+  if(!_niGroups){
+    try{ _niGroups = await sbGet('harvest_groups?select=id,group_label,area&order=group_label.asc'); }
+    catch(e){ _niGroups = []; }
+  }
+  niGroups();
+  const ph=document.getElementById('ni-photo');
+  if(ph && !ph._wired){
+    ph._wired=1;
+    ph.onchange=()=>{
+      const f=ph.files&&ph.files[0];
+      const st=document.getElementById('ni-photo-state');
+      if(st) st.textContent = f ? (f.name+' — '+Math.round(f.size/1024)+' KB') : '';
+    };
+  }
+}
+
+function niGroups(){
+  const sel=document.getElementById('ni-group'); if(!sel) return;
+  const area=(document.getElementById('ni-area')||{}).value||'';
+  const all=Array.isArray(_niGroups)?_niGroups:[];
+  const list = area ? all.filter(g=>!g.area || String(g.area).toUpperCase()===area.toUpperCase()) : all;
+  sel.innerHTML='<option value="">— No group —</option>'
+    + (list.length?list:all).map(g=>'<option value="'+g.id+'">'+esc(g.group_label||('Group '+g.id))+'</option>').join('');
+}
+
+function niLocate(){
+  if(!navigator.geolocation){ toast('No GPS on this device'); return; }
+  toast('Getting location…');
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const el=document.getElementById('ni-gps');
+      if(el){ el.value = pos.coords.latitude.toFixed(6)+', '+pos.coords.longitude.toFixed(6); el.style.background='#dcfce7'; }
+      toast('📍 Location captured');
+    },
+    err=>{ toast('Location failed: '+(err&&err.message||'denied')); },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+}
+
+function niParseGps(){
+  const raw=((document.getElementById('ni-gps')||{}).value||'').trim();
+  if(!raw) return null;
+  const m=raw.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+  if(!m) return null;
+  const lat=parseFloat(m[1]), lng=parseFloat(m[2]);
+  if(isNaN(lat)||isNaN(lng)) return null;
+  return {lat:lat, lng:lng};
+}
+
+async function niSave(){
+  const res=document.getElementById('ni-result');
+  const val=id=>((document.getElementById(id)||{}).value||'').trim();
+  const chk=id=>!!(document.getElementById(id)||{}).checked;
+
+  const name=val('ni-name'), area=val('ni-area');
+  if(!name){ toast('Sheet name is required'); return; }
+  if(!area){ toast('Pick an area'); return; }
+  const co=chk('ni-k-co'), cd=chk('ni-k-cd'), bd=chk('ni-k-bd');
+  if(!co && !cd && !bd){
+    if(!confirm('No keys ticked.\n\nSave the install with no keys received?')) return;
+  }
+  const gps=niParseGps();
+  if(((document.getElementById('ni-gps')||{}).value||'').trim() && !gps){
+    toast('GPS format must be: lat, lng'); return;
+  }
+
+  res.innerHTML='<div class="card" style="text-align:center;color:#9aa5b5;font-size:13px">Saving…</div>';
+  let out;
+  try{
+    out = await rpc('spawn_log_install_and_create_vendo', {
+      p_sheet_name: name,
+      p_area: area,
+      p_tg_name: null,
+      p_no_tg: true,
+      p_vlan: val('ni-vlan') ? parseInt(val('ni-vlan'),10) : null,
+      p_group_id: val('ni-group') ? parseInt(val('ni-group'),10) : null,
+      p_installed_by: val('ni-by') || (ME?ME.name:'keeper'),
+      p_install_date: val('ni-date') || null,
+      p_key_coin_original: co,
+      p_key_coin_duplicate: cd,
+      p_key_board: bd,
+      p_notes: val('ni-notes') || null,
+      p_existing_vendo_id: null,
+      p_server_name: val('ni-srv') || null,
+      p_address: val('ni-addr') || null
+    });
+  }catch(e){
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc(String(e.message||e))+'</div></div>';
+    return;
+  }
+  if(!out || out.ok===false){
+    res.innerHTML='<div class="card"><div class="banner">❌ '+esc((out&&(out.error||out.message))||'Save failed')+'</div></div>';
+    return;
+  }
+  const vid = out.vendo_id || out.id || null;
+  let warn = '';
+
+  // GPS to BOTH vendos and harvest_group_items — the collector app reads the item row
+  if(gps && vid){
+    try{
+      const r1=await fetch(SB+'/rest/v1/vendos?id=eq.'+vid,{method:'PATCH',
+        headers:Object.assign({Prefer:'return=minimal'},HDR),
+        body:JSON.stringify({lat:gps.lat,lng:gps.lng,gps:gps.lat+', '+gps.lng,gps_updated_at:new Date().toISOString()})});
+      if(!r1.ok) throw new Error(await r1.text());
+      await fetch(SB+'/rest/v1/harvest_group_items?vendo_id=eq.'+vid,{method:'PATCH',
+        headers:Object.assign({Prefer:'return=minimal'},HDR),
+        body:JSON.stringify({lat:gps.lat,lng:gps.lng})}).catch(()=>{});
+    }catch(e){ warn += '<br>⚠ GPS not saved: '+esc(String(e.message||e)); }
+  }
+
+  // photo best-effort — the vendo already exists either way
+  const ph=document.getElementById('ni-photo');
+  const file = ph && ph.files && ph.files[0];
+  if(file && vid){
+    try{
+      const path='vendo-profiles/vendo_'+vid+'.jpg';
+      const up=await fetch(SB+'/storage/v1/object/harvest-photos/'+path,{
+        method:'POST',
+        headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},
+        body:file});
+      if(!up.ok) throw new Error((await up.text()).slice(0,120));
+      const url=SB+'/storage/v1/object/public/harvest-photos/'+path+'?t='+Date.now();
+      await fetch(SB+'/rest/v1/vendos?id=eq.'+vid,{method:'PATCH',
+        headers:Object.assign({Prefer:'return=minimal'},HDR),
+        body:JSON.stringify({photo_url:url})});
+    }catch(e){ warn += '<br>⚠ Photo not uploaded: '+esc(String(e.message||e)); }
+  }
+
+  try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+  const keys=[]; if(co) keys.push('Coins'); if(cd) keys.push('Coins (Dup)'); if(bd) keys.push('Board');
+  res.innerHTML='<div class="card" style="text-align:center;border:2px solid #16a34a;background:#E6F7F0">'
+    + '<div style="font-size:38px">✅</div>'
+    + '<div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">INSTALL SAVED</div>'
+    + '<div style="font-size:14px;margin-top:6px"><b>'+esc(name)+'</b></div>'
+    + '<div style="font-size:12px;color:#1f2937;margin-top:2px">'+esc(area)+(vid?(' · vendo #'+vid):'')+'</div>'
+    + (keys.length?'<div style="font-size:12px;color:#1f2937;margin-top:3px">Keys: '+esc(keys.join(', '))+'</div>':'')
+    + '<div style="font-size:11px;color:#7a869c;margin-top:6px">Office still needs to link the TG name.</div>'
+    + (warn?'<div style="font-size:11px;color:#DF1A35;margin-top:6px;text-align:left">'+warn+'</div>':'')
+    + '<button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="niReset()">Log another</button>'
+    + '</div>';
+  toast('✅ Install saved');
+}
+
+function niReset(){
+  ['ni-name','ni-vlan','ni-srv','ni-addr','ni-gps','ni-notes'].forEach(id=>{
+    const el=document.getElementById(id); if(el){ el.value=''; el.style.background=''; }
+  });
+  ['ni-k-co','ni-k-cd','ni-k-bd'].forEach(id=>{ const el=document.getElementById(id); if(el) el.checked=false; });
+  const ph=document.getElementById('ni-photo'); if(ph) ph.value='';
+  const st=document.getElementById('ni-photo-state'); if(st) st.textContent='';
+  const r=document.getElementById('ni-result'); if(r) r.innerHTML='';
 }
 
 /* ══ BORROW SESSION ═══════════════════════════════════════════
@@ -1843,11 +2086,11 @@ if('serviceWorker' in navigator){
 
 // ══════════ TAB NAVIGATION ══════════
 // Screens that are top-level tabs (bottom nav stays, no back button).
-const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', fobs:'screen-fobs', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview' };
+const TAB_SCREENS = { home:'screen-home', rings:'screen-rings', bind:'screen-bind', fobs:'screen-fobs', loan:'screen-loan', handover:'screen-handover', overview:'screen-overview', install:'screen-install' };
 // Drill-down screens hide the nav and show a Back button.
 const DRILL_SCREENS = ['screen-ring','screen-pull','screen-scan'];
 let CUR_TAB = 'rings';
-const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', fobs:'Bound keys per vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance' };
+const TAB_SUB = { home:'Ring custody', rings:'Borrow & return rings', bind:'Bind fob QR to vendo', fobs:'Bound keys per vendo', loan:'Lineman key borrows', handover:'Approve collector QR', overview:'At a glance', install:'Log a new install' };
 
 function tabSwitch(tab){
   const id = TAB_SCREENS[tab]; if(!id) return;
@@ -1868,6 +2111,7 @@ function tabSwitch(tab){
   if(tab==='fobs') loadFobsList();
   if(tab==='loan') loadLoanOut();
   if(tab==='bind') openBind();
+  if(tab==='install') niInit();
 }
 
 // From a drill-down screen (ring detail / pull / scan) go back to the tab it came from.
