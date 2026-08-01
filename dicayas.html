@@ -172,6 +172,37 @@
                padding:1px 8px;border-radius:999px;background:#eef2f8;color:#7a8aa0}
   .subtab[data-sv="active"].active .cnt{background:#e6f4ee;color:#028867}
   .subtab[data-sv="inactive"].active .cnt{background:#fdeaed;color:#DF1A35}
+  .subtab[data-sv="match"].active{border-bottom-color:var(--gold,#FFB725)}
+  .subtab[data-sv="match"].active .cnt{background:#fff4de;color:#9a6b00}
+  /* ---- Match Names worklist ---- */
+  #grid-subs-match{display:block}
+  .mw{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:12px 13px;margin-bottom:10px}
+  .mw.done{opacity:.5}
+  .mw-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  .mw-ppp{font-weight:700;font-size:15px;color:#12203a}
+  .mw-meta{font-size:11.5px;color:#7a8aa0}
+  .mw-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px}
+  .mw-tag.prob{background:#fff4de;color:#9a6b00}
+  .mw-tag.none{background:#f0f2f6;color:#61708a}
+  .mw-cands{display:flex;flex-direction:column;gap:6px}
+  .mw-c{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid #e6ebf2;
+        border-radius:9px;cursor:pointer;background:#fbfcfe}
+  .mw-c:hover{border-color:#025AC6;background:#f4f8ff}
+  .mw-c.top{border-color:#028867;background:#f2fbf7}
+  .mw-c-name{font-weight:600;font-size:13.5px;color:#12203a;flex:1}
+  .mw-c-sub{font-size:11px;color:#7a8aa0;font-weight:400}
+  .mw-score{font-size:10.5px;font-weight:700;color:#028867;background:#e6f4ee;
+            padding:2px 7px;border-radius:99px;white-space:nowrap}
+  .mw-score.mid{color:#9a6b00;background:#fff4de}
+  .mw-acts{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+  .mw-btn{border:1px solid #dbe2ec;background:#fff;border-radius:8px;padding:6px 11px;
+          font-size:12px;font-weight:600;cursor:pointer;color:#3d4d66}
+  .mw-btn:hover{border-color:#025AC6;color:#025AC6}
+  .mw-btn.skip:hover{border-color:#DF1A35;color:#DF1A35}
+  .mw-search{width:100%;margin-top:8px;padding:8px 10px;border:1px solid #dbe2ec;
+             border-radius:8px;font-size:13px;font-family:inherit}
+  .mw-none{font-size:12px;color:#7a8aa0;padding:6px 2px}
+  .mw-ok{font-size:12.5px;font-weight:600;color:#028867}
   .newbtn{width:100%;margin-top:10px;border:1.5px dashed #b6c6de;background:#f7faff;color:#025AC6;
           border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}
   .newbtn:hover{background:#eef4ff}
@@ -399,9 +430,11 @@
     <div class="subtabs">
       <div class="subtab active" data-sv="active"  id="stab-active">🟢 Active</div>
       <div class="subtab"        data-sv="inactive" id="stab-inactive">🔴 Inactive</div>
+      <div class="subtab"        data-sv="match"    id="stab-match">🔗 Match Names</div>
     </div>
     <div class="grid" id="grid-subs-on"></div>
     <div class="grid" id="grid-subs-off" style="display:none !important"></div>
+    <div id="grid-subs-match" style="display:none"></div>
   </div>
   <div id="pane-search" class="pane" style="display:none">
     <div class="controls">
@@ -1138,17 +1171,26 @@ function renderSubs(){
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
   document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None inactive</div>';
   document.getElementById('grid-subs-on').innerHTML  = on.length ? on.map(subCard).join(''):'<div class="empty">None active</div>';
-  // one view at a time — ACTIVE = link up, INACTIVE = link down
-  const showOn = (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
+  // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
+  const isMatch = (SUBVIEW==='match');
+  const showOn  = !isMatch && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
   const gOn=document.getElementById('grid-subs-on'), gOff=document.getElementById('grid-subs-off');
+  const gM =document.getElementById('grid-subs-match');
   if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
-  if(gOff) gOff.style.setProperty('display', showOn?'none':'grid','important');
+  if(gOff) gOff.style.setProperty('display', (!isMatch && !showOn)?'grid':'none','important');
+  if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
+  if(isMatch) renderMatch();
   const ta=document.getElementById('stab-active'), ti=document.getElementById('stab-inactive');
+  const tm=document.getElementById('stab-match');
   if(ta&&ti){
     ta.innerHTML='🟢 Active<span class="cnt">'+on.length+'</span>';
     ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>';
     ta.classList.toggle('active', showOn);
-    ti.classList.toggle('active', !showOn);
+    ti.classList.toggle('active', !isMatch && !showOn);
+  }
+  if(tm){
+    tm.innerHTML='🔗 Match Names<span class="cnt">'+matchQueue().length+'</span>';
+    tm.classList.toggle('active', isMatch);
   }
 
   const offl=SUBS.filter(m=>!m.online && m.offline_since);
@@ -2220,6 +2262,184 @@ function lockRowHtml(ppp){
 // Joins each Dicayas PPPoE account to its subscriber record so the customer
 // profile (area, address, phone, billing, GPS) sits next to the live link state.
 function subRecOf(name){ return name ? SUBRECS.find(x=>x.name===name) : null; }
+
+/* ================= MATCH NAMES WORKLIST =================
+   Accounts that still need a subscriber attached:
+     · probable  — fuzzy guess, never confirmed
+     · no roster row at all
+   Names already taken by a confirmed link are hidden from the candidate
+   lists, so you can't accidentally attach one customer to two accounts.
+========================================================= */
+const MW_STOP=new Set(['piso','wifi','vendo','store','shop','sari','jr','sr','mr','mrs',
+  'ms','the','and','de','del','dela','san','sta','sto','ii','iii','2','3','spawn','test','tv']);
+
+function mwTokens(s){
+  return String(s||'').toLowerCase()
+    .replace(/[^a-z0-9\s]/g,' ').split(/\s+/)
+    .filter(t=>t.length>1 && !MW_STOP.has(t));
+}
+function mwLev(a,b){
+  if(a===b) return 0;
+  const m=a.length,n=b.length;
+  if(!m||!n) return Math.max(m,n);
+  let prev=Array.from({length:n+1},(_,i)=>i), cur=new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    [prev,cur]=[cur,prev];
+  }
+  return prev[n];
+}
+// 0..1. Surname-weighted token overlap with a small typo allowance.
+function mwScore(pppName, subName){
+  const A=mwTokens(pppName), B=mwTokens(subName);
+  if(!A.length||!B.length) return 0;
+  let hit=0;
+  A.forEach(a=>{
+    let best=0;
+    B.forEach(b=>{
+      if(a===b){ best=Math.max(best,1); return; }
+      const d=mwLev(a,b), L=Math.max(a.length,b.length);
+      if(d===1 && L>=4)      best=Math.max(best,0.85);
+      else if(d===2 && L>=8) best=Math.max(best,0.65);
+      else if(L>=5 && (a.startsWith(b)||b.startsWith(a))) best=Math.max(best,0.7);
+    });
+    hit+=best;
+  });
+  const base=hit/Math.max(A.length,B.length);
+  // surname agreement (last token) is the strongest signal we have
+  const bonus=(A[A.length-1]===B[B.length-1])?0.12:0;
+  return Math.min(1, base+bonus);
+}
+// subscriber names already locked to some OTHER ppp account
+function mwTakenNames(){
+  const t=new Set();
+  ROSTER.forEach(r=>{ if(r.roster_name && (r.match_status==='matched'||r.confirmed_at)) t.add(r.roster_name); });
+  return t;
+}
+function mwCandidates(pppName, limit){
+  const taken=mwTakenNames();
+  return SUBRECS
+    .filter(x=>x.name && !taken.has(x.name))
+    .map(x=>({rec:x, s:mwScore(pppName, x.name)}))
+    .filter(x=>x.s>=0.34)
+    .sort((a,b)=>b.s-a.s)
+    .slice(0, limit||4);
+}
+function matchQueue(){
+  return SUBS.filter(m=>{
+    if(!m.ppp_name) return false;
+    const r=ROSTER.get(m.ppp_name);
+    if(!r) return true;                                   // never seen
+    if(r.match_status==='rejected') return true;          // marked wrong, still open
+    if(!r.roster_name) return true;                       // cleared
+    if(r.match_status==='probable' && !r.confirmed_at) return true;  // fuzzy, unconfirmed
+    return false;
+  }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+}
+let MW_HIDE=new Set();   // rows resolved in this session
+
+function renderMatch(){
+  const el=document.getElementById('grid-subs-match'); if(!el) return;
+  const q=(document.getElementById('subq').value||'').toLowerCase().trim();
+  let queue=matchQueue().filter(m=>!MW_HIDE.has(m.ppp_name));
+  if(q) queue=queue.filter(m=>(m.ppp_name||'').toLowerCase().includes(q));
+
+  if(!queue.length){
+    el.innerHTML=`<div class="banner">✅ Nothing left in the queue${q?' for that search':''}.
+      Every PPPoE account on Dicayas is either linked to a subscriber or confirmed as not billable.</div>`;
+    return;
+  }
+  el.innerHTML =
+    `<div class="banner">🔗 ${queue.length} account${queue.length===1?'':'s'} still need a subscriber name.
+      Tap a suggestion to link it — it saves straight to the subscriber record.
+      Green = strong match, amber = check it first.</div>` +
+    queue.map(m=>{
+      const r=ROSTER.get(m.ppp_name);
+      const prob = r && r.match_status==='probable' && r.roster_name;
+      const cands=mwCandidates(m.ppp_name,4);
+      const tag = prob
+        ? `<span class="mw-tag prob">fuzzy guess: ${esc(r.roster_name)}</span>`
+        : `<span class="mw-tag none">no subscriber yet</span>`;
+      const rows = cands.length
+        ? cands.map((c,i)=>`
+            <div class="mw-c ${i===0&&c.s>=0.72?'top':''}" data-mwlink="${esc(m.ppp_name)}"
+                 data-mwname="${esc(c.rec.name)}" data-mwarea="${esc(c.rec.area||'')}">
+              <span class="mw-c-name">${esc(c.rec.name)}
+                <span class="mw-c-sub">${esc(c.rec.area||'no area')}${c.rec.phone?' · '+esc(c.rec.phone):''}</span>
+              </span>
+              <span class="mw-score ${c.s<0.72?'mid':''}">${Math.round(c.s*100)}%</span>
+            </div>`).join('')
+        : `<div class="mw-none">No close subscriber name. Search below, or mark it not billable.</div>`;
+      return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
+        <div class="mw-hd">
+          <span class="mw-ppp">${esc(m.ppp_name)}</span>
+          <span class="mw-meta">${m.online?'🟢 online':'🔴 offline'}${m.ip?' · '+esc(m.ip):''}${m.ppp_profile?' · '+esc(m.ppp_profile):''}</span>
+          ${tag}
+        </div>
+        <div class="mw-cands">${rows}</div>
+        <input class="mw-search" data-mwq="${esc(m.ppp_name)}" placeholder="Search a different subscriber name…">
+        <div class="mw-acts">
+          <button class="mw-btn skip" data-mwskip="${esc(m.ppp_name)}">✖ Not billable</button>
+          <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+// live search inside a worklist row
+document.addEventListener('input', e=>{
+  const box=e.target.closest('[data-mwq]'); if(!box) return;
+  const ppp=box.dataset.mwq, q=(box.value||'').toLowerCase().trim();
+  const row=document.querySelector(`.mw[data-mwrow="${CSS.escape(ppp)}"] .mw-cands`);
+  if(!row) return;
+  if(!q){ renderMatch(); return; }
+  const taken=mwTakenNames();
+  const hits=SUBRECS.filter(x=>x.name && !taken.has(x.name) && x.name.toLowerCase().includes(q)).slice(0,6);
+  row.innerHTML = hits.length
+    ? hits.map(x=>`<div class="mw-c" data-mwlink="${esc(ppp)}" data-mwname="${esc(x.name)}"
+         data-mwarea="${esc(x.area||'')}"><span class="mw-c-name">${esc(x.name)}
+         <span class="mw-c-sub">${esc(x.area||'no area')}</span></span></div>`).join('')
+    : `<div class="mw-none">No subscriber matches that.</div>`;
+});
+
+// link / skip / open
+document.addEventListener('click', async e=>{
+  const link=e.target.closest('[data-mwlink]');
+  const skip=e.target.closest('[data-mwskip]');
+  const open=e.target.closest('[data-mwopen]');
+  if(!link && !skip && !open) return;
+
+  if(open){ openSub(open.dataset.mwopen); return; }
+
+  const ppp = link ? link.dataset.mwlink : skip.dataset.mwskip;
+  const card= document.querySelector(`.mw[data-mwrow="${CSS.escape(ppp)}"]`);
+  try{
+    if(link){
+      const name=link.dataset.mwname, area=link.dataset.mwarea||null;
+      await rosterUpsert(ppp,{roster_name:name, area, match_status:'matched', score:1,
+        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+      ROSTER.set(ppp,{ppp_name:ppp, roster_name:name, area, match_status:'matched',
+        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+      if(card){ card.classList.add('done'); card.innerHTML=`<div class="mw-ok">✔ ${esc(ppp)} → ${esc(name)}</div>`; }
+      toast('Linked to '+name);
+    } else {
+      await rosterUpsert(ppp,{roster_name:null, area:null, match_status:'rejected',
+        score:null, confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+      ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:'rejected',
+        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+      if(card){ card.classList.add('done'); card.innerHTML=`<div class="mw-ok" style="color:#7a8aa0">✖ ${esc(ppp)} — marked not billable</div>`; }
+      toast('Marked not billable');
+    }
+    MW_HIDE.add(ppp);
+    const tm=document.getElementById('stab-match');
+    if(tm) tm.innerHTML='🔗 Match Names<span class="cnt">'+matchQueue().filter(m=>!MW_HIDE.has(m.ppp_name)).length+'</span>';
+  }catch(err){
+    toast('Save failed — '+err.message);
+  }
+});
 function rosterState(m){
   const r=ROSTER.get(m.ppp_name);
   if(!r || !r.roster_name) return 'nomatch';
