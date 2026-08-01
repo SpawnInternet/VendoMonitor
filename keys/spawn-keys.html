@@ -451,7 +451,10 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-scan">
   <div class="wrap">
-    <button class="btn btn-gray" onclick="stopScanToTab()" style="width:100%;margin-bottom:10px">&#8592; Back</button>
+    <div style="position:sticky;top:0;z-index:20;background:var(--bg,#f5f7fb);padding:8px 0 6px;display:flex;gap:8px">
+      <button class="btn btn-gray" onclick="stopScanToTab()" style="flex:1;margin:0">&#8592; Back</button>
+      <button class="btn btn-gray" id="scan-torch" onclick="toggleTorch()" style="width:auto;padding:11px 15px;flex:none;margin:0;display:none">🔦 Light</button>
+    </div>
     <div class="lbl" style="text-align:center">Point at ONE fob &mdash; cover the others</div>
     <div id="reader" style="margin:12px 0"></div>
     <div style="display:flex;gap:7px;margin-bottom:10px">
@@ -466,6 +469,9 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-ring">
   <div class="wrap">
+    <div style="position:sticky;top:0;z-index:20;background:var(--bg,#f5f7fb);padding:8px 0 6px">
+      <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%;margin:0">&#8592; Back to rings</button>
+    </div>
     <div class="card" id="ring-hdr"></div>
     <div class="card" id="ring-act"></div>
     <div class="card">
@@ -483,6 +489,9 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="screen" id="screen-pull">
   <div class="wrap">
+    <div style="position:sticky;top:0;z-index:20;background:var(--bg,#f5f7fb);padding:8px 0 6px">
+      <button class="btn btn-gray" onclick="tabSwitch('rings')" style="width:100%;margin:0">&#8592; Back</button>
+    </div>
     <div id="pull-banner"></div>
     <div class="card">
       <div class="lbl">Find vendo</div>
@@ -526,7 +535,13 @@ input,select{width:100%;padding:12px;border:1px solid var(--border);border-radiu
 
 <div class="toast" id="toast"></div>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Vendored. Previously this came from unpkg on every launch: on patchy mobile
+     data the camera could not start until the CDN answered, which is a large
+     part of why scanning "felt slow". Local first, CDN only as a fallback. -->
+<script src="../js/vendor/html5-qrcode.min.js"></script>
+<script>if(typeof Html5Qrcode==='undefined'){
+  document.write('<scr'+'ipt src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></scr'+'ipt>');
+}</script>
 <script>
 
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
@@ -678,7 +693,30 @@ const CAM_HD = {
 // Also gives #reader a real size and waits a frame, because starting right
 // after a screen becomes visible can hand the library a 0×0 box (→ no camera,
 // no permission prompt, no error).
-let _scanLockCode = null, _scanLockAt = 0;
+let _scanLockCode = null, _scanLockAt = 0, _torchOn = false;
+
+// THE camera-busy bug. Every tab called startScannerHD directly, but nothing
+// released the camera from the PREVIOUS screen first. The old Html5Qrcode
+// instance kept the MediaStream track open, so the next start() hit
+// NotReadable/TrackStart — the camera silently died and the only way through
+// was typing the code. Every scanner now hands the camera back before the
+// next one asks for it.
+async function releaseCamera(){
+  const s = SCANNER; SCANNER = null; _torchOn = false;
+  const tb = document.getElementById('scan-torch'); if(tb){ tb.style.display='none'; tb.textContent='🔦 Light'; }
+  if(s){
+    try{ await s.stop(); }catch(e){}
+    try{ s.clear(); }catch(e){}
+  }
+  // Belt and braces: if any track survived the library teardown, kill it.
+  try{
+    document.querySelectorAll('#reader video').forEach(v=>{
+      const st=v.srcObject; if(st && st.getTracks) st.getTracks().forEach(t=>{try{t.stop();}catch(e){}});
+      v.srcObject=null;
+    });
+  }catch(e){}
+}
+
 function startScannerHD(scanner, box, rawOnHit, onFail){
   // Guard against the library firing the same frame twice (fast fobs were
   // double-submitting) without blocking a genuine re-scan later.
@@ -713,6 +751,23 @@ function startScannerHD(scanner, box, rawOnHit, onFail){
       return {formatsToSupport:[F.QR_CODE], experimentalFeatures:{useBarCodeDetectorIfSupported:true}};
     }catch(e){ return undefined; } })();
 
+  if(typeof Html5Qrcode === 'undefined'){
+    showErr('Scanner library did not load. Reconnect and reopen the app.');
+    if(onFail) onFail(new Error('Html5Qrcode missing')); return;
+  }
+
+  // SPEED. Three things were costing us frames:
+  //   fps 15  → the decode loop only looked 15x/second. 25 is the practical
+  //             ceiling before the phone starts dropping frames anyway.
+  //   qrbox 250 fixed → on a wide phone that is a small window the keeper has
+  //             to line the fob up inside. Sizing it to ~78% of the viewfinder
+  //             means the fob is almost always already in the scan region.
+  //   disableFlip false → the library decoded each frame twice, once mirrored.
+  //             Fob QRs are never mirrored, so that was half the work wasted.
+  const qrbox = (vw, vh) => { const m = Math.floor(Math.min(vw, vh) * 0.78);
+                              const s = Math.max(160, Math.min(m, 420)); return {width:s, height:s}; };
+  const scanCfg = {fps:25, qrbox, aspectRatio:1.0, disableFlip:true};
+
   function fail(err){
     const msg = String(err && (err.name||err.message||err) || '');
     console.error('[Keys] camera start failed:', msg, err);
@@ -728,6 +783,8 @@ function startScannerHD(scanner, box, rawOnHit, onFail){
 
   async function tryStart(i){
     if(i >= sources.length){ return fail(new Error('NotReadable: all camera attempts failed')); }
+    await releaseCamera();
+    if(rd) rd.innerHTML='';
     let s;
     try{ s = cfg ? new Html5Qrcode('reader', cfg) : new Html5Qrcode('reader'); }
     catch(e){ return fail(e); }
@@ -742,7 +799,8 @@ function startScannerHD(scanner, box, rawOnHit, onFail){
       }
     }catch(e){ return fail(e); }
     try{
-      await s.start(src, {fps:15, qrbox:box}, onHit, ()=>{});
+      await s.start(src, scanCfg, onHit, ()=>{});
+      showTorchIfSupported();
       return; // live
     }catch(err){
       try{ await s.stop(); }catch(_){}
@@ -754,6 +812,29 @@ function startScannerHD(scanner, box, rawOnHit, onFail){
     }
   }
   requestAnimationFrame(()=>{ setTimeout(()=>tryStart(0), 60); });
+}
+
+// Worn fobs under plastic covers read far better with the light on, and the
+// office is dim. Only shown if the phone actually exposes a torch.
+function scanTrack(){
+  try{ const v=document.querySelector('#reader video');
+       const st=v&&v.srcObject; return st? st.getVideoTracks()[0] : null; }catch(e){ return null; }
+}
+function showTorchIfSupported(){
+  setTimeout(()=>{
+    const btn=document.getElementById('scan-torch'); if(!btn) return;
+    const tr=scanTrack(); if(!tr || !tr.getCapabilities) return;
+    let caps={}; try{ caps=tr.getCapabilities()||{}; }catch(e){}
+    if('torch' in caps){ btn.style.display=''; btn.textContent = _torchOn?'🔦 Light on':'🔦 Light'; }
+  }, 700);
+}
+async function toggleTorch(){
+  const tr=scanTrack(); if(!tr){ toast('Camera not ready'); return; }
+  _torchOn = !_torchOn;
+  try{ await tr.applyConstraints({advanced:[{torch:_torchOn}]}); }
+  catch(e){ _torchOn=false; toast('This phone will not let the app use the light'); }
+  const btn=document.getElementById('scan-torch');
+  if(btn) btn.textContent = _torchOn?'🔦 Light on':'🔦 Light';
 }
 
 let APPROVE_TOKEN = null;
@@ -958,9 +1039,7 @@ function startScan(){
     },
     ()=>{toast('Camera failed — use the list');tabSwitch('rings');});
 }
-async function stopScan(){
-  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
-}
+async function stopScan(){ await releaseCamera(); }
 
 // ── PULL ──
 function openPull(ring){
@@ -1435,7 +1514,7 @@ async function loanUndo(qr){
   const it = LOAN_BASKET.find(x=>x.qr===qr);
   if(!it) return;
   if(!confirm('Undo this key?\n\n'+(it.vendo||qr))) return;
-  const d = await rpc('spawn_key_return',{p_qr:qr, p_account:ME?ME.name:'keeper'});
+  const d = await rpc('spawn_key_undo_borrow',{p_qr:qr, p_account:ME?ME.name:'keeper'});
   if(!d || !d.ok){ toast('\u274c '+((d&&d.error)||'Undo failed'), 2800); return; }
   LOAN_BASKET = LOAN_BASKET.filter(x=>x.qr!==qr);
   toast('Undone \u2014 '+(it.vendo||qr));
@@ -1455,15 +1534,40 @@ function loanStartScan(mode){
       ()=>{toast('Camera failed');showLoanTab();});
     return;
   }
-  const live=document.getElementById('scan-live'); if(live) live.style.display='none';
+  // Returns are a session too. It used to close the camera after ONE fob, so
+  // a collector handing back six keys meant six trips through the scanner.
+  RET_BASKET = [];
   go('scan');
+  loanRetLive();
   startScannerHD(null,{width:250,height:250},
-    async txt=>{
-      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
-      showLoanTab();
-      loanDoReturn(String(txt||'').trim());
-    },
+    txt=>{ loanQuickReturn(String(txt||'').trim()); },
     ()=>{toast('Camera failed');showLoanTab();});
+}
+
+let RET_BASKET = [], RET_BUSY = false;
+
+function loanRetLive(){
+  const el=document.getElementById('scan-live'); if(!el) return;
+  el.style.display='block';
+  const last = RET_BASKET.length ? RET_BASKET[RET_BASKET.length-1] : null;
+  el.innerHTML = '<div style="background:#E6F7F0;border-radius:10px;padding:9px 11px;margin-bottom:10px;text-align:center">'
+    + '<div style="font-size:12px;color:#028867;font-weight:800">'+RET_BASKET.length+' key'+(RET_BASKET.length===1?'':'s')+' returned</div>'
+    + (last?'<div style="font-size:12px;color:#1f2937;margin-top:3px">last: '+esc(last.vendo||last.qr)+(last.queued?' \u2192 Pungpung':'')+'</div>':'')
+    + '</div>'
+    + '<button class="btn btn-ok" style="width:100%;margin-bottom:8px" onclick="stopScanToTab()">\u2713 Done \u2014 '+RET_BASKET.length+' returned</button>';
+}
+
+async function loanQuickReturn(qr){
+  if(RET_BUSY) return;
+  RET_BUSY = true;
+  try{
+    const d = await rpc('spawn_key_return',{p_qr:qr, p_account:ME?ME.name:'keeper'});
+    if(!d || !d.ok){ toast((d&&d.not_out?'\u2139 ':'\u274c ')+((d&&d.error)||'Return failed'), 2600); return; }
+    RET_BASKET.push({qr:d.qr||qr, vendo:d.vendo, queued:!!d.queued_for_pungpung});
+    try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
+    toast('\u21a9 '+(d.vendo||qr), 1600);
+    loanRetLive();
+  } finally { RET_BUSY = false; }
 }
 // show loan tab without resetting result
 function showLoanTab(){
@@ -1560,6 +1664,7 @@ async function loanDoReturn(qr){
       <div style="font-weight:800;color:#028867;font-size:19px;margin-top:4px">KEY RETURNED!</div>
       <div style="font-size:14px;margin-top:6px">${esc(d.vendo||'')}${d.vendo_code?' · '+esc(d.vendo_code):''}</div>
       <div style="font-size:12px;color:#7a869c;margin-top:4px">Was out with <b>${esc(d.was_borrowed_by||'—')}</b></div>
+      ${d.queued_for_pungpung?'<div style="margin-top:9px;font-size:12px;font-weight:800;color:#311A8E;background:#EEEAF7;border-radius:8px;padding:7px 10px">\u2192 Added to Pungpung Transfer</div>':''}
       <button class="btn btn-pri" style="width:100%;margin-top:12px" onclick="loanReset()">Done</button>
     </div>`;
   loadLoanOut();
@@ -1759,15 +1864,13 @@ function bindStartScan(){
   go('scan');
   startScannerHD(null,{width:250,height:250},
     async txt=>{
-      if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+      await releaseCamera();
       showBindTab();
       bindOnCode(String(txt||'').trim());
     },
     ()=>{toast('Camera failed');showBindTab();});
 }
-async function bindStopScan(){
-  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
-}
+async function bindStopScan(){ await releaseCamera(); }
 // Nothing in here used to be guarded. If the fetch failed, or the response
 // was not JSON, or ME had been lost, the promise rejected and the caller had
 // already painted "Saving…" — so the screen sat on "Saving…" forever with no
@@ -2133,6 +2236,11 @@ function tabSwitch(tab){
 
 // From a drill-down screen (ring detail / pull / scan) go back to the tab it came from.
 function tabBack(){
+  // From a drill-down (ring detail / pull / scan) "back" means the tab that
+  // opened it — not the previous TAB in history. Popping history here was
+  // throwing the keeper onto Home from the ring scanner.
+  const cur = document.querySelector('.screen.active');
+  if(cur && DRILL_SCREENS.includes(cur.id)){ stopScanToTab(); return; }
   // walk back through the tabs actually visited, not a fixed destination
   const prev = _tabHist.pop();
   if(!prev){ tabSwitch('home'); return; }
@@ -2175,7 +2283,7 @@ function enterDrill(){
 
 // Cancel out of the shared scan screen back to whatever tab we were on.
 async function stopScanToTab(){
-  if(SCANNER){try{await SCANNER.stop();SCANNER.clear();}catch(e){}SCANNER=null;}
+  await releaseCamera();
   tabSwitch(CUR_TAB);
 }
 
