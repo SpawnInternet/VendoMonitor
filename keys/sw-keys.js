@@ -14,14 +14,17 @@
 //     SW controls a page and the last registration wins. So we must not answer
 //     navigations that aren't ours — otherwise an offline harvest launch could
 //     be served spawn-keys.html.
-const CACHE = 'spawn-keys-keysfolder-v10';
+const CACHE = 'spawn-keys-keysfolder-v11';
 const APP_HTML = '/VendoMonitor/keys/spawn-keys.html';
 const SHELL = [
   APP_HTML,
   '/VendoMonitor/keys/keys-manifest.json',
   '/VendoMonitor/keys/spawn-keys-192.png',
   '/VendoMonitor/keys/spawn-keys-512.png',
-  '/VendoMonitor/keys/spawn-keys-maskable-512.png'
+  '/VendoMonitor/keys/spawn-keys-maskable-512.png',
+  // Scanner library is vendored now — it must be in the shell or the camera
+  // cannot start offline / on a slow connection.
+  '/VendoMonitor/js/vendor/html5-qrcode.min.js'
 ];
 
 self.addEventListener('install', e => {
