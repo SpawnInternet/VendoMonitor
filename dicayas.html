@@ -174,6 +174,17 @@
   .subtab[data-sv="inactive"].active .cnt{background:#fdeaed;color:#DF1A35}
   .subtab[data-sv="match"].active{border-bottom-color:var(--gold,#FFB725)}
   .subtab[data-sv="match"].active .cnt{background:#fff4de;color:#9a6b00}
+  .subtab[data-sv="vendo"].active{border-bottom-color:var(--magenta,#C01176)}
+  .subtab[data-sv="vendo"].active .cnt{background:#fbe7f2;color:#8d0d57}
+  .vsrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e6e8ee;border-radius:10px;background:#fff;cursor:pointer}
+  .vsrow.off{background:#fff8f8;border-color:#f3d2d7}
+  .vsmain{flex:1;min-width:0}
+  .vsname{font-weight:600;font-size:14px}
+  .vsmeta{font-size:12px;color:#6b7280;margin-top:2px}
+  .vspill{display:inline-block;font-size:11px;padding:2px 7px;border-radius:999px;margin:3px 4px 0 0;background:#f1f2f6;color:#4b5563}
+  .vspill.buy{background:#fbe7f2;color:#8d0d57}
+  .vspill.bill{background:#e6f4ee;color:#028867}
+  .vspill.warn{background:#fdeaed;color:#DF1A35}
   /* ---- Match Names worklist ---- */
   #grid-subs-match{display:block}
   .mw{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:12px 13px;margin-bottom:10px}
@@ -431,10 +442,12 @@
       <div class="subtab active" data-sv="active"  id="stab-active">🟢 Active</div>
       <div class="subtab"        data-sv="inactive" id="stab-inactive">🔴 Inactive</div>
       <div class="subtab"        data-sv="match"    id="stab-match">🔗 Match Names</div>
+      <div class="subtab"        data-sv="vendo"    id="stab-vendo">🎰 Vendo Subs</div>
     </div>
     <div class="grid" id="grid-subs-on"></div>
     <div class="grid" id="grid-subs-off" style="display:none !important"></div>
     <div id="grid-subs-match" style="display:none"></div>
+    <div class="grid" id="grid-subs-vendo" style="display:none !important"></div>
   </div>
   <div id="pane-search" class="pane" style="display:none">
     <div class="controls">
@@ -1150,6 +1163,60 @@ function subCard(m){
     <span class="chev">›</span>
   </div>`;
 }
+// ---- VENDO SUBSCRIBERS ----
+// Owner-purchased piso wifi units. These people bought the machine outright,
+// so they are NOT in the 75/25 harvest fleet — they just pay a monthly bill.
+// Rendered from SUBRECS (subscribers table) rather than SUBS (PPPoE roster)
+// so an owner still shows even when their PPPoE has not been matched yet.
+function vendoOwners(){
+  return (SUBRECS||[]).filter(r=>r && r.is_vendo_owner===true);
+}
+function pppForSub(rec){
+  if(!rec||!rec.name) return null;
+  let pn=rec.pppoe_username||null;
+  if(!pn && ROSTER){
+    for(const [k,v] of ROSTER){ if(v && v.roster_name===rec.name){ pn=k; break; } }
+  }
+  return pn ? (SUBS||[]).find(m=>m.ppp_name===pn)||null : null;
+}
+function vendoSubCard(rec){
+  const m=pppForSub(rec);
+  const online = m ? !!m.online : null;
+  const state = m
+    ? (online?'🟢 Online':'🔴 Offline'+(m.offline_since?' '+ago(m.offline_since):''))
+    : '⚫ no PPPoE matched';
+  const price = rec.vendo_purchase_price!=null ? '🎰 sold ₱'+esc(rec.vendo_purchase_price) : '';
+  const bill  = rec.monthly_amount!=null ? '₱'+esc(rec.monthly_amount)+'/mo' : 'no amount';
+  const due   = rec.due_day!=null ? 'due '+esc(rec.due_day) : '';
+  const vlan  = rec.vlan!=null ? 'VLAN '+esc(rec.vlan) : 'no VLAN';
+  return `<div class="vsrow ${online===false?'off':''}" data-subid="${esc(rec.id)}">
+    <div class="vsmain">
+      <div class="vsname">${esc(rec.name)||'(no name)'}</div>
+      <div class="vsmeta">${state}${rec.area?' · '+esc(rec.area):''}${rec.address?' · '+esc(rec.address):''}</div>
+      <div>
+        ${price?`<span class="vspill buy">${price}</span>`:''}
+        <span class="vspill bill">${bill}${due?' · '+due:''}</span>
+        <span class="vspill ${rec.vlan!=null?'':'warn'}">${vlan}</span>
+        ${rec.pppoe_username?'':'<span class="vspill warn">no PPPoE</span>'}
+        ${rec.phone?'':'<span class="vspill warn">no phone</span>'}
+      </div>
+    </div>
+    <span class="chev">›</span>
+  </div>`;
+}
+function renderVendoSubs(){
+  const q=(document.getElementById('subq').value||"").toLowerCase();
+  const list=vendoOwners().filter(r=>{
+    if(!q) return true;
+    return ((r.name||'')+' '+(r.address||'')+' '+(r.area||'')).toLowerCase().includes(q);
+  }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const g=document.getElementById('grid-subs-vendo');
+  if(g) g.innerHTML = list.length
+    ? list.map(vendoSubCard).join('')
+    : '<div class="empty">No vendo subscribers yet — flag a subscriber with is_vendo_owner to see them here.</div>';
+  return list.length;
+}
+
 function renderSubs(){
   const q=(document.getElementById('subq').value||"").toLowerCase();
   const f=document.getElementById('subflt').value;
@@ -1173,24 +1240,33 @@ function renderSubs(){
   document.getElementById('grid-subs-on').innerHTML  = on.length ? on.map(subCard).join(''):'<div class="empty">None active</div>';
   // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
   const isMatch = (SUBVIEW==='match');
-  const showOn  = !isMatch && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
+  const isVendo = (SUBVIEW==='vendo');
+  const showOn  = !isMatch && !isVendo && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
+  const showOff = !isMatch && !isVendo && !showOn;
   const gOn=document.getElementById('grid-subs-on'), gOff=document.getElementById('grid-subs-off');
   const gM =document.getElementById('grid-subs-match');
+  const gV =document.getElementById('grid-subs-vendo');
   if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
-  if(gOff) gOff.style.setProperty('display', (!isMatch && !showOn)?'grid':'none','important');
+  if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
+  if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
   if(isMatch) renderMatch();
+  const nVendo = renderVendoSubs();
   const ta=document.getElementById('stab-active'), ti=document.getElementById('stab-inactive');
-  const tm=document.getElementById('stab-match');
+  const tm=document.getElementById('stab-match'), tv=document.getElementById('stab-vendo');
   if(ta&&ti){
     ta.innerHTML='🟢 Active<span class="cnt">'+on.length+'</span>';
     ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>';
     ta.classList.toggle('active', showOn);
-    ti.classList.toggle('active', !isMatch && !showOn);
+    ti.classList.toggle('active', showOff);
   }
   if(tm){
     tm.innerHTML='🔗 Match Names<span class="cnt">'+matchQueue().length+'</span>';
     tm.classList.toggle('active', isMatch);
+  }
+  if(tv){
+    tv.innerHTML='🎰 Vendo Subs<span class="cnt">'+nVendo+'</span>';
+    tv.classList.toggle('active', isVendo);
   }
 
   const offl=SUBS.filter(m=>!m.online && m.offline_since);
@@ -3299,7 +3375,7 @@ async function boot(){
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
-      sb("subscribers?select=id,name,area,phone,address,monthly_amount,due_day,plan_type,status,lat,lng,gps_place&order=name&limit=2000").catch(()=>[])
+      sb("subscribers?select=id,name,area,phone,address,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     buildRoster(roster);
