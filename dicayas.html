@@ -1527,13 +1527,17 @@ document.getElementById('mBody').addEventListener('click', async e=>{
 function nameDupeInfo(name, field, area){
   if(!name) return null;
   const norm=a=>(a||'').trim().toUpperCase();
-  let matches=VENDOS.filter(v=>v[field]===name);
+  let matches=VENDOS.filter(v=>v[field]===name && !isRetired(v));
   if(area!=null) matches=matches.filter(v=>norm(v.area)===norm(area));
   if(matches.length<=1) return null;
   const pending=matches.filter(v=>v.pending_delete_at).length;
   return {total:matches.length, surviving:matches.length-pending, pending};
 }
-// renders the dupe badge: red ⚠️×N while unresolved, green ✓ when only 1 survives
+// A record that has already been merged away (or pulled from the field) is not
+// a live duplicate — it is resolved work. Excluding these stops the dupe checker
+// from re-reporting merges that were already done.
+function isRetired(v){ return v && (v.status==='merged' || v.status==='pulled_out'); }
+
 function dupeBadge(name, field, area){
   const info=nameDupeInfo(name, field, area);
   if(!info) return '';
@@ -1911,7 +1915,7 @@ let _dupeName=null, _dupeField=null, _dupeArea='';
 async function showDupes(name, field, area){
   _dupeName=name; _dupeField=field; _dupeArea=area||'';
   const norm=a=>(a||'').trim().toUpperCase();
-  const recs=VENDOS.filter(v=>v[field]===name && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
+  const recs=VENDOS.filter(v=>v[field]===name && !isRetired(v) && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
   document.getElementById('dupeTitle').textContent=`"${name}"${_dupeArea?' · '+_dupeArea:''} — ${recs.length} records`;
   document.getElementById('dupeBody').innerHTML='<div class="empty">Loading harvest info…</div>';
   document.getElementById('dupeOv').classList.add('show');
@@ -1920,7 +1924,7 @@ async function showDupes(name, field, area){
 }
 function renderDupes(){
   const norm=a=>(a||'').trim().toUpperCase();
-  const recs=VENDOS.filter(v=>v[_dupeField]===_dupeName && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
+  const recs=VENDOS.filter(v=>v[_dupeField]===_dupeName && !isRetired(v) && (!_dupeArea || norm(v.area)===norm(_dupeArea)));
   if(!recs.length){ closeDupe(); return; }
   const fieldLabel=_dupeField==='tg_name'?'TG name':'Sheet name';
   let html=`<p style="color:var(--dim);font-size:13px;font-weight:600;margin-bottom:12px">
