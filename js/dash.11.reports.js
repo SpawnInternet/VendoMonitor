@@ -67,6 +67,7 @@ async function reportsInit(){
 function rpShellHtml(){
   const tabs = [
     ['expense',  '\u{1F4B8}', 'Daily Expense'],
+    ['wendell',  '\u{1F4B3}', 'Wendell Expense'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
     ['releases', '\u{1F91D}', 'Fund Releases'],
     ['sales',    '\u{1F4B0}', 'Sales'],
@@ -76,8 +77,7 @@ function rpShellHtml(){
     ['pullout',  '\u{1F4E4}', 'Vendo Pull-Out'],
     ['cutoff',   '\u2702\uFE0F', 'Cutoff Subs'],
     ['status',   '\u{1F4E1}', 'Active / Inactive'],
-    ['cash',     '\u{1F3E6}', 'Cash Receipts'],
-    ['wendell',  '\u{1F4B3}', 'Paid by Wendell']
+    ['cash',     '\u{1F3E6}', 'Cash Receipts']
   ];
   const tabsHtml = tabs.map(function(t){
     return '<button class="rp-tab" data-rp="' + t[0] + '" onclick="rpSetTab(\'' + t[0] + '\')">' + t[1] + ' ' + t[2] + '</button>';
@@ -103,7 +103,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-in{width:100%;padding:6px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a1d2e;box-sizing:border-box}'
   + '#panel-reports .rp-in:focus{outline:none;border-color:#025AC6;box-shadow:0 0 0 2px rgba(2,90,198,.12)}'
   + '#panel-reports .rp-in.err{border-color:#DF1A35;background:#fff5f5}'
-  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.7fr 1.1fr 1.35fr 110px 96px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
+  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.8fr 1.15fr 1.4fr 120px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
@@ -130,6 +130,7 @@ function rpShellHtml(){
   +   '</div>'
   +   '<div class="rp-tabs" id="rp-tabs">' + tabsHtml + '</div>'
   +   '<div class="rp-mode" id="rp-mode-expense"></div>'
+  +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
   +   '<div class="rp-mode" id="rp-mode-summary"></div>'
   +   '<div class="rp-mode" id="rp-mode-releases"></div>'
   +   '<div class="rp-mode" id="rp-mode-sales"></div>'
@@ -140,7 +141,6 @@ function rpShellHtml(){
   +   '<div class="rp-mode" id="rp-mode-cutoff"></div>'
   +   '<div class="rp-mode" id="rp-mode-status"></div>'
   +   '<div class="rp-mode" id="rp-mode-cash"></div>'
-  +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
   + '</div>'
   + '<datalist id="rp-dl-desc"></datalist>'
   + '<datalist id="rp-dl-cat"></datalist>'
@@ -156,7 +156,18 @@ function rpFillDatalists(){
   if(c) c.innerHTML = (rpHints.categories||[]).map(function(x){ return '<option value="'+rpEsc(x.name)+'">'; }).join('');
 }
 
+let rpFund  = 'Collections';
+const rpState = { 'Collections': { date:null, draft:null }, 'Sir Wendell': { date:null, draft:null } };
+function rpStash(){
+  if(rpTab === 'expense' || rpTab === 'wendell'){
+    rpState[rpFund] = { date: rpDate, draft: rpDraft };
+  }
+}
+function rpFundShort(){ return rpFund === 'Sir Wendell' ? 'Wendell' : 'Collections'; }
+function rpFundColor(){ return rpFund === 'Sir Wendell' ? RP_BRAND.magenta : RP_BRAND.blue; }
+
 window.rpSetTab = function(mode){
+  if(mode !== rpTab) rpStash();
   rpTab = mode;
   document.querySelectorAll('#panel-reports .rp-tab').forEach(function(b){
     b.classList.toggle('active', b.getAttribute('data-rp') === mode);
@@ -165,12 +176,18 @@ window.rpSetTab = function(mode){
     m.classList.toggle('active', m.id === 'rp-mode-' + mode);
   });
   document.getElementById('rp-actions').innerHTML = '';
-  if(mode === 'expense')  rpRenderExpense();
+  if(mode === 'expense' || mode === 'wendell'){
+    rpFund = (mode === 'wendell') ? 'Sir Wendell' : 'Collections';
+    const st = rpState[rpFund];
+    rpDate  = st.date || rpPhToday();
+    rpDraft = st.draft && st.draft.length ? st.draft : [rpBlankRow(), rpBlankRow(), rpBlankRow()];
+    rpRenderExpense();
+  }
   if(mode === 'summary')  rpRenderSummary();
   if(mode === 'releases') rpRenderReleases();
   if(mode === 'sales')    rpRenderSales();
   if(mode === 'status')   rpRenderStatus();
-  if(['collect','newvendo','newsub','pullout','cutoff','cash','wendell'].indexOf(mode) >= 0) rpRenderTodo(mode);
+  if(['collect','newvendo','newsub','pullout','cutoff','cash'].indexOf(mode) >= 0) rpRenderTodo(mode);
 };
 
 // ══════════════════════════════════════════════════════════
@@ -182,13 +199,18 @@ async function rpRenderExpense(){
 
   let gaps = [], day = null;
   try {
-    const res = await Promise.all([ rpRpc('spawn_expense_gaps'), rpRpc('spawn_expense_day', { p_date: rpDate }) ]);
+    const res = await Promise.all([
+      rpRpc('spawn_expense_gaps', { p_fund: rpFund }),
+      rpRpc('spawn_expense_day', { p_date: rpDate })
+    ]);
     gaps = res[0] || []; day = res[1] || {};
   } catch(e){
     host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not load: ' + rpEsc(e.message) + '</div>';
     return;
   }
-  rpDayRows = day.rows || [];
+  rpDayRows = (day.rows || []).filter(function(r){ return r.paid_from === rpFund; });
+  const dayTotal = rpDayRows.reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
+  const mtdFund  = rpFund === 'Sir Wendell' ? day.mtd_wendell : day.mtd_collections;
   if(!rpDraft.length) rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
 
   const missing = gaps.filter(function(g){ return g.count === 0; });
@@ -207,9 +229,13 @@ async function rpRenderExpense(){
     : '';
 
   host.innerHTML = ''
+  + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
+  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
+  +   '<span style="font-weight:600;opacity:.9;font-size:11px">Everything saved on this tab is filed as \u201c'+rpFund+'\u201d</span>'
+  + '</div>'
   + '<div class="rp-kpis">'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date \u2014 combined</div><div class="v">'+rpPeso(day.month_to_date)+'</div><div class="s">C '+rpPesoShort(day.mtd_collections)+' \u00b7 W '+rpPesoShort(day.mtd_wendell)+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+rpFundColor()+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date</div><div class="v">'+rpPeso(mtdFund)+'</div><div class="s">'+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+' \u00b7 both books '+rpPesoShort(day.month_to_date)+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Days not yet entered</div><div class="v">'+missing.length+'</div><div class="s">since last book entry</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.magenta+'"><div class="k">Unsaved in grid</div><div class="v" id="rp-kpi-draft">'+rpPeso(0)+'</div><div class="s" id="rp-kpi-draftn">0 rows ready</div></div>'
   + '</div>'
@@ -218,11 +244,6 @@ async function rpRenderExpense(){
   +   '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">'
   +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">Entry date</div>'
   +       '<input type="date" id="rp-date" class="rp-in" style="width:170px" value="'+rpDate+'" onchange="rpChangeDate(this.value)"></div>'
-  +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">New rows default to</div>'
-  +       '<div id="rp-fundsel">'
-  +         '<button class="rp-chip sel" data-f="Collections" onclick="rpSetFundDefault(\'Collections\')">C \u00b7 Collections</button>'
-  +         '<button class="rp-chip" data-f="Sir Wendell" onclick="rpSetFundDefault(\'Sir Wendell\')">W \u00b7 Sir Wendell</button>'
-  +       '</div></div>'
   +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">Copy a previous day</div>'
   +       '<div style="display:flex;gap:5px">'
   +         '<input type="date" id="rp-copy-date" class="rp-in" style="width:150px" value="'+(lastFilled||'')+'">'
@@ -241,28 +262,24 @@ async function rpRenderExpense(){
   +     '<b>These rows were copied from another day.</b> The amounts came with them \u2014 they are a starting point, not a record. '
   +     'Correct every figure against the actual receipts and delete anything that did not happen, before you save.'
   +   '</div>'
-  +   '<div class="rp-grid hdr"><div>#</div><div>Description</div><div>c/o (released to)</div><div>Expense type</div><div class="rp-num">Amount</div><div style="text-align:center">Fund</div><div></div></div>'
+  +   '<div class="rp-grid hdr"><div>#</div><div>Particulars / description</div><div>Name (c/o \u2014 released to)</div><div>Expense type</div><div class="rp-num">Amount</div><div></div></div>'
   +   '<div id="rp-rows"></div>'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #f0f4ff">'
   +     '<div class="rp-keys">'
   +       '<kbd>\u2191</kbd><kbd>\u2193</kbd> move row \u00b7 <kbd>\u2190</kbd><kbd>\u2192</kbd> move column \u00b7 <kbd>Enter</kbd> next row \u00b7 <kbd>Tab</kbd> next cell<br>'
-  +       '<kbd>C</kbd>/<kbd>W</kbd>/<kbd>Space</kbd> on the Fund cell \u00b7 <kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
+  +       '<kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
   +     '</div>'
-  +     '<div style="text-align:right">'
-  +       '<div style="font-size:11px;color:#025AC6;font-weight:700">Collections <span id="rp-draft-coll">'+rpPeso(0)+'</span></div>'
-  +       '<div style="font-size:11px;color:#C01176;font-weight:700">Sir Wendell <span id="rp-draft-wend">'+rpPeso(0)+'</span></div>'
-  +       '<div style="font-size:16px;font-weight:800;color:#1a1d2e;margin-top:2px">Total <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
-  +     '</div>'
+  +     '<div style="font-size:16px;font-weight:800;color:'+rpFundColor()+'">Grid total: <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
   +   '</div>'
   + '</div>'
 
   + '<div class="rp-card">'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'
   +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Already saved for this day</div>'
-  +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(day.total)+'</div>'
+  +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
   +   '</div>'
   +   '<div class="rp-scroll"><table class="rp-t"><thead><tr>'
-  +     '<th>Description</th><th>c/o</th><th>Type</th><th class="rp-num">Amount</th><th>Paid from</th><th>Src</th><th></th>'
+  +     '<th>Particulars</th><th>Name (c/o)</th><th>Type</th><th class="rp-num">Amount</th><th>Src</th><th></th>'
   +   '</tr></thead><tbody id="rp-saved"></tbody></table></div>'
   + '</div>';
 
@@ -273,22 +290,11 @@ async function rpRenderExpense(){
 }
 
 function rpBlankRow(){
-  return { description:'', co:'', category:'', amount:'', paid_from: rpFundDefault };
+  return { description:'', co:'', category:'', amount:'' };
 }
-let rpFundDefault = 'Collections';
 
 window.rpAddRows = function(n){
   for(let i=0;i<(n||1);i++) rpDraft.push(rpBlankRow());
-  rpDrawRows();
-};
-
-window.rpSetFundDefault = function(f){
-  rpFundDefault = f;
-  document.querySelectorAll('#rp-fundsel .rp-chip').forEach(function(b){
-    b.classList.toggle('sel', b.getAttribute('data-f') === f);
-  });
-  // apply to any still-empty rows
-  rpDraft.forEach(function(r){ if(!r.description && !r.amount) r.paid_from = f; });
   rpDrawRows();
 };
 
@@ -304,7 +310,6 @@ function rpMatchCat(txt){
   hit = names.find(function(n){ return n.toLowerCase().indexOf(t) >= 0; });
   return hit || '';
 }
-function rpFundLabel(v){ return v === 'Sir Wendell' ? 'W' : 'C'; }
 
 function rpDrawRows(){
   const box = document.getElementById('rp-rows');
@@ -314,15 +319,13 @@ function rpDrawRows(){
              ? { r:active.getAttribute('data-r'), c:active.getAttribute('data-c'), s:active.selectionStart } : null;
 
   box.innerHTML = rpDraft.map(function(r, i){
-    const catOk  = r.category ? ' ok' : (r.amount ? ' warn' : '');
-    const fk     = rpFundLabel(r.paid_from);
+    const catOk = r.category ? ' ok' : (r.amount ? ' warn' : '');
     return '<div class="rp-grid" data-i="'+i+'">'
       + '<div class="rp-rn">'+(i+1)+'</div>'
       + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
       + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
       + '<input class="rp-in cell'+catOk+'" data-cell data-r="'+i+'" data-c="2" list="rp-dl-cat" placeholder="type" value="'+rpEsc(r.category)+'">'
       + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
-      + '<input class="rp-in cell rp-fund '+fk+'" data-cell data-r="'+i+'" data-c="4" value="'+fk+'" title="C = Collections, W = Sir Wendell \u2014 press C, W or Space" readonly>'
       + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
       + '</div>';
   }).join('');
@@ -340,7 +343,8 @@ function rpGridBind(){
   if(!box || box.__bound) return;
   box.__bound = true;
 
-  const FIELDS = ['description','co','category','amount','paid_from'];
+  const FIELDS = ['description','co','category','amount'];
+  const LASTC = 3;
 
   function cell(r,c){ return box.querySelector('[data-r="'+r+'"][data-c="'+c+'"]'); }
   function go(r,c,toEnd){
@@ -392,15 +396,6 @@ function rpGridBind(){
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     const k = ev.key;
 
-    // fund column: C / W / Space toggle
-    if(c === 4){
-      if(k === 'c' || k === 'C'){ ev.preventDefault(); rpDraft[r].paid_from = 'Collections'; rpDrawRows(); return; }
-      if(k === 'w' || k === 'W'){ ev.preventDefault(); rpDraft[r].paid_from = 'Sir Wendell'; rpDrawRows(); return; }
-      if(k === ' '){ ev.preventDefault();
-        rpDraft[r].paid_from = rpDraft[r].paid_from === 'Sir Wendell' ? 'Collections' : 'Sir Wendell';
-        rpDrawRows(); return; }
-    }
-
     if((ev.ctrlKey || ev.metaKey) && (k === 'Enter' || k === 's')){ ev.preventDefault(); rpSaveDraft(); return; }
 
     // Ctrl+D — copy the cell directly above
@@ -416,7 +411,7 @@ function rpGridBind(){
 
     if(k === 'ArrowRight'){
       if(t.readOnly || t.selectionStart === t.value.length){
-        if(c < 4){ ev.preventDefault(); go(r, c+1, false); }
+        if(c < LASTC){ ev.preventDefault(); go(r, c+1, false); }
         else { ev.preventDefault(); go(r+1, 0, false); }
       }
       return;
@@ -424,7 +419,7 @@ function rpGridBind(){
     if(k === 'ArrowLeft'){
       if(t.readOnly || t.selectionStart === 0){
         if(c > 0){ ev.preventDefault(); go(r, c-1, true); }
-        else if(r > 0){ ev.preventDefault(); go(r-1, 4, true); }
+        else if(r > 0){ ev.preventDefault(); go(r-1, LASTC, true); }
       }
       return;
     }
@@ -451,15 +446,10 @@ function rpValidDraft(){
 
 function rpTotals(){
   const good = rpValidDraft();
-  const coll = good.filter(function(r){ return r.paid_from !== 'Sir Wendell'; })
-                   .reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
-  const wend = good.filter(function(r){ return r.paid_from === 'Sir Wendell'; })
-                   .reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
+  const t = good.reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
   const set = function(id, v){ const e = document.getElementById(id); if(e) e.textContent = v; };
-  set('rp-draft-coll',  rpPeso(coll));
-  set('rp-draft-wend',  rpPeso(wend));
-  set('rp-draft-total', rpPeso(coll + wend));
-  set('rp-kpi-draft',   rpPeso(coll + wend));
+  set('rp-draft-total', rpPeso(t));
+  set('rp-kpi-draft',   rpPeso(t));
   set('rp-kpi-draftn',  good.length + ' row' + (good.length===1?'':'s') + ' ready');
   const sv = document.getElementById('rp-save'); if(sv) sv.disabled = !good.length;
 }
@@ -488,7 +478,7 @@ window.rpSaveDraft = async function(){
       co:           (r.co||'').trim() || null,
       category:     r.category,
       amount:       Number(r.amount),
-      paid_from:    r.paid_from || 'Collections',
+      paid_from:    rpFund,
       source:       'dashboard',
       created_by:   'dashboard'
     };
@@ -518,7 +508,6 @@ function rpDrawSaved(){
       + '<td style="color:#6b7394">'+rpEsc(r.co||'\u2014')+'</td>'
       + '<td>'+rpEsc(r.category)+'</td>'
       + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td>'
-      + '<td style="color:#6b7394">'+rpEsc(r.paid_from)+'</td>'
       + '<td><span style="font-size:9px;padding:2px 6px;border-radius:8px;background:'+(r.source==='excel'?'#f1f5f9':'#eefaf5')+';color:'+(r.source==='excel'?'#64748b':'#026a50')+'">'+rpEsc(r.source)+'</span></td>'
       + '<td><button class="rp-x" title="Delete" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
       + '</tr>';
@@ -546,8 +535,8 @@ window.rpCopyDay = async function(){
 
   const rows = (d.rows||[]).map(function(r){
     return { description: r.description||'', co: r.co||'', category: r.category||'',
-             amount: String(Number(r.amount)||''), paid_from: r.paid_from||'Collections' };
-  });
+             amount: String(Number(r.amount)||'') };
+  }).filter(function(r,i){ return (d.rows[i].paid_from === rpFund); });
   if(!rows.length){ if(window.toast) toast('No entries recorded on ' + src + '.'); return; }
 
   rpDraft = rpDraft.filter(function(r){ return r.description || r.amount; }).concat(rows, [rpBlankRow()]);
@@ -568,7 +557,7 @@ window.rpPasteOpen = function(){
     + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:16px 20px;color:#fff;font-size:15px;font-weight:800">\u{1F4CB} Paste rows from Excel</div>'
     + '<div style="padding:18px 20px">'
     +   '<div style="font-size:12px;color:#374151;margin-bottom:8px">Copy the cells straight out of the sheet and paste below. Expected column order:</div>'
-    +   '<div style="font-size:11px;font-family:monospace;background:#f6f9ff;border:1px solid #e8eeff;border-radius:7px;padding:8px 10px;margin-bottom:10px;color:#025AC6">Description &nbsp;\u2192&nbsp; c/o &nbsp;\u2192&nbsp; Expense Type &nbsp;\u2192&nbsp; Amount &nbsp;\u2192&nbsp; Fund (C/W, optional)</div>'
+    +   '<div style="font-size:11px;font-family:monospace;background:#f6f9ff;border:1px solid #e8eeff;border-radius:7px;padding:8px 10px;margin-bottom:10px;color:#025AC6">Description &nbsp;\u2192&nbsp; c/o &nbsp;\u2192&nbsp; Expense Type &nbsp;\u2192&nbsp; Amount</div>'
     +   '<textarea id="rp-paste-ta" placeholder="Gas&#9;Tandoy&#9;Fuel &amp; Oil&#9;150" style="width:100%;height:190px;padding:10px;border:1.5px solid #dbeafe;border-radius:9px;font-size:12px;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>'
     +   '<div id="rp-paste-msg" style="font-size:11px;color:#6b7394;margin-top:7px;min-height:15px"></div>'
     +   '<div style="display:flex;gap:8px;margin-top:14px">'
@@ -596,10 +585,7 @@ window.rpPasteApply = function(){
     let cat = (c[2]||'').trim();
     const match = cats.find(function(k){ return k.toLowerCase() === cat.toLowerCase(); });
     cat = match || '';
-    let fund = rpFundDefault;
-    const f5 = (c[4]||'').trim().toLowerCase();
-    if(f5){ if(f5[0] === 'w') fund = 'Sir Wendell'; else if(f5[0] === 'c') fund = 'Collections'; }
-    fresh.push({ description:(c[0]||'').trim(), co:(c[1]||'').trim(), category:cat, amount:String(amt), paid_from:fund });
+    fresh.push({ description:(c[0]||'').trim(), co:(c[1]||'').trim(), category:cat, amount:String(amt) });
     added++;
   });
   if(!added){ if(msg) msg.innerHTML = '<span style="color:#DF1A35;font-weight:700">No usable rows found \u2014 check that the 4th column holds the amount.</span>'; return; }
@@ -636,6 +622,10 @@ async function rpRenderSummary(){
     '<button class="rp-btn" onclick="rpExportSummary()">\u2B07\uFE0F Download CSV</button>';
 
   host.innerHTML = ''
+  + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
+  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
+  +   '<span style="font-weight:600;opacity:.9;font-size:11px">Everything saved on this tab is filed as \u201c'+rpFund+'\u201d</span>'
+  + '</div>'
   + '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Total expense '+yr+'</div><div class="v">'+rpPeso(s.grand)+'</div><div class="s">'+months.length+' month'+(months.length===1?'':'s')+' with activity</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">Biggest category</div><div class="v" style="font-size:15px">'+rpEsc((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).category || '\u2014')+'</div><div class="s">'+rpPeso((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).total)+'</div></div>'
