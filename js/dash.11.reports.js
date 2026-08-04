@@ -543,7 +543,9 @@ function rpGridBind(){
     }
 
     // ── suggestion popup open on Particulars / Name ──
-    if(rpSugCell && rpSugCell.r === r && rpSugCell.c === c && rpSugList.length){
+    // Guard on the popup actually being in the DOM: tracked state can drift,
+    // the element cannot.
+    if(document.getElementById('rp-sug-pop') && (c === 0 || c === 1) && rpSugList.length){
       if(k === 'ArrowDown'){
         ev.preventDefault();
         if(rpSugHi < rpSugList.length - 1){ rpSugHi++; rpSugRedraw(); }
