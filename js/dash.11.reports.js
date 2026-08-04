@@ -356,6 +356,73 @@ function rpMatchCat(txt){
   return hit || '';
 }
 
+// ── expense-type detection ───────────────────────────────
+function rpCatCellUpdate(r){
+  const el = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="2"]');
+  const row = rpDraft[r];
+  if(!el || !row) return;
+  el.value = row.category || '';
+  el.classList.remove('ok','warn','set','guess');
+  if(row.category){
+    el.classList.add('set');
+    el.classList.add(row.guessed ? 'guess' : 'ok');
+    el.title = row.guessed ? 'Detected from the particulars \u2014 press \u2192 then Enter to change it' : 'Chosen by you';
+  } else if(row.amount) el.classList.add('warn');
+}
+
+const RP_STOP = ['pcs','pc','pack','packs','roll','rolls','box','boxes','kg','pair','set','sets','meters','meter','pieces','piece'];
+
+function rpDescTokens(txt){
+  return String(txt||'').toLowerCase()
+    .replace(/[^a-z0-9\s&]/g,' ')
+    .split(/\s+/)
+    .filter(function(w){ return w && w.length >= 3 && !/^\d+$/.test(w) && RP_STOP.indexOf(w) < 0; });
+}
+
+// exactOnly = true while typing, so a half-finished word never locks in a
+// wrong category. The looser passes run when you leave the cell.
+function rpMatchDesc(txt, exactOnly){
+  const list = (typeof rpHints !== 'undefined' && rpHints.descriptions) ? rpHints.descriptions : [];
+  if(!list.length) return null;
+  const d = String(txt||'').trim().toLowerCase();
+  if(d.length < 2) return null;
+
+  let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
+  if(hit) return hit.c || null;
+  if(exactOnly) return null;
+
+  hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
+  if(hit) return hit.c || null;
+
+  const mine = rpDescTokens(d);
+  if(!mine.length) return null;
+  let best = null, bestScore = 0;
+  list.forEach(function(x){
+    const theirs = rpDescTokens(x.d);
+    if(!theirs.length) return;
+    let hits = 0;
+    theirs.forEach(function(w){ if(mine.indexOf(w) >= 0) hits++; });
+    if(!hits) return;
+    const score = hits / theirs.length;
+    if(score > bestScore){ bestScore = score; best = x; }
+  });
+  return (best && bestScore >= 0.5) ? (best.c || null) : null;
+}
+
+function rpTryAutoCat(r){
+  const row = rpDraft[r];
+  if(!row || !row.description || row.category) return false;
+  const c = rpMatchDesc(row.description, false);
+  if(c){ row.category = c; row.guessed = true; rpCatCellUpdate(r); return true; }
+  return false;
+}
+
+function rpAutoCatAll(){
+  let n = 0;
+  for(let i = 0; i < rpDraft.length; i++) if(rpTryAutoCat(i)) n++;
+  return n;
+}
+
 function rpRowHtml(r, i){
   const catOk = r.category ? (r.guessed ? ' guess set' : ' ok set') : (r.amount ? ' warn' : '');
   return '<div class="rp-grid" data-i="'+i+'">'
