@@ -102,7 +102,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-in{width:100%;padding:6px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a1d2e;box-sizing:border-box}'
   + '#panel-reports .rp-in:focus{outline:none;border-color:#025AC6;box-shadow:0 0 0 2px rgba(2,90,198,.12)}'
   + '#panel-reports .rp-in.err{border-color:#DF1A35;background:#fff5f5}'
-  + '#panel-reports .rp-grid{display:grid;grid-template-columns:1.7fr 1.1fr 1.3fr 100px 110px 34px;gap:6px;align-items:center;margin-bottom:5px}'
+  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.7fr 1.1fr 1.35fr 110px 96px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
@@ -141,6 +141,7 @@ function rpShellHtml(){
   +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
   + '</div>'
   + '<datalist id="rp-dl-desc"></datalist>'
+  + '<datalist id="rp-dl-cat"></datalist>'
   + '<datalist id="rp-dl-people"></datalist>';
 }
 
@@ -149,6 +150,8 @@ function rpFillDatalists(){
   const p = document.getElementById('rp-dl-people');
   if(d) d.innerHTML = (rpHints.descriptions||[]).map(function(x){ return '<option value="'+rpEsc(x.d)+'">'; }).join('');
   if(p) p.innerHTML = (rpHints.people||[]).map(function(x){ return '<option value="'+rpEsc(x)+'">'; }).join('');
+  const c = document.getElementById('rp-dl-cat');
+  if(c) c.innerHTML = (rpHints.categories||[]).map(function(x){ return '<option value="'+rpEsc(x.name)+'">'; }).join('');
 }
 
 window.rpSetTab = function(mode){
@@ -201,7 +204,7 @@ async function rpRenderExpense(){
   host.innerHTML = ''
   + '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date</div><div class="v">'+rpPeso(day.month_to_date)+'</div><div class="s">'+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+' '+rpDate.slice(0,4)+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date \u2014 combined</div><div class="v">'+rpPeso(day.month_to_date)+'</div><div class="s">C '+rpPesoShort(day.mtd_collections)+' \u00b7 W '+rpPesoShort(day.mtd_wendell)+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Days not yet entered</div><div class="v">'+missing.length+'</div><div class="s">since last book entry</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.magenta+'"><div class="k">Unsaved in grid</div><div class="v" id="rp-kpi-draft">'+rpPeso(0)+'</div><div class="s" id="rp-kpi-draftn">0 rows ready</div></div>'
   + '</div>'
@@ -210,8 +213,12 @@ async function rpRenderExpense(){
   +   '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">'
   +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">Entry date</div>'
   +       '<input type="date" id="rp-date" class="rp-in" style="width:170px" value="'+rpDate+'" onchange="rpChangeDate(this.value)"></div>'
+  +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">New rows default to</div>'
+  +       '<div id="rp-fundsel">'
+  +         '<button class="rp-chip sel" data-f="Collections" onclick="rpSetFundDefault(\'Collections\')">C \u00b7 Collections</button>'
+  +         '<button class="rp-chip" data-f="Sir Wendell" onclick="rpSetFundDefault(\'Sir Wendell\')">W \u00b7 Sir Wendell</button>'
+  +       '</div></div>'
   +     '<button class="rp-btn" onclick="rpPasteOpen()">\u{1F4CB} Paste from Excel</button>'
-  +     '<button class="rp-btn" onclick="rpAddRows(5)">\u2795 Add 5 rows</button>'
   +     '<div style="flex:1"></div>'
   +     '<button class="rp-btn ok" id="rp-save" onclick="rpSaveDraft()">\u{1F4BE} Save all rows</button>'
   +   '</div>'
@@ -220,11 +227,18 @@ async function rpRenderExpense(){
 
   + '<div class="rp-card">'
   +   '<div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:9px">\u270F\uFE0F New entries for <span id="rp-lbl-date">'+rpDate+'</span></div>'
-  +   '<div class="rp-grid hdr"><div>Description</div><div>c/o (released to)</div><div>Expense type</div><div class="rp-num">Amount</div><div>Paid from</div><div></div></div>'
+  +   '<div class="rp-grid hdr"><div>#</div><div>Description</div><div>c/o (released to)</div><div>Expense type</div><div class="rp-num">Amount</div><div style="text-align:center">Fund</div><div></div></div>'
   +   '<div id="rp-rows"></div>'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #f0f4ff">'
-  +     '<div style="font-size:11px;color:#6b7394">Tip: press <b>Enter</b> in the Amount box to jump to a fresh row.</div>'
-  +     '<div style="font-size:15px;font-weight:800;color:#025AC6">Grid total: <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
+  +     '<div class="rp-keys">'
+  +       '<kbd>\u2191</kbd><kbd>\u2193</kbd> move row \u00b7 <kbd>\u2190</kbd><kbd>\u2192</kbd> move column \u00b7 <kbd>Enter</kbd> next row \u00b7 <kbd>Tab</kbd> next cell<br>'
+  +       '<kbd>C</kbd>/<kbd>W</kbd>/<kbd>Space</kbd> on the Fund cell \u00b7 <kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
+  +     '</div>'
+  +     '<div style="text-align:right">'
+  +       '<div style="font-size:11px;color:#025AC6;font-weight:700">Collections <span id="rp-draft-coll">'+rpPeso(0)+'</span></div>'
+  +       '<div style="font-size:11px;color:#C01176;font-weight:700">Sir Wendell <span id="rp-draft-wend">'+rpPeso(0)+'</span></div>'
+  +       '<div style="font-size:16px;font-weight:800;color:#1a1d2e;margin-top:2px">Total <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
+  +     '</div>'
   +   '</div>'
   + '</div>'
 
@@ -239,76 +253,175 @@ async function rpRenderExpense(){
   + '</div>';
 
   rpDrawRows();
+  rpGridBind();
   rpDrawSaved();
+  setTimeout(function(){ const f = document.querySelector('#rp-rows [data-r="0"][data-c="0"]'); if(f) f.focus(); }, 40);
 }
 
 function rpBlankRow(){
-  return { description:'', co:'', category:'', amount:'', paid_from:'Collections' };
+  return { description:'', co:'', category:'', amount:'', paid_from: rpFundDefault };
 }
+let rpFundDefault = 'Collections';
 
 window.rpAddRows = function(n){
   for(let i=0;i<(n||1);i++) rpDraft.push(rpBlankRow());
   rpDrawRows();
 };
 
-function rpCatOptions(sel){
-  return '<option value=""></option>' + (rpHints.categories||[]).map(function(c){
-    return '<option value="'+rpEsc(c.name)+'"'+(c.name===sel?' selected':'')+'>'+rpEsc(c.name)+'</option>';
-  }).join('');
+window.rpSetFundDefault = function(f){
+  rpFundDefault = f;
+  document.querySelectorAll('#rp-fundsel .rp-chip').forEach(function(b){
+    b.classList.toggle('sel', b.getAttribute('data-f') === f);
+  });
+  // apply to any still-empty rows
+  rpDraft.forEach(function(r){ if(!r.description && !r.amount) r.paid_from = f; });
+  rpDrawRows();
+};
+
+// resolve a typed category fragment to a real category name
+function rpMatchCat(txt){
+  const t = (txt||'').trim().toLowerCase();
+  if(!t) return '';
+  const names = (rpHints.categories||[]).map(function(c){ return c.name; });
+  let hit = names.find(function(n){ return n.toLowerCase() === t; });
+  if(hit) return hit;
+  hit = names.find(function(n){ return n.toLowerCase().indexOf(t) === 0; });
+  if(hit) return hit;
+  hit = names.find(function(n){ return n.toLowerCase().indexOf(t) >= 0; });
+  return hit || '';
 }
+function rpFundLabel(v){ return v === 'Sir Wendell' ? 'W' : 'C'; }
 
 function rpDrawRows(){
   const box = document.getElementById('rp-rows');
   if(!box) return;
+  const active = document.activeElement;
+  const keep = active && active.hasAttribute && active.hasAttribute('data-cell')
+             ? { r:active.getAttribute('data-r'), c:active.getAttribute('data-c'), s:active.selectionStart } : null;
+
   box.innerHTML = rpDraft.map(function(r, i){
+    const catOk  = r.category ? ' ok' : (r.amount ? ' warn' : '');
+    const fk     = rpFundLabel(r.paid_from);
     return '<div class="rp-grid" data-i="'+i+'">'
-      + '<input class="rp-in" list="rp-dl-desc" placeholder="e.g. Gas Bao" value="'+rpEsc(r.description)+'" '
-      +   'oninput="rpEdit('+i+',\'description\',this.value)" onchange="rpAutoCat('+i+',this.value)" onkeydown="rpKey(event,'+i+',0)">'
-      + '<input class="rp-in" list="rp-dl-people" placeholder="e.g. Tandoy" value="'+rpEsc(r.co)+'" '
-      +   'oninput="rpEdit('+i+',\'co\',this.value)" onkeydown="rpKey(event,'+i+',1)">'
-      + '<select class="rp-in" onchange="rpEdit('+i+',\'category\',this.value)" onkeydown="rpKey(event,'+i+',2)">'+rpCatOptions(r.category)+'</select>'
-      + '<input class="rp-in rp-num" type="number" step="0.01" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'" '
-      +   'oninput="rpEdit('+i+',\'amount\',this.value)" onkeydown="rpKey(event,'+i+',3)">'
-      + '<select class="rp-in" onchange="rpEdit('+i+',\'paid_from\',this.value)">'
-      +   '<option value="Collections"'+(r.paid_from==='Collections'?' selected':'')+'>Collections</option>'
-      +   '<option value="Sir Wendell"'+(r.paid_from==='Sir Wendell'?' selected':'')+'>Sir Wendell</option>'
-      + '</select>'
-      + '<button class="rp-x" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
+      + '<div class="rp-rn">'+(i+1)+'</div>'
+      + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
+      + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
+      + '<input class="rp-in cell'+catOk+'" data-cell data-r="'+i+'" data-c="2" list="rp-dl-cat" placeholder="type" value="'+rpEsc(r.category)+'">'
+      + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
+      + '<input class="rp-in cell rp-fund '+fk+'" data-cell data-r="'+i+'" data-c="4" value="'+fk+'" title="C = Collections, W = Sir Wendell \u2014 press C, W or Space" readonly>'
+      + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
       + '</div>';
   }).join('');
+
+  if(keep){
+    const el = box.querySelector('[data-r="'+keep.r+'"][data-c="'+keep.c+'"]');
+    if(el){ el.focus(); try { el.setSelectionRange(keep.s, keep.s); } catch(e){} }
+  }
   rpTotals();
 }
 
-window.rpEdit = function(i, field, val){
-  if(!rpDraft[i]) return;
-  rpDraft[i][field] = val;
-  if(field === 'amount') rpTotals();
-  // keep a trailing blank row available
-  const last = rpDraft[rpDraft.length-1];
-  if(last && (last.description || last.amount)){ rpDraft.push(rpBlankRow()); rpDrawRows(); }
-};
+// one delegated handler for the whole grid — input, keys, blur
+function rpGridBind(){
+  const box = document.getElementById('rp-rows');
+  if(!box || box.__bound) return;
+  box.__bound = true;
 
-window.rpAutoCat = function(i, desc){
-  if(!rpDraft[i] || rpDraft[i].category) return;
-  const hit = (rpHints.descriptions||[]).find(function(x){
-    return (x.d||'').toLowerCase() === (desc||'').toLowerCase();
-  });
-  if(hit && hit.c){ rpDraft[i].category = hit.c; rpDrawRows(); }
-};
+  const FIELDS = ['description','co','category','amount','paid_from'];
 
-window.rpKey = function(ev, i, col){
-  if(ev.key !== 'Enter') return;
-  ev.preventDefault();
-  if(col === 3){
-    if(i === rpDraft.length-1){ rpDraft.push(rpBlankRow()); rpDrawRows(); }
-    const nxt = document.querySelector('#rp-rows .rp-grid[data-i="'+(i+1)+'"] input');
-    if(nxt) nxt.focus();
-  } else {
-    const row = document.querySelector('#rp-rows .rp-grid[data-i="'+i+'"]');
-    const fields = row ? row.querySelectorAll('input,select') : [];
-    if(fields[col+1]) fields[col+1].focus();
+  function cell(r,c){ return box.querySelector('[data-r="'+r+'"][data-c="'+c+'"]'); }
+  function go(r,c,toEnd){
+    if(r < 0) r = 0;
+    while(r >= rpDraft.length){ rpDraft.push(rpBlankRow()); }
+    if(box.querySelectorAll('.rp-grid').length !== rpDraft.length) rpDrawRows();
+    const el = cell(r,c);
+    if(el){
+      el.focus();
+      if(!el.readOnly){
+        const p = toEnd ? el.value.length : 0;
+        try { el.setSelectionRange(p,p); } catch(e){}
+      }
+    }
   }
-};
+
+  box.addEventListener('input', function(ev){
+    const t = ev.target;
+    if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
+    const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
+    if(!rpDraft[r]) return;
+    rpDraft[r][FIELDS[c]] = t.value;
+    if(c === 3) rpTotals();
+    // always keep one spare row at the bottom
+    const last = rpDraft[rpDraft.length-1];
+    if(last && (last.description || last.amount || last.co)){ rpDraft.push(rpBlankRow()); rpDrawRows(); }
+  });
+
+  box.addEventListener('blur', function(ev){
+    const t = ev.target;
+    if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
+    const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
+    if(!rpDraft[r]) return;
+    if(c === 2){                                   // snap category to a real name
+      const m = rpMatchCat(t.value);
+      if(m && m !== rpDraft[r].category){ rpDraft[r].category = m; rpDrawRows(); }
+    }
+    if(c === 0 && rpDraft[r].description && !rpDraft[r].category){
+      const hit = (rpHints.descriptions||[]).find(function(x){
+        return (x.d||'').toLowerCase() === rpDraft[r].description.toLowerCase();
+      });
+      if(hit && hit.c){ rpDraft[r].category = hit.c; rpDrawRows(); }
+    }
+  }, true);
+
+  box.addEventListener('keydown', function(ev){
+    const t = ev.target;
+    if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
+    const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
+    const k = ev.key;
+
+    // fund column: C / W / Space toggle
+    if(c === 4){
+      if(k === 'c' || k === 'C'){ ev.preventDefault(); rpDraft[r].paid_from = 'Collections'; rpDrawRows(); return; }
+      if(k === 'w' || k === 'W'){ ev.preventDefault(); rpDraft[r].paid_from = 'Sir Wendell'; rpDrawRows(); return; }
+      if(k === ' '){ ev.preventDefault();
+        rpDraft[r].paid_from = rpDraft[r].paid_from === 'Sir Wendell' ? 'Collections' : 'Sir Wendell';
+        rpDrawRows(); return; }
+    }
+
+    if((ev.ctrlKey || ev.metaKey) && (k === 'Enter' || k === 's')){ ev.preventDefault(); rpSaveDraft(); return; }
+
+    // Ctrl+D — copy the cell directly above
+    if((ev.ctrlKey || ev.metaKey) && (k === 'd' || k === 'D')){
+      ev.preventDefault();
+      if(r > 0){ rpDraft[r][FIELDS[c]] = rpDraft[r-1][FIELDS[c]]; rpDrawRows(); go(r,c,true); }
+      return;
+    }
+
+    if(k === 'ArrowDown'){ ev.preventDefault(); go(r+1, c, true); return; }
+    if(k === 'ArrowUp'){   ev.preventDefault(); go(r-1, c, true); return; }
+    if(k === 'Enter'){     ev.preventDefault(); go(r+1, c, true); return; }
+
+    if(k === 'ArrowRight'){
+      if(t.readOnly || t.selectionStart === t.value.length){
+        if(c < 4){ ev.preventDefault(); go(r, c+1, false); }
+        else { ev.preventDefault(); go(r+1, 0, false); }
+      }
+      return;
+    }
+    if(k === 'ArrowLeft'){
+      if(t.readOnly || t.selectionStart === 0){
+        if(c > 0){ ev.preventDefault(); go(r, c-1, true); }
+        else if(r > 0){ ev.preventDefault(); go(r-1, 4, true); }
+      }
+      return;
+    }
+    if(k === 'Escape'){ ev.preventDefault(); t.blur(); return; }
+
+    // Ctrl+Backspace deletes the row
+    if((ev.ctrlKey || ev.metaKey) && k === 'Backspace'){
+      ev.preventDefault(); rpDelRow(r); setTimeout(function(){ go(Math.max(0,r-1), c, true); }, 0); return;
+    }
+  });
+}
 
 window.rpDelRow = function(i){
   rpDraft.splice(i,1);
@@ -324,11 +437,17 @@ function rpValidDraft(){
 
 function rpTotals(){
   const good = rpValidDraft();
-  const t = good.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
-  const el = document.getElementById('rp-draft-total');   if(el) el.textContent = rpPeso(t);
-  const k  = document.getElementById('rp-kpi-draft');     if(k)  k.textContent  = rpPeso(t);
-  const kn = document.getElementById('rp-kpi-draftn');    if(kn) kn.textContent = good.length + ' row' + (good.length===1?'':'s') + ' ready';
-  const sv = document.getElementById('rp-save');          if(sv) sv.disabled = !good.length;
+  const coll = good.filter(function(r){ return r.paid_from !== 'Sir Wendell'; })
+                   .reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
+  const wend = good.filter(function(r){ return r.paid_from === 'Sir Wendell'; })
+                   .reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
+  const set = function(id, v){ const e = document.getElementById(id); if(e) e.textContent = v; };
+  set('rp-draft-coll',  rpPeso(coll));
+  set('rp-draft-wend',  rpPeso(wend));
+  set('rp-draft-total', rpPeso(coll + wend));
+  set('rp-kpi-draft',   rpPeso(coll + wend));
+  set('rp-kpi-draftn',  good.length + ' row' + (good.length===1?'':'s') + ' ready');
+  const sv = document.getElementById('rp-save'); if(sv) sv.disabled = !good.length;
 }
 
 window.rpChangeDate = function(d){
@@ -411,7 +530,7 @@ window.rpPasteOpen = function(){
     + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);padding:16px 20px;color:#fff;font-size:15px;font-weight:800">\u{1F4CB} Paste rows from Excel</div>'
     + '<div style="padding:18px 20px">'
     +   '<div style="font-size:12px;color:#374151;margin-bottom:8px">Copy the cells straight out of the sheet and paste below. Expected column order:</div>'
-    +   '<div style="font-size:11px;font-family:monospace;background:#f6f9ff;border:1px solid #e8eeff;border-radius:7px;padding:8px 10px;margin-bottom:10px;color:#025AC6">Description &nbsp;\u2192&nbsp; c/o &nbsp;\u2192&nbsp; Expense Type &nbsp;\u2192&nbsp; Amount</div>'
+    +   '<div style="font-size:11px;font-family:monospace;background:#f6f9ff;border:1px solid #e8eeff;border-radius:7px;padding:8px 10px;margin-bottom:10px;color:#025AC6">Description &nbsp;\u2192&nbsp; c/o &nbsp;\u2192&nbsp; Expense Type &nbsp;\u2192&nbsp; Amount &nbsp;\u2192&nbsp; Fund (C/W, optional)</div>'
     +   '<textarea id="rp-paste-ta" placeholder="Gas&#9;Tandoy&#9;Fuel &amp; Oil&#9;150" style="width:100%;height:190px;padding:10px;border:1.5px solid #dbeafe;border-radius:9px;font-size:12px;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>'
     +   '<div id="rp-paste-msg" style="font-size:11px;color:#6b7394;margin-top:7px;min-height:15px"></div>'
     +   '<div style="display:flex;gap:8px;margin-top:14px">'
@@ -439,11 +558,15 @@ window.rpPasteApply = function(){
     let cat = (c[2]||'').trim();
     const match = cats.find(function(k){ return k.toLowerCase() === cat.toLowerCase(); });
     cat = match || '';
-    fresh.push({ description:(c[0]||'').trim(), co:(c[1]||'').trim(), category:cat, amount:String(amt), paid_from:'Collections' });
+    let fund = rpFundDefault;
+    const f5 = (c[4]||'').trim().toLowerCase();
+    if(f5){ if(f5[0] === 'w') fund = 'Sir Wendell'; else if(f5[0] === 'c') fund = 'Collections'; }
+    fresh.push({ description:(c[0]||'').trim(), co:(c[1]||'').trim(), category:cat, amount:String(amt), paid_from:fund });
     added++;
   });
   if(!added){ if(msg) msg.innerHTML = '<span style="color:#DF1A35;font-weight:700">No usable rows found \u2014 check that the 4th column holds the amount.</span>'; return; }
   rpDraft = rpDraft.filter(function(r){ return r.description || r.amount; }).concat(fresh, [rpBlankRow()]);
+  rpGridBind();
   const ov = document.getElementById('rp-paste-ov'); if(ov) ov.remove();
   rpDrawRows();
   const unmatched = fresh.filter(function(r){ return !r.category; }).length;
@@ -479,6 +602,23 @@ async function rpRenderSummary(){
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Total expense '+yr+'</div><div class="v">'+rpPeso(s.grand)+'</div><div class="s">'+months.length+' month'+(months.length===1?'':'s')+' with activity</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">Biggest category</div><div class="v" style="font-size:15px">'+rpEsc((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).category || '\u2014')+'</div><div class="s">'+rpPeso((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).total)+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Average per month</div><div class="v">'+rpPeso(months.length ? s.grand/months.length : 0)+'</div><div class="s">across active months</div></div>'
+  + '</div>'
+  + '<div class="rp-card" style="padding:0;overflow:hidden">'
+  +   '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff">\u{1F4B0} Combined expense \u2014 Daily book + Sir Wendell</div>'
+  +   '<div style="overflow:auto"><table class="rp-t"><thead><tr><th style="min-width:150px">Fund</th>'
+  +     months.map(function(m){ return '<th class="rp-num">'+RP_MONTHS[m].slice(0,3).toUpperCase()+'</th>'; }).join('')
+  +     '<th class="rp-num" style="background:#e8f0ff">TOTAL</th></tr></thead><tbody>'
+  +     '<tr><td style="font-weight:700;color:#025AC6">Daily book (Collections)</td>'
+  +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).collections)+'</td>'; }).join('')
+  +       '<td class="rp-num" style="font-weight:800;background:#f6f9ff">'+rpPesoShort(s.fund_collections)+'</td></tr>'
+  +     '<tr><td style="font-weight:700;color:#C01176">Paid by Sir Wendell</td>'
+  +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).wendell)+'</td>'; }).join('')
+  +       '<td class="rp-num" style="font-weight:800;background:#fff4fb;color:#C01176">'+rpPesoShort(s.fund_wendell)+'</td></tr>'
+  +   '</tbody><tfoot><tr style="background:#f0f4ff">'
+  +     '<td style="font-weight:800;color:#1a1d2e">COMBINED</td>'
+  +     months.map(function(m){ return '<td class="rp-num" style="font-weight:800">'+rpPesoShort((s.funds[m]||{}).tot)+'</td>'; }).join('')
+  +     '<td class="rp-num" style="font-weight:800;background:#e8f0ff">'+rpPesoShort(s.grand)+'</td>'
+  +   '</tr></tfoot></table></div>'
   + '</div>'
   + '<div class="rp-card" style="padding:0;overflow:hidden">'
   +   '<div class="rp-scroll" style="border:none;max-height:620px"><table class="rp-t">'
