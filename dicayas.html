@@ -931,6 +931,18 @@ function isPulledOut(m){
 // Effective online: real link AND not pulled out / deactivated.
 function effOnline(m){ return !!m.online && !isPulledOut(m); }
 
+// A VLAN belonging to a customer who BOUGHT the unit outright. Spawn does not
+// harvest it and there is no vendo record to link -- it lives on
+// Subscribers > Vendo Subscribers, driven by subscribers.is_vendo_owner.
+// It must not show up in Online / Waiting / No-lease / Empty, and must never
+// offer "Create & link record", or a sold unit gets re-created as a vendo and
+// pollutes the harvest groups.
+function isSoldVendo(m){
+  if(!m || m.vlan==null) return false;
+  return (SUBRECS||[]).some(r =>
+    r && r.is_vendo_owner===true && r.vlan!=null && String(r.vlan)===String(m.vlan));
+}
+
 function flagsOf(m){
   const f=[];
   if(isPulledOut(m)) f.push({t:"pulled out",c:"dup"});
@@ -1044,7 +1056,7 @@ function render(){
   _pcCache=new Map();
   // Pulled-out machines live on the Inactive tab only — they must not appear
   // in Online, Waiting, No-lease or Empty.
-  const LIVE=STATUS.filter(m=>!isPulledOut(m));
+  const LIVE=STATUS.filter(m=>!isPulledOut(m) && !isSoldVendo(m));
   let on=LIVE.filter(m=>effOnline(m));
   const offAll=LIVE.filter(m=>!effOnline(m));
   const empties=offAll.filter(isEmptySlot);
@@ -1097,7 +1109,7 @@ function render(){
 function applySearch(){
   const q=(document.getElementById('q').value||"").toLowerCase();
   const f=document.getElementById('flt').value;
-  let list=STATUS.filter(m=>!isPulledOut(m)).filter(m=>{
+  let list=STATUS.filter(m=>!isPulledOut(m) && !isSoldVendo(m)).filter(m=>{
     if(q){
       const hay=(m.vlan+" "+nameOf(m)+" "+(m.ip||"")+" "+areaOf(m)+" "+(m.router_comment||"")).toLowerCase();
       if(!hay.includes(q))return false;
@@ -2024,7 +2036,7 @@ async function dupeDelete(vid){ askDelete(vid, ()=>renderDupes()); }
 function buildNavList(mk){
   // determine which vendos are visible in the active tab, in sorted order
   const active=document.querySelector('.tab.active')?.dataset.tab||'online';
-  const LIVE=STATUS.filter(m=>!isPulledOut(m));
+  const LIVE=STATUS.filter(m=>!isPulledOut(m) && !isSoldVendo(m));
   let list;
   if(active==='online') list=LIVE.filter(m=>effOnline(m));
   else if(active==='offline'){
