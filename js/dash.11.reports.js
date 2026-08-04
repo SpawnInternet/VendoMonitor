@@ -158,6 +158,18 @@ function rpFillDatalists(){
 
 let rpFund  = 'Collections';
 const rpState = { 'Collections': { date:null, draft:null }, 'Sir Wendell': { date:null, draft:null } };
+const RP_LS = 'spawn_rp_workdate';
+function rpSaveWorkDate(){
+  try {
+    const m = JSON.parse(localStorage.getItem(RP_LS) || '{}');
+    m[rpFund] = rpDate;
+    localStorage.setItem(RP_LS, JSON.stringify(m));
+  } catch(e){}
+}
+function rpLoadWorkDate(fund){
+  try { return (JSON.parse(localStorage.getItem(RP_LS) || '{}'))[fund] || null; }
+  catch(e){ return null; }
+}
 function rpStash(){
   if(rpTab === 'expense' || rpTab === 'wendell'){
     rpState[rpFund] = { date: rpDate, draft: rpDraft };
@@ -179,7 +191,7 @@ window.rpSetTab = function(mode){
   if(mode === 'expense' || mode === 'wendell'){
     rpFund = (mode === 'wendell') ? 'Sir Wendell' : 'Collections';
     const st = rpState[rpFund];
-    rpDate  = st.date || rpPhToday();
+    rpDate  = st.date || rpLoadWorkDate(rpFund) || rpPhToday();
     rpDraft = st.draft && st.draft.length ? st.draft : [rpBlankRow(), rpBlankRow(), rpBlankRow()];
     rpRenderExpense();
   }
@@ -380,12 +392,7 @@ function rpGridBind(){
     if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     if(!rpDraft[r]) return;
-    if(c === 0 && rpDraft[r].description && !rpDraft[r].category){
-      const hit = (rpHints.descriptions||[]).find(function(x){
-        return (x.d||'').toLowerCase() === rpDraft[r].description.toLowerCase();
-      });
-      if(hit && hit.c){ rpDraft[r].category = hit.c; rpDrawRows(); }
-    }
+    if(c === 0) rpTryAutoCat(r);
   }, true);
 
   box.addEventListener('keydown', function(ev){
@@ -427,12 +434,21 @@ function rpGridBind(){
       return;
     }
 
+    // leaving the description: try to recognise the expense type straight away
+    if(c === 0 && (k === 'Tab' || k === 'Enter') && !ev.shiftKey) rpTryAutoCat(r);
+
+    // leaving the name: if the type is already known, skip it and go to Amount
+    if(c === 1 && k === 'Tab' && !ev.shiftKey && rpDraft[r] && rpDraft[r].category){
+      ev.preventDefault(); go(r, 3, true); return;
+    }
+
     if(k === 'ArrowDown'){ ev.preventDefault(); go(r+1, c, true); return; }
     if(k === 'ArrowUp'){   ev.preventDefault(); go(r-1, c, true); return; }
     if(k === 'Enter'){     ev.preventDefault(); go(r+1, c, true); return; }
 
     if(k === 'ArrowRight'){
       if(t.readOnly || t.selectionStart === t.value.length){
+        if(c === 1 && rpDraft[r] && rpDraft[r].category){ ev.preventDefault(); go(r, 3, false); return; }
         if(c < LASTC){ ev.preventDefault(); go(r, c+1, false); }
         else { ev.preventDefault(); go(r+1, 0, false); }
       }
@@ -484,6 +500,7 @@ window.rpChangeDate = function(d){
     return;
   }
   rpDate  = d;
+  rpSaveWorkDate();
   rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
   rpRenderExpense();
 };
@@ -507,7 +524,8 @@ window.rpSaveDraft = async function(){
   });
   try {
     await rpRest('expenses', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(payload) });
-    if(window.toast) toast('\u2705 Saved ' + payload.length + ' entries for ' + rpDate);
+    if(window.toast) toast('\u2705 Saved ' + payload.length + ' entries for ' + rpDate + ' \u2014 still on this date, keep going');
+    rpSaveWorkDate();
     rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
     try { rpHints = await rpRpc('spawn_expense_hints'); rpFillDatalists(); } catch(e){}
     rpRenderExpense();
@@ -544,6 +562,20 @@ window.rpDelSaved = async function(id){
     rpRenderExpense();
   } catch(e){ if(window.toast) toast('\u274c Delete failed: ' + e.message); }
 };
+
+// Recognise the expense type from the description. Only ever fills a BLANK
+// type — it never overrides something already chosen by hand.
+function rpTryAutoCat(r){
+  const row = rpDraft[r];
+  if(!row || !row.description || row.category) return false;
+  const d = row.description.trim().toLowerCase();
+  if(!d) return false;
+  const list = rpHints.descriptions || [];
+  let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
+  if(!hit) hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
+  if(hit && hit.c){ row.category = hit.c; rpDrawRows(); return true; }
+  return false;
+}
 
 // ── expense-type picker ────────────────────────────────────
 // A real dropdown, but it only swallows the arrow keys while it is open —
