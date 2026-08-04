@@ -189,6 +189,8 @@ async function rpRenderExpense(){
   if(!rpDraft.length) rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
 
   const missing = gaps.filter(function(g){ return g.count === 0; });
+  const filled = gaps.filter(function(g){ return g.count > 0 && g.date !== rpDate; });
+  const lastFilled = filled.length ? filled[filled.length-1].date : null;
 
   const gapChips = gaps.map(function(g){
     const cls = g.count ? 'has' : 'gap';
@@ -218,6 +220,11 @@ async function rpRenderExpense(){
   +         '<button class="rp-chip sel" data-f="Collections" onclick="rpSetFundDefault(\'Collections\')">C \u00b7 Collections</button>'
   +         '<button class="rp-chip" data-f="Sir Wendell" onclick="rpSetFundDefault(\'Sir Wendell\')">W \u00b7 Sir Wendell</button>'
   +       '</div></div>'
+  +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">Copy a previous day</div>'
+  +       '<div style="display:flex;gap:5px">'
+  +         '<input type="date" id="rp-copy-date" class="rp-in" style="width:150px" value="'+(lastFilled||'')+'">'
+  +         '<button class="rp-btn" onclick="rpCopyDay()">\u{1F4C4} Load</button>'
+  +       '</div></div>'
   +     '<button class="rp-btn" onclick="rpPasteOpen()">\u{1F4CB} Paste from Excel</button>'
   +     '<div style="flex:1"></div>'
   +     '<button class="rp-btn ok" id="rp-save" onclick="rpSaveDraft()">\u{1F4BE} Save all rows</button>'
@@ -227,6 +234,10 @@ async function rpRenderExpense(){
 
   + '<div class="rp-card">'
   +   '<div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:9px">\u270F\uFE0F New entries for <span id="rp-lbl-date">'+rpDate+'</span></div>'
+  +   '<div id="rp-copy-warn" style="display:none;background:#fffaf0;border:1px solid #FFB725;border-radius:8px;padding:8px 11px;font-size:11px;color:#8a6100;margin-bottom:9px">'
+  +     '<b>These rows were copied from another day.</b> The amounts came with them \u2014 they are a starting point, not a record. '
+  +     'Correct every figure against the actual receipts and delete anything that did not happen, before you save.'
+  +   '</div>'
   +   '<div class="rp-grid hdr"><div>#</div><div>Description</div><div>c/o (released to)</div><div>Expense type</div><div class="rp-num">Amount</div><div style="text-align:center">Fund</div><div></div></div>'
   +   '<div id="rp-rows"></div>'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #f0f4ff">'
@@ -518,6 +529,30 @@ window.rpDelSaved = async function(id){
     if(window.toast) toast('Entry deleted.');
     rpRenderExpense();
   } catch(e){ if(window.toast) toast('\u274c Delete failed: ' + e.message); }
+};
+
+// ── copy a previous day's layout into the grid ──
+window.rpCopyDay = async function(){
+  const el = document.getElementById('rp-copy-date');
+  const src = el ? el.value : null;
+  if(!src){ if(window.toast) toast('Pick a date to copy from.'); return; }
+  if(src === rpDate){ if(window.toast) toast('That is the day you are already on.'); return; }
+  let d;
+  try { d = await rpRpc('spawn_expense_day', { p_date: src }); }
+  catch(e){ if(window.toast) toast('\u274c ' + e.message); return; }
+
+  const rows = (d.rows||[]).map(function(r){
+    return { description: r.description||'', co: r.co||'', category: r.category||'',
+             amount: String(Number(r.amount)||''), paid_from: r.paid_from||'Collections' };
+  });
+  if(!rows.length){ if(window.toast) toast('No entries recorded on ' + src + '.'); return; }
+
+  rpDraft = rpDraft.filter(function(r){ return r.description || r.amount; }).concat(rows, [rpBlankRow()]);
+  rpDrawRows();
+  rpGridBind();
+  const box = document.getElementById('rp-copy-warn');
+  if(box) box.style.display = 'block';
+  if(window.toast) toast('Loaded ' + rows.length + ' rows from ' + src + ' \u2014 check every amount before saving');
 };
 
 // ── paste-from-Excel ──────────────────────────────────────
