@@ -104,7 +104,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-in{width:100%;padding:6px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a1d2e;box-sizing:border-box}'
   + '#panel-reports .rp-in:focus{outline:none;border-color:#025AC6;box-shadow:0 0 0 2px rgba(2,90,198,.12)}'
   + '#panel-reports .rp-in.err{border-color:#DF1A35;background:#fff5f5}'
-  + '#panel-reports .rp-grid{display:grid;grid-template-columns:20px minmax(0,1.7fr) minmax(0,1fr) minmax(0,1.15fr) 82px 24px;gap:3px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:6px 7px;font-size:12px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-cat{cursor:pointer;padding-right:20px!important}#panel-reports .rp-cat.set{font-weight:600}#panel-reports .rp-pop{position:fixed;z-index:100030;background:#fff;border:1px solid #dbeafe;border-radius:10px;box-shadow:0 12px 40px rgba(17,10,60,.22);max-height:330px;overflow-y:auto;min-width:230px;padding:4px}#panel-reports .rp-pop div{padding:7px 10px;font-size:12.5px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:9px;color:#1a1d2e}#panel-reports .rp-pop div:hover,#panel-reports .rp-pop div.hi{background:#f0f4ff;color:#025AC6;font-weight:700}#panel-reports .rp-pop i{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}#panel-reports .rp-pop .hint{position:sticky;bottom:0;background:#f8faff;color:#6b7394;font-size:10px;padding:6px 10px;cursor:default;border-top:1px solid #e8eeff}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
+  + '#panel-reports .rp-grid{display:grid;grid-template-columns:20px minmax(0,1.7fr) minmax(0,1fr) minmax(0,1.15fr) 82px 24px;gap:3px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:6px 7px;font-size:12px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.guess{border-color:#028867;border-style:dashed;background:#f6fffb;color:#0b6b53}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-cat{cursor:pointer;padding-right:20px!important}#panel-reports .rp-cat.set{font-weight:600}#panel-reports .rp-pop{position:fixed;z-index:100030;background:#fff;border:1px solid #dbeafe;border-radius:10px;box-shadow:0 12px 40px rgba(17,10,60,.22);max-height:330px;overflow-y:auto;min-width:230px;padding:4px}#panel-reports .rp-pop div{padding:7px 10px;font-size:12.5px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:9px;color:#1a1d2e}#panel-reports .rp-pop div:hover,#panel-reports .rp-pop div.hi{background:#f0f4ff;color:#025AC6;font-weight:700}#panel-reports .rp-pop i{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}#panel-reports .rp-pop .hint{position:sticky;bottom:0;background:#f8faff;color:#6b7394;font-size:10px;padding:6px 10px;cursor:default;border-top:1px solid #e8eeff}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
@@ -298,7 +298,7 @@ async function rpRenderExpense(){
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #f0f4ff">'
   +     '<div class="rp-keys">'
   +       '<kbd>\u2191</kbd><kbd>\u2193</kbd> move row \u00b7 <kbd>\u2190</kbd><kbd>\u2192</kbd> move column \u00b7 <kbd>Enter</kbd> next row \u00b7 <kbd>Tab</kbd> next cell<br>'
-  +       'On <b>Expense type</b>: type a letter or press <kbd>Enter</kbd> to open the list<br>'
+  +       'On <b>Expense type</b>: type a letter, press <kbd>Enter</kbd> or click to open the list \u00b7 <kbd>Tab</kbd> from Name skips it, <kbd>\u2192</kbd> steps into it<br>'
   +       '<kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
   +     '</div>'
   +     '<div style="text-align:right">'
@@ -351,12 +351,12 @@ function rpMatchCat(txt){
 }
 
 function rpRowHtml(r, i){
-  const catOk = r.category ? ' ok set' : (r.amount ? ' warn' : '');
+  const catOk = r.category ? (r.guessed ? ' guess set' : ' ok set') : (r.amount ? ' warn' : '');
   return '<div class="rp-grid" data-i="'+i+'">'
     + '<div class="rp-rn">'+(i+1)+'</div>'
     + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
     + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
-    + '<input class="rp-in cell rp-cat'+catOk+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
+    + '<input class="rp-in cell rp-cat'+catOk+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" title="'+(r.category ? (r.guessed?'Detected \u2014 click to change':'Chosen by you') : 'Click or press Enter to choose')+'" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
     + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
     + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
     + '</div>';
@@ -499,7 +499,6 @@ function rpGridBind(){
 
     if(k === 'ArrowRight'){
       if(t.readOnly || t.selectionStart === t.value.length){
-        if(c === 1 && rpDraft[r] && rpDraft[r].category){ ev.preventDefault(); go(r, 3, false); return; }
         if(c < LASTC){ ev.preventDefault(); go(r, c+1, false); }
         else { ev.preventDefault(); go(r+1, 0, false); }
       }
@@ -636,9 +635,13 @@ function rpCatCellUpdate(r){
   const row = rpDraft[r];
   if(!el || !row) return;
   el.value = row.category || '';
-  el.classList.remove('ok','warn','set');
-  if(row.category) el.classList.add('ok','set');
-  else if(row.amount) el.classList.add('warn');
+  el.classList.remove('ok','warn','set','guess');
+  if(row.category){
+    el.classList.add('set');
+    el.classList.add(row.guessed ? 'guess' : 'ok');
+    el.title = row.guessed ? 'Detected from the particulars \u2014 click or press \u2192 then Enter to change it'
+                           : 'Chosen by you';
+  } else if(row.amount) el.classList.add('warn');
 }
 
 const RP_STOP = ['pcs','pc','pack','packs','roll','rolls','box','boxes','kg','pair','set','sets','meters','meter','pieces','piece'];
@@ -684,7 +687,7 @@ function rpTryAutoCat(r){
   const row = rpDraft[r];
   if(!row || !row.description || row.category) return false;
   const c = rpMatchDesc(row.description, false);
-  if(c){ row.category = c; rpCatCellUpdate(r); return true; }
+  if(c){ row.category = c; row.guessed = true; rpCatCellUpdate(r); return true; }
   return false;
 }
 
@@ -751,6 +754,7 @@ window.rpCatPick = function(ev, n){
   const list = rpCatList();
   if(rpPopRow != null && list[n]){
     rpDraft[rpPopRow].category = list[n].name;
+    rpDraft[rpPopRow].guessed = false;
     const row = rpPopRow;
     rpCatClose();
     rpDrawRows();
