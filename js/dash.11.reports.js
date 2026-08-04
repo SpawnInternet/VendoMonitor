@@ -68,6 +68,7 @@ function rpShellHtml(){
   const tabs = [
     ['expense',  '\u{1F4B8}', 'Daily Expense'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
+    ['releases', '\u{1F91D}', 'Fund Releases'],
     ['sales',    '\u{1F4B0}', 'Sales'],
     ['collect',  '\u{1F9FE}', 'Collections'],
     ['newvendo', '\u{1F195}', 'New Vendos'],
@@ -130,6 +131,7 @@ function rpShellHtml(){
   +   '<div class="rp-tabs" id="rp-tabs">' + tabsHtml + '</div>'
   +   '<div class="rp-mode" id="rp-mode-expense"></div>'
   +   '<div class="rp-mode" id="rp-mode-summary"></div>'
+  +   '<div class="rp-mode" id="rp-mode-releases"></div>'
   +   '<div class="rp-mode" id="rp-mode-sales"></div>'
   +   '<div class="rp-mode" id="rp-mode-collect"></div>'
   +   '<div class="rp-mode" id="rp-mode-newvendo"></div>'
@@ -165,6 +167,7 @@ window.rpSetTab = function(mode){
   document.getElementById('rp-actions').innerHTML = '';
   if(mode === 'expense')  rpRenderExpense();
   if(mode === 'summary')  rpRenderSummary();
+  if(mode === 'releases') rpRenderReleases();
   if(mode === 'sales')    rpRenderSales();
   if(mode === 'status')   rpRenderStatus();
   if(['collect','newvendo','newsub','pullout','cutoff','cash','wendell'].indexOf(mode) >= 0) rpRenderTodo(mode);
@@ -690,6 +693,156 @@ window.rpExportSummary = function(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'spawn-expense-summary-' + c.yr + '.csv';
+  a.click();
+};
+
+// ══════════════════════════════════════════════════════════
+// FUND RELEASES — who money was released to, and what for
+// ══════════════════════════════════════════════════════════
+let rpRelFrom = null, rpRelTo = null, rpRelOpen = {};
+
+async function rpRenderReleases(){
+  const host = document.getElementById('rp-mode-releases');
+  if(!rpRelFrom){
+    const d = rpDate || rpPhToday();
+    rpRelFrom = d.slice(0,8) + '01';
+    rpRelTo   = d;
+  }
+  host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Building release report\u2026</div>';
+
+  let rows = [];
+  try {
+    for(let off=0; off<20000; off+=1000){
+      const p = await rpRest('expenses?select=id,expense_date,description,co,category,amount,paid_from'
+        + '&expense_date=gte.' + rpRelFrom + '&expense_date=lte.' + rpRelTo
+        + '&order=expense_date.asc,id.asc&limit=1000&offset=' + off);
+      if(!p || !p.length) break;
+      rows = rows.concat(p);
+      if(p.length < 1000) break;
+    }
+  } catch(e){
+    host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not load: ' + rpEsc(e.message) + '</div>'; return;
+  }
+
+  // group by the person the funds went to
+  const by = {};
+  rows.forEach(function(r){
+    const k = (r.co && r.co.trim()) ? r.co.trim() : '\u2014 not recorded \u2014';
+    by[k] = by[k] || { name:k, rows:[], total:0, coll:0, wend:0, cats:{} };
+    const a = Number(r.amount) || 0;
+    by[k].rows.push(r);
+    by[k].total += a;
+    if(r.paid_from === 'Sir Wendell') by[k].wend += a; else by[k].coll += a;
+    by[k].cats[r.category] = (by[k].cats[r.category]||0) + a;
+  });
+  const people = Object.keys(by).map(function(k){ return by[k]; })
+                       .sort(function(a,b){ return b.total - a.total; });
+  const grand   = people.reduce(function(s,p){ return s + p.total; }, 0);
+  const unnamed = (by['\u2014 not recorded \u2014'] || {}).total || 0;
+
+  window.__rpRelCache = { people:people, grand:grand, from:rpRelFrom, to:rpRelTo };
+  document.getElementById('rp-actions').innerHTML =
+    '<button class="rp-btn" onclick="rpRelExport()">\u2B07\uFE0F Download CSV</button>'
+  + '<button class="rp-btn" onclick="window.print()">\u{1F5A8}\uFE0F Print</button>';
+
+  host.innerHTML = ''
+  + '<div class="rp-card">'
+  +   '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">'
+  +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">From</div>'
+  +       '<input type="date" class="rp-in" style="width:160px" value="'+rpRelFrom+'" onchange="rpRelSet(this.value,null)"></div>'
+  +     '<div><div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin-bottom:3px">To</div>'
+  +       '<input type="date" class="rp-in" style="width:160px" value="'+rpRelTo+'" onchange="rpRelSet(null,this.value)"></div>'
+  +     '<button class="rp-btn" onclick="rpRelMonth(0)">This month</button>'
+  +     '<button class="rp-btn" onclick="rpRelMonth(-1)">Last month</button>'
+  +   '</div>'
+  + '</div>'
+  + '<div class="rp-kpis">'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Total released</div><div class="v">'+rpPeso(grand)+'</div><div class="s">'+rows.length+' releases</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">People</div><div class="v">'+people.length+'</div><div class="s">'+rpRelFrom+' \u2192 '+rpRelTo+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(unnamed?RP_BRAND.red:RP_BRAND.teal)+'"><div class="k">No name recorded</div><div class="v">'+rpPeso(unnamed)+'</div><div class="s">'+(unnamed?'cannot be liquidated':'all releases named')+'</div></div>'
+  + '</div>'
+  + (unnamed ? '<div class="rp-card" style="background:#fff5f5;border-color:'+RP_BRAND.red+';font-size:11.5px;color:#7f1d1d">'
+  +   '<b>'+rpPeso(unnamed)+' has no c/o name against it.</b> Those releases cannot be traced to anyone. '
+  +   'Open the last row below to see them \u2014 they need a name filled in before this report can be used for liquidation.'
+  + '</div>' : '')
+  + '<div class="rp-card" style="padding:0;overflow:hidden">'
+  +   '<div class="rp-scroll" style="border:none;max-height:600px"><table class="rp-t"><thead><tr>'
+  +     '<th style="min-width:170px">Name (c/o)</th><th class="rp-num">Releases</th>'
+  +     '<th>Mainly for</th><th class="rp-num">Collections</th><th class="rp-num">Wendell</th><th class="rp-num">Total</th>'
+  +   '</tr></thead><tbody>' + people.map(rpRelRow).join('')
+  +   '</tbody><tfoot><tr style="background:#f0f4ff">'
+  +     '<td style="font-weight:800;color:#025AC6">TOTAL</td><td class="rp-num" style="font-weight:800">'+rows.length+'</td><td></td>'
+  +     '<td class="rp-num" style="font-weight:800">'+rpPesoShort(people.reduce(function(s,p){return s+p.coll;},0))+'</td>'
+  +     '<td class="rp-num" style="font-weight:800">'+rpPesoShort(people.reduce(function(s,p){return s+p.wend;},0))+'</td>'
+  +     '<td class="rp-num" style="font-weight:800;background:#e8f0ff;color:#025AC6">'+rpPesoShort(grand)+'</td>'
+  +   '</tr></tfoot></table></div>'
+  + '</div>';
+}
+
+function rpRelRow(p, i){
+  const top = Object.keys(p.cats).sort(function(a,b){ return p.cats[b]-p.cats[a]; }).slice(0,2).join(', ');
+  const open = !!rpRelOpen[p.name];
+  let html = '<tr style="cursor:pointer" onclick="rpRelToggle('+i+')">'
+    + '<td style="font-weight:700">' + (open ? '\u25be ' : '\u25b8 ') + rpEsc(p.name) + '</td>'
+    + '<td class="rp-num" style="color:#6b7394">' + p.rows.length + '</td>'
+    + '<td style="color:#6b7394;font-size:11px">' + rpEsc(top) + '</td>'
+    + '<td class="rp-num">' + rpPesoShort(p.coll) + '</td>'
+    + '<td class="rp-num" style="color:#C01176">' + (p.wend ? rpPesoShort(p.wend) : '\u2014') + '</td>'
+    + '<td class="rp-num" style="font-weight:800;color:#025AC6">' + rpPeso(p.total) + '</td></tr>';
+  if(open){
+    html += '<tr><td colspan="6" style="padding:0;background:#f8faff">'
+      + '<table class="rp-t" style="margin:0">'
+      + '<thead><tr><th style="width:110px">Date</th><th>Particulars</th><th style="width:150px">Expense type</th><th style="width:90px">Fund</th><th class="rp-num" style="width:120px">Amount</th></tr></thead><tbody>'
+      + p.rows.map(function(r){
+          return '<tr><td style="color:#6b7394">'+rpEsc(r.expense_date)+'</td>'
+            + '<td>'+rpEsc(r.description || '\u2014')+'</td>'
+            + '<td style="color:#6b7394">'+rpEsc(r.category)+'</td>'
+            + '<td style="font-size:11px;color:'+(r.paid_from==='Sir Wendell'?'#C01176':'#025AC6')+'">'+rpEsc(r.paid_from)+'</td>'
+            + '<td class="rp-num">'+rpPeso(r.amount)+'</td></tr>';
+        }).join('')
+      + '<tr style="background:#eef3ff"><td colspan="4" style="font-weight:800;text-align:right">Total released to '+rpEsc(p.name)+'</td>'
+      + '<td class="rp-num" style="font-weight:800;color:#025AC6">'+rpPeso(p.total)+'</td></tr>'
+      + '</tbody></table></td></tr>';
+  }
+  return html;
+}
+
+window.rpRelToggle = function(i){
+  const c = window.__rpRelCache; if(!c) return;
+  const n = c.people[i].name;
+  rpRelOpen[n] = !rpRelOpen[n];
+  rpRenderReleases();
+};
+window.rpRelSet = function(f, t){
+  if(f) rpRelFrom = f;
+  if(t) rpRelTo = t;
+  rpRenderReleases();
+};
+window.rpRelMonth = function(back){
+  const d = new Date(rpPhToday() + 'T00:00:00');
+  d.setMonth(d.getMonth() + back);
+  const y = d.getFullYear(), m = d.getMonth() + 1;
+  const last = new Date(y, m, 0).getDate();
+  const pad = function(n){ return String(n).padStart(2,'0'); };
+  rpRelFrom = y + '-' + pad(m) + '-01';
+  rpRelTo   = y + '-' + pad(m) + '-' + pad(back === 0 ? Math.min(last, +rpPhToday().slice(8,10)) : last);
+  rpRenderReleases();
+};
+window.rpRelExport = function(){
+  const c = window.__rpRelCache; if(!c) return;
+  const L = ['Fund Releases ' + c.from + ' to ' + c.to];
+  L.push('Name,Date,Particulars,Expense Type,Fund,Amount');
+  c.people.forEach(function(p){
+    p.rows.forEach(function(r){
+      L.push(['"'+p.name+'"','"'+r.expense_date+'"','"'+String(r.description||'').replace(/"/g,'""')+'"',
+              '"'+r.category+'"','"'+r.paid_from+'"', Number(r.amount)||0].join(','));
+    });
+    L.push(['"'+p.name+'"','','','','TOTAL', p.total].join(','));
+  });
+  L.push(['GRAND TOTAL','','','','', c.grand].join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([L.join('\n')], { type:'text/csv' }));
+  a.download = 'spawn-fund-releases-' + c.from + '_' + c.to + '.csv';
   a.click();
 };
 
