@@ -299,7 +299,10 @@ async function rpRenderExpense(){
   +       'On <b>Expense type</b>: type a letter or press <kbd>Enter</kbd> to open the list<br>'
   +       '<kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
   +     '</div>'
-  +     '<div style="font-size:16px;font-weight:800;color:'+rpFundColor()+'">Grid total: <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
+  +     '<div style="text-align:right">'
+  +       '<div style="font-size:16px;font-weight:800;color:'+rpFundColor()+';margin-bottom:7px">Grid total: <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
+  +       '<button class="rp-btn ok" id="rp-save2" style="padding:10px 20px;font-size:13px" onclick="rpSaveDraft()">\u{1F4BE} Save all rows</button>'
+  +     '</div>'
   +   '</div>'
   + '</div>'
 
@@ -341,28 +344,42 @@ function rpMatchCat(txt){
   return hit || '';
 }
 
+function rpRowHtml(r, i){
+  const catOk = r.category ? ' ok set' : (r.amount ? ' warn' : '');
+  return '<div class="rp-grid" data-i="'+i+'">'
+    + '<div class="rp-rn">'+(i+1)+'</div>'
+    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
+    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
+    + '<input class="rp-in cell rp-cat'+catOk+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
+    + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
+    + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
+    + '</div>';
+}
+
+// Append one row to the DOM. Does NOT rebuild the grid, so whatever you are
+// typing in keeps its focus and cursor position.
+function rpAppendRowDom(){
+  const box = document.getElementById('rp-rows');
+  if(!box) return;
+  const i = rpDraft.length - 1;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = rpRowHtml(rpDraft[i], i);
+  box.appendChild(tmp.firstChild);
+}
+
 function rpDrawRows(){
   const box = document.getElementById('rp-rows');
   if(!box) return;
   const active = document.activeElement;
   const keep = active && active.hasAttribute && active.hasAttribute('data-cell')
-             ? { r:active.getAttribute('data-r'), c:active.getAttribute('data-c'), s:active.selectionStart } : null;
+             ? { r:active.getAttribute('data-r'), c:active.getAttribute('data-c'),
+                 s:(active.readOnly ? null : active.selectionStart) } : null;
 
-  box.innerHTML = rpDraft.map(function(r, i){
-    const catOk = r.category ? ' ok' : (r.amount ? ' warn' : '');
-    return '<div class="rp-grid" data-i="'+i+'">'
-      + '<div class="rp-rn">'+(i+1)+'</div>'
-      + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
-      + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
-      + '<input class="rp-in cell rp-cat'+catOk+(r.category?' set':'')+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
-      + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
-      + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
-      + '</div>';
-  }).join('');
+  box.innerHTML = rpDraft.map(rpRowHtml).join('');
 
   if(keep){
     const el = box.querySelector('[data-r="'+keep.r+'"][data-c="'+keep.c+'"]');
-    if(el){ el.focus(); try { el.setSelectionRange(keep.s, keep.s); } catch(e){} }
+    if(el){ el.focus(); if(keep.s != null){ try { el.setSelectionRange(keep.s, keep.s); } catch(e){} } }
   }
   rpTotals();
 }
@@ -399,9 +416,20 @@ function rpGridBind(){
     if(!rpDraft[r]) return;
     rpDraft[r][FIELDS[c]] = t.value;
     if(c === 3) rpTotals();
-    // always keep one spare row at the bottom
+
+    // live type detection while typing the particulars — exact matches only,
+    // so a half-typed word never picks the wrong category
+    if(c === 0 && !rpDraft[r].category){
+      const hit = rpMatchDesc(t.value, true);
+      if(hit){ rpDraft[r].category = hit; rpCatCellUpdate(r); }
+    }
+
+    // keep one spare row at the bottom — appended, never a full redraw
     const last = rpDraft[rpDraft.length-1];
-    if(last && (last.description || last.amount || last.co)){ rpDraft.push(rpBlankRow()); rpDrawRows(); }
+    if(last && (last.description || last.amount || last.co)){
+      rpDraft.push(rpBlankRow());
+      rpAppendRowDom();
+    }
   });
 
   box.addEventListener('blur', function(ev){
@@ -506,7 +534,9 @@ function rpTotals(){
   set('rp-draft-total', rpPeso(t));
   set('rp-kpi-draft',   rpPeso(t));
   set('rp-kpi-draftn',  good.length + ' row' + (good.length===1?'':'s') + ' ready');
-  const sv = document.getElementById('rp-save'); if(sv) sv.disabled = !good.length;
+  ['rp-save','rp-save2'].forEach(function(id){
+    const b = document.getElementById(id); if(b) b.disabled = !good.length;
+  });
 }
 
 window.rpMonthStep = function(n){
@@ -536,8 +566,8 @@ window.rpSaveDraft = async function(){
   if(filled) rpDrawRows();
   const good = rpValidDraft();
   if(!good.length){ if(window.toast) toast('Nothing to save \u2014 each row needs an amount and an expense type.'); return; }
-  const btn = document.getElementById('rp-save');
-  if(btn){ btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+  const btns = ['rp-save','rp-save2'].map(function(id){ return document.getElementById(id); }).filter(Boolean);
+  btns.forEach(function(b){ b.disabled = true; b.textContent = 'Saving\u2026'; });
   const payload = good.map(function(r){
     return {
       expense_date: rpDate,
@@ -560,7 +590,7 @@ window.rpSaveDraft = async function(){
     rpRenderExpense();
   } catch(e){
     if(window.toast) toast('\u274c Save failed: ' + e.message);
-    if(btn){ btn.disabled = false; btn.textContent = '\u{1F4BE} Save all rows'; }
+    btns.forEach(function(b){ b.disabled = false; b.textContent = '\u{1F4BE} Save all rows'; });
   }
 };
 
@@ -606,22 +636,50 @@ function rpCatCellUpdate(r){
   else if(row.amount) el.classList.add('warn');
 }
 
-// Recognise the expense type from the particulars. Only ever fills a BLANK
-// type, and updates that one cell in place so focus is never disturbed.
+const RP_STOP = ['pcs','pc','pack','packs','roll','rolls','box','boxes','kg','pair','set','sets','meters','meter','pieces','piece'];
+
+function rpDescTokens(txt){
+  return String(txt||'').toLowerCase()
+    .replace(/[^a-z0-9\s&]/g,' ')
+    .split(/\s+/)
+    .filter(function(w){ return w && w.length >= 3 && !/^\d+$/.test(w) && RP_STOP.indexOf(w) < 0; });
+}
+
+// exactOnly = true while typing, so a half-finished word can never lock in
+// the wrong category. The looser passes run when you leave the cell.
+function rpMatchDesc(txt, exactOnly){
+  const list = rpHints.descriptions || [];
+  if(!list.length) return null;
+  const d = String(txt||'').trim().toLowerCase();
+  if(d.length < 2) return null;
+
+  let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
+  if(hit) return hit.c || null;
+  if(exactOnly) return null;
+
+  hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
+  if(hit) return hit.c || null;
+
+  const mine = rpDescTokens(d);
+  if(!mine.length) return null;
+  let best = null, bestScore = 0;
+  list.forEach(function(x){
+    const theirs = rpDescTokens(x.d);
+    if(!theirs.length) return;
+    let hits = 0;
+    theirs.forEach(function(w){ if(mine.indexOf(w) >= 0) hits++; });
+    if(!hits) return;
+    const score = hits / theirs.length;
+    if(score > bestScore){ bestScore = score; best = x; }
+  });
+  return (best && bestScore >= 0.5) ? (best.c || null) : null;
+}
+
 function rpTryAutoCat(r){
   const row = rpDraft[r];
   if(!row || !row.description || row.category) return false;
-  const d = row.description.trim().toLowerCase();
-  if(!d) return false;
-  const list = rpHints.descriptions || [];
-  let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
-  if(!hit) hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
-  if(!hit){
-    // last resort: a word in common, e.g. "Gas Bao Sindangan" -> Fuel & Oil
-    const w = d.split(/\s+/)[0];
-    if(w.length >= 3) hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(w) === 0; });
-  }
-  if(hit && hit.c){ row.category = hit.c; rpCatCellUpdate(r); return true; }
+  const c = rpMatchDesc(row.description, false);
+  if(c){ row.category = c; rpCatCellUpdate(r); return true; }
   return false;
 }
 
