@@ -621,37 +621,86 @@ function rpDrawSaved(){
   }).join('');
 }
 
+// One modal, two fields: reason + password. Resolves {reason, pw} or null.
+function rpVoidModal(row){
+  return new Promise(function(resolve){
+    const old = document.getElementById('rp-void-ov'); if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'rp-void-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100040;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:18px;max-width:430px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">'
+      + '<div style="background:linear-gradient(135deg,#DF1A35,#8f0f22);padding:16px 22px;color:#fff;font-size:16px;font-weight:800">\u{1F6AB} Void expense entry</div>'
+      + '<div style="padding:19px 22px">'
+      +   '<div style="background:#fff5f5;border:1px solid #ffd4da;border-radius:9px;padding:11px 13px;margin-bottom:15px">'
+      +     '<div style="font-size:13.5px;font-weight:700;color:#1a1d2e">' + rpEsc(row.description || row.category || 'Entry')
+      +       ' <span style="color:#DF1A35">' + rpPeso(row.amount) + '</span></div>'
+      +     '<div style="font-size:11px;color:#6b7394;margin-top:3px">' + rpEsc(row.expense_date || rpDate)
+      +       (row.co ? ' \u00b7 ' + rpEsc(row.co) : '') + ' \u00b7 ' + rpEsc(row.category || '')
+      +       ' \u00b7 ' + rpEsc(row.paid_from || rpFund) + '</div>'
+      +   '</div>'
+      +   '<div style="font-size:11.5px;color:#374151;margin-bottom:13px;line-height:1.6">It comes out of every total and report, but stays on record with your name and reason, and can be restored.</div>'
+      +   '<label style="display:block;font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Reason <span style="font-weight:500;text-transform:none">(optional)</span></label>'
+      +   '<input id="rp-void-why" placeholder="e.g. duplicate entry, wrong amount" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;margin-bottom:13px">'
+      +   '<label style="display:block;font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Admin password</label>'
+      +   '<input id="rp-void-pw" type="password" inputmode="numeric" placeholder="Required" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit">'
+      +   '<div id="rp-void-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none">\u274c Wrong password.</div>'
+      +   '<div style="display:flex;gap:8px;margin-top:18px">'
+      +     '<button id="rp-void-cancel" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
+      +     '<button id="rp-void-ok" style="flex:2;padding:11px;background:#DF1A35;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">\u{1F6AB} Void entry</button>'
+      +   '</div>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+
+    const why = document.getElementById('rp-void-why');
+    const pw  = document.getElementById('rp-void-pw');
+    function done(v){ ov.remove(); resolve(v); }
+    function submit(){
+      if(!pw.value){ pw.focus(); return; }
+      resolve({ reason: why.value, pw: pw.value, close: function(){ ov.remove(); },
+                wrong: function(){
+                  const e = document.getElementById('rp-void-err');
+                  if(e) e.style.display = 'block';
+                  pw.value = ''; pw.focus();
+                  const b = document.getElementById('rp-void-ok');
+                  if(b){ b.disabled = false; b.textContent = '\u{1F6AB} Void entry'; }
+                } });
+      const b = document.getElementById('rp-void-ok');
+      if(b){ b.disabled = true; b.textContent = 'Voiding\u2026'; }
+    }
+    document.getElementById('rp-void-cancel').onclick = function(){ done(null); };
+    document.getElementById('rp-void-ok').onclick = submit;
+    [why, pw].forEach(function(el){
+      el.onkeydown = function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); if(el === why) pw.focus(); else submit(); }
+        if(e.key === 'Escape'){ e.preventDefault(); done(null); }
+      };
+    });
+    ov.addEventListener('click', function(e){ if(e.target === ov) done(null); });
+    setTimeout(function(){ why.focus(); }, 60);
+  });
+}
+
 window.rpDelSaved = async function(id){
   const row = rpDayRows.find(function(x){ return x.id === id; }) || {};
-  const what = '<b>' + rpEsc(row.description || row.category || 'this entry') + '</b>'
-             + (row.co ? ' \u00b7 ' + rpEsc(row.co) : '')
-             + ' \u2014 <b style="color:#DF1A35">' + rpPeso(row.amount) + '</b>';
-
-  const pw = await window.askAdminPw(
-    'You are about to <b>void</b> this expense entry:<br><br>'
-    + '<div style="background:#fff5f5;border:1px solid #ffd4da;border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.6">'
-    + what + '<br><span style="color:#6b7394;font-size:11px">' + rpEsc(row.expense_date || rpDate)
-    + ' \u00b7 ' + rpEsc(row.category || '') + ' \u00b7 ' + rpEsc(row.paid_from || rpFund) + '</span>'
-    + '</div><br>It will be removed from every total and report, but kept on record so it can be traced or restored. Enter the admin password to confirm.'
-  );
-  if(pw === null) return;                       // cancelled
-
-  if(String(pw).trim() !== '101510'){
-    window.markAdminPwWrong();
-    return;
-  }
-  const ov = document.getElementById('spawn-pw-modal'); if(ov) ov.remove();
-
-  const why = prompt('Reason for voiding this entry (optional, kept on record):') || null;
+  const ans = await rpVoidModal(row);
+  if(!ans) return;
   try {
-    await rpRest('expenses?id=eq.' + id + '&voided_at=is.null', {
-      method:'PATCH', headers:{ Prefer:'return=minimal' },
-      body: JSON.stringify({ voided_at: new Date().toISOString(), voided_by: 'dashboard', void_reason: why })
+    const res = await rpRpc('spawn_expense_void', {
+      p_id: id, p_pw: ans.pw, p_by: 'dashboard', p_reason: ans.reason || null
     });
+    if(!res || res.ok !== true){
+      if(res && res.error === 'bad_password'){ ans.wrong(); return; }
+      throw new Error((res && res.error) || 'void failed');
+    }
+    ans.close();
     rpJustSaved = rpJustSaved.filter(function(x){ return x !== id; });
-    if(window.toast) toast('\u{1F6AB} Voided ' + rpPeso(row.amount) + ' \u2014 kept on record, out of all totals');
+    if(window.toast) toast('\u{1F6AB} Voided ' + rpPeso(row.amount) + ' \u2014 kept on record');
     rpRenderExpense();
-  } catch(e){ if(window.toast) toast('\u274c Void failed: ' + e.message); }
+  } catch(e){
+    ans.close();
+    if(window.toast) toast('\u274c Void failed: ' + e.message);
+  }
 };
 
 // ── expense-type picker ────────────────────────────────────
