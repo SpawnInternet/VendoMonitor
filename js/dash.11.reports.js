@@ -409,7 +409,7 @@ function rpGridBind(){
     if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     if(!rpDraft[r]) return;
-    if(c === 0) rpTryAutoCat(r);
+    if(c === 0) rpTryAutoCat(r);   // in-place, safe during blur
   }, true);
 
   box.addEventListener('keydown', function(ev){
@@ -451,8 +451,8 @@ function rpGridBind(){
       return;
     }
 
-    // leaving the description: try to recognise the expense type straight away
-    if(c === 0 && (k === 'Tab' || k === 'Enter') && !ev.shiftKey) rpTryAutoCat(r);
+    // leaving the particulars in any direction: recognise the expense type
+    if(c === 0 && (k === 'Tab' || k === 'Enter' || k === 'ArrowRight' || k === 'ArrowDown') && !ev.shiftKey) rpTryAutoCat(r);
 
     // leaving the name: if the type is already known, skip it and go to Amount
     if(c === 1 && k === 'Tab' && !ev.shiftKey && rpDraft[r] && rpDraft[r].category){
@@ -532,6 +532,8 @@ window.rpChangeDate = function(d){
 };
 
 window.rpSaveDraft = async function(){
+  const filled = rpAutoCatAll();          // catch any row still missing a type
+  if(filled) rpDrawRows();
   const good = rpValidDraft();
   if(!good.length){ if(window.toast) toast('Nothing to save \u2014 each row needs an amount and an expense type.'); return; }
   const btn = document.getElementById('rp-save');
@@ -594,6 +596,18 @@ window.rpDelSaved = async function(id){
 
 // Recognise the expense type from the description. Only ever fills a BLANK
 // type — it never overrides something already chosen by hand.
+function rpCatCellUpdate(r){
+  const el = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="2"]');
+  const row = rpDraft[r];
+  if(!el || !row) return;
+  el.value = row.category || '';
+  el.classList.remove('ok','warn','set');
+  if(row.category) el.classList.add('ok','set');
+  else if(row.amount) el.classList.add('warn');
+}
+
+// Recognise the expense type from the particulars. Only ever fills a BLANK
+// type, and updates that one cell in place so focus is never disturbed.
 function rpTryAutoCat(r){
   const row = rpDraft[r];
   if(!row || !row.description || row.category) return false;
@@ -602,8 +616,20 @@ function rpTryAutoCat(r){
   const list = rpHints.descriptions || [];
   let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
   if(!hit) hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
-  if(hit && hit.c){ row.category = hit.c; rpDrawRows(); return true; }
+  if(!hit){
+    // last resort: a word in common, e.g. "Gas Bao Sindangan" -> Fuel & Oil
+    const w = d.split(/\s+/)[0];
+    if(w.length >= 3) hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(w) === 0; });
+  }
+  if(hit && hit.c){ row.category = hit.c; rpCatCellUpdate(r); return true; }
   return false;
+}
+
+// Sweep every row — used after paste, after copy-a-day, and before saving.
+function rpAutoCatAll(){
+  let n = 0;
+  for(let i = 0; i < rpDraft.length; i++) if(rpTryAutoCat(i)) n++;
+  return n;
 }
 
 // ── expense-type picker ────────────────────────────────────
@@ -693,6 +719,7 @@ window.rpCopyDay = async function(){
   if(!rows.length){ if(window.toast) toast('No entries recorded on ' + src + '.'); return; }
 
   rpDraft = rpDraft.filter(function(r){ return r.description || r.amount; }).concat(rows, [rpBlankRow()]);
+  rpAutoCatAll();
   rpDrawRows();
   rpGridBind();
   const box = document.getElementById('rp-copy-warn');
@@ -743,6 +770,7 @@ window.rpPasteApply = function(){
   });
   if(!added){ if(msg) msg.innerHTML = '<span style="color:#DF1A35;font-weight:700">No usable rows found \u2014 check that the 4th column holds the amount.</span>'; return; }
   rpDraft = rpDraft.filter(function(r){ return r.description || r.amount; }).concat(fresh, [rpBlankRow()]);
+  rpAutoCatAll();
   rpGridBind();
   const ov = document.getElementById('rp-paste-ov'); if(ov) ov.remove();
   rpDrawRows();
