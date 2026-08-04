@@ -499,9 +499,21 @@ function rpGridBind(){
 
     // live type detection while typing the particulars — exact matches only,
     // so a half-typed word never picks the wrong category
-    if(c === 0 && !rpDraft[r].category){
-      const hit = rpMatchDesc(t.value, true);
-      if(hit){ rpDraft[r].category = hit; rpCatCellUpdate(r); }
+    if(c === 0){
+      // emptied the particulars: drop a type that was only ever a guess
+      if(!t.value.trim()){
+        if(rpDraft[r].guessed){ rpDraft[r].category = ''; rpDraft[r].guessed = false; rpCatCellUpdate(r); }
+      } else if(!rpDraft[r].category){
+        const hit = rpMatchDesc(t.value, true);
+        if(hit){ rpDraft[r].category = hit; rpDraft[r].guessed = true; rpCatCellUpdate(r); }
+      } else if(rpDraft[r].guessed){
+        // still a guess and the text changed — re-detect from scratch
+        rpDraft[r].category = '';
+        const hit2 = rpMatchDesc(t.value, true);
+        rpDraft[r].category = hit2 || '';
+        rpDraft[r].guessed  = !!hit2;
+        rpCatCellUpdate(r);
+      }
     }
     if(c === 0 || c === 1){ rpSugHi = -1; rpSugShow(r, c, t.value); }
 
@@ -1541,4 +1553,95 @@ function rpRenderTodo(mode){
     if(orig) orig(panel, btn);
     if(panel === 'reports' && typeof reportsInit === 'function') reportsInit();
   };
+})();
+
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD CARDS — daily expense + capital & admin
+// ══════════════════════════════════════════════════════════
+window.rpxGoReports = function(){
+  const btn = document.querySelector('[data-panel="reports"]');
+  if(typeof showP === 'function') showP('reports', btn);
+  if(typeof reportsInit === 'function') reportsInit();
+};
+
+let _rpxDaily = null, _rpxMonth = null, _rpxBusy = false;
+
+window.rpxLoadCharts = async function(){
+  if(_rpxBusy || typeof Chart === 'undefined') return;
+  if(!document.getElementById('rpx-daily-chart')) return;
+  _rpxBusy = true;
+  try {
+    const today = rpPhToday();
+    const from  = new Date(new Date(today + 'T00:00:00').getTime() - 13*86400000).toISOString().slice(0,10);
+
+    const rows = await rpRest('expenses?select=expense_date,amount,paid_from&voided_at=is.null'
+      + '&expense_date=gte.' + from + '&expense_date=lte.' + today + '&order=expense_date.asc&limit=1000');
+
+    const days = [], coll = [], wend = [];
+    for(let i = 0; i < 14; i++){
+      const d = new Date(new Date(from + 'T00:00:00').getTime() + i*86400000).toISOString().slice(0,10);
+      days.push(d.slice(5));
+      coll.push(0); wend.push(0);
+    }
+    (rows||[]).forEach(function(r){
+      const i = days.indexOf(String(r.expense_date).slice(5));
+      if(i < 0) return;
+      if(r.paid_from === 'Sir Wendell') wend[i] += Number(r.amount)||0; else coll[i] += Number(r.amount)||0;
+    });
+    const dTot = coll.reduce(function(a,b){return a+b;},0) + wend.reduce(function(a,b){return a+b;},0);
+    const dl = document.getElementById('rpx-d-tot'); if(dl) dl.textContent = rpPeso(dTot);
+
+    if(_rpxDaily) _rpxDaily.destroy();
+    _rpxDaily = new Chart(document.getElementById('rpx-daily-chart'), {
+      type: 'bar',
+      data: { labels: days, datasets: [
+        { label:'Daily book', data: coll, backgroundColor: RP_BRAND.blue, stack:'s' },
+        { label:'Sir Wendell', data: wend, backgroundColor: RP_BRAND.magenta, stack:'s' }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:true, labels:{ boxWidth:9, font:{size:9} } },
+          tooltip:{ callbacks:{ label:function(x){ return x.dataset.label + ': ' + rpPeso(x.raw); } } } },
+        scales:{ x:{ ticks:{ font:{size:8} }, grid:{display:false}, stacked:true },
+                 y:{ ticks:{ font:{size:8}, callback:function(v){ return rpPesoShort(v); } }, stacked:true } } }
+    });
+
+    const yr = parseInt(today.slice(0,4),10);
+    const sum = await rpRpc('spawn_expense_summary', { p_year: yr });
+    const MON = ['','JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const ms = [], mc = [], mw = [];
+    for(let m = 1; m <= 12; m++){
+      const f = (sum.funds||{})[m];
+      if(!f) continue;
+      ms.push(MON[m]); mc.push(Number(f.collections)||0); mw.push(Number(f.wendell)||0);
+    }
+    const ml = document.getElementById('rpx-m-tot'); if(ml) ml.textContent = rpPeso(sum.grand);
+
+    if(_rpxMonth) _rpxMonth.destroy();
+    _rpxMonth = new Chart(document.getElementById('rpx-month-chart'), {
+      type: 'bar',
+      data: { labels: ms, datasets: [
+        { label:'Daily book (Collections)', data: mc, backgroundColor: RP_BRAND.blue },
+        { label:'Capital & Admin (Sir Wendell)', data: mw, backgroundColor: RP_BRAND.magenta }
+      ]},
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:true, labels:{ boxWidth:9, font:{size:9} } },
+          tooltip:{ callbacks:{ label:function(x){ return x.dataset.label + ': ' + rpPeso(x.raw); } } } },
+        scales:{ x:{ ticks:{ font:{size:9} }, grid:{display:false} },
+                 y:{ ticks:{ font:{size:8}, callback:function(v){ return rpPesoShort(v); } } } } }
+    });
+  } catch(e){ console.warn('rpx charts', e); }
+  finally { _rpxBusy = false; }
+};
+
+(function(){
+  const orig = window.showP;
+  window.showP = function(panel, btn){
+    if(orig) orig(panel, btn);
+    if(panel === 'dash') setTimeout(rpxLoadCharts, 400);
+  };
+  setTimeout(function(){
+    if(document.getElementById('panel-dash') &&
+       document.getElementById('panel-dash').classList.contains('active')) rpxLoadCharts();
+  }, 1800);
 })();
