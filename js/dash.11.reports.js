@@ -299,6 +299,7 @@ async function rpRenderExpense(){
   +     '<div class="rp-keys">'
   +       '<kbd>\u2191</kbd><kbd>\u2193</kbd> move row \u00b7 <kbd>\u2190</kbd><kbd>\u2192</kbd> move column \u00b7 <kbd>Enter</kbd> next row \u00b7 <kbd>Tab</kbd> next cell<br>'
   +       'On <b>Expense type</b>: type a letter, press <kbd>Enter</kbd> or click to open the list \u00b7 <kbd>Tab</kbd> from Name skips it, <kbd>\u2192</kbd> steps into it<br>'
+  +       'Past entries appear as you type \u2014 <b>click</b> one to use it. The arrow keys always move around the grid.<br>'
   +       '<kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
   +     '</div>'
   +     '<div style="text-align:right">'
@@ -359,8 +360,8 @@ function rpRowHtml(r, i){
   const catOk = r.category ? (r.guessed ? ' guess set' : ' ok set') : (r.amount ? ' warn' : '');
   return '<div class="rp-grid" data-i="'+i+'">'
     + '<div class="rp-rn">'+(i+1)+'</div>'
-    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
-    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
+    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" autocomplete="off" placeholder="description" value="'+rpEsc(r.description)+'">'
+    + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" autocomplete="off" placeholder="c/o" value="'+rpEsc(r.co)+'">'
     + '<input class="rp-in cell rp-cat'+catOk+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" title="'+(r.category ? (r.guessed?'Detected \u2014 click to change':'Chosen by you') : 'Click or press Enter to choose')+'" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
     + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
     + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
@@ -407,6 +408,7 @@ function rpGridBind(){
   function cell(r,c){ return box.querySelector('[data-r="'+r+'"][data-c="'+c+'"]'); }
   function go(r,c,toEnd){
     rpCatClose();
+    rpSugHide();
     if(r < 0) r = 0;
     while(r >= rpDraft.length){ rpDraft.push(rpBlankRow()); }
     if(box.querySelectorAll('.rp-grid').length !== rpDraft.length) rpDrawRows();
@@ -434,6 +436,7 @@ function rpGridBind(){
       const hit = rpMatchDesc(t.value, true);
       if(hit){ rpDraft[r].category = hit; rpCatCellUpdate(r); }
     }
+    if(c === 0 || c === 1) rpSugShow(r, c, t.value);
 
     // keep one spare row at the bottom — appended, never a full redraw
     const last = rpDraft[rpDraft.length-1];
@@ -449,6 +452,7 @@ function rpGridBind(){
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     if(!rpDraft[r]) return;
     if(c === 0) rpTryAutoCat(r);   // in-place, safe during blur
+    setTimeout(rpSugHide, 120);    // let a click on the popup land first
   }, true);
 
   box.addEventListener('keydown', function(ev){
@@ -705,6 +709,74 @@ window.rpDelSaved = async function(id){
     if(window.toast) toast('\u274c Void failed: ' + e.message);
   }
 };
+
+// ── suggestion popup for Particulars and Name ────────────
+// Deliberately NOT a <datalist>: the native one captures the arrow keys for
+// its own list, which killed row navigation. This one is click-only, so the
+// arrows always belong to the grid.
+let rpSugCell = null;
+
+function rpSugSource(c){
+  if(c === 0) return (rpHints.descriptions||[]).map(function(x){ return x.d; });
+  if(c === 1) return (rpHints.people||[]);
+  return [];
+}
+
+function rpSugShow(r, c, typed){
+  rpSugHide();
+  const q = String(typed||'').trim().toLowerCase();
+  if(q.length < 2) return;
+  const src = rpSugSource(c);
+  if(!src.length) return;
+  const starts = [], has = [];
+  for(let i=0; i<src.length && starts.length + has.length < 40; i++){
+    const v = String(src[i]||''); const lv = v.toLowerCase();
+    if(lv === q) continue;
+    if(lv.indexOf(q) === 0) starts.push(v);
+    else if(lv.indexOf(q) > 0) has.push(v);
+  }
+  const list = starts.concat(has).slice(0, 8);
+  if(!list.length) return;
+
+  const cell = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="'+c+'"]');
+  if(!cell) return;
+  const pop = document.createElement('div');
+  pop.className = 'rp-pop'; pop.id = 'rp-sug-pop';
+  pop.innerHTML = list.map(function(v){
+      return '<div onmousedown="rpSugPick(event,'+r+','+c+',\'' + rpEsc(v).replace(/'/g,"\\\\'") + '\')">' + rpEsc(v) + '</div>';
+    }).join('')
+    + '<div class="hint">Click to use \u00b7 arrow keys still move around the grid</div>';
+  document.body.appendChild(pop);
+  const b = cell.getBoundingClientRect();
+  pop.style.minWidth = Math.max(190, b.width) + 'px';
+  const h = pop.offsetHeight;
+  pop.style.left = Math.min(b.left, window.innerWidth - pop.offsetWidth - 12) + 'px';
+  pop.style.top  = (window.innerHeight - b.bottom > h + 12) ? (b.bottom + 3) + 'px' : (b.top - h - 3) + 'px';
+  rpSugCell = { r:r, c:c };
+}
+
+function rpSugHide(){
+  const p = document.getElementById('rp-sug-pop'); if(p) p.remove();
+  rpSugCell = null;
+}
+
+window.rpSugPick = function(ev, r, c, val){
+  if(ev) ev.preventDefault();
+  const FIELDS = ['description','co','category','amount'];
+  if(!rpDraft[r]) return;
+  rpDraft[r][FIELDS[c]] = val;
+  const el = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="'+c+'"]');
+  if(el) el.value = val;
+  rpSugHide();
+  if(c === 0) rpTryAutoCat(r);
+  const nxt = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="'+(c+1)+'"]');
+  if(nxt) nxt.focus();
+};
+
+document.addEventListener('mousedown', function(e){
+  const p = document.getElementById('rp-sug-pop');
+  if(p && !p.contains(e.target)) rpSugHide();
+});
 
 // ── voided entries: view and restore ─────────────────────
 window.rpVoidedOpen = async function(){
