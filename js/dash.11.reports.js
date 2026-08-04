@@ -68,7 +68,7 @@ async function reportsInit(){
 function rpShellHtml(){
   const tabs = [
     ['expense',  '\u{1F4B8}', 'Daily Expense'],
-    ['wendell',  '\u{1F4B3}', 'Wendell Expense'],
+    ['wendell',  '\u{1F4B3}', 'Admin Expense'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
     ['releases', '\u{1F91D}', 'Fund Releases'],
     ['sales',    '\u{1F4B0}', 'Sales'],
@@ -176,7 +176,10 @@ function rpStash(){
     rpState[rpFund] = { date: rpDate, draft: rpDraft };
   }
 }
-function rpFundShort(){ return rpFund === 'Sir Wendell' ? 'Wendell' : 'Collections'; }
+function rpFundShort(){ return rpFund === 'Sir Wendell' ? 'Admin' : 'Collections'; }
+// Display label only. The stored value stays 'Sir Wendell' so the database,
+// the RPCs and the sheet bridge are untouched.
+function rpFundName(v){ return v === 'Sir Wendell' ? 'Admin Expense' : 'Daily Expense'; }
 function rpFundColor(){ return rpFund === 'Sir Wendell' ? RP_BRAND.magenta : RP_BRAND.blue; }
 
 window.rpSetTab = function(mode){
@@ -259,7 +262,7 @@ async function rpRenderExpense(){
 
   host.innerHTML = ''
   + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
-  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
+  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Admin Expense \u2014 capital & admin, paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
   +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   + '</div>'
   + '<div class="rp-kpis tight">'
@@ -744,7 +747,7 @@ function rpVoidModal(row){
       +       ' <span style="color:#DF1A35">' + rpPeso(row.amount) + '</span></div>'
       +     '<div style="font-size:11px;color:#6b7394;margin-top:3px">' + rpEsc(row.expense_date || rpDate)
       +       (row.co ? ' \u00b7 ' + rpEsc(row.co) : '') + ' \u00b7 ' + rpEsc(row.category || '')
-      +       ' \u00b7 ' + rpEsc(row.paid_from || rpFund) + '</div>'
+      +       ' \u00b7 ' + rpEsc(rpFundName(row.paid_from || rpFund)) + '</div>'
       +   '</div>'
       +   '<div style="font-size:11.5px;color:#374151;margin-bottom:13px;line-height:1.6">It comes out of every total and report, but stays on record with your name and reason, and can be restored.</div>'
       +   '<label style="display:block;font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Reason <span style="font-weight:500;text-transform:none">(optional)</span></label>'
@@ -1136,7 +1139,7 @@ async function rpRenderSummary(){
 
   host.innerHTML = ''
   + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
-  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
+  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Admin Expense \u2014 capital & admin, paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
   +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   + '</div>'
   + '<div class="rp-kpis">'
@@ -1145,14 +1148,14 @@ async function rpRenderSummary(){
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Average per month</div><div class="v">'+rpPeso(months.length ? s.grand/months.length : 0)+'</div><div class="s">across active months</div></div>'
   + '</div>'
   + '<div class="rp-card" style="padding:0;overflow:hidden">'
-  +   '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff">\u{1F4B0} Combined expense \u2014 Daily book + Sir Wendell</div>'
+  +   '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff">\u{1F4B0} Combined expense \u2014 Daily + Admin</div>'
   +   '<div style="overflow:auto"><table class="rp-t"><thead><tr><th style="min-width:150px">Fund</th>'
   +     months.map(function(m){ return '<th class="rp-num">'+RP_MONTHS[m].slice(0,3).toUpperCase()+'</th>'; }).join('')
   +     '<th class="rp-num" style="background:#e8f0ff">TOTAL</th></tr></thead><tbody>'
-  +     '<tr><td style="font-weight:700;color:#025AC6">Daily book (Collections)</td>'
+  +     '<tr><td style="font-weight:700;color:#025AC6">Daily Expense (Collections)</td>'
   +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).collections)+'</td>'; }).join('')
   +       '<td class="rp-num" style="font-weight:800;background:#f6f9ff">'+rpPesoShort(s.fund_collections)+'</td></tr>'
-  +     '<tr><td style="font-weight:700;color:#C01176">Paid by Sir Wendell</td>'
+  +     '<tr><td style="font-weight:700;color:#C01176">Admin Expense</td>'
   +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).wendell)+'</td>'; }).join('')
   +       '<td class="rp-num" style="font-weight:800;background:#fff4fb;color:#C01176">'+rpPesoShort(s.fund_wendell)+'</td></tr>'
   +   '</tbody><tfoot><tr style="background:#f0f4ff">'
@@ -1272,7 +1275,7 @@ async function rpRenderReleases(){
   + '<div class="rp-card" style="padding:0;overflow:hidden">'
   +   '<div class="rp-scroll" style="border:none;max-height:600px"><table class="rp-t"><thead><tr>'
   +     '<th style="min-width:170px">Name (c/o)</th><th class="rp-num">Releases</th>'
-  +     '<th>Mainly for</th><th class="rp-num">Collections</th><th class="rp-num">Wendell</th><th class="rp-num">Total</th>'
+  +     '<th>Mainly for</th><th class="rp-num">Daily</th><th class="rp-num">Admin</th><th class="rp-num">Total</th>'
   +   '</tr></thead><tbody>' + people.map(rpRelRow).join('')
   +   '</tbody><tfoot><tr style="background:#f0f4ff">'
   +     '<td style="font-weight:800;color:#025AC6">TOTAL</td><td class="rp-num" style="font-weight:800">'+rows.length+'</td><td></td>'
@@ -1301,7 +1304,7 @@ function rpRelRow(p, i){
           return '<tr><td style="color:#6b7394">'+rpEsc(r.expense_date)+'</td>'
             + '<td>'+rpEsc(r.description || '\u2014')+'</td>'
             + '<td style="color:#6b7394">'+rpEsc(r.category)+'</td>'
-            + '<td style="font-size:11px;color:'+(r.paid_from==='Sir Wendell'?'#C01176':'#025AC6')+'">'+rpEsc(r.paid_from)+'</td>'
+            + '<td style="font-size:11px;color:'+(r.paid_from==='Sir Wendell'?'#C01176':'#025AC6')+'">'+rpEsc(rpFundName(r.paid_from))+'</td>'
             + '<td class="rp-num">'+rpPeso(r.amount)+'</td></tr>';
         }).join('')
       + '<tr style="background:#eef3ff"><td colspan="4" style="font-weight:800;text-align:right">Total released to '+rpEsc(p.name)+'</td>'
@@ -1599,8 +1602,8 @@ window.rpxLoadCharts = async function(){
     _rpxDaily = new Chart(document.getElementById('rpx-daily-chart'), {
       type: 'bar',
       data: { labels: days, datasets: [
-        { label:'Daily book', data: coll, backgroundColor: RP_BRAND.blue, stack:'s' },
-        { label:'Sir Wendell', data: wend, backgroundColor: RP_BRAND.magenta, stack:'s' }
+        { label:'Daily Expense', data: coll, backgroundColor: RP_BRAND.blue, stack:'s' },
+        { label:'Admin Expense', data: wend, backgroundColor: RP_BRAND.magenta, stack:'s' }
       ]},
       options: { responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:true, labels:{ boxWidth:9, font:{size:9} } },
@@ -1624,8 +1627,8 @@ window.rpxLoadCharts = async function(){
     _rpxMonth = new Chart(document.getElementById('rpx-month-chart'), {
       type: 'bar',
       data: { labels: ms, datasets: [
-        { label:'Daily book (Collections)', data: mc, backgroundColor: RP_BRAND.blue },
-        { label:'Capital & Admin (Sir Wendell)', data: mw, backgroundColor: RP_BRAND.magenta }
+        { label:'Daily Expense', data: mc, backgroundColor: RP_BRAND.blue },
+        { label:'Admin Expense', data: mw, backgroundColor: RP_BRAND.magenta }
       ]},
       options: { responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:true, labels:{ boxWidth:9, font:{size:9} } },
@@ -1712,7 +1715,7 @@ window.rpxLoadStat = async function(){
         '<div class="sl" style="color:' + RP_BRAND.magenta + '">Expense &middot; ' + mn + '</div>'
       + '<div class="sv" style="color:' + RP_BRAND.magenta + '">' + rpPeso(coll + wend) + '</div>'
       + '<div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">'
-      +   'Daily ' + rpPesoShort(coll) + ' &middot; Wendell ' + (wend ? rpPesoShort(wend) : '\u2014')
+      +   'Daily ' + rpPesoShort(coll) + ' &middot; Admin ' + (wend ? rpPesoShort(wend) : '\u2014')
       + '</div>';
   } catch(e){
     card.innerHTML = '<div class="sl" style="color:' + RP_BRAND.magenta + '">Expense of the Month</div>'
