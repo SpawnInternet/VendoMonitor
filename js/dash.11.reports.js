@@ -503,7 +503,7 @@ function rpGridBind(){
       const hit = rpMatchDesc(t.value, true);
       if(hit){ rpDraft[r].category = hit; rpCatCellUpdate(r); }
     }
-    if(c === 0 || c === 1) rpSugShow(r, c, t.value);
+    if(c === 0 || c === 1){ rpSugHi = -1; rpSugShow(r, c, t.value); }
 
     // keep one spare row at the bottom — appended, never a full redraw
     const last = rpDraft[rpDraft.length-1];
@@ -540,6 +540,25 @@ function rpGridBind(){
         ev.preventDefault(); rpPopFilter += k; rpPopHi = 0; rpCatDraw(); return;
       }
       return;
+    }
+
+    // ── suggestion popup open on Particulars / Name ──
+    if(rpSugCell && rpSugCell.r === r && rpSugCell.c === c && rpSugList.length){
+      if(k === 'ArrowDown'){
+        ev.preventDefault();
+        if(rpSugHi < rpSugList.length - 1){ rpSugHi++; rpSugRedraw(); }
+        else { rpSugHide(); go(r+1, c, true); }
+        return;
+      }
+      if(k === 'ArrowUp'){
+        ev.preventDefault();
+        if(rpSugHi > 0){ rpSugHi--; rpSugRedraw(); }
+        else if(rpSugHi === 0){ rpSugHi = -1; rpSugRedraw(); }
+        else { rpSugHide(); go(r-1, c, true); }
+        return;
+      }
+      if((k === 'Enter' || k === 'Tab') && rpSugHi >= 0){ ev.preventDefault(); rpSugAccept(r, c); return; }
+      if(k === 'Escape'){ ev.preventDefault(); rpSugHide(); return; }
     }
 
     // ── closed picker: a letter, Enter or Space opens it ──
@@ -781,7 +800,7 @@ window.rpDelSaved = async function(id){
 // Deliberately NOT a <datalist>: the native one captures the arrow keys for
 // its own list, which killed row navigation. This one is click-only, so the
 // arrows always belong to the grid.
-let rpSugCell = null;
+let rpSugCell = null, rpSugList = [], rpSugHi = -1;
 
 function rpSugSource(c){
   if(c === 0) return (rpHints.descriptions||[]).map(function(x){ return x.d; });
@@ -804,15 +823,17 @@ function rpSugShow(r, c, typed){
   }
   const list = starts.concat(has).slice(0, 8);
   if(!list.length) return;
+  rpSugList = list;
+  if(rpSugHi >= list.length) rpSugHi = -1;
 
   const cell = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="'+c+'"]');
   if(!cell) return;
   const pop = document.createElement('div');
   pop.className = 'rp-pop'; pop.id = 'rp-sug-pop';
-  pop.innerHTML = list.map(function(v){
-      return '<div onmousedown="rpSugPick(event,'+r+','+c+',\'' + rpEsc(v).replace(/'/g,"\\\\'") + '\')">' + rpEsc(v) + '</div>';
+  pop.innerHTML = list.map(function(v, n){
+      return '<div class="'+(n===rpSugHi?'hi':'')+'" onmousedown="rpSugPick(event,'+r+','+c+',\'' + rpEsc(v).replace(/'/g,"\\\\'") + '\')">' + rpEsc(v) + '</div>';
     }).join('')
-    + '<div class="hint">Click to use \u00b7 arrow keys still move around the grid</div>';
+    + '<div class="hint">\u2191\u2193 choose \u00b7 Enter or Tab to use \u00b7 Esc to dismiss</div>';
   (document.getElementById('panel-reports') || document.body).appendChild(pop);
   const b = cell.getBoundingClientRect();
   pop.style.minWidth = Math.max(190, b.width) + 'px';
@@ -824,7 +845,19 @@ function rpSugShow(r, c, typed){
 
 function rpSugHide(){
   const p = document.getElementById('rp-sug-pop'); if(p) p.remove();
-  rpSugCell = null;
+  rpSugCell = null; rpSugList = []; rpSugHi = -1;
+}
+function rpSugRedraw(){
+  const pop = document.getElementById('rp-sug-pop');
+  if(!pop) return;
+  const items = pop.querySelectorAll('div:not(.hint)');
+  items.forEach(function(el, n){ el.classList.toggle('hi', n === rpSugHi); });
+  const hi = pop.querySelector('.hi'); if(hi) hi.scrollIntoView({ block:'nearest' });
+}
+function rpSugAccept(r, c){
+  if(rpSugHi < 0 || !rpSugList[rpSugHi]) return false;
+  rpSugPick(null, r, c, rpSugList[rpSugHi]);
+  return true;
 }
 
 window.rpSugPick = function(ev, r, c, val){
