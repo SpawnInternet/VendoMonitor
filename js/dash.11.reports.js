@@ -620,83 +620,33 @@ function rpDrawSaved(){
 }
 
 window.rpDelSaved = async function(id){
-  if(!confirm('Delete this expense entry? This cannot be undone.')) return;
+  const row = rpDayRows.find(function(x){ return x.id === id; }) || {};
+  const what = '<b>' + rpEsc(row.description || row.category || 'this entry') + '</b>'
+             + (row.co ? ' \u00b7 ' + rpEsc(row.co) : '')
+             + ' \u2014 <b style="color:#DF1A35">' + rpPeso(row.amount) + '</b>';
+
+  const pw = await window.askAdminPw(
+    'You are about to permanently delete an expense entry:<br><br>'
+    + '<div style="background:#fff5f5;border:1px solid #ffd4da;border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.6">'
+    + what + '<br><span style="color:#6b7394;font-size:11px">' + rpEsc(row.expense_date || rpDate)
+    + ' \u00b7 ' + rpEsc(row.category || '') + ' \u00b7 ' + rpEsc(row.paid_from || rpFund) + '</span>'
+    + '</div><br>This cannot be undone. Enter the admin password to confirm.'
+  );
+  if(pw === null) return;                       // cancelled
+
+  if(String(pw).trim() !== '101510'){
+    window.markAdminPwWrong();
+    return;
+  }
+  const ov = document.getElementById('spawn-pw-modal'); if(ov) ov.remove();
+
   try {
     await rpRest('expenses?id=eq.' + id, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
-    if(window.toast) toast('Entry deleted.');
+    rpJustSaved = rpJustSaved.filter(function(x){ return x !== id; });
+    if(window.toast) toast('\u{1F5D1}\uFE0F Deleted ' + rpPeso(row.amount) + ' \u2014 ' + (row.description || row.category || 'entry'));
     rpRenderExpense();
   } catch(e){ if(window.toast) toast('\u274c Delete failed: ' + e.message); }
 };
-
-// Recognise the expense type from the description. Only ever fills a BLANK
-// type — it never overrides something already chosen by hand.
-function rpCatCellUpdate(r){
-  const el = document.querySelector('#rp-rows [data-r="'+r+'"][data-c="2"]');
-  const row = rpDraft[r];
-  if(!el || !row) return;
-  el.value = row.category || '';
-  el.classList.remove('ok','warn','set','guess');
-  if(row.category){
-    el.classList.add('set');
-    el.classList.add(row.guessed ? 'guess' : 'ok');
-    el.title = row.guessed ? 'Detected from the particulars \u2014 click or press \u2192 then Enter to change it'
-                           : 'Chosen by you';
-  } else if(row.amount) el.classList.add('warn');
-}
-
-const RP_STOP = ['pcs','pc','pack','packs','roll','rolls','box','boxes','kg','pair','set','sets','meters','meter','pieces','piece'];
-
-function rpDescTokens(txt){
-  return String(txt||'').toLowerCase()
-    .replace(/[^a-z0-9\s&]/g,' ')
-    .split(/\s+/)
-    .filter(function(w){ return w && w.length >= 3 && !/^\d+$/.test(w) && RP_STOP.indexOf(w) < 0; });
-}
-
-// exactOnly = true while typing, so a half-finished word can never lock in
-// the wrong category. The looser passes run when you leave the cell.
-function rpMatchDesc(txt, exactOnly){
-  const list = rpHints.descriptions || [];
-  if(!list.length) return null;
-  const d = String(txt||'').trim().toLowerCase();
-  if(d.length < 2) return null;
-
-  let hit = list.find(function(x){ return (x.d||'').toLowerCase() === d; });
-  if(hit) return hit.c || null;
-  if(exactOnly) return null;
-
-  hit = list.find(function(x){ return (x.d||'').toLowerCase().indexOf(d) === 0; });
-  if(hit) return hit.c || null;
-
-  const mine = rpDescTokens(d);
-  if(!mine.length) return null;
-  let best = null, bestScore = 0;
-  list.forEach(function(x){
-    const theirs = rpDescTokens(x.d);
-    if(!theirs.length) return;
-    let hits = 0;
-    theirs.forEach(function(w){ if(mine.indexOf(w) >= 0) hits++; });
-    if(!hits) return;
-    const score = hits / theirs.length;
-    if(score > bestScore){ bestScore = score; best = x; }
-  });
-  return (best && bestScore >= 0.5) ? (best.c || null) : null;
-}
-
-function rpTryAutoCat(r){
-  const row = rpDraft[r];
-  if(!row || !row.description || row.category) return false;
-  const c = rpMatchDesc(row.description, false);
-  if(c){ row.category = c; row.guessed = true; rpCatCellUpdate(r); return true; }
-  return false;
-}
-
-// Sweep every row — used after paste, after copy-a-day, and before saving.
-function rpAutoCatAll(){
-  let n = 0;
-  for(let i = 0; i < rpDraft.length; i++) if(rpTryAutoCat(i)) n++;
-  return n;
-}
 
 // ── expense-type picker ────────────────────────────────────
 // A real dropdown, but it only swallows the arrow keys while it is open —
