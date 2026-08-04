@@ -103,7 +103,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-in{width:100%;padding:6px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a1d2e;box-sizing:border-box}'
   + '#panel-reports .rp-in:focus{outline:none;border-color:#025AC6;box-shadow:0 0 0 2px rgba(2,90,198,.12)}'
   + '#panel-reports .rp-in.err{border-color:#DF1A35;background:#fff5f5}'
-  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.8fr 1.15fr 1.4fr 120px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
+  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.8fr 1.15fr 1.4fr 120px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-cat{cursor:pointer;padding-right:20px!important}#panel-reports .rp-cat.set{font-weight:600}#panel-reports .rp-pop{position:fixed;z-index:100030;background:#fff;border:1px solid #dbeafe;border-radius:10px;box-shadow:0 12px 40px rgba(17,10,60,.22);max-height:330px;overflow-y:auto;min-width:230px;padding:4px}#panel-reports .rp-pop div{padding:7px 10px;font-size:12.5px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:9px;color:#1a1d2e}#panel-reports .rp-pop div:hover,#panel-reports .rp-pop div.hi{background:#f0f4ff;color:#025AC6;font-weight:700}#panel-reports .rp-pop i{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}#panel-reports .rp-pop .hint{position:sticky;bottom:0;background:#f8faff;color:#6b7394;font-size:10px;padding:6px 10px;cursor:default;border-top:1px solid #e8eeff}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
@@ -267,6 +267,7 @@ async function rpRenderExpense(){
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:2px solid #f0f4ff">'
   +     '<div class="rp-keys">'
   +       '<kbd>\u2191</kbd><kbd>\u2193</kbd> move row \u00b7 <kbd>\u2190</kbd><kbd>\u2192</kbd> move column \u00b7 <kbd>Enter</kbd> next row \u00b7 <kbd>Tab</kbd> next cell<br>'
+  +       'On <b>Expense type</b>: type a letter or press <kbd>Enter</kbd> to open the list<br>'
   +       '<kbd>Ctrl</kbd>+<kbd>D</kbd> copy cell above \u00b7 <kbd>Ctrl</kbd>+<kbd>\u232B</kbd> delete row \u00b7 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save'
   +     '</div>'
   +     '<div style="font-size:16px;font-weight:800;color:'+rpFundColor()+'">Grid total: <span id="rp-draft-total">'+rpPeso(0)+'</span></div>'
@@ -324,7 +325,7 @@ function rpDrawRows(){
       + '<div class="rp-rn">'+(i+1)+'</div>'
       + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="0" list="rp-dl-desc" placeholder="description" value="'+rpEsc(r.description)+'">'
       + '<input class="rp-in cell" data-cell data-r="'+i+'" data-c="1" list="rp-dl-people" placeholder="c/o" value="'+rpEsc(r.co)+'">'
-      + '<input class="rp-in cell'+catOk+'" data-cell data-r="'+i+'" data-c="2" list="rp-dl-cat" placeholder="type" value="'+rpEsc(r.category)+'">'
+      + '<input class="rp-in cell rp-cat'+catOk+(r.category?' set':'')+'" data-cell data-r="'+i+'" data-c="2" readonly placeholder="choose type" value="'+rpEsc(r.category)+'" onclick="rpCatOpen('+i+')">'
       + '<input class="rp-in cell rp-num" data-cell data-r="'+i+'" data-c="3" inputmode="decimal" placeholder="0.00" value="'+rpEsc(r.amount)+'">'
       + '<button class="rp-x" tabindex="-1" title="Remove row" onclick="rpDelRow('+i+')">\u00d7</button>'
       + '</div>';
@@ -348,6 +349,7 @@ function rpGridBind(){
 
   function cell(r,c){ return box.querySelector('[data-r="'+r+'"][data-c="'+c+'"]'); }
   function go(r,c,toEnd){
+    rpCatClose();
     if(r < 0) r = 0;
     while(r >= rpDraft.length){ rpDraft.push(rpBlankRow()); }
     if(box.querySelectorAll('.rp-grid').length !== rpDraft.length) rpDrawRows();
@@ -378,10 +380,6 @@ function rpGridBind(){
     if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     if(!rpDraft[r]) return;
-    if(c === 2){                                   // snap category to a real name
-      const m = rpMatchCat(t.value);
-      if(m && m !== rpDraft[r].category){ rpDraft[r].category = m; rpDrawRows(); }
-    }
     if(c === 0 && rpDraft[r].description && !rpDraft[r].category){
       const hit = (rpHints.descriptions||[]).find(function(x){
         return (x.d||'').toLowerCase() === rpDraft[r].description.toLowerCase();
@@ -395,6 +393,30 @@ function rpGridBind(){
     if(!t.hasAttribute || !t.hasAttribute('data-cell')) return;
     const r = +t.getAttribute('data-r'), c = +t.getAttribute('data-c');
     const k = ev.key;
+
+    // ── while the type picker is open it owns the keyboard ──
+    if(rpPopRow != null && c === 2){
+      const list = rpCatList();
+      if(k === 'ArrowDown'){ ev.preventDefault(); rpPopHi = Math.min(list.length-1, rpPopHi+1); rpCatDraw(); return; }
+      if(k === 'ArrowUp'){   ev.preventDefault(); rpPopHi = Math.max(0, rpPopHi-1); rpCatDraw(); return; }
+      if(k === 'Enter' || k === 'Tab'){ ev.preventDefault(); rpCatPick(null, rpPopHi); return; }
+      if(k === 'Escape'){ ev.preventDefault(); rpCatClose(); return; }
+      if(k === 'Backspace'){ ev.preventDefault(); rpPopFilter = rpPopFilter.slice(0,-1); rpPopHi = 0; rpCatDraw(); return; }
+      if(k.length === 1 && /[a-zA-Z0-9 &]/.test(k)){
+        ev.preventDefault(); rpPopFilter += k; rpPopHi = 0; rpCatDraw(); return;
+      }
+      return;
+    }
+
+    // ── closed picker: a letter, Enter or Space opens it ──
+    if(c === 2 && rpPopRow == null){
+      if(k === 'Enter' || k === ' ' || (k === 'ArrowDown' && ev.altKey)){
+        ev.preventDefault(); rpCatOpen(r); return;
+      }
+      if(k.length === 1 && /[a-zA-Z]/.test(k) && !ev.ctrlKey && !ev.metaKey){
+        ev.preventDefault(); rpCatOpen(r); rpPopFilter = k; rpPopHi = 0; rpCatDraw(); return;
+      }
+    }
 
     if((ev.ctrlKey || ev.metaKey) && (k === 'Enter' || k === 's')){ ev.preventDefault(); rpSaveDraft(); return; }
 
@@ -522,6 +544,76 @@ window.rpDelSaved = async function(id){
     rpRenderExpense();
   } catch(e){ if(window.toast) toast('\u274c Delete failed: ' + e.message); }
 };
+
+// ── expense-type picker ────────────────────────────────────
+// A real dropdown, but it only swallows the arrow keys while it is open —
+// closed, arrows still move around the grid.
+let rpPopRow = null, rpPopHi = 0, rpPopFilter = '';
+
+function rpCatList(){
+  const all = (rpHints.categories||[]);
+  if(!rpPopFilter) return all;
+  const f = rpPopFilter.toLowerCase();
+  const hit = all.filter(function(c){ return c.name.toLowerCase().indexOf(f) === 0; });
+  return hit.length ? hit : all.filter(function(c){ return c.name.toLowerCase().indexOf(f) >= 0; });
+}
+
+window.rpCatOpen = function(i){
+  rpPopRow = i; rpPopFilter = '';
+  const cur = rpDraft[i] ? rpDraft[i].category : '';
+  const list = rpCatList();
+  rpPopHi = Math.max(0, list.findIndex(function(c){ return c.name === cur; }));
+  rpCatDraw();
+};
+
+function rpCatDraw(){
+  rpCatClose(true);
+  if(rpPopRow == null) return;
+  const cell = document.querySelector('#rp-rows [data-r="'+rpPopRow+'"][data-c="2"]');
+  if(!cell) return;
+  const list = rpCatList();
+  const pop = document.createElement('div');
+  pop.className = 'rp-pop';
+  pop.id = 'rp-cat-pop';
+  pop.innerHTML = list.map(function(c, n){
+      return '<div class="'+(n===rpPopHi?'hi':'')+'" onmousedown="rpCatPick(event,'+n+')">'
+           + '<i style="background:'+(c.color||'#94a3b8')+'"></i>' + rpEsc(c.name) + '</div>';
+    }).join('')
+    + '<div class="hint">Type to filter \u00b7 \u2191\u2193 choose \u00b7 Enter select \u00b7 Esc cancel</div>';
+  document.body.appendChild(pop);
+
+  const r = cell.getBoundingClientRect();
+  pop.style.minWidth = Math.max(230, r.width) + 'px';
+  const h = pop.offsetHeight;
+  const below = window.innerHeight - r.bottom;
+  pop.style.left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 12) + 'px';
+  pop.style.top  = (below > h + 12 || r.top < h) ? (r.bottom + 3) + 'px' : (r.top - h - 3) + 'px';
+  const hi = pop.querySelector('.hi'); if(hi) hi.scrollIntoView({ block:'nearest' });
+}
+
+function rpCatClose(keepRow){
+  const old = document.getElementById('rp-cat-pop'); if(old) old.remove();
+  if(!keepRow){ rpPopRow = null; rpPopFilter = ''; }
+}
+
+window.rpCatPick = function(ev, n){
+  if(ev) ev.preventDefault();
+  const list = rpCatList();
+  if(rpPopRow != null && list[n]){
+    rpDraft[rpPopRow].category = list[n].name;
+    const row = rpPopRow;
+    rpCatClose();
+    rpDrawRows();
+    const nxt = document.querySelector('#rp-rows [data-r="'+row+'"][data-c="3"]');
+    if(nxt){ nxt.focus(); try { nxt.setSelectionRange(nxt.value.length, nxt.value.length); } catch(e){} }
+  } else rpCatClose();
+};
+
+document.addEventListener('mousedown', function(e){
+  const pop = document.getElementById('rp-cat-pop');
+  if(pop && !pop.contains(e.target) && !(e.target.classList && e.target.classList.contains('rp-cat'))) rpCatClose();
+});
+window.addEventListener('resize', function(){ if(rpPopRow != null) rpCatDraw(); });
 
 // ── copy a previous day's layout into the grid ──
 window.rpCopyDay = async function(){
