@@ -13,6 +13,7 @@ const RP_MONTHS = ['','January','February','March','April','May','June','July','
 let rpHints    = { categories:[], people:[], descriptions:[], last_date:null };
 let rpDraft    = [];      // unsaved rows in the entry grid
 let rpDayRows  = [];      // already-saved rows for the selected date
+let rpJustSaved = [];     // ids written in this sitting — highlighted in the list
 let rpDate     = null;    // selected expense date (YYYY-MM-DD)
 let rpTab      = 'expense';
 let rpInited   = false;
@@ -211,8 +212,13 @@ async function rpRenderExpense(){
 
   let gaps = [], day = null;
   try {
+    const today = rpPhToday();
+    const mFrom = rpDate.slice(0,8) + '01';
+    const lastD = new Date(+rpDate.slice(0,4), +rpDate.slice(5,7), 0).getDate();
+    let   mTo   = rpDate.slice(0,8) + String(lastD).padStart(2,'0');
+    if(mTo > today) mTo = today;
     const res = await Promise.all([
-      rpRpc('spawn_expense_gaps', { p_fund: rpFund }),
+      rpRpc('spawn_expense_gaps', { p_from: mFrom, p_to: mTo, p_fund: rpFund }),
       rpRpc('spawn_expense_day', { p_date: rpDate })
     ]);
     gaps = res[0] || []; day = res[1] || {};
@@ -220,7 +226,8 @@ async function rpRenderExpense(){
     host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not load: ' + rpEsc(e.message) + '</div>';
     return;
   }
-  rpDayRows = (day.rows || []).filter(function(r){ return r.paid_from === rpFund; });
+  rpDayRows = (day.rows || []).filter(function(r){ return r.paid_from === rpFund; })
+                              .sort(function(a,b){ return b.id - a.id; });
   const dayTotal = rpDayRows.reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
   const mtdFund  = rpFund === 'Sir Wendell' ? day.mtd_wendell : day.mtd_collections;
   if(!rpDraft.length) rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
@@ -235,20 +242,30 @@ async function rpRenderExpense(){
     return '<button class="rp-chip ' + cls + sel + '" onclick="rpChangeDate(\'' + g.date + '\')">'
          + g.date.slice(5) + (g.count ? ' \u00b7 ' + rpPesoShort(g.total) : '') + '</button>';
   }).join('');
+  const mLabel = RP_MONTHS[parseInt(rpDate.slice(5,7),10)] + ' ' + rpDate.slice(0,4);
+  const lastLine = rpDayRows.length
+    ? 'Last entered: \u201c' + rpEsc(rpDayRows[0].description || rpDayRows[0].category) + '\u201d '
+      + rpPeso(rpDayRows[0].amount) + (rpDayRows[0].co ? ' \u00b7 ' + rpEsc(rpDayRows[0].co) : '')
+    : 'Nothing entered for this day yet';
   const gapsHtml = gaps.length
-    ? '<div style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;margin:8px 0 4px">Jump to a day \u2014 amber = nothing entered yet</div>'
+    ? '<div style="display:flex;align-items:center;gap:8px;margin:10px 0 5px">'
+      + '<button class="rp-btn" style="padding:3px 9px" onclick="rpMonthStep(-1)">\u2039</button>'
+      + '<span style="font-size:11px;font-weight:800;color:#025AC6">' + mLabel + '</span>'
+      + '<button class="rp-btn" style="padding:3px 9px" onclick="rpMonthStep(1)">\u203a</button>'
+      + '<span style="font-size:10px;color:#6b7394">green = entered \u00b7 amber = still empty</span>'
+      + '</div>'
       + '<div style="margin-bottom:4px">' + gapChips + '</div>'
     : '';
 
   host.innerHTML = ''
   + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
   +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
-  +   '<span style="font-weight:600;opacity:.9;font-size:11px">Everything saved on this tab is filed as \u201c'+rpFund+'\u201d</span>'
+  +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   + '</div>'
   + '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+rpFundColor()+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date</div><div class="v">'+rpPeso(mtdFund)+'</div><div class="s">'+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+' \u00b7 both books '+rpPesoShort(day.month_to_date)+'</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Days not yet entered</div><div class="v">'+missing.length+'</div><div class="s">since last book entry</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Days still empty</div><div class="v">'+missing.length+'</div><div class="s">in '+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.magenta+'"><div class="k">Unsaved in grid</div><div class="v" id="rp-kpi-draft">'+rpPeso(0)+'</div><div class="s" id="rp-kpi-draftn">0 rows ready</div></div>'
   + '</div>'
 
@@ -288,7 +305,7 @@ async function rpRenderExpense(){
 
   + '<div class="rp-card">'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'
-  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Already saved for this day</div>'
+  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Already saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
   +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
   +   '</div>'
   +   '<div class="rp-scroll"><table class="rp-t"><thead><tr>'
@@ -492,6 +509,15 @@ function rpTotals(){
   const sv = document.getElementById('rp-save'); if(sv) sv.disabled = !good.length;
 }
 
+window.rpMonthStep = function(n){
+  const y = +rpDate.slice(0,4), m = +rpDate.slice(5,7);
+  const d = new Date(y, m - 1 + n, 1);
+  const ny = d.getFullYear(), nm = d.getMonth() + 1;
+  const last = new Date(ny, nm, 0).getDate();
+  const want = ny + '-' + String(nm).padStart(2,'0') + '-' + String(Math.min(+rpDate.slice(8,10), last)).padStart(2,'0');
+  rpChangeDate(want);
+};
+
 window.rpChangeDate = function(d){
   if(!d) return;
   const dirty = rpValidDraft().length;
@@ -523,7 +549,8 @@ window.rpSaveDraft = async function(){
     };
   });
   try {
-    await rpRest('expenses', { method:'POST', headers:{ Prefer:'return=minimal' }, body:JSON.stringify(payload) });
+    const written = await rpRest('expenses', { method:'POST', headers:{ Prefer:'return=representation' }, body:JSON.stringify(payload) });
+    if(Array.isArray(written)) rpJustSaved = rpJustSaved.concat(written.map(function(x){ return x.id; }));
     if(window.toast) toast('\u2705 Saved ' + payload.length + ' entries for ' + rpDate + ' \u2014 still on this date, keep going');
     rpSaveWorkDate();
     rpDraft = [rpBlankRow(), rpBlankRow(), rpBlankRow()];
@@ -542,10 +569,12 @@ function rpDrawSaved(){
     tb.innerHTML = '<tr><td colspan="7" style="padding:18px;text-align:center;color:#8b93ad">No entries saved for this day yet.</td></tr>';
     return;
   }
-  tb.innerHTML = rpDayRows.map(function(r){
-    return '<tr>'
-      + '<td>'+rpEsc(r.description||'\u2014')+'</td>'
-      + '<td style="color:#6b7394">'+rpEsc(r.co||'\u2014')+'</td>'
+  tb.innerHTML = rpDayRows.map(function(r, n){
+    const fresh = rpJustSaved.indexOf(r.id) >= 0;
+    return '<tr'+(fresh?' style="background:#f0fff8"':'')+'>'
+      + (n === 0 ? '' : '')
+      + '<td>'+(fresh?'<span style="color:#028867;font-weight:800;margin-right:5px">\u2713</span>':'')+rpEsc(r.description||'\u2014')+'</td>'
+      + '<td style="color:'+(r.co?'#6b7394':'#DF1A35')+'">'+rpEsc(r.co||'no name')+'</td>'
       + '<td>'+rpEsc(r.category)+'</td>'
       + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td>'
       + '<td><span style="font-size:9px;padding:2px 6px;border-radius:8px;background:'+(r.source==='excel'?'#f1f5f9':'#eefaf5')+';color:'+(r.source==='excel'?'#64748b':'#026a50')+'">'+rpEsc(r.source)+'</span></td>'
@@ -748,7 +777,7 @@ async function rpRenderSummary(){
   host.innerHTML = ''
   + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
   +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
-  +   '<span style="font-weight:600;opacity:.9;font-size:11px">Everything saved on this tab is filed as \u201c'+rpFund+'\u201d</span>'
+  +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   + '</div>'
   + '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Total expense '+yr+'</div><div class="v">'+rpPeso(s.grand)+'</div><div class="s">'+months.length+' month'+(months.length===1?'':'s')+' with activity</div></div>'
