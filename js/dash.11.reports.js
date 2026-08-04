@@ -315,7 +315,10 @@ async function rpRenderExpense(){
   +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries'
   +       (day.voided_count ? ' <span style="font-weight:700;color:#DF1A35;font-size:10px">\u00b7 '+day.voided_count+' voided</span>' : '')
   +       ' <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
-  +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
+  +     '<div style="display:flex;align-items:center;gap:7px">'
+  +       '<button class="rp-btn" style="padding:3px 8px;font-size:10.5px" onclick="rpVoidedOpen()">\u{1F6AB} Voided</button>'
+  +       '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
+  +     '</div>'
   +   '</div>'
   +   '<div class="rp-scroll" style="max-height:calc(100vh - 300px)"><table class="rp-t"><thead><tr>'
   +     '<th>Particulars</th><th>Name (c/o)</th><th class="rp-num">Amount</th><th></th>'
@@ -700,6 +703,77 @@ window.rpDelSaved = async function(id){
   } catch(e){
     ans.close();
     if(window.toast) toast('\u274c Void failed: ' + e.message);
+  }
+};
+
+// ── voided entries: view and restore ─────────────────────
+window.rpVoidedOpen = async function(){
+  const old = document.getElementById('rp-vd-ov'); if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'rp-vd-ov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100040;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:820px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden">'
+    + '<div style="background:linear-gradient(135deg,#DF1A35,#8f0f22);padding:15px 22px;color:#fff;font-size:15px;font-weight:800;display:flex;justify-content:space-between;align-items:center">'
+    +   '<span>\u{1F6AB} Voided entries</span>'
+    +   '<button onclick="document.getElementById(\'rp-vd-ov\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:7px;padding:4px 11px;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit">Close</button>'
+    + '</div>'
+    + '<div id="rp-vd-body" style="padding:16px 20px;max-height:70vh;overflow:auto"><div style="padding:24px;text-align:center;color:#6b7394;font-size:13px">Loading\u2026</div></div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click', function(e){ if(e.target === ov) ov.remove(); });
+  rpVoidedLoad();
+};
+
+async function rpVoidedLoad(){
+  const box = document.getElementById('rp-vd-body');
+  if(!box) return;
+  let rows = [];
+  try { rows = await rpRest('v_expense_voided?limit=300') || []; }
+  catch(e){ box.innerHTML = '<div style="color:#DF1A35;padding:16px">Could not load: '+rpEsc(e.message)+'</div>'; return; }
+
+  if(!rows.length){
+    box.innerHTML = '<div style="padding:30px;text-align:center;color:#8b93ad;font-size:13px">Nothing has been voided. Every entry ever saved is still counted.</div>';
+    return;
+  }
+  const total = rows.reduce(function(a,r){ return a + (Number(r.amount)||0); }, 0);
+  box.innerHTML =
+      '<div style="background:#fff8f8;border:1px solid #ffd4da;border-radius:9px;padding:10px 13px;margin-bottom:12px;font-size:12px;color:#7f1d1d">'
+    +   '<b>'+rows.length+' entries voided, '+rpPeso(total)+' total.</b> These are excluded from every report. Restoring one puts it straight back into the books.'
+    + '</div>'
+    + '<table class="rp-t"><thead><tr>'
+    +   '<th>Date</th><th>Particulars</th><th>Name</th><th class="rp-num">Amount</th><th>Voided</th><th>Reason</th><th></th>'
+    + '</tr></thead><tbody>'
+    + rows.map(function(r){
+        return '<tr>'
+          + '<td style="color:#6b7394;white-space:nowrap">'+rpEsc(r.expense_date)+'</td>'
+          + '<td>'+rpEsc(r.description||'\u2014')+'<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.category)+' \u00b7 '+rpEsc(r.paid_from)+'</div></td>'
+          + '<td style="color:#6b7394">'+rpEsc(r.co||'\u2014')+'</td>'
+          + '<td class="rp-num" style="font-weight:700;color:#DF1A35">'+rpPeso(r.amount)+'</td>'
+          + '<td style="font-size:10px;color:#6b7394;white-space:nowrap">'+rpEsc(String(r.voided_at||'').slice(0,16).replace('T',' '))
+          +   '<div>'+rpEsc(r.voided_by||'')+'</div></td>'
+          + '<td style="font-size:11px;color:#6b7394">'+rpEsc(r.void_reason||'\u2014')+'</td>'
+          + '<td><button class="rp-btn" style="padding:3px 9px;font-size:10.5px" onclick="rpRestore('+r.id+')">\u21a9 Restore</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody></table>';
+}
+
+window.rpRestore = async function(id){
+  const pw = await window.askAdminPw('Restore this entry to the books?<br><br>It will count in every total again from the moment you confirm.');
+  if(pw === null) return;
+  try {
+    const res = await rpRpc('spawn_expense_restore', { p_id: id, p_pw: pw });
+    if(!res || res.ok !== true){
+      if(res && res.error === 'bad_password'){ window.markAdminPwWrong(); return; }
+      throw new Error((res && res.error) || 'restore failed');
+    }
+    const m = document.getElementById('spawn-pw-modal'); if(m) m.remove();
+    if(window.toast) toast('\u21a9 Restored ' + rpPeso(res.amount) + ' \u2014 back in the books');
+    rpVoidedLoad();
+    rpRenderExpense();
+  } catch(e){
+    const m = document.getElementById('spawn-pw-modal'); if(m) m.remove();
+    if(window.toast) toast('\u274c Restore failed: ' + e.message);
   }
 };
 
