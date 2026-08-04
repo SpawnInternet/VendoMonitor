@@ -312,7 +312,9 @@ async function rpRenderExpense(){
   + '<div class="rp-side">'
   + '<div class="rp-card">'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'
-  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
+  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries'
+  +       (day.voided_count ? ' <span style="font-weight:700;color:#DF1A35;font-size:10px">\u00b7 '+day.voided_count+' voided</span>' : '')
+  +       ' <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
   +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
   +   '</div>'
   +   '<div class="rp-scroll" style="max-height:calc(100vh - 300px)"><table class="rp-t"><thead><tr>'
@@ -614,7 +616,7 @@ function rpDrawSaved(){
       +   '<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.category)+'</div></td>'
       + '<td style="color:'+(r.co?'#6b7394':'#DF1A35')+'">'+rpEsc(r.co||'no name')+'</td>'
       + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td>'
-      + '<td><button class="rp-x" title="Delete" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
+      + '<td><button class="rp-x" title="Void this entry (admin password)" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
       + '</tr>';
   }).join('');
 }
@@ -626,11 +628,11 @@ window.rpDelSaved = async function(id){
              + ' \u2014 <b style="color:#DF1A35">' + rpPeso(row.amount) + '</b>';
 
   const pw = await window.askAdminPw(
-    'You are about to permanently delete an expense entry:<br><br>'
+    'You are about to <b>void</b> this expense entry:<br><br>'
     + '<div style="background:#fff5f5;border:1px solid #ffd4da;border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.6">'
     + what + '<br><span style="color:#6b7394;font-size:11px">' + rpEsc(row.expense_date || rpDate)
     + ' \u00b7 ' + rpEsc(row.category || '') + ' \u00b7 ' + rpEsc(row.paid_from || rpFund) + '</span>'
-    + '</div><br>This cannot be undone. Enter the admin password to confirm.'
+    + '</div><br>It will be removed from every total and report, but kept on record so it can be traced or restored. Enter the admin password to confirm.'
   );
   if(pw === null) return;                       // cancelled
 
@@ -640,12 +642,16 @@ window.rpDelSaved = async function(id){
   }
   const ov = document.getElementById('spawn-pw-modal'); if(ov) ov.remove();
 
+  const why = prompt('Reason for voiding this entry (optional, kept on record):') || null;
   try {
-    await rpRest('expenses?id=eq.' + id, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    await rpRest('expenses?id=eq.' + id + '&voided_at=is.null', {
+      method:'PATCH', headers:{ Prefer:'return=minimal' },
+      body: JSON.stringify({ voided_at: new Date().toISOString(), voided_by: 'dashboard', void_reason: why })
+    });
     rpJustSaved = rpJustSaved.filter(function(x){ return x !== id; });
-    if(window.toast) toast('\u{1F5D1}\uFE0F Deleted ' + rpPeso(row.amount) + ' \u2014 ' + (row.description || row.category || 'entry'));
+    if(window.toast) toast('\u{1F6AB} Voided ' + rpPeso(row.amount) + ' \u2014 kept on record, out of all totals');
     rpRenderExpense();
-  } catch(e){ if(window.toast) toast('\u274c Delete failed: ' + e.message); }
+  } catch(e){ if(window.toast) toast('\u274c Void failed: ' + e.message); }
 };
 
 // ── expense-type picker ────────────────────────────────────
@@ -902,6 +908,7 @@ async function rpRenderReleases(){
   try {
     for(let off=0; off<20000; off+=1000){
       const p = await rpRest('expenses?select=id,expense_date,description,co,category,amount,paid_from'
+        + '&voided_at=is.null'
         + '&expense_date=gte.' + rpRelFrom + '&expense_date=lte.' + rpRelTo
         + '&order=expense_date.asc,id.asc&limit=1000&offset=' + off);
       if(!p || !p.length) break;
