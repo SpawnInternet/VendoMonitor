@@ -1572,7 +1572,10 @@ window.rpxLoadCharts = async function(){
   if(!document.getElementById('rpx-daily-chart')) return;
   _rpxBusy = true;
   try {
-    const today = rpPhToday();
+    const ym    = rpxMonth || rpPhToday().slice(0,7);
+    const lastD  = new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+    const realTd = rpPhToday();
+    const today = (ym === realTd.slice(0,7)) ? realTd : (ym + '-' + lastD);
     const from  = new Date(new Date(today + 'T00:00:00').getTime() - 13*86400000).toISOString().slice(0,10);
 
     const rows = await rpRest('expenses?select=expense_date,amount,paid_from&voided_at=is.null'
@@ -1606,7 +1609,7 @@ window.rpxLoadCharts = async function(){
                  y:{ ticks:{ font:{size:8}, callback:function(v){ return rpPesoShort(v); } }, stacked:true } } }
     });
 
-    const yr = parseInt(today.slice(0,4),10);
+    const yr = parseInt(ym.slice(0,4),10);
     const sum = await rpRpc('spawn_expense_summary', { p_year: yr });
     const MON = ['','JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
     const ms = [], mc = [], mw = [];
@@ -1638,10 +1641,81 @@ window.rpxLoadCharts = async function(){
   const orig = window.showP;
   window.showP = function(panel, btn){
     if(orig) orig(panel, btn);
-    if(panel === 'dash') setTimeout(rpxLoadCharts, 400);
+    if(panel === 'dash') setTimeout(function(){ rpxLoadStat(); rpxLoadCharts(); }, 400);
   };
   setTimeout(function(){
     if(document.getElementById('panel-dash') &&
-       document.getElementById('panel-dash').classList.contains('active')) rpxLoadCharts();
+       document.getElementById('panel-dash').classList.contains('active')){ rpxLoadStat(); rpxLoadCharts(); }
   }, 1800);
 })();
+
+
+// ══════════════════════════════════════════════════════════
+// EXPENSE OF THE MONTH — dashboard stat card + month picker
+// ══════════════════════════════════════════════════════════
+let rpxMonth = null;   // 'YYYY-MM'
+
+function rpxFillMonthPicker(){
+  const sel = document.getElementById('rpx-month');
+  if(!sel || sel.dataset.built) return;
+  sel.dataset.built = '1';
+  const today = rpPhToday();
+  if(!rpxMonth) rpxMonth = today.slice(0,7);
+  const opts = [];
+  let y = +today.slice(0,4), m = +today.slice(5,7);
+  for(let i = 0; i < 18; i++){
+    const key = y + '-' + String(m).padStart(2,'0');
+    opts.push('<option value="'+key+'"'+(key===rpxMonth?' selected':'')+'>'
+      + RP_MONTHS[m].slice(0,3) + ' ' + y + '</option>');
+    m--; if(m < 1){ m = 12; y--; }
+  }
+  sel.innerHTML = opts.join('');
+}
+
+window.rpxSetMonth = function(v){
+  rpxMonth = v;
+  rpxLoadStat();
+  rpxLoadCharts();
+};
+
+window.rpxLoadStat = async function(){
+  rpxFillMonthPicker();
+  const host = document.querySelector('#panel-dash .stat');
+  if(!host || !host.parentNode) return;
+  const wrap = host.parentNode;
+
+  let card = document.getElementById('rpx-stat');
+  if(!card){
+    card = document.createElement('div');
+    card.className = 'stat';
+    card.id = 'rpx-stat';
+    card.style.cssText = 'border-bottom-color:' + RP_BRAND.magenta + ';cursor:pointer';
+    card.title = 'Total expense for the selected month \u2014 click to open the books';
+    card.onclick = rpxGoReports;
+    wrap.appendChild(card);
+  }
+  card.innerHTML = '<div class="sl" style="color:' + RP_BRAND.magenta + '">Expense of the Month</div>'
+                 + '<div class="sv" style="color:' + RP_BRAND.magenta + '">\u2026</div>';
+
+  try {
+    const ym = rpxMonth || rpPhToday().slice(0,7);
+    const last = new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+    const rows = await rpRest('expenses?select=amount,paid_from&voided_at=is.null'
+      + '&expense_date=gte.' + ym + '-01&expense_date=lte.' + ym + '-' + last + '&limit=1000');
+    let coll = 0, wend = 0;
+    (rows||[]).forEach(function(r){
+      const a = Number(r.amount)||0;
+      if(r.paid_from === 'Sir Wendell') wend += a; else coll += a;
+    });
+    const mn = RP_MONTHS[parseInt(ym.slice(5,7),10)];
+    card.innerHTML =
+        '<div class="sl" style="color:' + RP_BRAND.magenta + '">Expense &middot; ' + mn + '</div>'
+      + '<div class="sv" style="color:' + RP_BRAND.magenta + '">' + rpPeso(coll + wend) + '</div>'
+      + '<div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">'
+      +   'Daily ' + rpPesoShort(coll) + ' &middot; Wendell ' + (wend ? rpPesoShort(wend) : '\u2014')
+      + '</div>';
+  } catch(e){
+    card.innerHTML = '<div class="sl" style="color:' + RP_BRAND.magenta + '">Expense of the Month</div>'
+                   + '<div class="sv" style="color:var(--mu);font-size:13px">unavailable</div>';
+  }
+};
