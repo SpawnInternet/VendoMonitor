@@ -104,7 +104,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-in{width:100%;padding:6px 8px;border:1px solid #dbeafe;border-radius:6px;font-size:12px;font-family:inherit;background:#fff;color:#1a1d2e;box-sizing:border-box}'
   + '#panel-reports .rp-in:focus{outline:none;border-color:#025AC6;box-shadow:0 0 0 2px rgba(2,90,198,.12)}'
   + '#panel-reports .rp-in.err{border-color:#DF1A35;background:#fff5f5}'
-  + '#panel-reports .rp-grid{display:grid;grid-template-columns:30px 1.8fr 1.15fr 1.4fr 120px 30px;gap:5px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-cat{cursor:pointer;padding-right:20px!important}#panel-reports .rp-cat.set{font-weight:600}#panel-reports .rp-pop{position:fixed;z-index:100030;background:#fff;border:1px solid #dbeafe;border-radius:10px;box-shadow:0 12px 40px rgba(17,10,60,.22);max-height:330px;overflow-y:auto;min-width:230px;padding:4px}#panel-reports .rp-pop div{padding:7px 10px;font-size:12.5px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:9px;color:#1a1d2e}#panel-reports .rp-pop div:hover,#panel-reports .rp-pop div.hi{background:#f0f4ff;color:#025AC6;font-weight:700}#panel-reports .rp-pop i{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}#panel-reports .rp-pop .hint{position:sticky;bottom:0;background:#f8faff;color:#6b7394;font-size:10px;padding:6px 10px;cursor:default;border-top:1px solid #e8eeff}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
+  + '#panel-reports .rp-grid{display:grid;grid-template-columns:24px minmax(0,1.6fr) minmax(0,1.1fr) minmax(0,1.25fr) 92px 26px;gap:4px;align-items:center;margin-bottom:4px}#panel-reports .rp-rn{font-size:10px;color:#b6bdd0;text-align:right;font-variant-numeric:tabular-nums}#panel-reports .rp-in.cell{padding:7px 8px}#panel-reports .rp-in.ok{border-color:#028867;background:#f6fffb}#panel-reports .rp-in.warn{border-color:#FFB725;background:#fffdf5}#panel-reports .rp-fund{text-align:center;font-weight:800;letter-spacing:.03em}#panel-reports .rp-fund.C{color:#025AC6;background:#f2f7ff;border-color:#bfd8ff}#panel-reports .rp-fund.W{color:#C01176;background:#fff4fb;border-color:#f3c2e2}#panel-reports .rp-keys{font-size:10.5px;color:#6b7394;line-height:1.9}#panel-reports .rp-cat{cursor:pointer;padding-right:20px!important}#panel-reports .rp-cat.set{font-weight:600}#panel-reports .rp-pop{position:fixed;z-index:100030;background:#fff;border:1px solid #dbeafe;border-radius:10px;box-shadow:0 12px 40px rgba(17,10,60,.22);max-height:330px;overflow-y:auto;min-width:230px;padding:4px}#panel-reports .rp-pop div{padding:7px 10px;font-size:12.5px;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:9px;color:#1a1d2e}#panel-reports .rp-pop div:hover,#panel-reports .rp-pop div.hi{background:#f0f4ff;color:#025AC6;font-weight:700}#panel-reports .rp-pop i{width:10px;height:10px;border-radius:3px;flex:none;display:inline-block}#panel-reports .rp-pop .hint{position:sticky;bottom:0;background:#f8faff;color:#6b7394;font-size:10px;padding:6px 10px;cursor:default;border-top:1px solid #e8eeff}#panel-reports .rp-keys kbd{background:#f0f4ff;border:1px solid #dbeafe;border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:ui-monospace,monospace;font-size:10px;color:#025AC6;font-weight:700}'
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
@@ -119,7 +119,7 @@ function rpShellHtml(){
   + '#panel-reports .rp-chip.has{background:#eefaf5;border-color:#028867;color:#026a50}'
   + '#panel-reports .rp-chip.sel{background:#025AC6;border-color:#025AC6;color:#fff}'
   + '#panel-reports .rp-todo{background:#fffaf0;border:1px solid #FFB725;border-radius:12px;padding:16px}'
-  + '#panel-reports .rp-scroll{max-height:480px;overflow:auto;border:1px solid #e8eeff;border-radius:10px}'
+  + '#panel-reports .rp-scroll{max-height:480px;overflow:auto;border:1px solid #e8eeff;border-radius:10px}#panel-reports .rp-2col{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:12px;align-items:start}@media(max-width:1180px){#panel-reports .rp-2col{grid-template-columns:1fr}}#panel-reports .rp-side{position:sticky;top:8px}#panel-reports .rp-kpis.tight{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:7px;margin-bottom:9px}#panel-reports .rp-kpis.tight .rp-kpi{padding:8px 10px}#panel-reports .rp-kpis.tight .rp-kpi .v{font-size:15px}#panel-reports .rp-chip{padding:2px 7px;font-size:10.5px;margin:1px 2px 1px 0}'
   + '</style>'
   + '<div class="w" style="padding-top:10px">'
   +   '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">'
@@ -262,7 +262,7 @@ async function rpRenderExpense(){
   +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Expenses paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
   +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   + '</div>'
-  + '<div class="rp-kpis">'
+  + '<div class="rp-kpis tight">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+rpFundColor()+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Month to date</div><div class="v">'+rpPeso(mtdFund)+'</div><div class="s">'+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+' \u00b7 both books '+rpPesoShort(day.month_to_date)+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Days still empty</div><div class="v">'+missing.length+'</div><div class="s">in '+RP_MONTHS[parseInt(rpDate.slice(5,7),10)]+'</div></div>'
@@ -285,6 +285,8 @@ async function rpRenderExpense(){
   +   gapsHtml
   + '</div>'
 
+  + '<div class="rp-2col">'
+  + '<div>'
   + '<div class="rp-card">'
   +   '<div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:9px">\u270F\uFE0F New entries for <span id="rp-lbl-date">'+rpDate+'</span></div>'
   +   '<div id="rp-copy-warn" style="display:none;background:#fffaf0;border:1px solid #FFB725;border-radius:8px;padding:8px 11px;font-size:11px;color:#8a6100;margin-bottom:9px">'
@@ -306,14 +308,18 @@ async function rpRenderExpense(){
   +   '</div>'
   + '</div>'
 
+  + '</div>'
+  + '<div class="rp-side">'
   + '<div class="rp-card">'
   +   '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'
-  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Already saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
+  +     '<div style="font-size:12px;font-weight:800;color:#028867">\u2705 Saved for '+rpDate+' \u2014 '+rpDayRows.length+' entries <span style="font-weight:600;color:#6b7394;font-size:10px">(newest first)</span></div>'
   +     '<div style="font-size:13px;font-weight:800;color:#028867" id="rp-saved-total">'+rpPeso(dayTotal)+'</div>'
   +   '</div>'
-  +   '<div class="rp-scroll"><table class="rp-t"><thead><tr>'
-  +     '<th>Particulars</th><th>Name (c/o)</th><th>Type</th><th class="rp-num">Amount</th><th>Src</th><th></th>'
+  +   '<div class="rp-scroll" style="max-height:calc(100vh - 300px)"><table class="rp-t"><thead><tr>'
+  +     '<th>Particulars</th><th>Name (c/o)</th><th class="rp-num">Amount</th><th></th>'
   +   '</tr></thead><tbody id="rp-saved"></tbody></table></div>'
+  + '</div>'
+  + '</div>'
   + '</div>';
 
   rpDrawRows();
@@ -598,18 +604,17 @@ function rpDrawSaved(){
   const tb = document.getElementById('rp-saved');
   if(!tb) return;
   if(!rpDayRows.length){
-    tb.innerHTML = '<tr><td colspan="7" style="padding:18px;text-align:center;color:#8b93ad">No entries saved for this day yet.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="4" style="padding:18px;text-align:center;color:#8b93ad">No entries saved for this day yet.</td></tr>';
     return;
   }
   tb.innerHTML = rpDayRows.map(function(r, n){
     const fresh = rpJustSaved.indexOf(r.id) >= 0;
     return '<tr'+(fresh?' style="background:#f0fff8"':'')+'>'
       + (n === 0 ? '' : '')
-      + '<td>'+(fresh?'<span style="color:#028867;font-weight:800;margin-right:5px">\u2713</span>':'')+rpEsc(r.description||'\u2014')+'</td>'
+      + '<td>'+(fresh?'<span style="color:#028867;font-weight:800;margin-right:4px">\u2713</span>':'')+rpEsc(r.description||'\u2014')
+      +   '<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.category)+'</div></td>'
       + '<td style="color:'+(r.co?'#6b7394':'#DF1A35')+'">'+rpEsc(r.co||'no name')+'</td>'
-      + '<td>'+rpEsc(r.category)+'</td>'
       + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td>'
-      + '<td><span style="font-size:9px;padding:2px 6px;border-radius:8px;background:'+(r.source==='excel'?'#f1f5f9':'#eefaf5')+';color:'+(r.source==='excel'?'#64748b':'#026a50')+'">'+rpEsc(r.source)+'</span></td>'
       + '<td><button class="rp-x" title="Delete" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
       + '</tr>';
   }).join('');
