@@ -186,6 +186,9 @@
       <div id="groups"></div>
     </div>
 
+    <div id="mob-lastmonth" style="margin-top:14px;"></div>
+    <div id="mob-collperf" style="margin-top:14px;"></div>
+
     <div class="sec-lbl">SPAWN APPS</div>
     <div class="apps" id="apps-spawn"></div>
 
@@ -1081,6 +1084,7 @@ async function loadOverview(){
     const groups=ov.harvest_by_group||[]; const max=Math.max.apply(null,groups.map(g=>+g.spawn||0).concat([1]));
     const gc={Dipolog:'#025AC6',Dapitan:'#FFB725',Polanco:'#028867',Roxas:'#C01176'};
     document.getElementById('groups').innerHTML=groups.map(g=>'<div class="grp-row"><span class="grp-n">'+g.grp+'</span><div class="grp-bar"><div style="width:'+Math.round((+g.spawn||0)/max*100)+'%;background:'+(gc[g.grp]||'#025AC6')+'"></div></div><span class="grp-v">'+peso(g.spawn)+'</span></div>').join('');
+    try{ mobMonthLabels(); mobLastMonth(ov); MOB_CP=ov.collector_perf||[]; mobCollPerf(); }catch(e){ console.warn('mob cards',e); }
     // Overdue total (unharvested vendos) via owner RPC — also cached for the Overdue screen
     try{
       const ro=await gw({kind:'rpc',fn:'spawn_owner_overview',body:{}});
@@ -1090,6 +1094,104 @@ async function loadOverview(){
     }catch(_){}
   }catch(e){ console.warn('overview failed',e); document.getElementById('hl-sub').textContent='couldn\u2019t load \u2014 tap refresh'; }
   finally{ rb.classList.remove('spin'); document.querySelector('.body').classList.remove('loading'); }
+}
+
+// ── Month labels + Last month summary + Collector performance (mobile) ──
+var MOB_AREA_COLORS={'Dipolog':'#025AC6','Dapitan':'#028867','Sindangan':'#C01176','Polanco':'#FFB725','Roxas':'#311A8E','Minaog':'#0EA5E9','Sinaman':'#DF1A35','Mix Areas':'#7F77DD','Pre-v3 / Admin':'#94a3b8'};
+function mobAreaColor(g){ return MOB_AREA_COLORS[g]||'#94a3b8'; }
+function mobShort(v){ var n=Number(v||0);
+  if(Math.abs(n)>=1000000) return '\u20B1'+(n/1000000).toFixed(2)+'M';
+  if(Math.abs(n)>=1000) return '\u20B1'+Math.round(n/1000)+'K';
+  return '\u20B1'+Math.round(n); }
+function mobCurMonth(){ try{
+    var d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
+    return d.toLocaleDateString('en-US',{month:'long'})+' '+d.getFullYear();
+  }catch(e){ return 'this month'; } }
+function mobMonthLabels(){
+  var m=mobCurMonth();
+  var a=document.querySelector('#st-tg-month .s-l'); if(a) a.innerHTML='Telegram \u00B7 '+m;
+  var b=document.querySelector('.hl-lbl'); if(b) b.innerHTML='Harvest spawn share \u00B7 '+m;
+  var c=document.querySelector('#groups'); if(c&&c.parentNode){
+    var h=c.parentNode.querySelector('.card-h .t');
+    if(h) h.innerHTML='HARVEST COLLECTIONS \u00B7 '+m.toUpperCase()+' <span style="font-weight:400;color:var(--tx2);">(Spawn Share)</span>';
+  }
+}
+function mobLastMonth(ov){
+  var el=document.getElementById('mob-lastmonth'); if(!el) return;
+  var expTot=Number(ov.prev_exp_daily||0)+Number(ov.prev_exp_admin||0);
+  var net=Number(ov.prev_harvest||0)-expTot;
+  function cell(label,value,color,sub){
+    return '<div style="background:#f7f9fc;border-radius:10px;border-bottom:3px solid '+color+';padding:10px 11px;">'
+      +'<div style="font-size:10px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;line-height:1.3">'+label+'</div>'
+      +'<div style="font-size:18px;font-weight:800;color:'+color+';margin-top:3px">'+value+'</div>'
+      +(sub?'<div style="font-size:10px;color:var(--tx2);margin-top:1px;font-weight:600">'+sub+'</div>':'')
+      +'</div>';
+  }
+  el.innerHTML='<div class="card" style="margin:0;">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;font-weight:800;letter-spacing:.4px;color:var(--tx2);text-transform:uppercase">Last Month Summary</span>'
+    +'<span style="background:#eef2ff;color:#311A8E;font-size:15px;font-weight:800;padding:4px 14px;border-radius:20px">'+(ov.prev_label||'')+'</span>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+    +cell('Telegram Sales',peso(ov.prev_tg),'#025AC6')
+    +cell('Harvested Spawn',peso(ov.prev_harvest),'#028867')
+    +cell('Spawn Cloud',peso(ov.prev_cloud),'#311A8E')
+    +cell('Suspicious Txns',Number(ov.prev_sus_cnt||0).toLocaleString(),'#DF1A35',peso(ov.prev_sus_amt))
+    +cell('Expense',peso(expTot),'#C01176','Daily '+mobShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?mobShort(ov.prev_exp_admin):'\u2014'))
+    +cell('Net After Expense',peso(net),'#0F6E56','Harvest \u2212 expense')
+    +'</div></div>';
+}
+var MOB_CP=[], MOB_CP_MONTH=null;
+function mobSetCpMonth(v){ MOB_CP_MONTH=v; mobCollPerf(); }
+function mobCollPerf(){
+  var el=document.getElementById('mob-collperf'); if(!el) return;
+  var all=MOB_CP||[];
+  if(!all.length){ el.innerHTML=''; return; }
+  var months=[]; all.forEach(function(r){ if(months.indexOf(r.ym)===-1) months.push(r.ym); });
+  months.sort().reverse();
+  if(!MOB_CP_MONTH||months.indexOf(MOB_CP_MONTH)===-1){
+    var n=new Date(), p=new Date(n.getFullYear(),n.getMonth()-1,1);
+    var py=p.getFullYear()+'-'+String(p.getMonth()+1).padStart(2,'0');
+    MOB_CP_MONTH=months.indexOf(py)!==-1?py:months[0];
+  }
+  var rows=all.filter(function(r){return r.ym===MOB_CP_MONTH;}).sort(function(a,b){return Number(b.spawn)-Number(a.spawn);});
+  var maxS=Math.max.apply(null,rows.map(function(r){return Number(r.spawn)||0;}).concat([1]));
+  var totS=rows.reduce(function(s,r){return s+Number(r.spawn||0);},0);
+  var MN=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var opts=months.map(function(m){
+    return '<option value="'+m+'"'+(m===MOB_CP_MONTH?' selected':'')+'>'+MN[parseInt(m.slice(5,7),10)]+' '+m.slice(0,4)+'</option>';
+  }).join('');
+  var seen=[]; rows.forEach(function(r){ (r.by_area||[]).forEach(function(a){ if(seen.indexOf(a.grp)===-1) seen.push(a.grp); }); });
+  var legend=seen.map(function(g){
+    return '<span style="font-size:10px;color:var(--tx2);font-weight:600;white-space:nowrap">'
+      +'<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+mobAreaColor(g)+';margin-right:4px"></i>'+g+'</span>';
+  }).join('');
+  el.innerHTML='<div class="card" style="margin:0;">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;flex-wrap:wrap">'
+    +'<span style="font-size:12px;font-weight:800;letter-spacing:.4px;color:var(--tx2);text-transform:uppercase">Collector Performance</span>'
+    +'<select id="mob-cp-sel" style="font-family:inherit;font-size:15px;font-weight:800;color:#311A8E;background:#eef2ff;border:none;border-radius:20px;padding:4px 12px;">'+opts+'</select>'
+    +'</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:11px">'+legend+'</div>'
+    +rows.map(function(r){
+      var tot=Number(r.spawn)||1, scale=(Number(r.spawn)||0)/maxS*100;
+      var segs=(r.by_area||[]).map(function(a){
+        return '<div style="width:'+(Number(a.spawn)/tot*100)+'%;background:'+mobAreaColor(a.grp)+'"></div>';
+      }).join('');
+      return '<div style="margin-bottom:11px">'
+        +'<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">'
+        +'<span style="font-size:13px;font-weight:800;color:var(--tx)">'+r.collector+'</span>'
+        +'<span style="font-size:14px;font-weight:800;color:#028867">'+peso(r.spawn)+'</span>'
+        +'</div>'
+        +'<div style="background:#f1f5f9;border-radius:5px;overflow:hidden">'
+        +'<div style="width:'+scale.toFixed(1)+'%;min-width:3%;display:flex;height:20px;border-radius:5px;overflow:hidden">'+segs+'</div></div>'
+        +'<div style="font-size:10px;color:var(--tx2);font-weight:600;margin-top:3px">'
+        +Number(r.harvests||0).toLocaleString()+' harvests \u00B7 '+Number(r.days||0).toLocaleString()+' days \u00B7 '+peso(r.avg_spawn)+' avg</div>'
+        +'</div>';
+    }).join('')
+    +'<div style="border-top:1px solid var(--line);padding-top:7px;font-size:10px;color:var(--tx2);font-weight:600">Total '+peso(totS)+' \u00B7 bar length = spawn share, segments = area mix</div>'
+    +'</div>';
+  var sel=document.getElementById('mob-cp-sel');
+  if(sel) sel.addEventListener('change',function(){ mobSetCpMonth(this.value); });
 }
 
 async function loadCollectors(){
