@@ -83,6 +83,10 @@ function overviewRender(ov, data) {
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
     </div>`;
 
+  // ── Last month strip + collector performance ──
+  try { lastMonthRender(ov); } catch(e){ console.warn('lastMonthRender', e); }
+  try { _CP_DATA = ov.collector_perf || []; cpRender(); } catch(e){ console.warn('cpRender', e); }
+
   // nav badge + alert
   const nb = document.getElementById("nav-sus-badge");
   if (nb) { nb.textContent = hackedCnt > 0 ? hackedCnt : ""; nb.style.display = hackedCnt > 0 ? "" : "none"; }
@@ -432,4 +436,124 @@ async function systemCheckLoad(){
     el.innerHTML = '<div style="padding:14px;color:var(--mu);font-size:11px">System check unavailable</div>';
     console.warn('systemCheckLoad', e && e.message);
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// LAST MONTH SUMMARY STRIP  +  COLLECTOR PERFORMANCE
+// ══════════════════════════════════════════════════════════════
+const CP_AREA_COLORS = {
+  'Dipolog':'#025AC6', 'Dapitan':'#028867', 'Sindangan':'#C01176',
+  'Polanco':'#FFB725', 'Roxas':'#311A8E', 'Minaog':'#0EA5E9',
+  'Sinaman':'#DF1A35', 'Mix Areas':'#7F77DD', 'Pre-v3 / Admin':'#94a3b8'
+};
+const _cpColor = (g)=> CP_AREA_COLORS[g] || '#94a3b8';
+
+function _cpShort(v){
+  const n = Number(v||0);
+  if (Math.abs(n) >= 1000000) return '\u20B1' + (n/1000000).toFixed(2) + 'M';
+  if (Math.abs(n) >= 1000)    return '\u20B1' + Math.round(n/1000) + 'K';
+  return '\u20B1' + Math.round(n);
+}
+
+function lastMonthRender(ov){
+  const el = document.getElementById('lastmonth-strip');
+  if (!el) return;
+  const expTot = Number(ov.prev_exp_daily||0) + Number(ov.prev_exp_admin||0);
+  const net    = Number(ov.prev_harvest||0) - expTot;
+  const cell = (label, value, color, sub) =>
+      '<div style="background:#f7f9fc;border-radius:8px;border-bottom:3px solid '+color+';padding:8px 10px;">'
+    +   '<div style="font-size:9px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.3px;line-height:1.3">'+label+'</div>'
+    +   '<div style="font-size:16px;font-weight:800;color:'+color+';margin-top:2px">'+value+'</div>'
+    +   (sub ? '<div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">'+sub+'</div>' : '')
+    + '</div>';
+
+  el.innerHTML =
+      '<div style="background:#fff;border:1px solid #e6ecf5;border-radius:9px;padding:10px 12px;">'
+    +   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'
+    +     '<span style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Last Month Summary</span>'
+    +     '<span style="background:#eef2ff;color:'+BRAND.purple+';font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px">'+(ov.prev_label||'')+'</span>'
+    +     '<span style="flex:1"></span>'
+    +     '<span style="font-size:9px;color:var(--mu);font-weight:600">1\u2013'+(ov.prev_days||'')+' \u00B7 full month closed</span>'
+    +   '</div>'
+    +   '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;">'
+    +     cell('Telegram Sales', _php(ov.prev_tg), BRAND.blue)
+    +     cell('Harvested Spawn', _php(ov.prev_harvest), BRAND.teal)
+    +     cell('Spawn Cloud', _php(ov.prev_cloud), BRAND.purple)
+    +     cell('Suspicious Txns', _fmtNum(ov.prev_sus_cnt), BRAND.red, _php(ov.prev_sus_amt))
+    +     cell('Expense', _php(expTot), BRAND.magenta,
+             'Daily '+_cpShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?_cpShort(ov.prev_exp_admin):'\u2014'))
+    +     cell('Net After Expense', _php(net), '#0F6E56', 'Harvest \u2212 expense')
+    +   '</div>'
+    + '</div>';
+}
+
+let _CP_DATA = [];
+let _CP_MONTH = null;
+
+window.cpSetMonth = function(v){ _CP_MONTH = v; cpRender(); };
+
+function cpRender(){
+  const el = document.getElementById('collector-perf');
+  if (!el) return;
+  const all = _CP_DATA || [];
+  if (!all.length){
+    el.innerHTML = '<div style="background:#fff;border:1px solid #e6ecf5;border-radius:9px;padding:14px;font-size:11px;color:var(--mu)">No collector harvest data yet.</div>';
+    return;
+  }
+  const months = Array.from(new Set(all.map(r=>r.ym))).sort().reverse();
+  // default = last month if present, else newest month with data
+  if (!_CP_MONTH || months.indexOf(_CP_MONTH) === -1){
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const prevYm = prev.getFullYear()+'-'+String(prev.getMonth()+1).padStart(2,'0');
+    _CP_MONTH = months.indexOf(prevYm) !== -1 ? prevYm : months[0];
+  }
+  const rows = all.filter(r=>r.ym === _CP_MONTH).sort((a,b)=>Number(b.spawn)-Number(a.spawn));
+  const maxSpawn = Math.max.apply(null, rows.map(r=>Number(r.spawn)||0)) || 1;
+  const totSpawn = rows.reduce((s,r)=>s+Number(r.spawn||0),0);
+  const totHarv  = rows.reduce((s,r)=>s+Number(r.harvests||0),0);
+
+  const MN = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const mLabel = (ym)=> MN[parseInt(ym.slice(5,7),10)] + ' ' + ym.slice(0,4);
+  const opts = months.map(m=>'<option value="'+m+'"'+(m===_CP_MONTH?' selected':'')+'>'+mLabel(m)+'</option>').join('');
+
+  // legend from the areas actually present this month
+  const seen = [];
+  rows.forEach(r=>(r.by_area||[]).forEach(a=>{ if(seen.indexOf(a.grp)===-1) seen.push(a.grp); }));
+  const legend = seen.map(g=>
+      '<span style="font-size:9px;color:var(--mu);font-weight:600;white-space:nowrap">'
+    + '<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+_cpColor(g)+';vertical-align:0;margin-right:4px"></i>'+g+'</span>').join('');
+
+  const bar = (r)=>{
+    const tot = Number(r.spawn)||1;
+    const scale = (Number(r.spawn)||0)/maxSpawn*100;
+    const segs = (r.by_area||[]).map(a=>
+        '<div title="'+a.grp+' \u2014 '+_php(a.spawn)+' \u00B7 '+_fmtNum(a.n)+' harvests" '
+      + 'style="width:'+(Number(a.spawn)/tot*100)+'%;background:'+_cpColor(a.grp)+'"></div>').join('');
+    return '<div style="width:'+scale.toFixed(1)+'%;min-width:2%;display:flex;height:24px;border-radius:5px;overflow:hidden">'+segs+'</div>';
+  };
+
+  el.innerHTML =
+      '<div style="background:#fff;border:1px solid #e6ecf5;border-radius:9px;padding:10px 12px;">'
+    +   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">'
+    +     '<span style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Collector Performance</span>'
+    +     '<select onchange="cpSetMonth(this.value)" style="font-family:inherit;font-size:10px;font-weight:700;color:'+BRAND.purple+';background:#eef2ff;border:none;border-radius:20px;padding:3px 8px;cursor:pointer">'+opts+'</select>'
+    +     '<span style="flex:1"></span>'
+    +     '<span style="font-size:9px;color:var(--mu);font-weight:600">'+_php(totSpawn)+' spawn \u00B7 '+_fmtNum(totHarv)+' harvests</span>'
+    +   '</div>'
+    +   '<div style="display:flex;flex-wrap:wrap;gap:9px;margin-bottom:10px">'+legend+'</div>'
+    +   rows.map(r=>
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
+        +   '<div style="width:76px;flex:none">'
+        +     '<div style="font-size:12px;font-weight:800;color:var(--tx)">'+r.collector+'</div>'
+        +     '<div style="font-size:9px;color:var(--mu);font-weight:600">'+_fmtNum(r.harvests)+' \u00B7 '+_fmtNum(r.days)+' days</div>'
+        +   '</div>'
+        +   '<div style="flex:1;background:#f1f5f9;border-radius:5px;overflow:hidden">'+bar(r)+'</div>'
+        +   '<div style="width:88px;flex:none;text-align:right">'
+        +     '<div style="font-size:14px;font-weight:800;color:'+BRAND.teal+'">'+_php(r.spawn)+'</div>'
+        +     '<div style="font-size:9px;color:var(--mu);font-weight:600">'+_php(r.avg_spawn)+' avg</div>'
+        +   '</div>'
+        + '</div>').join('')
+    +   '<div style="border-top:1px solid #f0f4ff;padding-top:7px;font-size:9px;color:var(--mu);font-weight:600">Bar length = spawn share \u00B7 segments = area mix \u00B7 hover a segment for detail</div>'
+    + '</div>';
 }
