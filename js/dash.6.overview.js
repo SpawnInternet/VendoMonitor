@@ -48,21 +48,28 @@ async function overviewLoad() {
 // _php is already defined globally in dash.1.harvest.js (loads first) — reuse it.
 // safe fallbacks in case fmt helpers load later or are missing
 const _fmtNum = (v)=> (typeof fmtNum==='function'? fmtNum(v) : Number(v||0).toLocaleString());
+const _curMonthLabel = ()=>{
+  try {
+    const d = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
+    return d.toLocaleDateString('en-US',{month:'long'}) + ' ' + d.getFullYear();
+  } catch(e){ return 'This Month'; }
+};
 const _fmtDateShort = (d)=>{ try{ return (typeof fmtDateShort==='function')? fmtDateShort(d) : String(d).slice(5); }catch(e){ return String(d); } };
 const _fmtTime = (t)=>{ try{ return (typeof fmtTime==='function')? fmtTime(t) : ''; }catch(e){ return ''; } };
 
 function overviewRender(ov, data) {
   const stats = (data && data.stats) || {};
   const hackedCnt = stats.suspicious_count || 0;
+  const _MLBL = _curMonthLabel();
 
   // ── Stat cards: TG month · Harvest month · TG today · Harvest today · Suspicious ──
   document.getElementById("dash-stats").innerHTML = `
     <div class="stat" style="border-bottom-color:${BRAND.blue};cursor:pointer" onclick="anlGoto('tg')" title="View Telegram analytics">
-      <div class="sl">Telegram Sales · This Month</div>
+      <div class="sl">Telegram Sales &middot; ${_MLBL}</div>
       <div class="sv" style="color:${BRAND.blue}">${_php(ov.tg_month)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="anlGoto('harvest')" title="View harvested spawn analytics">
-      <div class="sl">Harvested Spawn Share · Month</div>
+      <div class="sl">Harvested Spawn &middot; ${_MLBL}</div>
       <div class="sv" style="color:${BRAND.teal}">${_php(ov.harvest_month)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.gold};cursor:pointer" onclick="anlGoto('tg')" title="View Telegram analytics">
@@ -74,7 +81,7 @@ function overviewRender(ov, data) {
       <div class="sv" style="color:${BRAND.magenta}">${_php(ov.harvest_today)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.purple};cursor:pointer" onclick="showP('spawncloud')" title="Spawn Cloud coin income this month">
-      <div class="sl">Spawn Cloud &middot; Month</div>
+      <div class="sl">Spawn Cloud &middot; ${_MLBL}</div>
       <div class="sv" style="color:${BRAND.purple}">${_php(ov.cloud_month)}</div>
       <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">${_fmtNum(ov.cloud_machines||0)} machines &middot; ${_php(ov.cloud_today)} today</div>
     </div>
@@ -470,8 +477,8 @@ function lastMonthRender(ov){
   el.innerHTML =
       '<div style="background:#fff;border:1px solid #e6ecf5;border-radius:9px;padding:10px 12px;">'
     +   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'
-    +     '<span style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Last Month Summary</span>'
-    +     '<span style="background:#eef2ff;color:'+BRAND.purple+';font-size:10px;font-weight:800;padding:2px 9px;border-radius:20px">'+(ov.prev_label||'')+'</span>'
+    +     '<span style="font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Last Month Summary</span>'
+    +     '<span style="background:#eef2ff;color:'+BRAND.purple+';font-size:15px;font-weight:800;padding:4px 14px;border-radius:20px;letter-spacing:.2px">'+(ov.prev_label||'')+'</span>'
     +     '<span style="flex:1"></span>'
     +     '<span style="font-size:9px;color:var(--mu);font-weight:600">1\u2013'+(ov.prev_days||'')+' \u00B7 full month closed</span>'
     +   '</div>'
@@ -536,8 +543,8 @@ function cpRender(){
   el.innerHTML =
       '<div style="background:#fff;border:1px solid #e6ecf5;border-radius:9px;padding:10px 12px;">'
     +   '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">'
-    +     '<span style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Collector Performance</span>'
-    +     '<select onchange="cpSetMonth(this.value)" style="font-family:inherit;font-size:10px;font-weight:700;color:'+BRAND.purple+';background:#eef2ff;border:none;border-radius:20px;padding:3px 8px;cursor:pointer">'+opts+'</select>'
+    +     '<span style="font-size:12px;font-weight:800;letter-spacing:.5px;color:var(--mu);text-transform:uppercase">Collector Performance</span>'
+    +     '<select onchange="cpSetMonth(this.value)" style="font-family:inherit;font-size:15px;font-weight:800;color:'+BRAND.purple+';background:#eef2ff;border:none;border-radius:20px;padding:4px 12px;cursor:pointer">'+opts+'</select>'
     +     '<span style="flex:1"></span>'
     +     '<span style="font-size:9px;color:var(--mu);font-weight:600">'+_php(totSpawn)+' spawn \u00B7 '+_fmtNum(totHarv)+' harvests</span>'
     +   '</div>'
