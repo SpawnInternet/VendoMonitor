@@ -72,6 +72,7 @@ const LOGIN_URL=SB+'/functions/v1/spawn-admin-login';
 const GW_URL=SB+'/functions/v1/spawn-gw-admin';
 const SESSION_KEY='spawn_owner_session';
 let GW_TOKEN=null;
+function QP(k){ try{ return new URLSearchParams(location.search).get(k); }catch(_){ return null; } }
 function peso(n){ n=Math.round(+n||0); return '\u20B1'+n.toLocaleString(); }
 async function gw(p){ return fetch(GW_URL,{method:'POST',headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},body:JSON.stringify(p)}); }
 
@@ -107,6 +108,14 @@ function buildMonthOptions(){
     opts+='<option value="'+val+'">'+lbl+'</option>';
   }
   sel.innerHTML=opts;
+  const qm=QP('m');
+  if(qm&&/^\d{4}-\d{2}$/.test(qm)){
+    if(!Array.from(sel.options).some(o=>o.value===qm)){
+      const lb=new Date(qm+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      sel.insertAdjacentHTML('afterbegin','<option value="'+qm+'">'+lb+'</option>');
+    }
+    sel.value=qm;
+  }
   sel.addEventListener('change',()=>loadMonth(sel.value));
 }
 
@@ -152,8 +161,8 @@ async function loadMonth(month){
 
 // ---- Printable monthly statement (SPAWN report style) ----
 let _lastFin=null, _lastMonth=null;
-function openReport(){
-  const f=_lastFin; if(!f){ alert('Load a month first.'); return; }
+function buildReportHtml(){
+  const f=_lastFin; if(!f){ return null; }
   const monthLbl=new Date((_lastMonth||f.month)+'-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
   const byCol=f.by_collector||[]; const expCat=f.expenses_by_category||[];
   const P=n=>'\u20B1'+Math.round(+n||0).toLocaleString();
@@ -210,15 +219,27 @@ function openReport(){
   SPAWN Internet · Lalawan, Dicayas, Dipolog City · spawnremote@gmail.com · Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</div>
   <button class="pbtn" onclick="window.print()">🖨 Print / Save PDF</button>
   </body></html>`;
+  return html;
+}
+function openReport(){
+  const html=buildReportHtml();
+  if(!html){ alert('Load a month first.'); return; }
   const w=window.open('','_blank');
   if(w){ w.document.write(html); w.document.close(); }
-  else { alert('Allow pop-ups to view the report.'); }
+  else { showReportInline(html); }
+}
+function showReportInline(html){
+  document.open(); document.write(html); document.close();
 }
 document.getElementById('report-btn').addEventListener('click',openReport);
 
-function init(){
+async function init(){
   buildMonthOptions();
-  loadMonth(document.getElementById('month-sel').value);
+  await loadMonth(document.getElementById('month-sel').value);
+  if(QP('r')==='1'){
+    const html=buildReportHtml();
+    if(html) showReportInline(html);
+  }
 }
 
 // Boot
