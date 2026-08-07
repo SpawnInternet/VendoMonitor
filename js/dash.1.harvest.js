@@ -2269,10 +2269,10 @@ function rcFilter(){
                 </div>
                 ${h.tg_name
                   ? `<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}
-                       <span onclick='rcnUnlink(${JSON.stringify(h.sheet_name||h.tg_name)})' style="color:#b91c1c;cursor:pointer;font-weight:700;margin-left:5px;" title="Unlink this TG name">✕ unlink</span>
+                       <span onclick='rcnUnlink(${klArg(h.sheet_name||h.tg_name)})' style="color:#b91c1c;cursor:pointer;font-weight:700;margin-left:5px;" title="Unlink this TG name">✕ unlink</span>
                      </div>`
                   : `<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked
-                       <span onclick='rcnUnlink(${JSON.stringify(h.sheet_name||h.tg_name)},{noTg:true})' style="color:#6b7280;cursor:pointer;font-weight:700;margin-left:5px;" title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>
+                       <span onclick='rcnUnlink(${klArg(h.sheet_name||h.tg_name)},{noTg:true})' style="color:#6b7280;cursor:pointer;font-weight:700;margin-left:5px;" title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>
                      </div>`}
               </td>
               <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
@@ -2375,7 +2375,7 @@ function rcShowCollector(collector){
         <div><div style="font-size:10px;opacity:.7;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${d.exactN??0}</div></div>
         <div><div style="font-size:10px;opacity:.7;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${d.surplusN??0}${d.surplusN?` · ${_php(d.surplusAmt)}`:''}</div></div>
         <div><div style="font-size:10px;opacity:.7;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${d.deficitN??0}${d.deficitN?` · ${_php(d.deficitAmt)}`:''}</div></div>
-        <button id="rc-modal-refresh" onclick='rcRefreshCollector(${JSON.stringify(collector)})' title="Re-read live from the database and rebuild this popup — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:30px;padding:0 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
+        <button id="rc-modal-refresh" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database and rebuild this popup — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:30px;padding:0 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
         <button onclick="rcCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
       </div>
     </div>
@@ -2928,6 +2928,16 @@ function klClearAreas(){
 
 function klEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// Build JSON arguments for an inline handler that lives inside a SINGLE-quoted
+// HTML attribute (onclick='fn(...)'). Raw JSON.stringify breaks the attribute
+// as soon as a value contains an apostrophe — e.g. "Dodong's Eatery" — which
+// silently kills the click. Encode to HTML entities; the browser decodes them
+// back to valid JS before the handler is parsed.
+function klArg(){
+  return Array.prototype.map.call(arguments, function(a){ return JSON.stringify(a===undefined?null:a); }).join(',')
+    .replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 // TRIAL applies ONLY to the automatic scanned entries coming from v4 and
 // spawn-keys (they stamp is_test=true). Manual entries logged here are real.
 // So there is NO tab-wide trial banner — instead each scanned/trial row is
@@ -3189,7 +3199,7 @@ function lmVendoInput(){
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
-          return '<div onclick=\'lmAddVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+          return '<div onclick=\'lmAddVendo('+klArg(v.id,nm,v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
@@ -3955,7 +3965,7 @@ function kcVendoInput(){
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
-          return '<div onclick=\'kcPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+          return '<div onclick=\'kcPickVendo('+klArg(v.id,nm,v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
@@ -4195,7 +4205,7 @@ function viVendoInput(){
           if(v.tg_name && v.tg_name!==nm) sub.push('📶 '+klEsc(v.tg_name));
           if(v.vlan) sub.push('VLAN '+v.vlan);
           if(v.server_name) sub.push('🖥️ '+klEsc(v.server_name));
-          return '<div onclick=\'viPickVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+          return '<div onclick=\'viPickVendo('+klArg(v.id,nm,v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f0fdf9\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
@@ -4607,7 +4617,7 @@ function viTgInput(){
           box.style.display='block'; return;
         }
         box.innerHTML = rows.map(v=>
-          '<div onclick=\'viPickTg('+JSON.stringify(v.name)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
+          '<div onclick=\'viPickTg('+klArg(v.name)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
           + 'onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'#fff\'">📶 '+klEsc(v.name)+'</div>'
         ).join('');
         box.style.display='block';
@@ -4743,7 +4753,7 @@ function ktVendoInput(){
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
           const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
-          return '<div onclick=\'ktAddVendo('+JSON.stringify(v.id)+','+JSON.stringify(nm)+','+JSON.stringify(v.area||'')+')\' '
+          return '<div onclick=\'ktAddVendo('+klArg(v.id,nm,v.area||'')+')\' '
             + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;" '
             + 'onmouseover="this.style.background=\'#f5f3ff\'" onmouseout="this.style.background=\'#fff\'">'
             + '<b style="color:#311A8E;">'+klEsc(nm)+'</b>'
@@ -5312,7 +5322,7 @@ async function viSrvInput(){
     let html = '';
     if(hits.length){
       html += hits.map(s=>
-        '<div onclick=\'viPickSrv('+JSON.stringify(s)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
+        '<div onclick=\'viPickSrv('+klArg(s)+')\' style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;font-weight:700;color:#311A8E;" '
         + 'onmouseover="this.style.background=\'#f0fdf9\'" onmouseout="this.style.background=\'#fff\'">🖥️ '+klEsc(s)+'</div>'
       ).join('');
     }
@@ -5371,7 +5381,7 @@ function viRtInput(){
         const dot = r.online ? '🟢' : '🔴';
         const taken = !!r.claimed_by;
         const cmt = (r.comment||'').replace(/[\r\n]+/g,' · ').trim();
-        return '<div onclick=\'viPickRouter('+JSON.stringify(r)+')\' '
+        return '<div onclick=\'viPickRouter('+klArg(r)+')\' '
           + 'style="padding:9px 12px;border-bottom:1px solid #f1f5f9;cursor:'+(taken?'not-allowed':'pointer')+';font-size:12px;'+(taken?'background:#fafafa;opacity:.75;':'')+'" '
           + 'onmouseover="this.style.background=\''+(taken?'#fafafa':'#f5f3ff')+'\'" onmouseout="this.style.background=\''+(taken?'#fafafa':'#fff')+'\'">'
           + '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">'
@@ -5579,7 +5589,7 @@ function ktRenderPending(){
           +   '</div>'
           +   (already
               ? '<span style="font-size:10px;color:#028867;font-weight:800;white-space:nowrap;">✓ added</span>'
-              : '<button type="button" onclick=\'ktAddPending('+JSON.stringify(r.vendo_id)+','+JSON.stringify(r.vendo_name||'')+','+JSON.stringify(r.area||'')+','+JSON.stringify(r.detail||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
+              : '<button type="button" onclick=\'ktAddPending('+klArg(r.vendo_id,r.vendo_name||'',r.area||'',r.detail||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
           + '</div></div>';
       }).join('')
     + '</div>';
@@ -5635,7 +5645,7 @@ function ktPendingUnlinked(r, s){
     +     (r.detail?'<div style="font-size:10px;color:#9ca3af;font-weight:600;margin-top:1px;">'+klEsc(r.detail)+'</div>':'')
     +     '<div style="font-size:10px;color:#C01176;font-weight:700;margin-top:3px;">⚠️ Typed by hand — no vendo linked. Pick which vendo this key belongs to.</div>'
     +   '</div>'
-    +   '<button type="button" onclick=\'ktPickForLog('+JSON.stringify(r.log_id)+')\' style="padding:5px 11px;background:#025AC6;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">Pick vendo</button>'
+    +   '<button type="button" onclick=\'ktPickForLog('+klArg(r.log_id)+')\' style="padding:5px 11px;background:#025AC6;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0;">Pick vendo</button>'
     + '</div></div>';
 }
 
