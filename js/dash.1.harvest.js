@@ -2974,14 +2974,18 @@ async function _klFetch(path, opts, tries){
 }
 
 /* Non-blocking warning strip above the Keys list. Pass '' to clear. */
-function klWarn(msg){
-  let el = document.getElementById('kl-warn');
+/* Non-blocking warning strip above a keys list. Pass '' to clear.
+   anchorId/warnId default to the Borrow Log pane so existing calls are unchanged. */
+function klWarn(msg, anchorId, warnId){
+  const aId = anchorId || 'kl-list';
+  const wId = warnId || (aId === 'kl-list' ? 'kl-warn' : aId + '-warn');
+  let el = document.getElementById(wId);
   if(!msg){ if(el) el.remove(); return; }
   if(!el){
-    const list = document.getElementById('kl-list');
+    const list = document.getElementById(aId);
     if(!list || !list.parentNode) return;
     el = document.createElement('div');
-    el.id = 'kl-warn';
+    el.id = wId;
     el.style.cssText = 'margin:10px 14px;padding:10px 14px;background:#FEF3C7;border:1.5px solid #FFB725;border-radius:10px;color:#92400E;font-size:12px;font-weight:700;line-height:1.5;';
     list.parentNode.insertBefore(el, list);
   }
@@ -3801,18 +3805,31 @@ let _kvoLogs = [], _kvoChanges = [], _kvoItems = [], _kvoInstalls = [];
 function kvoLoad(){
   const list = document.getElementById('kvo-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  // key_logs / key_changes / key_items define the custody picture — if any of
+  // them fail we must NOT render, because a missing key_items leaves every row
+  // with a blank key label, which reads as "no keys outstanding".
+  // vendo_installs is supplementary context only, so it degrades to [] with a
+  // visible warning rather than blocking the whole view.
+  let installsFailed = '';
   Promise.all([
-    fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_changes?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_items?select=*&limit=2000', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
-    fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+    _klFetch('/rest/v1/key_logs?select=*&order=taken_at.desc&limit=800').then(r=>r.json()),
+    _klFetch('/rest/v1/key_changes?select=*&order=created_at.desc&limit=800').then(r=>r.json()),
+    _klFetch('/rest/v1/key_items?select=*&limit=2000').then(r=>r.json()),
+    _klFetch('/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=800').then(r=>r.json())
+      .catch(e=>{ installsFailed = e.message; return []; })
   ]).then(([logs, changes, items, installs])=>{
     _kvoLogs = Array.isArray(logs)?logs:[];
     _kvoChanges = Array.isArray(changes)?changes:[];
     _kvoItems = Array.isArray(items)?items:[];
     _kvoInstalls = Array.isArray(installs)?installs:[];
     kvoRender();
-  }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+    klWarn(installsFailed ? ('Install history did not load ('+installsFailed+'). Key custody below is accurate; install details are missing.') : '', 'kvo-list');
+  }).catch(e=>{
+    klWarn('', 'kvo-list');
+    if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;font-weight:700;line-height:1.6;">Load error: '+klEsc(e.message)
+      + '<div style="font-weight:600;color:#6b7280;font-size:12px;margin-top:6px;">Key details could not be loaded — do not treat this list as a record of what is out.</div>'
+      + '<button onclick="kvoLoad()" style="margin-top:12px;padding:9px 18px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">↻ Retry</button></div>';
+  });
 }
 
 function kvoItemLbl(logId){
@@ -4115,8 +4132,8 @@ function kcEnsureNames(){
   const dl = document.getElementById('kc-by-list');
   if(!dl || dl.children.length) return;
   Promise.all([
-    fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
-    fetch(_SB+'/rest/v1/technicians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+    _klFetch('/rest/v1/collectors?select=name&active=eq.true&order=name.asc').then(r=>r.json()).catch(e=>{ console.warn('[KEYS] collectors datalist failed:', e.message); return []; }),
+    _klFetch('/rest/v1/technicians?select=name&active=eq.true&order=name.asc').then(r=>r.json()).catch(e=>{ console.warn('[KEYS] technicians datalist failed:', e.message); return []; })
   ]).then(([cs,ts])=>{
     const names = new Set();
     (Array.isArray(cs)?cs:[]).forEach(c=>names.add(c.name));
