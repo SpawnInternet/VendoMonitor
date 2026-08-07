@@ -1736,7 +1736,7 @@ const RP_ADM_G = [
   ['personnel',   '4. Personnel',             '#FFB725', 'Salaries & advances'],
   ['admin',       '5. Admin & General',       '#C01176', 'Cards & general']
 ];
-let rpAdmRows = null, rpAdmMonth = null;
+let rpAdmRows = null, rpAdmMonth = null, rpAdmPending = [];
 
 async function rpRenderWendell(){
   const host = document.getElementById('rp-mode-wendell');
@@ -1746,6 +1746,10 @@ async function rpRenderWendell(){
     try{
       rpAdmRows = await rpRest('expenses?select=id,expense_date,description,amount,note,statement_group,vendor'
         + '&book=eq.admin&voided_at=is.null&order=expense_date.desc&limit=1000');
+      try{
+        rpAdmPending = await rpRest('sheet_outbox?select=id,payload&source=eq.wendell_expenses'
+          + '&status=eq.queued&order=id&limit=50');
+      }catch(e){ rpAdmPending = []; }
     }catch(e){
       host.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:13px">'
         + 'Could not load the admin book.<br><span style="font-size:11px;color:#8b93ad">' + rpEsc(e.message) + '</span></div>';
@@ -1800,6 +1804,43 @@ function rpAdmHtml(months){
   +     '<div class="v" style="color:'+(unclA?'#8a6100':'#028867')+'">'+(unclA?rpPeso(unclA):'All set')+'</div>'
   +     '<div class="s">'+uncl.length+' of '+rows.length+' entries</div></div>'
   + '</div>';
+
+  // Entry form. The tab decides the book: anything added here is admin &
+  // capital, never daily. No password to add — only editing and voiding
+  // ask for one.
+  h += '<div class="rp-card" style="border-color:#f3c2e2">'
+    +  '<div style="font-size:12px;font-weight:800;color:#C01176;margin-bottom:9px">\u2795 Add an admin expense</div>'
+    +  '<div style="display:grid;grid-template-columns:130px minmax(0,2fr) 110px minmax(0,1.2fr) auto;gap:7px;align-items:end">'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Date</label>'
+    +      '<input type="date" id="rp-adm-date" class="rp-in" value="'+rpPhToday()+'"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Particulars</label>'
+    +      '<input id="rp-adm-desc" class="rp-in" list="rp-adm-descs" placeholder="e.g. Globe Bill"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Amount</label>'
+    +      '<input id="rp-adm-amt" class="rp-in" type="number" step="0.01" min="0" placeholder="0.00"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Remarks</label>'
+    +      '<input id="rp-adm-rem" class="rp-in" placeholder="optional"></div>'
+    +    '<button class="rp-btn pri" id="rp-adm-save" onclick="rpAdmAdd()">Add</button>'
+    +  '</div>'
+    +  '<datalist id="rp-adm-descs">'
+    +    Array.from(new Set(rpAdmRows.map(function(r){ return r.description; }).filter(Boolean)))
+           .slice(0,300).map(function(d){ return '<option value="'+rpEsc(d)+'">'; }).join('')
+    +  '</datalist>'
+    +  '<div id="rp-adm-msg" style="font-size:11px;margin-top:7px;min-height:14px"></div>'
+    +  '<div style="font-size:10.5px;color:#8b93ad">Written to the "Expenses paid by Wendell" sheet first, then read back \u2014 '
+    +  'so the sheet and the dashboard can never disagree. Its group is assigned automatically on the way in.</div>'
+    + '</div>';
+
+  if(rpAdmPending && rpAdmPending.length){
+    h += '<div class="rp-card" style="border-color:#FFB725;background:#fffdf5">'
+      +  '<div style="font-size:12px;font-weight:800;color:#8a6100;margin-bottom:7px">\u23f3 Waiting to reach the sheet \u2014 '+rpAdmPending.length+'</div>'
+      +  rpAdmPending.map(function(p){
+           const q = p.payload || {};
+           return '<div style="font-size:11.5px;padding:3px 0;display:flex;justify-content:space-between;gap:8px">'
+             + '<span>'+rpEsc(q.expense_date||'')+' \u00b7 '+rpEsc(q.description||'')+'</span>'
+             + '<span style="font-weight:700">'+rpPeso(q.amount)+'</span></div>';
+         }).join('')
+      +  '<div style="font-size:10.5px;color:#8a6100;margin-top:6px">These appear above within about a minute.</div></div>';
+  }
 
   // Statement groups, broken down to the lines inside each one
   h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:4px">Breakdown \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>'
@@ -1878,3 +1919,40 @@ window.rpRenderWendell = rpRenderWendell;
 
 // Drop the cached rows so the next render re-reads the database.
 window.rpAdmRefresh = function(){ rpAdmRows = null; rpRenderWendell(); };
+
+// Queue an admin expense. It is written to the sheet by the bridge and
+// comes back through the normal pull, so nothing is inserted into the book
+// directly from here.
+window.rpAdmAdd = async function(){
+  const msg  = document.getElementById('rp-adm-msg');
+  const btn  = document.getElementById('rp-adm-save');
+  const date = (document.getElementById('rp-adm-date')||{}).value || '';
+  const desc = ((document.getElementById('rp-adm-desc')||{}).value||'').trim();
+  const amt  = Number((document.getElementById('rp-adm-amt')||{}).value || 0);
+  const rem  = ((document.getElementById('rp-adm-rem')||{}).value||'').trim();
+  const fail = function(t){ msg.innerHTML = '<span style="color:#DF1A35;font-weight:700">'+rpEsc(t)+'</span>'; };
+
+  if(!date)              return fail('Pick a date.');
+  if(!desc)              return fail('Particulars is required.');
+  if(!(amt > 0))         return fail('Amount must be more than zero.');
+
+  btn.disabled = true; btn.textContent = 'Adding\u2026';
+  msg.innerHTML = '';
+  try{
+    await rpRpc('spawn_queue_admin_expense', {
+      p_date: date, p_description: desc, p_amount: amt,
+      p_remarks: rem || null, p_by: 'dashboard'
+    });
+    msg.innerHTML = '<span style="color:#028867;font-weight:700">\u2713 Queued \u2014 '
+      + rpEsc(desc) + ' ' + rpPeso(amt) + '. It reaches the sheet within seconds.</span>';
+    document.getElementById('rp-adm-desc').value = '';
+    document.getElementById('rp-adm-amt').value  = '';
+    document.getElementById('rp-adm-rem').value  = '';
+    rpAdmRows = null;
+    setTimeout(rpRenderWendell, 1200);
+  }catch(e){
+    fail('Not saved: ' + e.message);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Add';
+  }
+};
