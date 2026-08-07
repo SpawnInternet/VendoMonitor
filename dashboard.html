@@ -233,7 +233,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   </div>
 </div>
 <script defer src="js/dash.5.fmt.js?v=split123"></script>
-<script defer src="js/dash.0.core.js?v=split123"></script>
+<script defer src="js/dash.0.core.js?v=split124"></script>
 
 <!-- GLOBAL FLOATING BACK BUTTON -->
 <style>
@@ -3677,7 +3677,21 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <script defer src="js/dash.9.overdue.js?v=split123"></script>
 <script defer src="js/dash.10.backup.js?v=split123"></script>
 <script defer src="js/dash.11.reports.js?v=rp08040744"></script>
-<script>(function(){var V="?v=split123";window.ensureHarvestJs=function(){if(window.__hvLoaded)return;window.__hvLoaded=1;var s=document.createElement("script");s.src="js/dash.1.harvest.js"+V;s.async=false;document.head.appendChild(s);};if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}})();</script>
+<script>(function(){
+  /* Single loader. dash.0.core.js owns dash.1.harvest.js via window.ensureHarvest().
+     This block used to inject a SECOND copy under a different ?v= string, so the
+     browser fetched and parsed the file twice and the second parse threw
+     "SyntaxError: Identifier '_viBusy' has already been declared".
+     dash.6.overview.js calls ensureHarvestJs(), so the name is kept as an alias. */
+  window.ensureHarvestJs = function(){
+    if (typeof window.ensureHarvest === 'function') return window.ensureHarvest();
+    if (window.__hvLoaded) return; window.__hvLoaded = 1;   // fallback: core failed to load
+    var s = document.createElement("script");
+    s.src = "js/dash.1.harvest.js?v=split124"; s.async = false;
+    document.head.appendChild(s);
+  };
+  if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}
+})();</script>
 
 </body>
 </html>
