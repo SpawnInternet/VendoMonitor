@@ -1781,6 +1781,7 @@ function rpAdmHtml(months){
   + '<div style="background:linear-gradient(135deg,#C01176,#311A8E);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
   +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B3} Admin &amp; Capital Expense</div>'
   +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Paid by Sir Wendell \u00b7 separate book from Daily Expense</div></div>'
+  +   '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;margin-right:6px" onclick="rpAdmRefresh()" title="Re-read the admin book from the database">\u21bb Refresh</button>'
   +   '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpAdmSetMonth(this.value)">'
   +     months.map(function(m){
           return '<option value="'+m+'"'+(m===rpAdmMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>';
@@ -1866,10 +1867,14 @@ function rpAdmHtml(months){
              + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td></tr>';
          }).join('')
     +  '</tbody></table></div>'
-    +  '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Synced from the "Expenses paid by Wendell" sheet. '
-    +  'Entry from the dashboard is not wired yet \u2014 add rows in the sheet and they appear here within seconds.</div></div>';
+    +  '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Synced from the "Expenses paid by Wendell" sheet \u2014 '
+    +  'the bridge reads it every 10 seconds and new rows are filed every 5 minutes. '
+    +  'Press \u21bb Refresh to pull the latest without reloading the page.</div></div>';
   return h;
 }
 
 window.rpAdmSetMonth = function(m){ rpAdmMonth = m; rpRenderWendell(); };
 window.rpRenderWendell = rpRenderWendell;
+
+// Drop the cached rows so the next render re-reads the database.
+window.rpAdmRefresh = function(){ rpAdmRows = null; rpRenderWendell(); };
