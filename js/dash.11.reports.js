@@ -172,7 +172,7 @@ function rpLoadWorkDate(fund){
   catch(e){ return null; }
 }
 function rpStash(){
-  if(rpTab === 'expense' || rpTab === 'wendell'){
+  if(rpTab === 'expense'){
     rpState[rpFund] = { date: rpDate, draft: rpDraft };
   }
 }
@@ -192,8 +192,9 @@ window.rpSetTab = function(mode){
     m.classList.toggle('active', m.id === 'rp-mode-' + mode);
   });
   document.getElementById('rp-actions').innerHTML = '';
-  if(mode === 'expense' || mode === 'wendell'){
-    rpFund = (mode === 'wendell') ? 'Sir Wendell' : 'Collections';
+  if(mode === 'wendell') rpRenderWendell();
+  if(mode === 'expense'){
+    rpFund = 'Collections';
     const st = rpState[rpFund];
     rpDate  = st.date || rpLoadWorkDate(rpFund) || rpPhToday();
     rpDraft = st.draft && st.draft.length ? st.draft : [rpBlankRow(), rpBlankRow(), rpBlankRow()];
@@ -1722,3 +1723,152 @@ window.rpxLoadStat = async function(){
                    + '<div class="sv" style="color:var(--mu);font-size:13px">unavailable</div>';
   }
 };
+
+// ══════════════════════════════════════════════════════════
+// 2. ADMIN EXPENSE  — Sir Wendell's book, grouped by statement group
+// Separate book from Daily Expense: never mixed, never summed together.
+// Source: "Expenses paid by Wendell" sheet -> sheet bridge -> expenses(book='admin')
+// ══════════════════════════════════════════════════════════
+const RP_ADM_G = [
+  ['capex',       '1. Capital Expenditure',   '#311A8E', 'One-time build-out'],
+  ['network',     '2. Network & Connectivity','#025AC6', 'Upstream, telco, fiber'],
+  ['maintenance', '3. Maintenance',           '#028867', 'Repairs & upkeep'],
+  ['personnel',   '4. Personnel',             '#FFB725', 'Salaries & advances'],
+  ['admin',       '5. Admin & General',       '#C01176', 'Cards & general']
+];
+let rpAdmRows = null, rpAdmMonth = null;
+
+async function rpRenderWendell(){
+  const host = document.getElementById('rp-mode-wendell');
+  if(!host) return;
+  if(!rpAdmRows){
+    host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Loading admin expense book\u2026</div>';
+    try{
+      rpAdmRows = await rpRest('expenses?select=id,expense_date,description,amount,note,statement_group,vendor'
+        + '&book=eq.admin&voided_at=is.null&order=expense_date.desc&limit=1000');
+    }catch(e){
+      host.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:13px">'
+        + 'Could not load the admin book.<br><span style="font-size:11px;color:#8b93ad">' + rpEsc(e.message) + '</span></div>';
+      return;
+    }
+  }
+  const months = Array.from(new Set((rpAdmRows||[]).map(function(r){ return String(r.expense_date).slice(0,7); }))).sort().reverse();
+  if(!months.length){ host.innerHTML = '<div class="rp-card">No admin expenses yet.</div>'; return; }
+  if(!rpAdmMonth || months.indexOf(rpAdmMonth) < 0) rpAdmMonth = months[0];
+  host.innerHTML = rpAdmHtml(months);
+}
+
+function rpAdmMonthLabel(m){
+  const p = String(m).split('-');
+  return RP_MONTHS[Number(p[1])] + ' ' + p[0];
+}
+
+function rpAdmHtml(months){
+  const rows  = rpAdmRows.filter(function(r){ return String(r.expense_date).slice(0,7) === rpAdmMonth; });
+  const total = rows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+  const book  = rpAdmRows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+  const uncl  = rows.filter(function(r){ return !r.statement_group; });
+  const unclA = uncl.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+
+  // previous month, for the movement figure
+  const idx  = months.indexOf(rpAdmMonth);
+  const prev = idx >= 0 && idx + 1 < months.length ? months[idx+1] : null;
+  const prevT = prev ? rpAdmRows.filter(function(r){ return String(r.expense_date).slice(0,7) === prev; })
+                                .reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0) : 0;
+  const delta = prev ? total - prevT : 0;
+  const dPct  = prev && prevT ? Math.round(delta / prevT * 100) : 0;
+
+  var h = ''
+  + '<div style="background:linear-gradient(135deg,#C01176,#311A8E);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+  +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B3} Admin &amp; Capital Expense</div>'
+  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Paid by Sir Wendell \u00b7 separate book from Daily Expense</div></div>'
+  +   '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpAdmSetMonth(this.value)">'
+  +     months.map(function(m){
+          return '<option value="'+m+'"'+(m===rpAdmMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>';
+        }).join('')
+  +   '</select>'
+  + '</div>'
+
+  // KPIs
+  + '<div class="rp-kpis">'
+  +   '<div class="rp-kpi" style="border-bottom-color:#C01176"><div class="k">'+rpAdmMonthLabel(rpAdmMonth)+' total</div>'
+  +     '<div class="v">'+rpPeso(total)+'</div><div class="s">'+rows.length+' entries</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(delta>0?'#DF1A35':'#028867')+'"><div class="k">vs previous month</div>'
+  +     '<div class="v" style="color:'+(delta>0?'#DF1A35':'#028867')+'">'+(prev?(delta>0?'+':'')+rpPesoShort(delta):'\u2014')+'</div>'
+  +     '<div class="s">'+(prev? rpAdmMonthLabel(prev)+' \u00b7 '+(dPct>0?'+':'')+dPct+'%' : 'no earlier month')+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(unclA?'#FFB725':'#028867')+'"><div class="k">Needs a group</div>'
+  +     '<div class="v" style="color:'+(unclA?'#8a6100':'#028867')+'">'+(unclA?rpPeso(unclA):'All set')+'</div>'
+  +     '<div class="s">'+uncl.length+' of '+rows.length+' entries</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:#311A8E"><div class="k">Whole book</div>'
+  +     '<div class="v">'+rpPesoShort(book)+'</div><div class="s">'+rpAdmRows.length+' entries \u00b7 '+months.length+' months</div></div>'
+  + '</div>';
+
+  // Statement groups
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:10px">Statement groups \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>';
+  RP_ADM_G.forEach(function(g){
+    const gr = rows.filter(function(r){ return r.statement_group === g[0]; });
+    const amt = gr.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+    const pct = total ? (amt/total*100) : 0;
+    h += '<div style="margin-bottom:9px">'
+      +  '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:3px">'
+      +    '<span style="font-weight:700;color:'+g[2]+'">'+g[1]+'<span style="font-weight:400;color:#8b93ad;font-size:10px"> \u00b7 '+g[3]+'</span></span>'
+      +    '<span style="font-weight:800;font-variant-numeric:tabular-nums">'+(amt?rpPeso(amt):'\u2014')
+      +      '<span style="font-size:10px;color:#8b93ad;font-weight:600"> '+gr.length+'</span></span>'
+      +  '</div>'
+      +  '<div style="height:7px;background:#f0f4ff;border-radius:4px;overflow:hidden">'
+      +    '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:'+g[2]+';border-radius:4px"></div>'
+      +  '</div></div>';
+  });
+  if(unclA){
+    const pct = total ? (unclA/total*100) : 0;
+    h += '<div style="margin-top:11px;padding-top:9px;border-top:1px dashed #FFB725">'
+      +  '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+      +    '<span style="font-weight:700;color:#8a6100">\u26a0\uFE0F Not yet grouped</span>'
+      +    '<span style="font-weight:800">'+rpPeso(unclA)+'<span style="font-size:10px;color:#8b93ad;font-weight:600"> '+uncl.length+'</span></span></div>'
+      +  '<div style="height:7px;background:#f0f4ff;border-radius:4px;overflow:hidden">'
+      +    '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:repeating-linear-gradient(45deg,#FFB725,#FFB725 5px,#ffd98a 5px,#ffd98a 10px);border-radius:4px"></div></div></div>';
+  }
+  h += '<div style="margin-top:12px;padding-top:10px;border-top:2px solid #e8eeff;display:flex;justify-content:space-between;font-size:14px;font-weight:800;color:#311A8E">'
+    +  '<span>TOTAL</span><span>'+rpPeso(total)+'</span></div></div>';
+
+  // Vendors
+  const vm = {};
+  rows.forEach(function(r){
+    if(!r.vendor) return;
+    vm[r.vendor] = (vm[r.vendor]||0) + (Number(r.amount)||0);
+  });
+  const vend = Object.keys(vm).map(function(k){ return [k, vm[k]]; }).sort(function(a,b){ return b[1]-a[1]; });
+  if(vend.length){
+    h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">By vendor</div>'
+      +  '<table class="rp-t"><thead><tr><th>Vendor</th><th class="rp-num">Amount</th><th class="rp-num">Share</th></tr></thead><tbody>'
+      +  vend.map(function(v){
+           return '<tr><td style="font-weight:600">'+rpEsc(v[0])+'</td>'
+             + '<td class="rp-num" style="font-weight:700">'+rpPeso(v[1])+'</td>'
+             + '<td class="rp-num" style="color:#8b93ad">'+(total?(v[1]/total*100).toFixed(1):'0.0')+'%</td></tr>';
+         }).join('')
+      +  '</tbody></table></div>';
+  }
+
+  // Entries
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">Entries \u2014 '+rows.length+'</div>'
+    +  '<div style="max-height:420px;overflow-y:auto"><table class="rp-t">'
+    +  '<thead><tr><th>Date</th><th>Description</th><th>Group</th><th>Vendor</th><th class="rp-num">Amount</th></tr></thead><tbody>'
+    +  rows.slice().sort(function(a,b){ return String(a.expense_date) < String(b.expense_date) ? 1 : -1; })
+         .map(function(r){
+           const g = RP_ADM_G.filter(function(x){ return x[0] === r.statement_group; })[0];
+           return '<tr'+(r.statement_group?'':' style="background:#fffdf5"')+'>'
+             + '<td style="white-space:nowrap;color:#6b7394">'+rpEsc(String(r.expense_date).slice(5))+'</td>'
+             + '<td>'+rpEsc(r.description||'\u2014')
+             +   (r.note?'<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.note)+'</div>':'')+'</td>'
+             + '<td style="font-size:11px;font-weight:700;color:'+(g?g[2]:'#8a6100')+'">'+(g?rpEsc(g[1].replace(/^\d\.\s*/,'')):'\u26a0\uFE0F needs group')+'</td>'
+             + '<td style="font-size:11px;color:#6b7394">'+rpEsc(r.vendor||'\u2014')+'</td>'
+             + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td></tr>';
+         }).join('')
+    +  '</tbody></table></div>'
+    +  '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Synced from the "Expenses paid by Wendell" sheet. '
+    +  'Entry from the dashboard is not wired yet \u2014 add rows in the sheet and they appear here within seconds.</div></div>';
+  return h;
+}
+
+window.rpAdmSetMonth = function(m){ rpAdmMonth = m; rpRenderWendell(); };
+window.rpRenderWendell = rpRenderWendell;
