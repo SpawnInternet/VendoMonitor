@@ -2778,7 +2778,10 @@ async function rcptLoad(){
       fetch(`${_SB}/rest/v1/harvests?harvest_date=eq.${date}&select=id,collector,vendo_name,sheet_name,area,coins_total,spawn_share,harvested_at&order=collector.asc,harvested_at.asc&limit=2000`,{headers:_HDR}).then(r=>r.json()),
       fetch(`${_SB}/rest/v1/harvest_pack_items?harvest_date=eq.${date}&saved_by=eq.office&select=harvest_id,pack_type,amount&limit=5000`,{headers:_HDR}).then(r=>r.json()),
       fetch(`${_SB}/rest/v1/harvest_reconciliations?recon_date=eq.${date}&select=collector,confirmed_by,confirmed_at,spawn_share,expenses,net_to_remit,vendo_count&limit=200`,{headers:_HDR}).then(r=>r.json()),
-      fetch(`${_SB}/rest/v1/collector_expenses?expense_date=eq.${date}&select=collector,category,description,amount&limit=500`,{headers:_HDR}).then(r=>r.json()).catch(()=>[])
+      // NOT best-effort: expenses feed totalExp -> netRemit. A swallowed
+      // failure here silently OVERSTATES "Net to Remit" by the whole expense
+      // amount, so this must fail the load rather than default to [].
+      _klFetch(`/rest/v1/collector_expenses?expense_date=eq.${date}&select=collector,category,description,amount&limit=500`).then(r=>r.json())
     ]);
     // pack map per harvest
     const packMap={};
@@ -3684,7 +3687,7 @@ function gqLoad(){
       const t=document.getElementById('gq-total'); if(t) t.textContent=total;
       const u=document.getElementById('gq-unbound'); if(u) u.textContent=unbound;
     })
-    .catch(()=>{});
+    .catch(e=>{ console.warn('[KEYS] QR fob counters did not refresh:', e.message); });
 }
 
 function gqLoadQr(){
@@ -4154,7 +4157,9 @@ function viLoad(){
   ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', viCompile); e._wired=true; } });
   if(!_viGroups.length){
     fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label,group_id,collector,team,barangays,total_vendos,status&status=eq.active&order=area.asc,group_id.asc', {headers:_HDR})
-      .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); }).catch(()=>{});
+      .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); })
+      .catch(e=>{ console.warn('[INSTALL] harvest_groups failed:', e.message);
+                  klWarn('Group list did not load ('+e.message+'). Do not save an install until it does — the group would be blank.', 'vi-list'); });
   }
   viSrvLoadList();
   fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=500', {headers:_HDR})
@@ -4314,7 +4319,9 @@ async function viAdd(){
         // the collector PWA reads lat/lng from harvest_group_items — keep both in sync
         await fetch(_SB+'/rest/v1/harvest_group_items?vendo_id=eq.'+vid, {method:'PATCH',
           headers:Object.assign({'Prefer':'return=minimal'},_HDR),
-          body:JSON.stringify({lat:_viGps.lat, lng:_viGps.lng})}).catch(()=>{});
+          body:JSON.stringify({lat:_viGps.lat, lng:_viGps.lng})})
+        .then(gi=>{ if(!gi.ok) throw new Error('harvest_group_items HTTP '+gi.status); })
+        .catch(err2=>{ extraNote += '<br><br>⚠️ GPS saved on the vendo but NOT synced to the collector app ('+klEsc(String(err2.message||err2))+'). The pin will look right here and wrong on the route.'; });
       }catch(err){ extraNote += '<br><br>⚠️ GPS not saved: '+klEsc(String(err.message||err)); }
     }
     let photoUrl = null;
@@ -4658,11 +4665,17 @@ let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], 
 function ktLoad(){
   const list = document.getElementById('kt-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
+  let ktSoft = [];
   Promise.all([
-    fetch(_SB+'/rest/v1/key_transfers?select=*&order=created_at.desc&limit=800', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc', {headers:_HDR}).then(r=>r.json()).catch(()=>[]),
-    fetch(_SB+'/rest/v1/rpc/spawn_pungpung_pending', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[]),
-    fetch(_SB+'/rest/v1/rpc/spawn_kt_details', {method:'POST', headers:_HDR, body:'{}'}).then(r=>r.json()).catch(()=>[])
+    _klFetch('/rest/v1/key_transfers?select=*&order=created_at.desc&limit=800').then(r=>r.json()),
+    // custodian chips have their own empty state — degrade with a warning
+    _klFetch('/rest/v1/key_custodians?select=name&active=eq.true&order=name.asc').then(r=>r.json())
+      .catch(e=>{ ktSoft.push('saved custodian names'); return []; }),
+    // pending pungpung IS custody data: empty reads as "nothing pending"
+    _klFetch('/rest/v1/rpc/spawn_pungpung_pending', {method:'POST', body:'{}'}, 1).then(r=>r.json()),
+    // per-vendo detail only decorates rows
+    _klFetch('/rest/v1/rpc/spawn_kt_details', {method:'POST', body:'{}'}, 1).then(r=>r.json())
+      .catch(e=>{ ktSoft.push('vendo details'); return []; })
   ]).then(([rows, cus, pend, det])=>{
     _ktRows = Array.isArray(rows)?rows:[];
     _ktCustodians = (Array.isArray(cus)?cus:[]).map(c=>c.name);
@@ -4674,7 +4687,13 @@ function ktLoad(){
     ktRenderVendos();
     ktRenderPending();
     ktRender();
-  }).catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+    klWarn(ktSoft.length ? (ktSoft.join(' and ')+' did not load. Pending keys below are accurate; some labels are missing.') : '', 'kt-list');
+  }).catch(e=>{
+    klWarn('', 'kt-list');
+    if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;font-weight:700;line-height:1.6;">Load error: '+klEsc(e.message)
+      + '<div style="font-weight:600;color:#6b7280;font-size:12px;margin-top:6px;">Pending pungpung could not be loaded — this list does NOT show what is outstanding.</div>'
+      + '<button onclick="ktLoad()" style="margin-top:12px;padding:9px 18px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">↻ Retry</button></div>';
+  });
 }
 
 /* remembered custodian names — click a chip to reuse */
@@ -4707,7 +4726,7 @@ function ktRememberCustodian(name){
   if(_ktCustodians.some(c=>c.toLowerCase()===nm.toLowerCase())) return Promise.resolve();
   return fetch(_SB+'/rest/v1/key_custodians', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({name:nm, active:true})})
     .then(()=>{ _ktCustodians.push(nm); _ktCustodians.sort(); ktRenderCustodians(); })
-    .catch(()=>{});
+    .catch(e=>{ console.warn('[KEYS] custodian name not remembered:', e.message); });
 }
 
 function ktVendoInput(){
