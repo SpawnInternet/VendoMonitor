@@ -69,6 +69,7 @@ function rpShellHtml(){
   const tabs = [
     ['expense',  '\u{1F4B8}', 'Daily Expense'],
     ['wendell',  '\u{1F4B3}', 'Admin Expense'],
+    ['subinc',   '\u{1F4B5}', 'Subscriber Income'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
     ['releases', '\u{1F91D}', 'Fund Releases'],
     ['sales',    '\u{1F4B0}', 'Sales'],
@@ -132,6 +133,7 @@ function rpShellHtml(){
   +   '<div class="rp-tabs" id="rp-tabs">' + tabsHtml + '</div>'
   +   '<div class="rp-mode" id="rp-mode-expense"></div>'
   +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
+  +   '<div class="rp-mode" id="rp-mode-subinc"></div>'
   +   '<div class="rp-mode" id="rp-mode-summary"></div>'
   +   '<div class="rp-mode" id="rp-mode-releases"></div>'
   +   '<div class="rp-mode" id="rp-mode-sales"></div>'
@@ -200,6 +202,7 @@ window.rpSetTab = function(mode){
     rpDraft = st.draft && st.draft.length ? st.draft : [rpBlankRow(), rpBlankRow(), rpBlankRow()];
     rpRenderExpense();
   }
+  if(mode === 'subinc')   rpRenderSubInc();
   if(mode === 'summary')  rpRenderSummary();
   if(mode === 'releases') rpRenderReleases();
   if(mode === 'sales')    rpRenderSales();
@@ -1956,3 +1959,138 @@ window.rpAdmAdd = async function(){
     btn.disabled = false; btn.textContent = 'Add';
   }
 };
+
+// ══════════════════════════════════════════════════════════
+// 3. SUBSCRIBER INCOME  — the payment ledger, cash basis
+// Source: "Spawn Subsciber 2026" (both tabs) -> bridge -> subscriber_payments
+// Counts PESOS RECEIVED, not subscribers who paid. One person can pay
+// twice in a month and most payments cover more than one month, so a
+// head-count times an average understates it.
+// ══════════════════════════════════════════════════════════
+let rpSubRows = null, rpSubMonth = null;
+
+async function rpRenderSubInc(){
+  const host = document.getElementById('rp-mode-subinc');
+  if(!host) return;
+  if(!rpSubRows){
+    host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Loading subscriber payments\u2026</div>';
+    try{
+      rpSubRows = await rpRest('subscriber_payments?select=id,payment_date,subscriber_name,amount,collector,'
+        + 'invoice_no,note,coverage_from,coverage_to,coverage_months,coverage_ok'
+        + '&order=payment_date.desc&limit=1000');
+    }catch(e){
+      host.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:13px">'
+        + 'Could not load subscriber payments.<br><span style="font-size:11px;color:#8b93ad">'+rpEsc(e.message)+'</span></div>';
+      return;
+    }
+  }
+  const months = Array.from(new Set(rpSubRows.map(function(r){ return String(r.payment_date).slice(0,7); }))).sort().reverse();
+  if(!months.length){ host.innerHTML = '<div class="rp-card">No subscriber payments yet.</div>'; return; }
+  if(!rpSubMonth || months.indexOf(rpSubMonth) < 0) rpSubMonth = months[0];
+  host.innerHTML = rpSubHtml(months);
+}
+
+function rpSubHtml(months){
+  const rows  = rpSubRows.filter(function(r){ return String(r.payment_date).slice(0,7) === rpSubMonth; });
+  const total = rows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+  const payers = new Set(rows.map(function(r){ return (r.subscriber_name||'').toLowerCase().trim(); })).size;
+  const repeat = rows.length - payers;
+  const multi  = rows.filter(function(r){ return (r.coverage_months||0) > 1; }).length;
+  const unres  = rows.filter(function(r){ return r.coverage_ok !== true; });
+
+  const idx  = months.indexOf(rpSubMonth);
+  const prev = idx >= 0 && idx+1 < months.length ? months[idx+1] : null;
+  const prevT = prev ? rpSubRows.filter(function(r){ return String(r.payment_date).slice(0,7) === prev; })
+                               .reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0) : 0;
+  const delta = prev ? total - prevT : 0;
+  const dPct  = prev && prevT ? Math.round(delta/prevT*100) : 0;
+
+  var h = ''
+  + '<div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+  +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B5} Subscriber Income</div>'
+  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Cash received \u00b7 from the payment ledger</div></div>'
+  +   '<div style="display:flex;gap:6px;align-items:center">'
+  +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpSubRefresh()">\u21bb Refresh</button>'
+  +     '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpSubSetMonth(this.value)">'
+  +       months.map(function(m){
+            return '<option value="'+m+'"'+(m===rpSubMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>';
+          }).join('')
+  +     '</select></div>'
+  + '</div>'
+
+  + '<div class="rp-kpis">'
+  +   '<div class="rp-kpi" style="border-bottom-color:#028867"><div class="k">'+rpAdmMonthLabel(rpSubMonth)+' collected</div>'
+  +     '<div class="v">'+rpPeso(total)+'</div><div class="s">'+rows.length+' payments</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(delta<0?'#DF1A35':'#028867')+'"><div class="k">vs previous month</div>'
+  +     '<div class="v" style="color:'+(delta<0?'#DF1A35':'#028867')+'">'+(prev?(delta>0?'+':'')+rpPesoShort(delta):'\u2014')+'</div>'
+  +     '<div class="s">'+(prev? rpAdmMonthLabel(prev)+' \u00b7 '+(dPct>0?'+':'')+dPct+'%' : 'no earlier month')+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:#025AC6"><div class="k">Subscribers who paid</div>'
+  +     '<div class="v">'+payers+'</div><div class="s">'+(repeat>0?repeat+' paid more than once':'one payment each')+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:#FFB725"><div class="k">Average payment</div>'
+  +     '<div class="v">'+rpPeso(rows.length?total/rows.length:0)+'</div>'
+  +     '<div class="s">'+multi+' cover 2+ months</div></div>'
+  + '</div>';
+
+  // by collector
+  const cm = {};
+  rows.forEach(function(r){
+    const k = (r.collector||'\u2014').trim();
+    if(!cm[k]) cm[k] = { amt:0, n:0 };
+    cm[k].amt += (Number(r.amount)||0); cm[k].n += 1;
+  });
+  const cols = Object.keys(cm).map(function(k){ return [k, cm[k].amt, cm[k].n]; })
+                     .sort(function(a,b){ return b[1]-a[1]; });
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">By collector \u2014 '+rpAdmMonthLabel(rpSubMonth)+'</div>'
+    +  '<table class="rp-t"><thead><tr><th>Collector</th><th class="rp-num">Payments</th><th class="rp-num">Share</th><th class="rp-num">Amount</th></tr></thead><tbody>'
+    +  cols.map(function(c){
+         return '<tr><td style="font-weight:600">'+rpEsc(c[0])+'</td>'
+           + '<td class="rp-num" style="color:#8b93ad">'+c[2]+'</td>'
+           + '<td class="rp-num" style="color:#8b93ad">'+(total?(c[1]/total*100).toFixed(1):'0.0')+'%</td>'
+           + '<td class="rp-num" style="font-weight:700">'+rpPeso(c[1])+'</td></tr>';
+       }).join('')
+    +  '<tr><td colspan="3" style="border-top:2px solid #e8eeff;font-weight:800;color:#311A8E;padding-top:8px">TOTAL</td>'
+    +  '<td class="rp-num" style="border-top:2px solid #e8eeff;font-weight:800;color:#311A8E;padding-top:8px">'+rpPeso(total)+'</td></tr>'
+    +  '</tbody></table>'
+    +  '<div style="font-size:10.5px;color:#8b93ad;margin-top:7px">Collector is recorded exactly as written in the sheet \u2014 '
+    +  '"G-cash" and "G-Cash" appear separately, and payment channels sit alongside people. Not yet normalised.</div></div>';
+
+  if(unres.length){
+    h += '<div class="rp-card" style="border-color:#FFB725;background:#fffdf5">'
+      +  '<div style="font-size:12px;font-weight:800;color:#8a6100;margin-bottom:6px">\u26a0\uFE0F Coverage period unreadable \u2014 '+unres.length+'</div>'
+      +  '<div style="font-size:11px;color:#8a6100;margin-bottom:6px">Counted in the total; only the months they cover are unknown.</div>'
+      +  unres.slice(0,12).map(function(r){
+           return '<div style="font-size:11.5px;padding:2px 0;display:flex;justify-content:space-between;gap:8px">'
+             + '<span>'+rpEsc(String(r.payment_date).slice(5))+' \u00b7 '+rpEsc(r.subscriber_name||'\u2014')
+             + ' <span style="color:#b6bdd0">'+rpEsc(r.note||'no remarks')+'</span></span>'
+             + '<span style="font-weight:700">'+rpPeso(r.amount)+'</span></div>';
+         }).join('')
+      +  '</div>';
+  }
+
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">Payments \u2014 '+rows.length+'</div>'
+    +  '<div style="max-height:440px;overflow-y:auto"><table class="rp-t">'
+    +  '<thead><tr><th>Date</th><th>Subscriber</th><th>Covers</th><th>Collector</th><th class="rp-num">Amount</th></tr></thead><tbody>'
+    +  rows.slice().sort(function(a,b){ return String(a.payment_date) < String(b.payment_date) ? 1 : -1; })
+         .map(function(r){
+           var cov = '\u2014';
+           if(r.coverage_from){
+             const f = String(r.coverage_from).slice(0,7), t = String(r.coverage_to).slice(0,7);
+             cov = (f === t) ? rpAdmMonthLabel(f) : rpAdmMonthLabel(f)+' \u2192 '+rpAdmMonthLabel(t);
+           }
+           return '<tr'+(r.coverage_ok===true?'':' style="background:#fffdf5"')+'>'
+             + '<td style="white-space:nowrap;color:#6b7394">'+rpEsc(String(r.payment_date).slice(5))+'</td>'
+             + '<td>'+rpEsc(r.subscriber_name||'\u2014')
+             +   (r.note?'<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.note)+'</div>':'')+'</td>'
+             + '<td style="font-size:11px;color:'+((r.coverage_months||0)>1?'#C01176':'#6b7394')+'">'+rpEsc(cov)+'</td>'
+             + '<td style="font-size:11px;color:#6b7394">'+rpEsc(r.collector||'\u2014')+'</td>'
+             + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td></tr>';
+         }).join('')
+    +  '</tbody></table></div>'
+    +  '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Cash basis: a payment counts in the month it was received, '
+    +  'whichever months it covers. Payments spanning two months are shown in magenta.</div></div>';
+  return h;
+}
+
+window.rpSubSetMonth = function(m){ rpSubMonth = m; rpRenderSubInc(); };
+window.rpSubRefresh  = function(){ rpSubRows = null; rpRenderSubInc(); };
+window.rpRenderSubInc = rpRenderSubInc;
