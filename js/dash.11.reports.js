@@ -1766,7 +1766,6 @@ function rpAdmMonthLabel(m){
 function rpAdmHtml(months){
   const rows  = rpAdmRows.filter(function(r){ return String(r.expense_date).slice(0,7) === rpAdmMonth; });
   const total = rows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
-  const book  = rpAdmRows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
   const uncl  = rows.filter(function(r){ return !r.statement_group; });
   const unclA = uncl.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
 
@@ -1799,55 +1798,57 @@ function rpAdmHtml(months){
   +   '<div class="rp-kpi" style="border-bottom-color:'+(unclA?'#FFB725':'#028867')+'"><div class="k">Needs a group</div>'
   +     '<div class="v" style="color:'+(unclA?'#8a6100':'#028867')+'">'+(unclA?rpPeso(unclA):'All set')+'</div>'
   +     '<div class="s">'+uncl.length+' of '+rows.length+' entries</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:#311A8E"><div class="k">Whole book</div>'
-  +     '<div class="v">'+rpPesoShort(book)+'</div><div class="s">'+rpAdmRows.length+' entries \u00b7 '+months.length+' months</div></div>'
   + '</div>';
 
-  // Statement groups
-  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:10px">Statement groups \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>';
-  RP_ADM_G.forEach(function(g){
-    const gr = rows.filter(function(r){ return r.statement_group === g[0]; });
-    const amt = gr.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
-    const pct = total ? (amt/total*100) : 0;
-    h += '<div style="margin-bottom:9px">'
-      +  '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:3px">'
-      +    '<span style="font-weight:700;color:'+g[2]+'">'+g[1]+'<span style="font-weight:400;color:#8b93ad;font-size:10px"> \u00b7 '+g[3]+'</span></span>'
-      +    '<span style="font-weight:800;font-variant-numeric:tabular-nums">'+(amt?rpPeso(amt):'\u2014')
-      +      '<span style="font-size:10px;color:#8b93ad;font-weight:600"> '+gr.length+'</span></span>'
-      +  '</div>'
-      +  '<div style="height:7px;background:#f0f4ff;border-radius:4px;overflow:hidden">'
-      +    '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:'+g[2]+';border-radius:4px"></div>'
-      +  '</div></div>';
-  });
-  if(unclA){
-    const pct = total ? (unclA/total*100) : 0;
-    h += '<div style="margin-top:11px;padding-top:9px;border-top:1px dashed #FFB725">'
-      +  '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
-      +    '<span style="font-weight:700;color:#8a6100">\u26a0\uFE0F Not yet grouped</span>'
-      +    '<span style="font-weight:800">'+rpPeso(unclA)+'<span style="font-size:10px;color:#8b93ad;font-weight:600"> '+uncl.length+'</span></span></div>'
-      +  '<div style="height:7px;background:#f0f4ff;border-radius:4px;overflow:hidden">'
-      +    '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:repeating-linear-gradient(45deg,#FFB725,#FFB725 5px,#ffd98a 5px,#ffd98a 10px);border-radius:4px"></div></div></div>';
-  }
-  h += '<div style="margin-top:12px;padding-top:10px;border-top:2px solid #e8eeff;display:flex;justify-content:space-between;font-size:14px;font-weight:800;color:#311A8E">'
-    +  '<span>TOTAL</span><span>'+rpPeso(total)+'</span></div></div>';
+  // Statement groups, broken down to the lines inside each one
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:4px">Breakdown \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>'
+    +  '<table class="rp-t"><tbody>';
 
-  // Vendors
-  const vm = {};
-  rows.forEach(function(r){
-    if(!r.vendor) return;
-    vm[r.vendor] = (vm[r.vendor]||0) + (Number(r.amount)||0);
+  RP_ADM_G.forEach(function(g){
+    const gr  = rows.filter(function(r){ return r.statement_group === g[0]; });
+    const amt = gr.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+
+    // one line per vendor; entries with no vendor group by description
+    const lm = {};
+    gr.forEach(function(r){
+      const k = r.vendor || r.description || '\u2014';
+      if(!lm[k]) lm[k] = { amt:0, n:0 };
+      lm[k].amt += (Number(r.amount)||0);
+      lm[k].n   += 1;
+    });
+    const lines = Object.keys(lm).map(function(k){ return [k, lm[k].amt, lm[k].n]; })
+                        .sort(function(a,b){ return b[1]-a[1]; });
+
+    h += '<tr style="background:'+g[2]+'0d"><td colspan="2" style="padding:8px;font-weight:800;font-size:11.5px;color:'+g[2]+'">'
+      +    rpEsc(g[1]) + '<span style="font-weight:400;color:#8b93ad;font-size:10px"> \u00b7 '+g[3]+'</span></td>'
+      +  '<td class="rp-num" style="padding:8px;font-weight:800;color:'+g[2]+'">'+(amt?rpPeso(amt):'\u2014')+'</td></tr>';
+
+    if(!lines.length){
+      h += '<tr><td colspan="3" style="padding:5px 8px 5px 24px;color:#b6bdd0;font-size:11px">no entries this month</td></tr>';
+    } else {
+      lines.forEach(function(L){
+        h += '<tr><td style="padding:4px 8px 4px 24px;font-size:11.5px">'+rpEsc(L[0])
+          +    (L[2]>1?'<span style="color:#8b93ad;font-size:10px"> \u00d7'+L[2]+'</span>':'')+'</td>'
+          +  '<td class="rp-num" style="font-size:10px;color:#8b93ad">'+(amt?(L[1]/amt*100).toFixed(0)+'%':'')+'</td>'
+          +  '<td class="rp-num" style="font-size:11.5px;font-variant-numeric:tabular-nums">'+rpPeso(L[1])+'</td></tr>';
+      });
+    }
   });
-  const vend = Object.keys(vm).map(function(k){ return [k, vm[k]]; }).sort(function(a,b){ return b[1]-a[1]; });
-  if(vend.length){
-    h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">By vendor</div>'
-      +  '<table class="rp-t"><thead><tr><th>Vendor</th><th class="rp-num">Amount</th><th class="rp-num">Share</th></tr></thead><tbody>'
-      +  vend.map(function(v){
-           return '<tr><td style="font-weight:600">'+rpEsc(v[0])+'</td>'
-             + '<td class="rp-num" style="font-weight:700">'+rpPeso(v[1])+'</td>'
-             + '<td class="rp-num" style="color:#8b93ad">'+(total?(v[1]/total*100).toFixed(1):'0.0')+'%</td></tr>';
-         }).join('')
-      +  '</tbody></table></div>';
+
+  if(unclA){
+    h += '<tr style="background:#fffdf5"><td colspan="2" style="padding:8px;font-weight:800;font-size:11.5px;color:#8a6100">'
+      +  '\u26a0\uFE0F Not yet grouped</td>'
+      +  '<td class="rp-num" style="padding:8px;font-weight:800;color:#8a6100">'+rpPeso(unclA)+'</td></tr>';
+    uncl.slice().sort(function(a,b){ return (Number(b.amount)||0)-(Number(a.amount)||0); }).forEach(function(r){
+      h += '<tr><td style="padding:4px 8px 4px 24px;font-size:11.5px;color:#8a6100">'+rpEsc(r.description||'\u2014')+'</td>'
+        +  '<td class="rp-num" style="font-size:10px;color:#b6bdd0">'+rpEsc(String(r.expense_date).slice(5))+'</td>'
+        +  '<td class="rp-num" style="font-size:11.5px">'+rpPeso(r.amount)+'</td></tr>';
+    });
   }
+
+  h += '<tr><td colspan="2" style="padding:10px 8px;border-top:2px solid #e8eeff;font-weight:800;font-size:13px;color:#311A8E">TOTAL</td>'
+    +  '<td class="rp-num" style="padding:10px 8px;border-top:2px solid #e8eeff;font-weight:800;font-size:13px;color:#311A8E">'+rpPeso(total)+'</td></tr>'
+    +  '</tbody></table></div>';
 
   // Entries
   h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">Entries \u2014 '+rows.length+'</div>'
