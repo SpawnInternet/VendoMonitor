@@ -2936,6 +2936,58 @@ function klCheckTrial(){
   if(ban) ban.remove();
 }
 
+/* ── Keys pane: gateway-aware fetch ───────────────────────────────────────
+   All /rest/v1/* calls are rewritten to spawn-gw-admin by the interceptor in
+   dash.0.core.js. That edge worker can return a transient 502/503/504/429 when
+   it is cold or at its concurrency limit. Reads retry with backoff; writes
+   never auto-retry (a duplicate custody record costs more than one manual
+   press). Every non-OK response throws a readable error so callers can no
+   longer swallow a failure into an empty list. */
+async function _klFetch(path, opts, tries){
+  const o    = opts || {};
+  const max  = (tries == null) ? 3 : tries;
+  const meth = (o.method || 'GET').toUpperCase();
+  let lastErr = null;
+  for(let a = 1; a <= max; a++){
+    let r;
+    try{
+      r = await fetch(_SB + path, Object.assign({}, o, {
+        headers: Object.assign({}, _HDR, o.headers || {})
+      }));
+    }catch(e){
+      lastErr = new Error('network error — ' + ((e && e.message) || e));
+      if(meth === 'GET' && a < max){ await new Promise(s=>setTimeout(s, 400*a)); continue; }
+      throw lastErr;
+    }
+    if(r.ok) return r;
+    const transient = (r.status===502 || r.status===503 || r.status===504 || r.status===429);
+    if(transient && meth === 'GET' && a < max){
+      console.warn('[KEYS] HTTP '+r.status+' on '+path+' — retry '+a+'/'+(max-1));
+      await new Promise(s=>setTimeout(s, 400*a));
+      continue;
+    }
+    let t = '';
+    try{ t = await r.text(); }catch(e){}
+    throw new Error('HTTP ' + r.status + (t ? (' — ' + String(t).slice(0,200)) : ''));
+  }
+  throw lastErr || new Error('request failed');
+}
+
+/* Non-blocking warning strip above the Keys list. Pass '' to clear. */
+function klWarn(msg){
+  let el = document.getElementById('kl-warn');
+  if(!msg){ if(el) el.remove(); return; }
+  if(!el){
+    const list = document.getElementById('kl-list');
+    if(!list || !list.parentNode) return;
+    el = document.createElement('div');
+    el.id = 'kl-warn';
+    el.style.cssText = 'margin:10px 14px;padding:10px 14px;background:#FEF3C7;border:1.5px solid #FFB725;border-radius:10px;color:#92400E;font-size:12px;font-weight:700;line-height:1.5;';
+    list.parentNode.insertBefore(el, list);
+  }
+  el.textContent = '⚠️ ' + msg;
+}
+
 function klLoad(){
   const list = document.getElementById('kl-list');
   if(list) list.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
@@ -2948,21 +3000,29 @@ function klLoad(){
   const sel = document.getElementById('kl-name');
   if(sel){
     const cur = sel.value;
-    fetch(_SB+'/rest/v1/collectors?select=name&active=eq.true&order=name.asc', {headers:_HDR})
+    _klFetch('/rest/v1/collectors?select=name&active=eq.true&order=name.asc')
       .then(r=>r.json())
       .then(cs=>{
         sel.innerHTML = '<option value="">— Select Collector —</option>';
         if(Array.isArray(cs)){ cs.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; sel.appendChild(o); }); }
         if(cur) sel.value = cur;
+        klWarn('');
       })
-      .catch(()=>{});
+      .catch(e=>{ klWarn('Collector list did not load ('+e.message+'). Reload the tab before logging any key.'); });
   }
   Promise.all([
-    fetch(_SB+'/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500', {headers:_HDR}).then(r=>r.json()),
-    fetch(_SB+'/rest/v1/key_items?select=*&order=id.asc&limit=2000', {headers:_HDR}).then(r=>r.json()).catch(()=>[])
+    _klFetch('/rest/v1/key_logs?select=*&order=taken_at.desc&limit=500').then(r=>r.json()),
+    _klFetch('/rest/v1/key_items?select=*&order=id.asc&limit=2000').then(r=>r.json())
   ])
     .then(([rows, items])=>{ _klRows = Array.isArray(rows)?rows:[]; _klItems = Array.isArray(items)?items:[]; klRender(); })
-    .catch(e=>{ if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;">Load error: '+klEsc(e.message)+'</div>'; });
+    .catch(e=>{
+      // Previously key_items failures fell back to [] — that renders a custody
+      // list with zero keys attached, which reads as "nothing is out". Show the
+      // error instead of wrong data.
+      if(list) list.innerHTML = '<div style="padding:20px;color:#DF1A35;font-weight:700;line-height:1.6;">Load error: '+klEsc(e.message)
+        + '<div style="font-weight:600;color:#6b7280;font-size:12px;margin-top:6px;">The list below may be incomplete — do not rely on it until this loads.</div>'
+        + '<button onclick="klLoad()" style="margin-top:12px;padding:9px 18px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">↻ Retry</button></div>';
+    });
 }
 
 let _klItems = [];
@@ -3034,16 +3094,27 @@ function klAdd(){
   if(!name){ alert('Select collector name'); return; }
   if(!areas.length){ alert('Check at least one area'); return; }
   const body = { record_type:'collector', collector_name:name, area:area||null, keys_taken:count, key_date:kdate, notes:notes||null, returned:false };
-  fetch(_SB+'/rest/v1/key_logs', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)})
-    .then(r=>{
-      if(!r.ok){ return r.text().then(t=>{throw new Error(t);}); }
+  const btn = document.querySelector('[onclick="klAdd()"]');
+  if(btn){ btn.disabled = true; btn.dataset.klLbl = btn.textContent; btn.textContent = 'Saving…'; }
+  // tries=1 on purpose: a write is never auto-retried. A silent duplicate
+  // custody row is worse than asking the keeper to press Save again.
+  _klFetch('/rest/v1/key_logs', {method:'POST', headers:{'Prefer':'return=minimal'}, body:JSON.stringify(body)}, 1)
+    .then(()=>{
       document.getElementById('kl-name').value='';
       document.getElementById('kl-notes').value='';
       document.getElementById('kl-count').value='1';
       klClearAreas();
+      klWarn('');
       klLoad();
     })
-    .catch(e=>alert('Save failed: '+e.message));
+    .catch(e=>{
+      const busy = /HTTP (502|503|504|429)\b/.test(e.message) || /network error/.test(e.message);
+      alert(busy
+        ? '⚠️ NOT SAVED — server busy.\n\nNothing was written. Your entries are still on the form. Press "Log Keys" again.'
+        : '❌ NOT SAVED.\n\n' + e.message + '\n\nYour entries are still on the form.');
+      klWarn('Last save did not go through — the key was NOT logged.');
+    })
+    .finally(()=>{ if(btn){ btn.disabled = false; btn.textContent = btn.dataset.klLbl || '✓ Log Keys'; } });
 }
 
 function klOpenLineman(){
