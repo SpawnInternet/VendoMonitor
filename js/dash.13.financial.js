@@ -147,6 +147,13 @@ function fnRender(){
     +     '<div class="s">revenue \u2212 both books</div></div>'
     + '</div>'
 
+    + (f.dailyTot === 0 ? '<div class="rp-card" style="border-color:#f5b3b3;background:#fff5f5;'
+        + 'font-size:11.5px;color:#a11;margin-bottom:10px"><b>No daily expenses entered for '
+        + fnLabel(fnMonth) + '.</b> The cash receipts ledger shows '
+        + fnPeso(Number(f.cash.cash_expenses)||0) + ' of expenses actually spent this month, but '
+        + 'nothing has been keyed into the daily expense book. Net income below is overstated by '
+        + 'roughly that amount until the entries are made.</div>' : '')
+
     + (thin ? '<div class="rp-card" style="border-color:#ffe0a3;background:#fffaf0;font-size:11.5px;'
         + 'color:#8a5a00;margin-bottom:10px"><b>Heads up.</b> The harvest app only holds '
         + fnPeso(hvSpawn) + ' for ' + fnLabel(fnMonth) + ' \u2014 about ' + cover + '% of the '
@@ -214,7 +221,19 @@ function fnRender(){
     +     row('Short', f.cash.short_, {indent:true})
     +     row('G-Cash (digital, not in net cash)', f.rev.gcash, {indent:true})
     +     row('Change received (returned money, not revenue)', f.rev.change_received, {indent:true})
-    +   '</tbody></table></div>'
+    +     row('Discrepancy flagged (money out, awaiting return)', f.cash.discrepancy, {indent:true})
+    +   '</tbody></table>'
+    +   '<div style="padding:10px 12px;border-top:1px solid #eef2f8;font-size:10.5px;'
+    +     'color:#6b7394;line-height:1.6;background:#fbfcfe">'
+    +     '<b>About change received and money paid back.</b> The column figure above is the '
+    +     'day\u2019s total change on hand \u2014 it is not the transaction amount. The real amount '
+    +     'for each movement is written in the remarks column of the cash receipts sheet '
+    +     '(for example \u201c14,000 Partial Payment ma\u2019am Joi\u201d). '
+    +     'When a loan or advance goes out it is booked as an expense, so when it is paid back '
+    +     'that money must be <b>added back to company money</b> \u2014 otherwise the expense '
+    +     'stands with nothing offsetting it. Those repayments are not included in the figures '
+    +     'above yet; they still have to be read from the remarks and tagged.'
+    +   '</div></div>'
 
     + '<div style="font-size:10.5px;color:#8b93ad;line-height:1.6;background:#fbfcfe;'
     +   'border:1px solid #e6ecf5;border-radius:9px;padding:10px 12px">'
