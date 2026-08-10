@@ -1701,6 +1701,13 @@ window.rpxSetMonth = function(v){
 
 window.rpxLoadStat = async function(){
   rpxFillMonthPicker();
+  // The dashboard expense card now lives in dash.6.overview.js — it is
+  // book-based and sits in the correct position in the stat row. This
+  // injector used to append a duplicate at the end; disabled. Also clear
+  // any card left behind by an older cached copy of this module.
+  const stale = document.getElementById('rpx-stat');
+  if(stale && stale.parentNode) stale.parentNode.removeChild(stale);
+  return;
   const host = document.querySelector('#panel-dash .stat');
   if(!host || !host.parentNode) return;
   const wrap = host.parentNode;
