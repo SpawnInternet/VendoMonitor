@@ -279,9 +279,16 @@ function fnRenderSheet(months, F){
       + fnRow('TOTAL REVENUE',         col(function(x){ return x.totalRev; }), 'tot')
       + fnRow('MEMO \u2014 not revenue', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('G-Cash (inside subscriber income)', col(function(x){ return Number(x.rev.gcash)||0; }), 'item')
-      + fnRow('Change received (day total on hand)', col(function(x){ return Number(x.rev.change_received)||0; }), 'item')
+      + fnRow('Change received (capital + income + sukli)', col(function(x){ return Number(x.rev.change_received)||0; }), 'item')
       + fnRow('Harvest app recorded',  col(function(x){ return Number(x.hv.spawn_share)||0; }), 'item')
-    );
+    ) + '<div style="margin-top:8px;font-size:10.5px;color:#8b93ad;line-height:1.6;'
+      + 'background:#fbfcfe;border:1px solid #e6ecf5;border-radius:9px;padding:9px 11px">'
+      + '<b>Why \u201cchange received\u201d looks large.</b> It is not loose change. It is every '
+      + 'peso handed back into the office \u2014 owner capital, loans repaid, unspent float and '
+      + 'sukli. In June, \u20b1196,750 of the \u20b1210,185 was owner capital. None of it counts '
+      + 'as revenue until it is tagged in columns P and Q of the CASH RECEIPTS sheet, and even '
+      + 'then only loans repaid and other income add to net.'
+      + '</div>';
     return;
   }
 
@@ -328,7 +335,7 @@ function fnRenderSheet(months, F){
       + fnRow('Piso WiFi collections', col(function(x){ return x.vendo; }), 'item')
       + fnRow('Subscriber income (ledger)', col(function(x){ return x.subInc; }), 'item')
       + fnRow('G-Cash (digital)', col(function(x){ return Number(x.rev.gcash)||0; }), 'item')
-      + fnRow('Change received', col(function(x){ return Number(x.rev.change_received)||0; }), 'item')
+      + fnRow('Change received (capital + income + sukli)', col(function(x){ return Number(x.rev.change_received)||0; }), 'item')
       + fnRow('NET CASH', col(function(x){ return Number(x.cash.net_cash)||0; }), 'sub')
       + fnRow('DEPOSITS', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Deposited', col(function(x){ return Number(x.cash.deposited)||0; }), 'item')
@@ -393,7 +400,7 @@ async function fnExport(){
     a.push(line('TOTAL REVENUE',           col(function(x){ return x.totalRev; })));
     a.push([]); a.push(['MEMO \u2014 not revenue']);
     a.push(line('G-Cash (inside subscriber income)', col(function(x){ return Number(x.rev.gcash)||0; })));
-    a.push(line('Change received (day total)',       col(function(x){ return Number(x.rev.change_received)||0; })));
+    a.push(line('Change received (capital + income + sukli)', col(function(x){ return Number(x.rev.change_received)||0; })));
     a.push(line('Harvest app recorded',              col(function(x){ return Number(x.hv.spawn_share)||0; })));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), 'Revenue');
 
@@ -429,7 +436,7 @@ async function fnExport(){
     a = [head];
     a.push(line('Piso WiFi collections', col(function(x){ return x.vendo; })));
     a.push(line('G-Cash (digital)',      col(function(x){ return Number(x.rev.gcash)||0; })));
-    a.push(line('Change received',       col(function(x){ return Number(x.rev.change_received)||0; })));
+    a.push(line('Change received (capital + income + sukli)', col(function(x){ return Number(x.rev.change_received)||0; })));
     a.push(line('NET CASH',              col(function(x){ return Number(x.cash.net_cash)||0; })));
     a.push(line('Deposited',             col(function(x){ return Number(x.cash.deposited)||0; })));
     a.push(line('Carried to next month', col(function(x){
