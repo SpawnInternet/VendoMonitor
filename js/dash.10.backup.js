@@ -105,6 +105,7 @@
     const old=btn?btn.textContent:'';
     if(btn){ btn.disabled=true; btn.textContent='⏳ Working…'; }
     try{
+      if(typeof JSZip==='undefined' && window.spawnLazy){ await window.spawnLazy('zip'); }
       if(typeof JSZip==='undefined') throw new Error('JSZip not loaded — hard-refresh the page');
       const zip=new JSZip();
       const manifest=[`Spawn Internetan — core data export`,`Taken: ${nowPH()}`,``];
