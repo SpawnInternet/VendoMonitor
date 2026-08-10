@@ -206,6 +206,67 @@ window.markAdminPwWrong = function(){
 })();
 
 
+// ── Generic lazy loader for tab-scoped bundles ────────────────────────────
+// These were all in <script> tags, so ~1.4 MB downloaded and parsed on every
+// page view for tabs most sessions never open. Now: fetched when the tab is
+// opened, and warmed quietly once the browser goes idle so nothing feels slow
+// the first time someone clicks through.
+// Each entry: [localUrl, cdnFallbackUrl]. The fallbacks match what the old
+// inline onerror handlers used, so offline-vendor failures behave as before.
+window.__spawnBundles = {
+  map: [
+    ['js/vendor/leaflet.min.css', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'],
+    ['js/vendor/leaflet.min.js',  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'],
+    ['js/dash.4.map.js?v=split128', null]
+  ],
+  xlsx: [['js/vendor/xlsx.full.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js']],
+  zip:  [['js/vendor/jszip.min.js',     'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js']]
+};
+window.__spawnLoaded = {};
+window.spawnLazy = function(name){
+  if (window.__spawnLoaded[name]) return window.__spawnLoaded[name];
+  var urls = window.__spawnBundles[name] || [];
+  window.__spawnLoaded[name] = urls.reduce(function(chain, entry){
+    var local = Array.isArray(entry) ? entry[0] : entry;
+    var cdn   = Array.isArray(entry) ? entry[1] : null;
+    return chain.then(function(){
+      return new Promise(function(resolve, reject){
+        function inject(url, onFail){
+          var el;
+          if (/\.css($|\?)/.test(url)) {
+            el = document.createElement('link');
+            el.rel = 'stylesheet'; el.href = url;
+          } else {
+            el = document.createElement('script');
+            el.src = url; el.async = false;
+          }
+          el.onload  = function(){ resolve(true); };
+          el.onerror = onFail;
+          document.head.appendChild(el);
+        }
+        inject(local, function(){
+          if (cdn) { inject(cdn, function(e){ delete window.__spawnLoaded[name]; reject(e); }); }
+          else { delete window.__spawnLoaded[name]; reject(new Error('failed: ' + local)); }
+        });
+      });
+    });
+  }, Promise.resolve());
+  return window.__spawnLoaded[name];
+};
+// Warm every bundle after the page is interactive, so a later click is instant.
+(function(){
+  function warm(){
+    Object.keys(window.__spawnBundles).forEach(function(k){
+      try { window.spawnLazy(k); } catch(e){}
+    });
+  }
+  if ('requestIdleCallback' in window) {
+    window.addEventListener('load', function(){ requestIdleCallback(warm, { timeout: 6000 }); });
+  } else {
+    window.addEventListener('load', function(){ setTimeout(warm, 3500); });
+  }
+})();
+
 // ── Lazy loader for dash.1.harvest.js (354 KB) ────────────────────────────
 // It was loading on every page view even when nobody opened Harvest.
 // Now: fetched on demand when a harvest surface is opened, and otherwise
