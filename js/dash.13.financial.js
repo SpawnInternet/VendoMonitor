@@ -404,7 +404,8 @@ function fnRenderSheet(months, F){
       + fnRow('Sukli returned \u2014 cash only', col(function(x){ return x.sukli; }), 'item')
       + fnRow('Owner capital in \u2014 financing', col(function(x){ return x.capital; }), 'item')
       + fnRow('Remarks still untagged (count)', col(function(x){ return x.untagged; }), 'sub', true)
-    );
+    ) + '<div id="fn-tagwrap" style="margin-top:12px"></div>';
+    fnLoadTagger();
     return;
   }
 }
@@ -527,5 +528,108 @@ async function fnExport(){
     alert('Could not build the Excel file: ' + (e && e.message || e));
   } finally {
     if(btn){ btn.disabled = false; btn.innerHTML = '\u2B07\uFE0F Download Excel'; }
+  }
+}
+
+
+// ── Tagging worklist (Cash Recon sheet) ───────────────────
+const FN_TYPES = [
+  ['loan_repaid',     'Loan repaid \u2014 adds to net'],
+  ['other_income',    'Other income \u2014 adds to net'],
+  ['change_returned', 'Change/float returned \u2014 cash only'],
+  ['sukli',           'Sukli \u2014 cash only'],
+  ['capital',         'Owner capital in \u2014 financing'],
+  ['deposit_note',    'Deposit record (not a return)']
+];
+let fnTagRows = null;
+
+async function fnLoadTagger(){
+  const wrap = document.getElementById('fn-tagwrap');
+  if(!wrap) return;
+  wrap.innerHTML = '<div style="font-size:11.5px;color:#6b7394;padding:8px">Loading untagged remarks\u2026</div>';
+  try {
+    fnTagRows = await rpRpc('spawn_untagged_returns', { p_from: '2026-01-01' });
+  } catch(e){
+    wrap.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:12px">'
+      + 'Could not load the tagging list: ' + fnEsc(e.message) + '</div>';
+    return;
+  }
+  fnRenderTagger();
+}
+
+function fnRenderTagger(){
+  const wrap = document.getElementById('fn-tagwrap');
+  if(!wrap) return;
+  const rows = fnTagRows || [];
+  const pend = rows.filter(function(r){ return !r.return_type; });
+
+  let html = '<div style="font-size:12.5px;font-weight:800;color:#1f2b52;margin-bottom:3px">'
+    + 'Tag money paid back</div>'
+    + '<div style="font-size:10.5px;color:#8b93ad;margin-bottom:8px;line-height:1.5">'
+    + 'The amount is the number written in the remark, not the change column. '
+    + 'Only <b>loan repaid</b> and <b>other income</b> add to net income \u2014 the rest are cash-only. '
+    + 'Saved straight to the database; the sheet never overwrites it.</div>';
+
+  if(!rows.length){
+    html += '<div class="rp-card" style="font-size:12px;color:#028867">Nothing to tag \u2014 all clear.</div>';
+    wrap.innerHTML = html; return;
+  }
+
+  html += '<div class="fn-scroll" style="max-height:none"><table class="fn-grid">'
+    + '<thead><tr><th class="l">Date</th><th style="text-align:left">Remark</th>'
+    + '<th style="text-align:left;min-width:190px">Type</th>'
+    + '<th style="min-width:110px">Amount</th><th style="min-width:70px"></th></tr></thead><tbody>';
+
+  rows.forEach(function(r){
+    const done = !!r.return_type;
+    const guessAmt = r.return_amount != null ? r.return_amount
+                     : (r.guess_amount != null ? r.guess_amount : '');
+    html += '<tr' + (done?' style="background:#f2fbf6"':'') + '>'
+      + '<td class="l">' + fnEsc(r.receipt_date) + '</td>'
+      + '<td style="text-align:left;white-space:normal;font-size:10.5px;color:#4a5270">'
+      +   fnEsc(r.remarks||'') + '</td>'
+      + '<td style="text-align:left"><select class="rp-in" data-id="' + r.receipt_id
+      +   '" style="width:100%;font-size:11px;padding:4px 6px">'
+      +   '<option value="">\u2014 pick \u2014</option>'
+      +   FN_TYPES.map(function(t){
+            const sel = (r.return_type===t[0] || (!done && r.guess_type===t[0])) ? ' selected' : '';
+            return '<option value="' + t[0] + '"' + sel + '>' + t[1] + '</option>';
+          }).join('')
+      +   '</select></td>'
+      + '<td><input class="rp-in fn-amt" data-id="' + r.receipt_id
+      +   '" type="number" value="' + (guessAmt===''?'':guessAmt)
+      +   '" style="width:100%;font-size:11px;padding:4px 6px;text-align:right"></td>'
+      + '<td><button class="rp-btn" style="padding:4px 10px;font-size:11px" '
+      +   'onclick="fnSaveTag(' + r.receipt_id + ')">' + (done?'Update':'Save') + '</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '<div style="font-size:10.5px;color:#8b93ad;margin-top:6px">'
+    + pend.length + ' still to tag \u00b7 ' + (rows.length - pend.length) + ' done</div>';
+  wrap.innerHTML = html;
+}
+
+async function fnSaveTag(id){
+  const sel = document.querySelector('#fn-tagwrap select[data-id="' + id + '"]');
+  const amt = document.querySelector('#fn-tagwrap input[data-id="' + id + '"]');
+  if(!sel) return;
+  const type = sel.value;
+  const val  = amt && amt.value !== '' ? Number(amt.value) : null;
+  const btn  = sel.closest('tr').querySelector('button');
+  if(type && (val===null || isNaN(val))){
+    alert('Enter the amount from the remark before saving.'); return;
+  }
+  if(btn){ btn.disabled = true; btn.textContent = '\u2026'; }
+  try {
+    await rpRpc('spawn_tag_return', {
+      p_receipt_id: id, p_return_type: type || null,
+      p_return_amount: val, p_by: 'dashboard'
+    });
+    // refresh the whole financial pack so the statement updates too
+    fnPack = null; fnLines = null;
+    await fnLoad(true);
+  } catch(e){
+    alert('Could not save the tag: ' + (e && e.message || e));
+    if(btn){ btn.disabled = false; btn.textContent = 'Save'; }
   }
 }
