@@ -1223,7 +1223,7 @@ async function rpRenderReleases(){
   let rows = [];
   try {
     for(let off=0; off<20000; off+=1000){
-      const p = await rpRest('expenses?select=id,expense_date,description,co,category,amount,paid_from'
+      const p = await rpRest('expenses?select=id,expense_date,description,co,category,statement_group,book,amount,paid_from'
         + '&voided_at=is.null'
         + '&expense_date=gte.' + rpRelFrom + '&expense_date=lte.' + rpRelTo
         + '&order=expense_date.asc,id.asc&limit=1000&offset=' + off);
@@ -1243,8 +1243,9 @@ async function rpRenderReleases(){
     const a = Number(r.amount) || 0;
     by[k].rows.push(r);
     by[k].total += a;
-    if(r.paid_from === 'Sir Wendell') by[k].wend += a; else by[k].coll += a;
-    by[k].cats[r.category] = (by[k].cats[r.category]||0) + a;
+    if(r.book === 'admin') by[k].wend += a; else by[k].coll += a;
+    const ck = r.category || r.statement_group || '\u2014 uncategorised \u2014';
+    by[k].cats[ck] = (by[k].cats[ck]||0) + a;
   });
   const people = Object.keys(by).map(function(k){ return by[k]; })
                        .sort(function(a,b){ return b.total - a.total; });
@@ -1585,7 +1586,7 @@ window.rpxLoadCharts = async function(){
     const today = (ym === realTd.slice(0,7)) ? realTd : (ym + '-' + lastD);
     const from  = new Date(new Date(today + 'T00:00:00').getTime() - 13*86400000).toISOString().slice(0,10);
 
-    const rows = await rpRest('expenses?select=expense_date,amount,paid_from&voided_at=is.null'
+    const rows = await rpRest('expenses?select=expense_date,amount,book&voided_at=is.null'
       + '&expense_date=gte.' + from + '&expense_date=lte.' + today + '&order=expense_date.asc&limit=1000');
 
     const days = [], coll = [], wend = [];
@@ -1597,7 +1598,7 @@ window.rpxLoadCharts = async function(){
     (rows||[]).forEach(function(r){
       const i = days.indexOf(String(r.expense_date).slice(5));
       if(i < 0) return;
-      if(r.paid_from === 'Sir Wendell') wend[i] += Number(r.amount)||0; else coll[i] += Number(r.amount)||0;
+      if(r.book === 'admin') wend[i] += Number(r.amount)||0; else coll[i] += Number(r.amount)||0;
     });
     const dTot = coll.reduce(function(a,b){return a+b;},0) + wend.reduce(function(a,b){return a+b;},0);
     const dl = document.getElementById('rpx-d-tot'); if(dl) dl.textContent = rpPeso(dTot);
@@ -1707,12 +1708,12 @@ window.rpxLoadStat = async function(){
   try {
     const ym = rpxMonth || rpPhToday().slice(0,7);
     const last = new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
-    const rows = await rpRest('expenses?select=amount,paid_from&voided_at=is.null'
+    const rows = await rpRest('expenses?select=amount,book&voided_at=is.null'
       + '&expense_date=gte.' + ym + '-01&expense_date=lte.' + ym + '-' + last + '&limit=1000');
     let coll = 0, wend = 0;
     (rows||[]).forEach(function(r){
       const a = Number(r.amount)||0;
-      if(r.paid_from === 'Sir Wendell') wend += a; else coll += a;
+      if(r.book === 'admin') wend += a; else coll += a;
     });
     const mn = RP_MONTHS[parseInt(ym.slice(5,7),10)];
     card.innerHTML =
