@@ -501,7 +501,9 @@ function lastMonthRender(ov){
   const el = document.getElementById('lastmonth-strip');
   if (!el) return;
   const expTot = Number(ov.prev_exp_daily||0) + Number(ov.prev_exp_admin||0);
-  const net    = Number(ov.prev_harvest||0) - expTot;
+  // Same formula as the current-month Net card: harvest + subscriber - daily - admin.
+  // Telegram and Spawn Cloud are excluded — that money is not harvested yet.
+  const net    = Number(ov.prev_harvest||0) + Number(ov.prev_sub||0) - expTot;
   const cell = (label, value, color, sub) =>
       '<div style="background:#f7f9fc;border-radius:8px;border-bottom:3px solid '+color+';padding:8px 10px;">'
     +   '<div style="font-size:9px;color:var(--mu);font-weight:700;text-transform:uppercase;letter-spacing:.3px;line-height:1.3">'+label+'</div>'
@@ -517,14 +519,16 @@ function lastMonthRender(ov){
     +     '<span style="flex:1"></span>'
     +     '<span style="font-size:9px;color:var(--mu);font-weight:600">1\u2013'+(ov.prev_days||'')+' \u00B7 full month closed</span>'
     +   '</div>'
-    +   '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;">'
+    +   '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;">'
     +     cell('Telegram Sales', _php(ov.prev_tg), BRAND.blue)
     +     cell('Harvested Spawn', _php(ov.prev_harvest), BRAND.teal)
     +     cell('Spawn Cloud', _php(ov.prev_cloud), BRAND.purple)
+    +     cell('Subscriber Collections', _php(ov.prev_sub), BRAND.teal)
     +     cell('Suspicious Txns', _fmtNum(ov.prev_sus_cnt), BRAND.red, _php(ov.prev_sus_amt))
     +     cell('Expense', _php(expTot), BRAND.magenta,
              'Daily '+_cpShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?_cpShort(ov.prev_exp_admin):'\u2014'))
-    +     cell('Net After Expense', _php(net), '#0F6E56', 'Harvest \u2212 expense')
+    +     cell('Net Income', _php(net), net < 0 ? BRAND.red : '#0F6E56',
+             'Harvest + subscriber \u2212 expense')
     +   '</div>'
     + '</div>';
 }
