@@ -214,10 +214,11 @@ window.markAdminPwWrong = function(){
 // Each entry: [localUrl, cdnFallbackUrl]. The fallbacks match what the old
 // inline onerror handlers used, so offline-vendor failures behave as before.
 window.__spawnBundles = {
-  map: [
+  // Leaflet only — dash.4.map.js must stay eager because it also defines
+  // showP() and apiLoad(), which every surface depends on.
+  leaflet: [
     ['js/vendor/leaflet.min.css', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'],
-    ['js/vendor/leaflet.min.js',  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'],
-    ['js/dash.4.map.js?v=split128', null]
+    ['js/vendor/leaflet.min.js',  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js']
   ],
   xlsx: [['js/vendor/xlsx.full.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js']],
   zip:  [['js/vendor/jszip.min.js',     'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js']]
