@@ -57,6 +57,30 @@ const _curMonthLabel = ()=>{
 const _fmtDateShort = (d)=>{ try{ return (typeof fmtDateShort==='function')? fmtDateShort(d) : String(d).slice(5); }catch(e){ return String(d); } };
 const _fmtTime = (t)=>{ try{ return (typeof fmtTime==='function')? fmtTime(t) : ''; }catch(e){ return ''; } };
 
+// ── Net income helpers ────────────────────────────────────────────
+// Net = Harvested Spawn + Subscriber Collections - Daily Expense - Admin Expense.
+// Telegram Sales and Spawn Cloud are sales figures for money not yet harvested,
+// so they are shown as cards but MUST NOT be added to net (would double-count).
+function _expTotal(ov){
+  return Number(ov.exp_daily_month||0) + Number(ov.exp_admin_month||0);
+}
+function _netTotal(ov){
+  return Number(ov.harvest_month||0) + Number(ov.sub_month||0) - _expTotal(ov);
+}
+function _netCardHtml(ov, mlbl){
+  const net = _netTotal(ov);
+  const pos = net >= 0;
+  const col = pos ? BRAND.teal : BRAND.red;
+  return `
+    <div class="stat" style="border-bottom-color:${col};border-width:0 0 3px 0;background:linear-gradient(135deg,rgba(2,136,103,.05),rgba(2,90,198,.05))" title="Harvest + Subscriber - Daily - Admin. Telegram and Cloud are not included: that money is not harvested yet.">
+      <div class="sl" style="font-weight:800">Net Income &middot; ${mlbl}</div>
+      <div class="sv" style="color:${col}">${_php(net)}</div>
+      <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">
+        ${_php(ov.harvest_month)} + ${_php(ov.sub_month)} &minus; ${_php(_expTotal(ov))}
+      </div>
+    </div>`;
+}
+
 function overviewRender(ov, data) {
   const stats = (data && data.stats) || {};
   const hackedCnt = stats.suspicious_count || 0;
@@ -88,7 +112,18 @@ function overviewRender(ov, data) {
     <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15);cursor:pointer" onclick="showP('suspicious')">
       <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
-    </div>`;
+    </div>
+    <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="showP('subscribers')" title="Subscriber payments received this month">
+      <div class="sl">Subscriber Collections &middot; ${_MLBL}</div>
+      <div class="sv" style="color:${BRAND.teal}">${_php(ov.sub_month)}</div>
+      <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">${_fmtNum(ov.sub_count_month||0)} payments &middot; ${_php(ov.sub_today)} today</div>
+    </div>
+    <div class="stat" style="border-bottom-color:${BRAND.magenta};cursor:pointer" onclick="showP('reports')" title="Expenses this month by book">
+      <div class="sl">Expenses &middot; ${_MLBL}</div>
+      <div class="sv" style="color:${BRAND.magenta}">${_php(_expTotal(ov))}</div>
+      <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">Daily ${_php(ov.exp_daily_month)} &middot; Admin ${_php(ov.exp_admin_month)}</div>
+    </div>
+    ${_netCardHtml(ov, _MLBL)}`;
 
   // ── Last month strip + collector performance ──
   try { lastMonthRender(ov); } catch(e){ console.warn('lastMonthRender', e); }
