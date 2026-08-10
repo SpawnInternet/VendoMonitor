@@ -12,7 +12,12 @@ const _VMT_COLORS = {
 };
 async function vmTopLoad(){
   const mapEl = document.getElementById('vmap-top-map');
-  if(!mapEl||!window.L) return;
+  if(!mapEl) return;
+  // Leaflet is lazy-loaded (159 KB) — pull it in on first map open.
+  if(!window.L && window.spawnLazy){
+    try { await window.spawnLazy('leaflet'); } catch(e){ console.warn('leaflet failed', e); }
+  }
+  if(!window.L) return;
   if(!_vmtMap){
     _vmtMap = L.map('vmap-top-map').setView([8.15,123.27],10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(_vmtMap);
@@ -226,7 +231,13 @@ async function gpsTraceLoad(){
 }
 
 function gpsInitMap(){
-  if(!window.L) return;
+  if(!window.L){
+    if(window.spawnLazy){
+      window.spawnLazy('leaflet').then(gpsInitMap)
+        .catch(function(e){ console.warn('leaflet failed', e); });
+    }
+    return;
+  }
   setTimeout(()=>{
     const mapEl=document.getElementById('gps-map');
     if(!mapEl) return;
