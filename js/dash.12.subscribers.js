@@ -62,9 +62,10 @@ const SUB_STATUS = {
 const SUB_ORDER = ['current','overdue_35','overdue_60','never_paid','disconnected'];
 
 function subStyles(){
+  // Injected into <head>, NOT into the panel: the panel's innerHTML is replaced
+  // on every render, which would delete a style tag placed inside it.
   if(document.getElementById('sub-styles')) return '';
-  return ''
-  + '<style id="sub-styles">'
+  const css = ''
   + '.sub-wrap{--sub-line:#e9eef6;--sub-mu:#7c85a3;--sub-ink:#141726}'
   + '.sub-hero{background:linear-gradient(135deg,#025AC6,#028867);border-radius:14px;'
   +   'padding:16px 18px;color:#fff;margin-bottom:12px;position:relative;overflow:hidden}'
@@ -110,8 +111,12 @@ function subStyles(){
   + '.sub-note{margin-top:9px;font-size:10.5px;color:#8b93ad;line-height:1.6;'
   +   'background:#fbfcfe;border:1px solid var(--sub-line);border-radius:9px;padding:9px 11px}'
   + '@media (max-width:720px){.sub-hide{display:none}}'
-  + '@media (prefers-reduced-motion:reduce){.sub-bar span,.sub-chip{transition:none}}'
-  + '</style>';
+  + '@media (prefers-reduced-motion:reduce){.sub-bar span,.sub-chip{transition:none}}';
+  const el = document.createElement('style');
+  el.id = 'sub-styles';
+  el.textContent = css;
+  document.head.appendChild(el);
+  return '';
 }
 
 async function subscribersInit(){
@@ -119,14 +124,14 @@ async function subscribersInit(){
   if(!host) return;
   if(subInited && subRows){ subRender(); return; }
   subInited = true;
-  host.innerHTML = subStyles()
-    + '<div style="padding:34px;text-align:center;color:#7c85a3;font-size:12.5px">'
+  subStyles();
+  host.innerHTML = '<div style="padding:34px;text-align:center;color:#7c85a3;font-size:12.5px">'
     + 'Loading subscribers\u2026</div>';
   try {
     subRows = await subRest('v_subscriber_overview?select=*&order=days_since_paid.desc.nullslast');
   } catch(e){
-    host.innerHTML = subStyles()
-      + '<div class="sub-card" style="border-color:#f3c2e2;padding:16px;color:#C01176;font-size:12.5px">'
+    subStyles();
+    host.innerHTML = '<div class="sub-card" style="border-color:#f3c2e2;padding:16px;color:#C01176;font-size:12.5px">'
       + '<b>Subscribers didn\'t load.</b><br>'
       + '<span style="font-size:11px;color:#8b93ad">' + subEsc(e.message) + '</span><br>'
       + '<button class="sub-chip" style="margin-top:9px" onclick="subRetry()">Try again</button></div>';
@@ -185,7 +190,8 @@ function subRender(){
     + (subFilter===id ? ' style="background:'+SUB_BRAND.blue+';border-color:'+SUB_BRAND.blue+';color:#fff"' : '')
     + '>'+label+'<b>'+n+'</b></button>';
 
-  host.innerHTML = subStyles() + '<div class="sub-wrap">'
+  subStyles();
+  host.innerHTML = '<div class="sub-wrap">'
 
     + '<div class="sub-hero">'
     +   '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;position:relative;z-index:1">'
