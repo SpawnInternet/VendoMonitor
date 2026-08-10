@@ -10,21 +10,63 @@ const BRAND = {
 };
 const BRAND_SERIES = [BRAND.blue, BRAND.gold, BRAND.teal, BRAND.magenta, BRAND.purple, BRAND.red, BRAND.sky, BRAND.slate];
 
+// The overview RPC is ~300 ms warm but several seconds cold, and it used to be
+// awaited on every refresh with nothing cached — so the dashboard sat on
+// "Loading..." each time. Now: paint immediately from the last payload, then
+// refresh in the background and repaint. Cache is short-lived (10 min) and the
+// network result always wins.
+const OV_CACHE_TTL = 10 * 60 * 1000;
+
+function _ovCacheGet(){
+  try {
+    if (typeof lsGet === 'function') return lsGet('overview_v2', OV_CACHE_TTL);
+    const raw = localStorage.getItem('spawn_overview_v2');
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return (Date.now() - o.ts > OV_CACHE_TTL) ? null : o.data;
+  } catch(e){ return null; }
+}
+function _ovCacheSet(d){
+  try {
+    if (typeof lsSet === 'function') { lsSet('overview_v2', d); return; }
+    localStorage.setItem('spawn_overview_v2', JSON.stringify({ ts: Date.now(), data: d }));
+  } catch(e){}
+}
+
+async function _ovFetch(){
+  const base = (typeof _SB!=='undefined'?_SB:(typeof SB_URL!=='undefined'?SB_URL:'https://cviraqfhphhsonjmrtvu.supabase.co'));
+  const hdr = (typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
+  const r = await fetch(`${base}/rest/v1/rpc/dashboard_overview_v2`, { method:'POST', headers:hdr, body:'{}' });
+  let j = await r.json();
+  if (Array.isArray(j)) j = j[0];
+  if (j && j.dashboard_overview_v2) j = j.dashboard_overview_v2;
+  return j || {};
+}
+
 async function overviewLoad() {
-  document.getElementById("dash-stats").innerHTML =
-    '<div style="padding:20px;color:var(--mu);font-size:13px">Loading...</div>';
+  // ── Fast path: repaint from the last good payload before touching the network
+  const cached = _ovCacheGet();
+  if (cached) {
+    try {
+      overviewRender(cached, {});
+      const st = document.getElementById('dash-stale');
+      if (st) st.style.display = '';
+    } catch(e){ console.warn('overview cache render', e); }
+  } else {
+    document.getElementById("dash-stats").innerHTML =
+      '<div style="padding:20px;color:var(--mu);font-size:13px">Loading...</div>';
+  }
+
   // fetch the combined overview (TG sales + harvest spawn) via gateway RPC
   let ov = null;
   try {
-    const base = (typeof _SB!=='undefined'?_SB:(typeof SB_URL!=='undefined'?SB_URL:'https://cviraqfhphhsonjmrtvu.supabase.co'));
-    const hdr = (typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
-    const r = await fetch(`${base}/rest/v1/rpc/dashboard_overview_v2`, { method:'POST', headers:hdr, body:'{}' });
-    let j = await r.json();
-    // PostgREST may return the object directly, or wrapped as [obj], or as {dashboard_overview_v2:obj}
-    if (Array.isArray(j)) j = j[0];
-    if (j && j.dashboard_overview_v2) j = j.dashboard_overview_v2;
-    ov = j || {};
-  } catch(e){ console.warn('overview rpc failed', e && e.message); ov = {}; }
+    ov = await _ovFetch();
+    if (ov && Object.keys(ov).length) _ovCacheSet(ov);
+  } catch(e){
+    console.warn('overview rpc failed', e && e.message);
+    // Keep whatever the cache already painted rather than blanking the page.
+    ov = cached || {};
+  }
 
   // Render the main overview immediately from the RPC (never blocks on apiLoad)
   let data = {};
