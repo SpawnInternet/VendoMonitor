@@ -153,11 +153,17 @@ function fnFigures(ym){
 }
 
 // ── grid helpers ──────────────────────────────────────────
-function fnRow(label, vals, cls){
+function fnCount(n){
+  const v = Number(n)||0;
+  return v ? v.toLocaleString('en-PH',{maximumFractionDigits:0}) : '';
+}
+// isCount = render as a plain number, not pesos (payment counts, untagged tallies)
+function fnRow(label, vals, cls, isCount){
   return '<tr class="' + (cls||'') + '"><td class="l">' + fnEsc(label) + '</td>'
     + vals.map(function(v){
         const n = Number(v)||0;
-        return '<td' + (n<0?' class="fn-neg"':'') + '>' + fnPeso(v) + '</td>';
+        return '<td' + (n<0?' class="fn-neg"':'') + '>'
+             + (isCount ? fnCount(v) : fnPeso(v)) + '</td>';
       }).join('')
     + '</tr>';
 }
@@ -265,7 +271,7 @@ function fnRenderSheet(months, F){
       + fnRow('From cash receipts ledger', col(function(x){ return x.vendo; }), 'item')
       + fnRow('SUBSCRIBER INCOME', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Subscriber payments',   col(function(x){ return x.subInc; }), 'item')
-      + fnRow('Payments received',     col(function(x){ return Number(x.sub.payments)||0; }), 'item')
+      + fnRow('Payments received (count)', col(function(x){ return Number(x.sub.payments)||0; }), 'item', true)
       + fnRow('OTHER', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Sales box / vendo box', col(function(x){ return x.otherInc; }), 'item')
       + fnRow('Loans repaid',          col(function(x){ return x.loanBack; }), 'item')
@@ -338,7 +344,7 @@ function fnRenderSheet(months, F){
       + fnRow('Float returned \u2014 cash only', col(function(x){ return x.chgBack; }), 'item')
       + fnRow('Sukli returned \u2014 cash only', col(function(x){ return x.sukli; }), 'item')
       + fnRow('Owner capital in \u2014 financing', col(function(x){ return x.capital; }), 'item')
-      + fnRow('Remarks still untagged', col(function(x){ return x.untagged; }), 'sub')
+      + fnRow('Remarks still untagged (count)', col(function(x){ return x.untagged; }), 'sub', true)
     );
     return;
   }
