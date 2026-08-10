@@ -34,6 +34,19 @@ function rpPesoShort(n){
 function rpEsc(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+async function rpRestAll(base, cap){
+  // PostgREST hard-caps at 1000 rows per request regardless of limit=.
+  // Walk pages until a short page comes back (or the safety cap is hit).
+  const max = cap || 20000;
+  let out = [];
+  for(let off = 0; off < max; off += 1000){
+    const page = await rpRest(base + '&limit=1000&offset=' + off);
+    if(!page || !page.length) break;
+    out = out.concat(page);
+    if(page.length < 1000) break;
+  }
+  return out;
+}
 async function rpRpc(fn, body){
   const r = await fetch(RP_SB + '/rest/v1/rpc/' + fn, { method:'POST', headers:RP_H, body:JSON.stringify(body||{}) });
   if(!r.ok) throw new Error(fn + ' -> ' + r.status);
@@ -1748,8 +1761,8 @@ async function rpRenderWendell(){
   if(!rpAdmRows){
     host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Loading admin expense book\u2026</div>';
     try{
-      rpAdmRows = await rpRest('expenses?select=id,expense_date,description,amount,note,statement_group,vendor'
-        + '&book=eq.admin&voided_at=is.null&order=expense_date.desc&limit=1000');
+      rpAdmRows = await rpRestAll('expenses?select=id,expense_date,description,amount,note,statement_group,vendor'
+        + '&book=eq.admin&voided_at=is.null&order=expense_date.desc,id.desc');
       try{
         rpAdmPending = await rpRest('sheet_outbox?select=id,payload&source=eq.wendell_expenses'
           + '&status=eq.queued&order=id&limit=50');
@@ -1976,9 +1989,9 @@ async function rpRenderSubInc(){
   if(!rpSubRows){
     host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Loading subscriber payments\u2026</div>';
     try{
-      rpSubRows = await rpRest('subscriber_payments?select=id,payment_date,subscriber_name,amount,collector,'
+      rpSubRows = await rpRestAll('subscriber_payments?select=id,payment_date,subscriber_name,amount,collector,'
         + 'invoice_no,note,coverage_from,coverage_to,coverage_months,coverage_ok'
-        + '&order=payment_date.desc&limit=1000');
+        + '&order=payment_date.desc,id.desc');
     }catch(e){
       host.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:13px">'
         + 'Could not load subscriber payments.<br><span style="font-size:11px;color:#8b93ad">'+rpEsc(e.message)+'</span></div>';
