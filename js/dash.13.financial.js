@@ -69,6 +69,7 @@ async function fnLoad(force){
 // ── derive every figure for one month ─────────────────────
 function fnFigures(ym){
   const rev  = fnBy(fnPack.revenue)[ym]    || {};
+  const ret  = fnBy(fnPack.returns)[ym]    || {};
   const sub  = fnBy(fnPack.subscriber)[ym] || {};
   const cash = fnBy(fnPack.cash)[ym]       || {};
   const hv   = fnBy(fnPack.harvest_check)[ym] || {};
@@ -79,13 +80,26 @@ function fnFigures(ym){
   const vendo      = Number(rev.vendo_sales)||0;
   const subInc     = Number(sub.income)||0;
   const otherInc   = Number(rev.other_income)||0;
-  const totalRev   = vendo + subInc + otherInc;
+
+  // Tagged returns. Only these two touch profit: a loan out was booked as an
+  // expense, so repaying it cancels that expense; other_income is real income.
+  // change_returned / sukli / capital move cash but are not profit.
+  const loanBack   = Number(ret.loan_repaid)||0;
+  const otherBack  = Number(ret.other_income)||0;
+  const chgBack    = Number(ret.change_returned)||0;
+  const sukli      = Number(ret.sukli)||0;
+  const capital    = Number(ret.capital)||0;
+  const addBack    = loanBack + otherBack;
+
+  const totalRev   = vendo + subInc + otherInc + addBack;
   const dailyTot   = daily.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
   const adminTot   = admin.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
   const net        = totalRev - dailyTot - adminTot;
 
-  return { ym, rev, sub, cash, hv, daily, admin,
-           vendo, subInc, otherInc, totalRev, dailyTot, adminTot, net };
+  return { ym, rev, sub, cash, hv, daily, admin, ret,
+           vendo, subInc, otherInc, totalRev, dailyTot, adminTot, net,
+           loanBack, otherBack, chgBack, sukli, capital, addBack,
+           tagged: Number(ret.tagged)||0, untagged: Number(ret.untagged)||0 };
 }
 
 function fnRender(){
@@ -147,6 +161,16 @@ function fnRender(){
     +     '<div class="s">revenue \u2212 both books</div></div>'
     + '</div>'
 
+    + (f.untagged > 0 ? '<div class="rp-card" style="border-color:#ffe0a3;background:#fffaf0;'
+        + 'font-size:11.5px;color:#8a5a00;margin-bottom:10px">'
+        + '<b>' + f.untagged + ' cash receipt remark' + (f.untagged===1?'':'s')
+        + ' not yet tagged for ' + fnLabel(fnMonth) + '.</b> '
+        + 'Money paid back \u2014 loans, returned float \u2014 is written in the remarks column '
+        + 'of the CASH RECEIPTS sheet but has no Type or Amount in columns P and Q yet, so it is '
+        + 'not in the figures below. Net income is understated until those are filled in.'
+        + (f.tagged ? ' (' + f.tagged + ' already tagged.)' : '')
+        + '</div>' : '')
+
     + (f.dailyTot === 0 ? '<div class="rp-card" style="border-color:#f5b3b3;background:#fff5f5;'
         + 'font-size:11.5px;color:#a11;margin-bottom:10px"><b>No daily expenses entered for '
         + fnLabel(fnMonth) + '.</b> The cash receipts ledger shows '
@@ -168,6 +192,8 @@ function fnRender(){
     +     row('Vendo Sales (Piso WiFi)', f.vendo, {indent:true})
     +     row('Subscriber Income', f.subInc, {indent:true})
     +     row('Other Income (sales box)', f.otherInc, {indent:true})
+    +     (f.loanBack  ? row('Add back: loans repaid', f.loanBack,  {indent:true, color:'#028867'}) : '')
+    +     (f.otherBack ? row('Add back: other income returned', f.otherBack, {indent:true, color:'#028867'}) : '')
     +     row('TOTAL REVENUE', f.totalRev, {total:true})
     +   '</tbody></table></div>'
 
@@ -202,6 +228,8 @@ function fnRender(){
     +   '<div style="padding:9px 12px;background:#f7f9fc;border-bottom:1px solid #e6ecf5;'
     +     'font-size:11px;font-weight:800;color:#028867;text-transform:uppercase;letter-spacing:.4px">Summary</div>'
     +   '<table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>'
+    +     row('Revenue (sales + subscriber + other)', f.totalRev - f.addBack, {indent:true})
+    +     (f.addBack ? row('Add: money paid back', f.addBack, {indent:true, color:'#028867'}) : '')
     +     row('Total Revenue', f.totalRev, {indent:true})
     +     row('Less: Daily Expense', -f.dailyTot, {indent:true, color:'#C01176'})
     +     row('Less: Admin &amp; Capital', -f.adminTot, {indent:true, color:'#DF1A35'})
@@ -222,6 +250,9 @@ function fnRender(){
     +     row('G-Cash (digital, not in net cash)', f.rev.gcash, {indent:true})
     +     row('Change received (returned money, not revenue)', f.rev.change_received, {indent:true})
     +     row('Discrepancy flagged (money out, awaiting return)', f.cash.discrepancy, {indent:true})
+    +     (f.chgBack ? row('Float returned (cash only, not profit)', f.chgBack, {indent:true}) : '')
+    +     (f.sukli   ? row('Sukli returned (cash only, not profit)', f.sukli,   {indent:true}) : '')
+    +     (f.capital ? row('Owner capital in (financing, not income)', f.capital, {indent:true}) : '')
     +   '</tbody></table>'
     +   '<div style="padding:10px 12px;border-top:1px solid #eef2f8;font-size:10.5px;'
     +     'color:#6b7394;line-height:1.6;background:#fbfcfe">'
@@ -273,6 +304,7 @@ async function fnExport(){
     rows.push(['  Vendo Sales (Piso WiFi)'].concat(F.map(function(x){ return x.vendo; })));
     rows.push(['  Subscriber Income'].concat(F.map(function(x){ return x.subInc; })));
     rows.push(['  Other Income'].concat(F.map(function(x){ return x.otherInc; })));
+    rows.push(['  Add back: money paid back'].concat(F.map(function(x){ return x.addBack; })));
     rows.push(['TOTAL REVENUE'].concat(F.map(function(x){ return x.totalRev; })));
     rows.push([]);
     rows.push(['EXPENSES']);
@@ -324,6 +356,18 @@ async function fnExport(){
     cRows.push(['Change received (returned)'].concat(months.map(function(m){
       const r = fnBy(fnPack.revenue)[m] || {}; return Number(r.change_received)||0; })));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(cRows), 'Cash Recon');
+
+    // Tagged returns
+    const rRows = [['Item'].concat(months.map(fnLabel))];
+    rRows.push(['Loans repaid (adds to net)'].concat(F.map(function(x){ return x.loanBack; })));
+    rRows.push(['Other income returned (adds to net)'].concat(F.map(function(x){ return x.otherBack; })));
+    rRows.push(['Float returned (cash only)'].concat(F.map(function(x){ return x.chgBack; })));
+    rRows.push(['Sukli returned (cash only)'].concat(F.map(function(x){ return x.sukli; })));
+    rRows.push(['Owner capital in (financing)'].concat(F.map(function(x){ return x.capital; })));
+    rRows.push([]);
+    rRows.push(['Remarks tagged'].concat(F.map(function(x){ return x.tagged; })));
+    rRows.push(['Remarks still untagged'].concat(F.map(function(x){ return x.untagged; })));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rRows), 'Money Paid Back');
 
     const stamp = new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
     XLSX.writeFile(wb, 'Spawn_Financial_' + stamp + '.xlsx');
