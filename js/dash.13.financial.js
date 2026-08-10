@@ -551,6 +551,7 @@ const FN_TYPES = [
   ['deposit_note',    'Deposit record (not a return)']
 ];
 let fnTagRows = null;
+let fnSearchRows = null;
 
 async function fnLoadTagger(){
   const wrap = document.getElementById('fn-tagwrap');
@@ -605,8 +606,21 @@ function fnRenderTagger(){
     + '\u2022 6 deposits are written in remarks, not the deposit column \u2014 see the Cash in Bank tab.'
     + '</div></details>';
 
-  if(!rows.length){
-    html += '<div class="rp-card" style="font-size:12px;color:#028867">Nothing to tag \u2014 all clear.</div>';
+  html += '<div style="display:flex;gap:6px;margin:6px 0 10px">'
+    + '<input id="fn-tagsearch" class="rp-in" placeholder="Search any receipt to tag (e.g. \u201cJoi\u201d, \u201c2,238\u201d, a date)\u2026" '
+    +   'style="flex:1;font-size:11.5px;padding:6px 9px" '
+    +   'onkeydown="if(event.key===\'Enter\')fnSearchTag()">'
+    + '<button class="rp-btn" style="padding:5px 12px;font-size:11px" onclick="fnSearchTag()">Search</button>'
+    + (fnSearchRows ? '<button class="rp-btn" style="padding:5px 12px;font-size:11px" onclick="fnClearSearch()">Show untagged</button>' : '')
+    + '</div>';
+
+  const showRows = fnSearchRows || rows;
+
+  if(!showRows.length){
+    html += '<div class="rp-card" style="font-size:12px;color:'
+      + (fnSearchRows?'#8b93ad':'#028867') + '">'
+      + (fnSearchRows ? 'No receipts match that search.' : 'Nothing to tag \u2014 all clear.')
+      + '</div>';
     wrap.innerHTML = html; return;
   }
 
@@ -615,7 +629,7 @@ function fnRenderTagger(){
     + '<th style="text-align:left;min-width:190px">Type</th>'
     + '<th style="min-width:110px">Amount</th><th style="min-width:70px"></th></tr></thead><tbody>';
 
-  rows.forEach(function(r){
+  showRows.forEach(function(r){
     const done = !!r.return_type;
     const guessAmt = r.return_amount != null ? r.return_amount
                      : (r.guess_amount != null ? r.guess_amount : '');
@@ -640,7 +654,8 @@ function fnRenderTagger(){
   });
   html += '</tbody></table></div>';
   html += '<div style="font-size:10.5px;color:#8b93ad;margin-top:6px">'
-    + pend.length + ' still to tag \u00b7 ' + (rows.length - pend.length) + ' done</div>';
+    + (fnSearchRows ? (showRows.length + ' search result' + (showRows.length===1?'':'s'))
+                    : (pend.length + ' still to tag \u00b7 ' + (rows.length - pend.length) + ' done')) + '</div>';
   wrap.innerHTML = html;
 }
 
@@ -668,3 +683,14 @@ async function fnSaveTag(id){
     if(btn){ btn.disabled = false; btn.textContent = 'Save'; }
   }
 }
+
+
+async function fnSearchTag(){
+  const q = (document.getElementById('fn-tagsearch')||{}).value || '';
+  if(!q.trim()){ fnSearchRows = null; fnRenderTagger(); return; }
+  try {
+    fnSearchRows = await rpRpc('spawn_search_receipts', { p_q: q.trim(), p_from: '2026-01-01' });
+  } catch(e){ alert('Search failed: ' + (e && e.message || e)); return; }
+  fnRenderTagger();
+}
+function fnClearSearch(){ fnSearchRows = null; fnRenderTagger(); }
