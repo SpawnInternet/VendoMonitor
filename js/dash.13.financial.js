@@ -136,6 +136,8 @@ function fnFigures(ym){
   const otherInc  = Number(rev.other_income)||0;
   const loanBack  = Number(ret.loan_repaid)||0;
   const otherBack = Number(ret.other_income)||0;
+  const expPaid   = Number(ret.expense_paid)||0;   // spent from change -> an expense
+  const loanOut   = Number(ret.loan_out)||0;       // lent out -> money leaving, memo only
   const addBack   = loanBack + otherBack;
 
   const totalRev = vendo + subInc + otherInc + addBack;
@@ -143,8 +145,9 @@ function fnFigures(ym){
   const adminTot = admin.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
 
   return { ym, rev, ret, sub, cash, hv,
-           vendo, subInc, otherInc, loanBack, otherBack, addBack,
-           totalRev, dailyTot, adminTot, net: totalRev - dailyTot - adminTot,
+           vendo, subInc, otherInc, loanBack, otherBack, addBack, expPaid, loanOut,
+           totalRev, dailyTot, adminTot,
+           net: totalRev - dailyTot - adminTot - expPaid,
            chgBack: Number(ret.change_returned)||0,
            sukli:   Number(ret.sukli)||0,
            capital: Number(ret.capital)||0,
@@ -260,7 +263,8 @@ function fnRenderSheet(months, F){
       + fnRow('EXPENSES', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Daily Expense',           col(function(x){ return x.dailyTot; }), 'item')
       + fnRow('Admin & Capital',         col(function(x){ return x.adminTot; }), 'item')
-      + fnRow('TOTAL EXPENSE',           col(function(x){ return x.dailyTot + x.adminTot; }), 'sub')
+      + fnRow('Paid from change (i baylo)', col(function(x){ return x.expPaid; }), 'item')
+      + fnRow('TOTAL EXPENSE',           col(function(x){ return x.dailyTot + x.adminTot + x.expPaid; }), 'sub')
       + fnRow('NET INCOME',              col(function(x){ return x.net; }), 'tot')
     );
     return;
@@ -403,6 +407,8 @@ function fnRenderSheet(months, F){
       + fnRow('Float returned \u2014 cash only', col(function(x){ return x.chgBack; }), 'item')
       + fnRow('Sukli returned \u2014 cash only', col(function(x){ return x.sukli; }), 'item')
       + fnRow('Owner capital in \u2014 financing', col(function(x){ return x.capital; }), 'item')
+      + fnRow('Paid an expense (i baylo) \u2014 subtracts', col(function(x){ return x.expPaid; }), 'item')
+      + fnRow('Lent out (gipautang) \u2014 money out', col(function(x){ return x.loanOut; }), 'item')
       + fnRow('Remarks still untagged (count)', col(function(x){ return x.untagged; }), 'sub', true)
     ) + '<div id="fn-tagwrap" style="margin-top:12px"></div>';
     fnLoadTagger();
@@ -438,7 +444,8 @@ async function fnExport(){
     a.push([]); a.push(['EXPENSES']);
     a.push(line('  Daily Expense',   col(function(x){ return x.dailyTot; })));
     a.push(line('  Admin & Capital', col(function(x){ return x.adminTot; })));
-    a.push(line('TOTAL EXPENSE',     col(function(x){ return x.dailyTot + x.adminTot; })));
+    a.push(line('  Paid from change (i baylo)', col(function(x){ return x.expPaid; })));
+    a.push(line('TOTAL EXPENSE',     col(function(x){ return x.dailyTot + x.adminTot + x.expPaid; })));
     a.push([]);
     a.push(line('NET INCOME', col(function(x){ return x.net; })));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), 'Summary');
@@ -536,6 +543,8 @@ async function fnExport(){
 const FN_TYPES = [
   ['loan_repaid',     'Loan repaid \u2014 adds to net'],
   ['other_income',    'Other income \u2014 adds to net'],
+  ['expense_paid',    'Paid an expense (i baylo) \u2014 subtracts'],
+  ['loan_out',        'Lent out (gipautang) \u2014 money out'],
   ['change_returned', 'Change/float returned \u2014 cash only'],
   ['sukli',           'Sukli \u2014 cash only'],
   ['capital',         'Owner capital in \u2014 financing'],
