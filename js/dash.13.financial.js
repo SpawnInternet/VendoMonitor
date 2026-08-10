@@ -134,11 +134,13 @@ function fnFigures(ym){
   const vendo     = Number(rev.vendo_sales)||0;
   const subInc    = Number(sub.income)||0;
   const otherInc  = Number(rev.other_income)||0;
-  const loanBack  = Number(ret.loan_repaid)||0;
-  const otherBack = Number(ret.other_income)||0;
+  const loanBack  = Number(ret.loan_repaid)||0;   // cash back to drawer, NOT income
+  const otherBack = Number(ret.other_income)||0;  // genuine income
   const expPaid   = Number(ret.expense_paid)||0;   // spent from change -> an expense
   const loanOut   = Number(ret.loan_out)||0;       // lent out -> money leaving, memo only
-  const addBack   = loanBack + otherBack;
+  // Loans are lent from cash on hand and were never expensed, so repayment does
+  // NOT add to net (it never left the books). Only genuine other income adds.
+  const addBack   = otherBack;
 
   const totalRev = vendo + subInc + otherInc + addBack;
   const dailyTot = daily.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
@@ -258,7 +260,7 @@ function fnRenderSheet(months, F){
       + fnRow('Vendo Sales (Piso WiFi)', col(function(x){ return x.vendo; }), 'item')
       + fnRow('Subscriber Income',       col(function(x){ return x.subInc; }), 'item')
       + fnRow('Other Income',            col(function(x){ return x.otherInc; }), 'item')
-      + fnRow('Add back: money paid back', col(function(x){ return x.addBack; }), 'item')
+      + fnRow('Add back: other income', col(function(x){ return x.addBack; }), 'item')
       + fnRow('TOTAL REVENUE',           col(function(x){ return x.totalRev; }), 'sub')
       + fnRow('EXPENSES', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Daily Expense',           col(function(x){ return x.dailyTot; }), 'item')
@@ -279,7 +281,6 @@ function fnRenderSheet(months, F){
       + fnRow('Payments received (count)', col(function(x){ return Number(x.sub.payments)||0; }), 'item', true)
       + fnRow('OTHER', months.concat(['']).map(function(){ return ''; }), 'sec')
       + fnRow('Sales box / vendo box', col(function(x){ return x.otherInc; }), 'item')
-      + fnRow('Loans repaid',          col(function(x){ return x.loanBack; }), 'item')
       + fnRow('Other income returned', col(function(x){ return x.otherBack; }), 'item')
       + fnRow('TOTAL REVENUE',         col(function(x){ return x.totalRev; }), 'tot')
       + fnRow('MEMO \u2014 not revenue', months.concat(['']).map(function(){ return ''; }), 'sec')
@@ -402,7 +403,7 @@ function fnRenderSheet(months, F){
       + fnRow('Short', col(function(x){ return Number(x.cash.short_)||0; }), 'item')
       + fnRow('Discrepancy flagged', col(function(x){ return Number(x.cash.discrepancy)||0; }), 'item')
       + fnRow('MONEY PAID BACK (tagged)', months.concat(['']).map(function(){ return ''; }), 'sec')
-      + fnRow('Loans repaid \u2014 adds to net', col(function(x){ return x.loanBack; }), 'item')
+      + fnRow('Loans repaid \u2014 cash back to drawer', col(function(x){ return x.loanBack; }), 'item')
       + fnRow('Other income returned \u2014 adds to net', col(function(x){ return x.otherBack; }), 'item')
       + fnRow('Float returned \u2014 cash only', col(function(x){ return x.chgBack; }), 'item')
       + fnRow('Sukli returned \u2014 cash only', col(function(x){ return x.sukli; }), 'item')
@@ -439,7 +440,7 @@ async function fnExport(){
     a.push(line('  Vendo Sales (Piso WiFi)', col(function(x){ return x.vendo; })));
     a.push(line('  Subscriber Income',       col(function(x){ return x.subInc; })));
     a.push(line('  Other Income',            col(function(x){ return x.otherInc; })));
-    a.push(line('  Add back: money paid back', col(function(x){ return x.addBack; })));
+    a.push(line('  Add back: other income', col(function(x){ return x.addBack; })));
     a.push(line('TOTAL REVENUE',             col(function(x){ return x.totalRev; })));
     a.push([]); a.push(['EXPENSES']);
     a.push(line('  Daily Expense',   col(function(x){ return x.dailyTot; })));
@@ -455,7 +456,6 @@ async function fnExport(){
     a.push(line('Vendo Sales (Piso WiFi)', col(function(x){ return x.vendo; })));
     a.push(line('Subscriber Income',       col(function(x){ return x.subInc; })));
     a.push(line('Sales box / vendo box',   col(function(x){ return x.otherInc; })));
-    a.push(line('Loans repaid',            col(function(x){ return x.loanBack; })));
     a.push(line('Other income returned',   col(function(x){ return x.otherBack; })));
     a.push(line('TOTAL REVENUE',           col(function(x){ return x.totalRev; })));
     a.push([]); a.push(['MEMO \u2014 not revenue']);
@@ -505,7 +505,7 @@ async function fnExport(){
     a.push(line('Short', col(function(x){ return Number(x.cash.short_)||0; })));
     a.push(line('Discrepancy flagged', col(function(x){ return Number(x.cash.discrepancy)||0; })));
     a.push([]); a.push(['MONEY PAID BACK (tagged)']);
-    a.push(line('Loans repaid \u2014 adds to net',  col(function(x){ return x.loanBack; })));
+    a.push(line('Loans repaid \u2014 cash back to drawer', col(function(x){ return x.loanBack; })));
     a.push(line('Other income returned \u2014 adds to net', col(function(x){ return x.otherBack; })));
     a.push(line('Float returned \u2014 cash only',  col(function(x){ return x.chgBack; })));
     a.push(line('Sukli returned \u2014 cash only',  col(function(x){ return x.sukli; })));
@@ -541,7 +541,7 @@ async function fnExport(){
 
 // ── Tagging worklist (Cash Recon sheet) ───────────────────
 const FN_TYPES = [
-  ['loan_repaid',     'Loan repaid \u2014 adds to net'],
+  ['loan_repaid',     'Loan repaid \u2014 cash back to drawer'],
   ['other_income',    'Other income \u2014 adds to net'],
   ['expense_paid',    'Paid an expense (i baylo) \u2014 subtracts'],
   ['loan_out',        'Lent out (gipautang) \u2014 money out'],
@@ -583,8 +583,6 @@ function fnRenderTagger(){
     +   'What each type does \u00b7 and the things to double-check</summary>'
     + '<div style="font-size:10.5px;color:#4a5270;line-height:1.7;margin-top:7px">'
     + '<b>Adds to net income</b><br>'
-    + '\u2022 <b>Loan repaid</b> \u2014 an advance paid back. Adds back <i>only if the advance was '
-    +   'booked as an expense when it went out</i>. If it was not, this would overstate net.<br>'
     + '\u2022 <b>Other income</b> \u2014 a genuine sale (wire, fiber, motor). Real income.<br>'
     + '<b>Subtracts from net income</b><br>'
     + '\u2022 <b>Paid an expense (i baylo)</b> \u2014 change spent on an expense. '
@@ -593,12 +591,14 @@ function fnRenderTagger(){
     + '<b>Cash moves, net does NOT change</b><br>'
     + '\u2022 <b>Lent out (gipautang)</b> \u2014 cash leaves the business, but a loan is an asset, '
     +   'not an expense. It touches net only when it comes back as \u201cloan repaid\u201d.<br>'
-    + '\u2022 <b>Change / float returned</b>, <b>Sukli</b> \u2014 float coming back; never was an expense.<br>'
+    + '\u2022 <b>Loan repaid</b>, <b>Change / float returned</b>, <b>Sukli</b> \u2014 cash back to the '
+    +   'drawer. Loans are lent from cash on hand and were never expensed, so repayment is not '
+    +   'income.<br>'
     + '\u2022 <b>Owner capital in</b> \u2014 your money funding the business. Financing, not income.<br>'
     + '\u2022 <b>Deposit record</b> \u2014 the remark just names a bank deposit; the amount belongs '
     +   'in the deposit column (L/M), not here.<br>'
     + '<b style="color:#8a5a00">Still to resolve</b><br>'
-    + '\u2022 Loans only balance if the loan-out was expensed. Not yet verified per loan.<br>'
+
     + '\u2022 Jan &amp; Feb have no daily expenses entered \u2014 net for those months is overstated.<br>'
     + '\u2022 Pre-July harvest data is thin; vendo sales here come from the cash book, not the '
     +   'harvest app.<br>'
