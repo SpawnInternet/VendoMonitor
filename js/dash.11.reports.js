@@ -92,7 +92,8 @@ function rpShellHtml(){
     ['pullout',  '\u{1F4E4}', 'Vendo Pull-Out'],
     ['cutoff',   '\u2702\uFE0F', 'Cutoff Subs'],
     ['status',   '\u{1F4E1}', 'Active / Inactive'],
-    ['cash',     '\u{1F3E6}', 'Cash Receipts']
+    ['cash',     '\u{1F3E6}', 'Cash Receipts'],
+    ['financial','\u{1F4C8}', 'Spawn Financial']
   ];
   const tabsHtml = tabs.map(function(t){
     return '<button class="rp-tab" data-rp="' + t[0] + '" onclick="rpSetTab(\'' + t[0] + '\')">' + t[1] + ' ' + t[2] + '</button>';
@@ -157,6 +158,7 @@ function rpShellHtml(){
   +   '<div class="rp-mode" id="rp-mode-cutoff"></div>'
   +   '<div class="rp-mode" id="rp-mode-status"></div>'
   +   '<div class="rp-mode" id="rp-mode-cash"></div>'
+  +   '<div class="rp-mode" id="rp-mode-financial"></div>'
   + '</div>'
   + '<datalist id="rp-dl-desc"></datalist>'
   + '<datalist id="rp-dl-cat"></datalist>'
@@ -220,6 +222,7 @@ window.rpSetTab = function(mode){
   if(mode === 'releases') rpRenderReleases();
   if(mode === 'sales')    rpRenderSales();
   if(mode === 'status')   rpRenderStatus();
+  if(mode === 'financial' && typeof fnLoad === 'function') fnLoad();
   if(['collect','newvendo','newsub','pullout','cutoff','cash'].indexOf(mode) >= 0) rpRenderTodo(mode);
 };
 
