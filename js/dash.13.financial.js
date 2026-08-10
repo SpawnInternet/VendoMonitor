@@ -203,7 +203,8 @@ function fnRender(){
     ['revenue', '\u{1F4B0} Revenue'],
     ['daily',   '\u{1F4B8} Daily Expenses'],
     ['admin',   '\u{1F3E6} Admin & Capital'],
-    ['cash',    '\u{1F9FE} Cash Recon']
+    ['cash',    '\u{1F9FE} Cash Recon'],
+    ['bank',    '\u{1F3E7} Cash in Bank']
   ];
 
   host.innerHTML = ''
@@ -326,6 +327,57 @@ function fnRenderSheet(months, F){
     });
     body += fnRow('TOTAL ADMIN & CAPITAL', col(function(x){ return x.adminTot; }), 'tot');
     el.innerHTML = fnGrid(months, body);
+    return;
+  }
+
+  if(fnSheet === 'bank'){
+    const bm = (fnLines && fnLines.bank_month) || [];
+    const byM = {}; bm.forEach(function(r){ byM[r.ym] = r; });
+    const bcol = function(key){
+      return fnWithTotal(months.map(function(m){ return Number((byM[m]||{})[key])||0; }));
+    };
+    // average lag is a rate, not a sum — blank the TOTAL cell
+    const lag = months.map(function(m){ return Number((byM[m]||{}).avg_lag_days)||0; }).concat(['']);
+    const hidden = months.reduce(function(s,m){ return s + (Number((byM[m]||{}).hidden_in_remarks)||0); }, 0);
+
+    let body = ''
+      + fnRow('DEPOSITS', months.concat(['']).map(function(){ return ''; }), 'sec')
+      + fnRow('Amount deposited', bcol('deposited'), 'item')
+      + fnRow('Net cash generated', fnWithTotal(F.map(function(x){ return Number(x.cash.net_cash)||0; })), 'item')
+      + fnRow('Carried to next month', fnWithTotal(F.map(function(x){
+          return (Number(x.cash.net_cash)||0) - (Number(x.cash.deposited)||0); })), 'sub')
+      + fnRow('TIMING', months.concat(['']).map(function(){ return ''; }), 'sec')
+      + fnRow('Number of deposits (count)', bcol('deposits'), 'item', true)
+      + fnRow('Average days to bank (count)', lag, 'item', true)
+      + fnRow('Deposits written only in remarks (count)', bcol('hidden_in_remarks'), 'item', true);
+
+    // individual deposit rows
+    const rows = (fnLines && fnLines.bank_rows) || [];
+    let list = '';
+    rows.slice(0,120).forEach(function(r){
+      const hid = r.deposit_hidden_in_remark;
+      list += '<tr' + (hid?' style="background:#fffaf0"':'') + '>'
+        + '<td class="l">' + fnEsc(r.collection_date) + '</td>'
+        + '<td>' + (Number(r.amount) ? fnPeso(r.amount) : (hid?'\u2014':'')) + '</td>'
+        + '<td>' + fnEsc(r.date_deposited || '\u2014') + '</td>'
+        + '<td>' + (r.lag_days==null?'':fnCount(r.lag_days)) + '</td>'
+        + '<td style="text-align:left;white-space:normal;color:#6b7394;font-size:10.5px">'
+        +   fnEsc(r.remarks||'') + (hid?' <b style="color:#8a5a00">\u2190 not in deposit column</b>':'')
+        + '</td></tr>';
+    });
+
+    el.innerHTML = fnGrid(months, body)
+      + (hidden ? '<div class="rp-card" style="border-color:#ffe0a3;background:#fffaf0;'
+          + 'font-size:11.5px;color:#8a5a00;margin-top:10px"><b>' + hidden
+          + ' deposits are written in the remarks column but not in the deposit column.</b> '
+          + 'That money IS in the bank, but the month reads as short until the amount and date '
+          + 'are entered in columns L and M. July alone had \u20b1129,730 recorded this way.</div>' : '')
+      + '<div style="margin-top:11px;font-size:11.5px;font-weight:800;color:#1f2b52">Every deposit</div>'
+      + '<div class="fn-scroll" style="margin-top:5px"><table class="fn-grid"><thead><tr>'
+      +   '<th class="l">Collection date</th><th>Amount</th><th>Date deposited</th>'
+      +   '<th>Days</th><th style="text-align:left">Remarks</th></tr></thead><tbody>'
+      + (list || '<tr><td colspan="5" style="padding:20px;text-align:center;color:#8b93ad">No deposits.</td></tr>')
+      + '</tbody></table></div>';
     return;
   }
 
@@ -452,6 +504,22 @@ async function fnExport(){
     a.push(line('Owner capital in \u2014 financing', col(function(x){ return x.capital; })));
     a.push(line('Remarks still untagged', col(function(x){ return x.untagged; })));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), 'Cash Recon');
+
+    // Cash in Bank
+    const bm = (fnLines.bank_month||[]); const byM = {};
+    bm.forEach(function(r){ byM[r.ym] = r; });
+    a = [head];
+    a.push(line('Amount deposited', months.map(function(m){ return Number((byM[m]||{}).deposited)||0; })));
+    a.push(line('Net cash generated', col(function(x){ return Number(x.cash.net_cash)||0; })));
+    a.push(line('Carried to next month', col(function(x){
+      return (Number(x.cash.net_cash)||0)-(Number(x.cash.deposited)||0); })));
+    a.push(line('Number of deposits', months.map(function(m){ return Number((byM[m]||{}).deposits)||0; })));
+    a.push(line('Deposits only in remarks', months.map(function(m){ return Number((byM[m]||{}).hidden_in_remarks)||0; })));
+    a.push([]); a.push(['Collection date','Amount','Date deposited','Days','Remarks']);
+    (fnLines.bank_rows||[]).forEach(function(r){
+      a.push([r.collection_date, Number(r.amount)||0, r.date_deposited||'', r.lag_days, r.remarks||'']);
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a), 'Cash in Bank');
 
     const stamp = new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
     XLSX.writeFile(wb, 'Spawn_Financial_' + stamp + '.xlsx');
