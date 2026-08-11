@@ -84,6 +84,7 @@ function rpShellHtml(){
     ['wendell',  '\u{1F4B3}', 'Admin Expense'],
     ['subinc',   '\u{1F4B5}', 'Subscriber Income'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
+    ['salesrecon','\u{1F9EE}', 'Sales Recon'],
     ['sales',    '\u{1F4B0}', 'Sales'],
     ['collect',  '\u{1F9FE}', 'Collections'],
     ['newvendo', '\u{1F195}', 'New Vendos'],
@@ -148,6 +149,7 @@ function rpShellHtml(){
   +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
   +   '<div class="rp-mode" id="rp-mode-subinc"></div>'
   +   '<div class="rp-mode" id="rp-mode-summary"></div>'
+  +   '<div class="rp-mode" id="rp-mode-salesrecon"></div>'
   +   '<div class="rp-mode" id="rp-mode-sales"></div>'
   +   '<div class="rp-mode" id="rp-mode-collect"></div>'
   +   '<div class="rp-mode" id="rp-mode-newvendo"></div>'
@@ -217,6 +219,7 @@ window.rpSetTab = function(mode){
   }
   if(mode === 'subinc')   rpRenderSubInc();
   if(mode === 'summary')  rpRenderSummary();
+  if(mode === 'salesrecon') rpRenderRecon();
   if(mode === 'sales')    rpRenderSales();
   if(mode === 'status')   rpRenderStatus();
   if(mode === 'financial' && typeof fnLoad === 'function') fnLoad();
@@ -2422,3 +2425,218 @@ window.rpSubSetTab   = function(t){ rpSubTab = t; rpRenderSubInc(); };
 window.rpSubSetMonth = function(m){ rpSubMonth = m; rpRenderSubInc(); };
 window.rpSubRefresh  = function(){ rpSubRows = null; rpRenderSubInc(); };
 window.rpRenderSubInc = rpRenderSubInc;
+
+// ══════════════════════════════════════════════════════════
+// SALES RECONCILIATION — harvest app vs office record vs cash book
+// Grouped by the harvest groups the collector app uses (Dipolog Group 1,
+// Dapitan Group 2, and so on) — not by route code.
+// ══════════════════════════════════════════════════════════
+let rpRecMonth = null, rpRecData = null;
+
+async function rpRenderRecon(){
+  const host = document.getElementById('rp-mode-salesrecon');
+  if(!host) return;
+  if(!rpRecMonth) rpRecMonth = (rpDate || rpPhToday()).slice(0,7);
+  host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Reconciling\u2026</div>';
+  let d;
+  try { d = await rpRpc('spawn_sales_recon', { p_ym: rpRecMonth }); }
+  catch(e){ host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not load: '+rpEsc(e.message)+'</div>'; return; }
+  rpRecData = d;
+  const actions = document.getElementById('rp-actions');
+  if(actions) actions.innerHTML = '<button class="rp-btn" onclick="rpRecCsv()">\u2B07\uFE0F Download CSV</button>';
+  try { host.innerHTML = rpRecHtml(d); }
+  catch(e){ host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not draw: '+rpEsc(e.message)+'</div>'; }
+}
+
+function rpRecPct(a, b){ return b ? Math.round((a-b)/b*100) : null; }
+
+function rpRecHtml(d){
+  const g  = d.groups || [];
+  const c  = d.cash || {};
+  const s  = d.subscriber || {};
+  const months = d.months || [];
+  const N = function(v){ return Number(v)||0; };
+
+  const appPiso   = N(d.harvest_total);
+  const bookPiso  = N(c.piso);
+  const pisoGap   = appPiso - bookPiso;
+  const pisoPct   = rpRecPct(appPiso, bookPiso);
+
+  const subLedger = N(s.amount);
+  const bookSub   = N(c.sub_cash) + N(c.gcash);
+  const subGap    = subLedger - bookSub;
+  const subPct    = rpRecPct(subLedger, bookSub);
+
+  const officeOn  = N(d.office_rows) > 0;
+
+  // cash book identity: piso + subscriber + change in, less expenses paid out,
+  // should land on net cash. G-Cash is excluded — it never becomes notes and coins.
+  const expected  = N(c.piso) + N(c.sub_cash) + N(c.change_in) - N(c.expenses);
+  const residual  = N(c.net_cash) - expected;
+  const undeposit = N(c.net_cash) - N(c.deposited);
+
+  var h = ''
+  + '<div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+  +   '<div><div style="font-size:13px;font-weight:800">\u{1F9EE} Sales Reconciliation</div>'
+  +     '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Harvest app \u00b7 office record \u00b7 cash book \u2014 by harvest group</div></div>'
+  +   '<div style="display:flex;gap:6px;align-items:center">'
+  +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpRecRefresh()">\u21bb Refresh</button>'
+  +     '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpRecSetMonth(this.value)">'
+  +       months.map(function(m){ return '<option value="'+m+'"'+(m===rpRecMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>'; }).join('')
+  +     '</select></div>'
+  + '</div>';
+
+  // ---- KPI strip ----
+  h += '<div class="rp-kpis">'
+  +   '<div class="rp-kpi" style="border-bottom-color:#025AC6"><div class="k">Harvest app \u2014 coins</div>'
+  +     '<div class="v">'+rpPeso(appPiso)+'</div><div class="s">'+g.reduce(function(a,x){return a+N(x.harvests);},0)+' harvests \u00b7 Spawn '+rpPesoShort(d.spawn_total)+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(officeOn?'#028867':'#c9cfe0')+'"><div class="k">Office record (bashang)</div>'
+  +     '<div class="v" style="'+(officeOn?'':'color:#b6bdd0;font-size:15px')+'">'+(officeOn?rpPeso(d.office_total):'not synced')+'</div>'
+  +     '<div class="s">'+(officeOn? N(d.office_rows)+' rows' : 'sheet not yet connected')+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(Math.abs(pisoPct||0)>5?'#DF1A35':'#028867')+'"><div class="k">App vs cash book</div>'
+  +     '<div class="v" style="color:'+(Math.abs(pisoPct||0)>5?'#DF1A35':'#028867')+'">'+(pisoGap>0?'+':'')+rpPesoShort(pisoGap)+'</div>'
+  +     '<div class="s">'+(pisoPct===null?'\u2014':(pisoPct>0?'+':'')+pisoPct+'% vs '+rpPesoShort(bookPiso))+'</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(Math.abs(subPct||0)>5?'#FFB725':'#028867')+'"><div class="k">Subscriber vs cash book</div>'
+  +     '<div class="v" style="color:'+(Math.abs(subPct||0)>5?'#8a6100':'#028867')+'">'+(subGap>0?'+':'')+rpPesoShort(subGap)+'</div>'
+  +     '<div class="s">'+(subPct===null?'\u2014':(subPct>0?'+':'')+subPct+'% \u00b7 '+N(s.rows_)+' payments')+'</div></div>'
+  + '</div>';
+
+  // ---- by group ----
+  h += '<div class="rp-card" style="padding:0;overflow:hidden">'
+    +  '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
+    +    '<span>\u{1F5FA}\uFE0F By harvest group \u2014 '+rpAdmMonthLabel(rpRecMonth)+'</span>'
+    +    '<span style="font-weight:600;color:#8b93ad;font-size:10.5px">Coverage is vendos harvested out of the group roster</span></div>'
+    +  '<div style="overflow:auto"><table class="rp-t" style="min-width:900px;font-variant-numeric:tabular-nums">'
+    +  '<thead><tr><th style="min-width:170px">Group</th><th>Collector</th>'
+    +  '<th class="rp-num">Coverage</th><th class="rp-num">Harvests</th>'
+    +  '<th class="rp-num">App coins</th><th class="rp-num">Office</th><th class="rp-num">Gap</th>'
+    +  '<th class="rp-num">Spawn 75%</th><th class="rp-num">Owner 25%</th><th class="rp-num">Saloy</th>'
+    +  '</tr></thead><tbody>';
+
+  g.forEach(function(x){
+    const orphan = N(x.gid) < 0;
+    const cov = N(x.in_group) ? Math.round(N(x.vendos)/N(x.in_group)*100) : null;
+    h += '<tr'+(orphan?' style="background:#fffdf5"':'')+'>'
+      + '<td style="font-weight:700;font-size:11.5px">'+rpEsc(x.label)
+      +   (x.code?'<span style="color:#8b93ad;font-weight:400;font-size:10px"> \u00b7 '+rpEsc(x.code)+'</span>':'')
+      +   (orphan?'<div style="font-size:9.5px;color:#8a6100">'+rpEsc(x.area||'')+'</div>':'')+'</td>'
+      + '<td style="font-size:11px;color:#6b7394">'+rpEsc(x.collector||'\u2014')+'</td>'
+      + '<td class="rp-num" style="font-size:11px;color:'+(cov!==null&&cov<70?'#8a6100':'#6b7394')+'">'
+      +   (cov===null?'\u2014':N(x.vendos)+'/'+N(x.in_group)+' \u00b7 '+cov+'%')+'</td>'
+      + '<td class="rp-num" style="font-size:11px;color:#6b7394">'+N(x.harvests)+'</td>'
+      + '<td class="rp-num" style="font-weight:700">'+rpPeso(x.coins)+'</td>'
+      + '<td class="rp-num" style="color:'+(N(x.office_rows)?'#1a1d2e':'#c9cfe0')+'">'+(N(x.office_rows)?rpPeso(x.office_amount):'\u2014')+'</td>'
+      + '<td class="rp-num" style="font-weight:700;color:'+(N(x.office_rows)?(N(x.gap)>0?'#DF1A35':'#028867'):'#c9cfe0')+'">'
+      +   (N(x.office_rows)? (N(x.gap)>0?'+':'')+rpPesoShort(x.gap) : '\u2014')+'</td>'
+      + '<td class="rp-num" style="color:#025AC6">'+rpPesoShort(x.spawn_share)+'</td>'
+      + '<td class="rp-num" style="color:#8b93ad">'+rpPesoShort(x.owner_share)+'</td>'
+      + '<td class="rp-num" style="font-size:11px;color:'+(N(x.saloy)?'#C01176':'#c9cfe0')+'">'+(N(x.saloy)?N(x.saloy).toLocaleString():'\u2014')+'</td>'
+      + '</tr>';
+  });
+
+  h += '<tr style="background:#e8f0ff"><td colspan="4" style="padding:10px 8px;font-weight:800;color:#311A8E">TOTAL</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+rpPeso(appPiso)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+(officeOn?rpPeso(d.office_total):'\u2014')+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+(officeOn?rpPesoShort(appPiso-N(d.office_total)):'\u2014')+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#025AC6">'+rpPesoShort(d.spawn_total)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#6b7394">'+rpPesoShort(d.owner_total)+'</td>'
+    +  '<td></td></tr>'
+    +  '</tbody></table></div>';
+
+  if(!officeOn){
+    h += '<div style="padding:10px 14px;font-size:10.5px;color:#8a6100;background:#fffdf5;border-top:1px solid #f3e2b8">'
+      +  'The Office column is empty because the bashang workbook is not yet syncing. '
+      +  'Once its piso-wifi tabs are connected, the office figure and the gap fill in per group with no further work here.</div>';
+  }
+  h += '</div>';
+
+  // ---- final matching ----
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">\u2696\uFE0F Final matching of sales</div>'
+    +  '<table class="rp-t"><thead><tr><th>Stream</th><th class="rp-num">Our record</th>'
+    +  '<th class="rp-num">Cash book</th><th class="rp-num">Gap</th><th class="rp-num">%</th><th>Reads as</th></tr></thead><tbody>'
+    +  rpRecRow('Piso-wifi (harvest app)', appPiso, bookPiso, pisoGap, pisoPct, 5)
+    +  rpRecRow('Subscriber (payment ledger)', subLedger, bookSub, subGap, subPct, 5)
+    +  '</tbody></table>'
+    +  '<div style="font-size:10.5px;color:#8b93ad;margin-top:8px">Subscriber cash book is <b>Subscriber Collection + G-Cash</b> together, since the ledger does not split channel. '
+    +  'Both sides are cash-received basis \u2014 the date money arrived, not the month it covers.</div></div>';
+
+  // ---- analyzer ----
+  const tags = d.tags || [];
+  const income = tags.filter(function(t){ return String(t.tag_type) === 'other_income'; });
+  const incomeAmt = income.reduce(function(a,t){ return a + N(t.amt); }, 0);
+
+  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#C01176;margin-bottom:8px">\u{1F50E} Analyzer \u2014 does it balance</div>'
+    +  '<table class="rp-t"><tbody>'
+    +  rpRecCheck('Sales hiding in cash receipts',
+         incomeAmt ? rpPeso(incomeAmt)+' tagged as other income' : 'none tagged this month',
+         incomeAmt ? 'warn' : 'ok',
+         incomeAmt ? 'Genuine sales recorded in the receipts book rather than through harvest or the ledger. Counts toward net income.'
+                   : 'No receipt remark in this month is tagged as a sale.')
+    +  rpRecCheck('Cash book adds up',
+         (Math.abs(residual) < 1000 ? 'balanced' : (residual>0?'+':'')+rpPeso(residual)+' unexplained'),
+         (Math.abs(residual) < 1000 ? 'ok' : 'warn'),
+         'Piso '+rpPesoShort(c.piso)+' + subscriber '+rpPesoShort(c.sub_cash)+' + change in '+rpPesoShort(c.change_in)
+         +' \u2212 expenses '+rpPesoShort(c.expenses)+' = '+rpPesoShort(expected)+', against net cash '+rpPesoShort(c.net_cash)+'. G-Cash excluded \u2014 it never becomes coins.')
+    +  rpRecCheck('Cash reached the bank',
+         (undeposit > 0 ? rpPeso(undeposit)+' not yet deposited' : 'fully deposited'),
+         (undeposit > 20000 ? 'warn' : 'ok'),
+         'Net cash '+rpPesoShort(c.net_cash)+' against '+rpPesoShort(c.deposited)+' banked. A lag of a day or two at month end is normal.')
+    +  rpRecCheck('Over and short',
+         'over '+rpPesoShort(c.over_)+' \u00b7 short '+rpPesoShort(c.short_),
+         (N(c.short_) > 5000 ? 'warn' : 'ok'),
+         'Counting differences the office already recorded against itself.')
+    +  rpRecCheck('Harvests outside a group',
+         (function(){ const o = g.filter(function(x){ return N(x.gid)<0; });
+           return o.length ? rpPeso(o.reduce(function(a,x){return a+N(x.coins);},0))+' across '+o.reduce(function(a,x){return a+N(x.harvests);},0)+' harvests' : 'none'; })(),
+         (g.some(function(x){ return N(x.gid)<0; }) ? 'warn' : 'ok'),
+         'These vendos are not on any group roster, so they never appear on a collector\u2019s route sheet.')
+    +  '</tbody></table></div>';
+
+  return h;
+}
+
+function rpRecRow(label, ours, book, gap, pct, tol){
+  const bad = pct !== null && Math.abs(pct) > tol;
+  return '<tr><td style="font-weight:600">'+rpEsc(label)+'</td>'
+    + '<td class="rp-num" style="font-weight:700">'+rpPeso(ours)+'</td>'
+    + '<td class="rp-num">'+rpPeso(book)+'</td>'
+    + '<td class="rp-num" style="font-weight:700;color:'+(bad?'#DF1A35':'#028867')+'">'+(gap>0?'+':'')+rpPesoShort(gap)+'</td>'
+    + '<td class="rp-num" style="color:'+(bad?'#DF1A35':'#028867')+'">'+(pct===null?'\u2014':(pct>0?'+':'')+pct+'%')+'</td>'
+    + '<td style="font-size:11px;color:'+(bad?'#DF1A35':'#028867')+';font-weight:700">'+(bad?'out of line':'balanced')+'</td></tr>';
+}
+
+function rpRecCheck(label, verdict, state, detail){
+  const col = state === 'ok' ? '#028867' : '#8a6100';
+  const dot = state === 'ok' ? '\u2713' : '\u26a0\uFE0F';
+  return '<tr'+(state==='ok'?'':' style="background:#fffdf5"')+'>'
+    + '<td style="font-weight:700;font-size:11.5px;min-width:190px">'+dot+' '+rpEsc(label)+'</td>'
+    + '<td style="font-weight:700;font-size:11.5px;color:'+col+';white-space:nowrap">'+rpEsc(verdict)+'</td>'
+    + '<td style="font-size:10.5px;color:#8b93ad">'+rpEsc(detail)+'</td></tr>';
+}
+
+window.rpRecSetMonth = function(m){ rpRecMonth = m; rpRenderRecon(); };
+window.rpRecRefresh  = function(){ rpRenderRecon(); };
+window.rpRenderRecon = rpRenderRecon;
+
+window.rpRecCsv = function(){
+  const d = rpRecData; if(!d) return;
+  const q = function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
+  const L = ['Sales Reconciliation '+d.month];
+  L.push(['Group','Code','Collector','Vendos harvested','Vendos in group','Harvests','App coins','Office record','Gap','Spawn 75%','Owner 25%','Saloy'].map(q).join(','));
+  (d.groups||[]).forEach(function(x){
+    L.push([q(x.label), q(x.code||''), q(x.collector||''), Number(x.vendos)||0, Number(x.in_group)||0,
+            Number(x.harvests)||0, Number(x.coins)||0, Number(x.office_amount)||0, Number(x.gap)||0,
+            Number(x.spawn_share)||0, Number(x.owner_share)||0, Number(x.saloy)||0].join(','));
+  });
+  const c = d.cash||{}, s = d.subscriber||{};
+  L.push('');
+  L.push([q('Stream'),q('Our record'),q('Cash book')].join(','));
+  L.push([q('Piso-wifi'), Number(d.harvest_total)||0, Number(c.piso)||0].join(','));
+  L.push([q('Subscriber'), Number(s.amount)||0, (Number(c.sub_cash)||0)+(Number(c.gcash)||0)].join(','));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([L.join('\n')], {type:'text/csv;charset=utf-8'}));
+  a.download = 'spawn-sales-recon-'+d.month+'.csv';
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
+};
+
