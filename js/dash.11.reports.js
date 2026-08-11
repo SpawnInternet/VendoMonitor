@@ -84,7 +84,6 @@ function rpShellHtml(){
     ['wendell',  '\u{1F4B3}', 'Admin Expense'],
     ['subinc',   '\u{1F4B5}', 'Subscriber Income'],
     ['summary',  '\u{1F4CA}', 'Expense Summary'],
-    ['releases', '\u{1F91D}', 'Fund Releases'],
     ['sales',    '\u{1F4B0}', 'Sales'],
     ['collect',  '\u{1F9FE}', 'Collections'],
     ['newvendo', '\u{1F195}', 'New Vendos'],
@@ -149,7 +148,6 @@ function rpShellHtml(){
   +   '<div class="rp-mode" id="rp-mode-wendell"></div>'
   +   '<div class="rp-mode" id="rp-mode-subinc"></div>'
   +   '<div class="rp-mode" id="rp-mode-summary"></div>'
-  +   '<div class="rp-mode" id="rp-mode-releases"></div>'
   +   '<div class="rp-mode" id="rp-mode-sales"></div>'
   +   '<div class="rp-mode" id="rp-mode-collect"></div>'
   +   '<div class="rp-mode" id="rp-mode-newvendo"></div>'
@@ -219,7 +217,6 @@ window.rpSetTab = function(mode){
   }
   if(mode === 'subinc')   rpRenderSubInc();
   if(mode === 'summary')  rpRenderSummary();
-  if(mode === 'releases') rpRenderReleases();
   if(mode === 'sales')    rpRenderSales();
   if(mode === 'status')   rpRenderStatus();
   if(mode === 'financial' && typeof fnLoad === 'function') fnLoad();
