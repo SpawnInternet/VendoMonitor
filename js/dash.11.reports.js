@@ -2458,6 +2458,7 @@ function rpRecHtml(d){
   const N = function(v){ return Number(v)||0; };
 
   const appPiso   = N(d.harvest_total);
+  const appSpawn  = N(d.spawn_total);
   const bookPiso  = N(c.piso);
   const pisoGap   = appPiso - bookPiso;
   const pisoPct   = rpRecPct(appPiso, bookPiso);
@@ -2490,9 +2491,12 @@ function rpRecHtml(d){
   h += '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:#025AC6"><div class="k">Harvest app \u2014 coins</div>'
   +     '<div class="v">'+rpPeso(appPiso)+'</div><div class="s">'+g.reduce(function(a,x){return a+N(x.harvests);},0)+' harvests \u00b7 Spawn '+rpPesoShort(d.spawn_total)+'</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+(officeOn?'#028867':'#c9cfe0')+'"><div class="k">Office record (bashang)</div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(officeOn?'#028867':'#c9cfe0')+'"><div class="k">Office record \u2014 spawn share</div>'
   +     '<div class="v" style="'+(officeOn?'':'color:#b6bdd0;font-size:15px')+'">'+(officeOn?rpPeso(d.office_total):'not synced')+'</div>'
-  +     '<div class="s">'+(officeOn? N(d.office_rows)+' rows' : 'sheet not yet connected')+'</div></div>'
+  +     '<div class="s">'+(officeOn
+  ?      (N(d.office_rows)+' rows \u00b7 vs app '+rpPesoShort(appSpawn)
+           + (N(d.office_unmatched_rows)?' \u00b7 '+N(d.office_unmatched_rows)+' unnamed':''))
+  :      'sheet not yet connected')+'</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+(Math.abs(pisoPct||0)>5?'#DF1A35':'#028867')+'"><div class="k">App vs cash book</div>'
   +     '<div class="v" style="color:'+(Math.abs(pisoPct||0)>5?'#DF1A35':'#028867')+'">'+(pisoGap>0?'+':'')+rpPesoShort(pisoGap)+'</div>'
   +     '<div class="s">'+(pisoPct===null?'\u2014':(pisoPct>0?'+':'')+pisoPct+'% vs '+rpPesoShort(bookPiso))+'</div></div>'
@@ -2509,8 +2513,9 @@ function rpRecHtml(d){
     +  '<div style="overflow:auto"><table class="rp-t" style="min-width:900px;font-variant-numeric:tabular-nums">'
     +  '<thead><tr><th style="min-width:170px">Group</th><th>Collector</th>'
     +  '<th class="rp-num">Coverage</th><th class="rp-num">Harvests</th>'
-    +  '<th class="rp-num">App coins</th><th class="rp-num">Office</th><th class="rp-num">Gap</th>'
-    +  '<th class="rp-num">Spawn 75%</th><th class="rp-num">Owner 25%</th><th class="rp-num">Saloy</th>'
+    +  '<th class="rp-num">Gross coins</th>'
+    +  '<th class="rp-num">App spawn 75%</th><th class="rp-num">Office spawn</th><th class="rp-num">Gap</th>'
+    +  '<th class="rp-num">Owner 25%</th><th class="rp-num">Saloy</th>'
     +  '</tr></thead><tbody>';
 
   g.forEach(function(x){
@@ -2524,21 +2529,22 @@ function rpRecHtml(d){
       + '<td class="rp-num" style="font-size:11px;color:'+(cov!==null&&cov<70?'#8a6100':'#6b7394')+'">'
       +   (cov===null?'\u2014':N(x.vendos)+'/'+N(x.in_group)+' \u00b7 '+cov+'%')+'</td>'
       + '<td class="rp-num" style="font-size:11px;color:#6b7394">'+N(x.harvests)+'</td>'
-      + '<td class="rp-num" style="font-weight:700">'+rpPeso(x.coins)+'</td>'
-      + '<td class="rp-num" style="color:'+(N(x.office_rows)?'#1a1d2e':'#c9cfe0')+'">'+(N(x.office_rows)?rpPeso(x.office_amount):'\u2014')+'</td>'
-      + '<td class="rp-num" style="font-weight:700;color:'+(N(x.office_rows)?(N(x.gap)>0?'#DF1A35':'#028867'):'#c9cfe0')+'">'
+      + '<td class="rp-num" style="color:#8b93ad">'+rpPesoShort(x.coins)+'</td>'
+      + '<td class="rp-num" style="font-weight:700;color:#025AC6">'+rpPeso(x.spawn_share)+'</td>'
+      + '<td class="rp-num" style="color:'+(N(x.office_rows)?'#1a1d2e':'#c9cfe0')+'">'+(N(x.office_rows)?rpPeso(x.office_amount):'\u2014')
+      +   (N(x.office_unmatched)?'<div style="font-size:9px;color:#8a6100">'+N(x.office_unmatched)+' unnamed</div>':'')+'</td>'
+      + '<td class="rp-num" style="font-weight:700;color:'+(N(x.office_rows)?(Math.abs(N(x.gap))>1?(N(x.gap)>0?'#DF1A35':'#028867'):'#028867'):'#c9cfe0')+'">'
       +   (N(x.office_rows)? (N(x.gap)>0?'+':'')+rpPesoShort(x.gap) : '\u2014')+'</td>'
-      + '<td class="rp-num" style="color:#025AC6">'+rpPesoShort(x.spawn_share)+'</td>'
       + '<td class="rp-num" style="color:#8b93ad">'+rpPesoShort(x.owner_share)+'</td>'
       + '<td class="rp-num" style="font-size:11px;color:'+(N(x.saloy)?'#C01176':'#c9cfe0')+'">'+(N(x.saloy)?N(x.saloy).toLocaleString():'\u2014')+'</td>'
       + '</tr>';
   });
 
   h += '<tr style="background:#e8f0ff"><td colspan="4" style="padding:10px 8px;font-weight:800;color:#311A8E">TOTAL</td>'
-    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+rpPeso(appPiso)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#6b7394">'+rpPesoShort(appPiso)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#025AC6">'+rpPeso(d.spawn_total)+'</td>'
     +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+(officeOn?rpPeso(d.office_total):'\u2014')+'</td>'
-    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+(officeOn?rpPesoShort(appPiso-N(d.office_total)):'\u2014')+'</td>'
-    +  '<td class="rp-num" style="font-weight:800;color:#025AC6">'+rpPesoShort(d.spawn_total)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E">'+(officeOn?rpPesoShort(N(d.spawn_total)-N(d.office_total)):'\u2014')+'</td>'
     +  '<td class="rp-num" style="font-weight:800;color:#6b7394">'+rpPesoShort(d.owner_total)+'</td>'
     +  '<td></td></tr>'
     +  '</tbody></table></div>';
