@@ -51,6 +51,11 @@
   .hl-num{font-size:44px;font-weight:700;letter-spacing:-.5px;line-height:1.05;}
   .hl-num-2{font-size:22px;font-weight:700;margin-top:2px;}
   .hl-sub{font-size:12px;color:#9FE1CB;margin-top:4px;}
+  .hl-brk{margin-top:10px;border-top:1px solid rgba(255,255,255,.16);padding-top:8px;}
+  .hl-brk-r{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:3px 0;}
+  .hl-brk-r .l{font-size:12px;color:rgba(255,255,255,.72);}
+  .hl-brk-r .v{font-size:14px;font-weight:700;letter-spacing:-.2px;}
+  .hl-brk-r.tap:active{opacity:.6;}
 
   .body{padding:14px;}
   .sec-lbl{font-size:11px;letter-spacing:.5px;color:var(--tx3);margin:4px 0 12px;}
@@ -186,13 +191,18 @@
         <button class="refresh-btn" id="refresh" aria-label="Refresh"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 11-6 6H4a8 8 0 108-8z"/></svg></button>
       </div>
     </div>
-    <div class="hl-lbl">Harvest spawn share &middot; this month</div>
-    <div class="hl-num" id="hl-spawn" style="cursor:pointer;">&#8369;&#8212;</div>
-    <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px;">
-      <span style="font-size:12px;color:rgba(255,255,255,.72);">Today:</span>
+    <div class="hl-lbl">Net income &middot; this month</div>
+    <div class="hl-num" id="hl-net">&#8369;&#8212;</div>
+    <div class="hl-brk" id="hl-brk">
+      <div class="hl-brk-r" id="hl-brk-harvest"><span class="l">Harvest spawn share</span><span class="v">&#8369;&#8212;</span></div>
+      <div class="hl-brk-r" id="hl-brk-sub"><span class="l">Subscriber collections</span><span class="v">&#8369;&#8212;</span></div>
+      <div class="hl-brk-r" id="hl-brk-exp"><span class="l">Less expenses</span><span class="v">&#8369;&#8212;</span></div>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin-top:9px;">
+      <span style="font-size:12px;color:rgba(255,255,255,.72);">Harvest today:</span>
       <span class="hl-num-2" id="hl-spawn-today" style="color:#7CF2C9;cursor:pointer;">&#8369;&#8212;</span>
     </div>
-    <div class="hl-sub" id="hl-sub">tap for breakdown</div>
+    <div class="hl-sub" id="hl-sub">tap a line for the breakdown</div>
   </div>
 
   <div class="body">
@@ -1079,7 +1089,8 @@ document.getElementById('sheet').addEventListener('click',e=>{ if(e.target.id===
 function groupRows(arr,key,valKey){
   return (arr||[]).map(g=>'<div class="sh-row"><span>'+g[key]+'</span><span class="v">'+peso(g[valKey])+'</span></div>').join('')||'<div class="sh-row"><span>No data</span></div>';
 }
-document.getElementById('hl-spawn').addEventListener('click',()=>{ if(LAST_OV) openSheet('Spawn share by group \u00B7 month', groupRows(LAST_OV.harvest_by_group,'grp','spawn')); });
+document.getElementById('hl-brk-harvest').addEventListener('click',()=>{ if(LAST_OV) openSheet('Spawn share by group \u00B7 month', groupRows(LAST_OV.harvest_by_group,'grp','spawn')); });
+document.getElementById('hl-brk-exp').addEventListener('click',()=>{ var e=document.getElementById('mob-expcal'); if(e) e.scrollIntoView({behavior:'smooth',block:'start'}); });
 window.mobKpiTap=function(what){
   if(what==='harvest') return toolHarvest('#028867');
   if(what==='tg')      return LAST_OV && openSheet('Telegram sales by group', groupRows(LAST_OV.tg_by_group,'grp','tg_sales'));
@@ -1094,7 +1105,7 @@ async function loadOverview(){
     const r=await gw({kind:'rpc',fn:'dashboard_overview_v2',body:{}});
     let ov=await r.json(); if(Array.isArray(ov)) ov=ov[0]; if(ov&&ov.dashboard_overview_v2) ov=ov.dashboard_overview_v2; ov=ov||{};
     LAST_OV=ov;
-    document.getElementById('hl-spawn').innerHTML=peso(ov.harvest_month)+' <span style="opacity:.6;font-size:22px;">\u203A</span>';
+    mobHero(ov);
     document.getElementById('hl-spawn-today').textContent=peso(ov.harvest_today);
     mobKpis(ov);
     const now=new Date();
@@ -1112,6 +1123,25 @@ async function loadOverview(){
     }catch(_){}
   }catch(e){ console.warn('overview failed',e); document.getElementById('hl-sub').textContent='couldn\u2019t load \u2014 tap refresh'; }
   finally{ rb.classList.remove('spin'); document.querySelector('.body').classList.remove('loading'); }
+}
+
+// ── Hero: net income and its three parts ────────────
+function mobHero(ov){
+  var N=function(v){ return Number(v)||0; };
+  var harv=N(ov.harvest_month), sub=N(ov.sub_month);
+  var exp=N(ov.exp_daily_month)+N(ov.exp_admin_month);
+  // Net = Harvest + Subscriber Collection − Daily Expense − Admin Expense
+  var net=harv+sub-exp;
+  var el=document.getElementById('hl-net');
+  if(el){ el.textContent=peso(net); el.style.color=(net<0?'#FFB4C0':'#fff'); }
+  function put(id,val,col,tap){
+    var r=document.getElementById(id); if(!r) return;
+    var v=r.querySelector('.v'); if(v){ v.textContent=val; if(col) v.style.color=col; }
+    if(tap) r.classList.add('tap');
+  }
+  put('hl-brk-harvest', peso(harv), '#7CF2C9', true);
+  put('hl-brk-sub', peso(sub), '#FFD98A');
+  put('hl-brk-exp', '−'+peso(exp), '#FFA8C6', true);
 }
 
 // ── Expense calendar (mobile) ──────────────────────────────
@@ -1277,7 +1307,7 @@ function mobCurMonth(){ try{
   }catch(e){ return 'this month'; } }
 function mobMonthLabels(){
   var m=mobCurMonth();
-  var b=document.querySelector('.hl-lbl'); if(b) b.innerHTML='Harvest spawn share \u00B7 '+m;
+  var b=document.querySelector('.hl-lbl'); if(b) b.innerHTML='Net income \u00B7 '+m;
   var c=document.querySelector('#groups'); if(c&&c.parentNode){
     var h=c.parentNode.querySelector('.card-h .t');
     if(h) h.innerHTML='HARVEST COLLECTIONS \u00B7 '+m.toUpperCase()+' <span style="font-weight:400;color:var(--tx2);">(Spawn Share)</span>';
