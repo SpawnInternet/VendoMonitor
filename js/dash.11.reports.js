@@ -1134,92 +1134,233 @@ window.rpPasteApply = function(){
 };
 
 // ══════════════════════════════════════════════════════════
-// 2. EXPENSE SUMMARY — category x month pivot
+// 2. EXPENSE SUMMARY — Excel-style sheet, months across columns
+//    Daily book and Admin book kept in separate blocks, never mixed.
+//    Source: spawn_expense_matrix(year) — split by `book`, not paid_from.
 // ══════════════════════════════════════════════════════════
+let rpSumYear = null, rpSumExact = false, rpSumMx = null;
+
 async function rpRenderSummary(){
   const host = document.getElementById('rp-mode-summary');
+  if(!host) return;
+  if(!rpSumYear) rpSumYear = parseInt((rpDate||rpPhToday()).slice(0,4), 10);
   host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Building summary\u2026</div>';
-  const yr = parseInt((rpDate||rpPhToday()).slice(0,4), 10);
-  let s;
-  try { s = await rpRpc('spawn_expense_summary', { p_year: yr }); }
+
+  let mx;
+  try { mx = await rpRpc('spawn_expense_matrix', { p_year: rpSumYear }); }
   catch(e){ host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not load: '+rpEsc(e.message)+'</div>'; return; }
+  rpSumMx = mx;
 
-  const rows = s.rows || [];
-  const months = [];
-  for(let m=1;m<=12;m++){
-    if(rows.some(function(r){ return Number(r.months[m]) > 0; })) months.push(m);
-  }
-  const colTotal = {};
-  months.forEach(function(m){
-    colTotal[m] = rows.reduce(function(a,r){ return a + (Number(r.months[m])||0); }, 0);
-  });
+  const actions = document.getElementById('rp-actions');
+  if(actions) actions.innerHTML = '<button class="rp-btn" onclick="rpExportSummary()">\u2B07\uFE0F Download CSV</button>';
 
-  document.getElementById('rp-actions').innerHTML =
-    '<button class="rp-btn" onclick="rpExportSummary()">\u2B07\uFE0F Download CSV</button>';
-
-  host.innerHTML = ''
-  + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
-  +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Admin Expense \u2014 capital & admin, paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
-  +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
-  + '</div>'
-  + '<div class="rp-kpis">'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.gold+'"><div class="k">Total expense '+yr+'</div><div class="v">'+rpPeso(s.grand)+'</div><div class="s">'+months.length+' month'+(months.length===1?'':'s')+' with activity</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.blue+'"><div class="k">Biggest category</div><div class="v" style="font-size:15px">'+rpEsc((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).category || '\u2014')+'</div><div class="s">'+rpPeso((rows.slice().sort(function(a,b){ return b.total-a.total; })[0]||{}).total)+'</div></div>'
-  +   '<div class="rp-kpi" style="border-bottom-color:'+RP_BRAND.teal+'"><div class="k">Average per month</div><div class="v">'+rpPeso(months.length ? s.grand/months.length : 0)+'</div><div class="s">across active months</div></div>'
-  + '</div>'
-  + '<div class="rp-card" style="padding:0;overflow:hidden">'
-  +   '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff">\u{1F4B0} Combined expense \u2014 Daily + Admin</div>'
-  +   '<div style="overflow:auto"><table class="rp-t"><thead><tr><th style="min-width:150px">Fund</th>'
-  +     months.map(function(m){ return '<th class="rp-num">'+RP_MONTHS[m].slice(0,3).toUpperCase()+'</th>'; }).join('')
-  +     '<th class="rp-num" style="background:#e8f0ff">TOTAL</th></tr></thead><tbody>'
-  +     '<tr><td style="font-weight:700;color:#025AC6">Daily Expense (Collections)</td>'
-  +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).collections)+'</td>'; }).join('')
-  +       '<td class="rp-num" style="font-weight:800;background:#f6f9ff">'+rpPesoShort(s.fund_collections)+'</td></tr>'
-  +     '<tr><td style="font-weight:700;color:#C01176">Admin Expense</td>'
-  +       months.map(function(m){ return '<td class="rp-num">'+rpPesoShort((s.funds[m]||{}).wendell)+'</td>'; }).join('')
-  +       '<td class="rp-num" style="font-weight:800;background:#fff4fb;color:#C01176">'+rpPesoShort(s.fund_wendell)+'</td></tr>'
-  +   '</tbody><tfoot><tr style="background:#f0f4ff">'
-  +     '<td style="font-weight:800;color:#1a1d2e">COMBINED</td>'
-  +     months.map(function(m){ return '<td class="rp-num" style="font-weight:800">'+rpPesoShort((s.funds[m]||{}).tot)+'</td>'; }).join('')
-  +     '<td class="rp-num" style="font-weight:800;background:#e8f0ff">'+rpPesoShort(s.grand)+'</td>'
-  +   '</tr></tfoot></table></div>'
-  + '</div>'
-  + '<div class="rp-card" style="padding:0;overflow:hidden">'
-  +   '<div class="rp-scroll" style="border:none;max-height:620px"><table class="rp-t">'
-  +   '<thead><tr><th style="min-width:170px">Expense type</th>'
-  +     months.map(function(m){ return '<th class="rp-num">'+RP_MONTHS[m].slice(0,3).toUpperCase()+'</th>'; }).join('')
-  +     '<th class="rp-num" style="background:#e8f0ff">TOTAL</th></tr></thead><tbody>'
-  +   rows.map(function(r){
-        const dim = Number(r.total) === 0;
-        return '<tr'+(dim?' style="opacity:.4"':'')+'>'
-          + '<td style="font-weight:600"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+(r.color||'#94a3b8')+';margin-right:7px"></span>'+rpEsc(r.category)+'</td>'
-          + months.map(function(m){ return '<td class="rp-num">'+rpPesoShort(r.months[m])+'</td>'; }).join('')
-          + '<td class="rp-num" style="font-weight:800;background:#f6f9ff;color:#025AC6">'+rpPesoShort(r.total)+'</td>'
-          + '</tr>';
-      }).join('')
-  +   '</tbody><tfoot><tr style="background:#f0f4ff">'
-  +     '<td style="font-weight:800;color:#025AC6">TOTAL</td>'
-  +     months.map(function(m){ return '<td class="rp-num" style="font-weight:800;color:#025AC6">'+rpPesoShort(colTotal[m])+'</td>'; }).join('')
-  +     '<td class="rp-num" style="font-weight:800;background:#e8f0ff;color:#025AC6">'+rpPesoShort(s.grand)+'</td>'
-  +   '</tr></tfoot></table></div>'
-  + '</div>';
-
-  window.__rpSummaryCache = { yr:yr, rows:rows, months:months, colTotal:colTotal, grand:s.grand };
+  try { host.innerHTML = rpSumHtml(mx); }
+  catch(e){ host.innerHTML = '<div class="rp-card" style="color:#DF1A35">Could not draw the sheet: '+rpEsc(e.message)+'</div>'; }
 }
 
+function rpSumCell(v){ return rpSumExact ? (Number(v)? rpPeso(v) : '\u2014') : rpPesoShort(v); }
+function rpSumMv(r, m){ return Number((r.months||{})[String(m)]) || 0; }
+
+function rpSumHtml(mx){
+  const months = (mx.months||[]).map(Number);
+  const mt     = mx.month_totals || {};
+  const years  = (mx.years||[]).map(Number).sort(function(a,b){ return b-a; });
+  const nm     = months.length;
+
+  const tot = function(m){ return Number((mt[String(m)]||{}).tot)   || 0; };
+  const dly = function(m){ return Number((mt[String(m)]||{}).daily) || 0; };
+  const adm = function(m){ return Number((mt[String(m)]||{}).admin) || 0; };
+
+  // biggest month, and the month-on-month movement
+  var hiM = null, hiV = 0;
+  months.forEach(function(m){ if(tot(m) > hiV){ hiV = tot(m); hiM = m; } });
+  const lastM = nm ? months[nm-1] : null;
+  const prevM = nm > 1 ? months[nm-2] : null;
+  const mom   = prevM ? tot(lastM) - tot(prevM) : 0;
+  const momP  = prevM && tot(prevM) ? Math.round(mom / tot(prevM) * 100) : 0;
+
+  if(!nm) return '<div class="rp-card">No expenses recorded in '+rpSumYear+'.</div>';
+
+  // ---- header -------------------------------------------------------
+  var h = ''
+  + '<div style="background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+  +   '<div><div style="font-size:13px;font-weight:800">\u{1F4CA} Expense Summary \u2014 '+rpSumYear+'</div>'
+  +     '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Daily and Admin books side by side \u00b7 '
+  +     RP_MONTHS[months[0]]+' \u2192 '+RP_MONTHS[lastM]+'</div></div>'
+  +   '<div style="display:flex;gap:6px;align-items:center">'
+  +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpSumToggleExact()">'
+  +       (rpSumExact ? '\u{1F4B1} Rounded' : '\u{1F522} Exact centavos') + '</button>'
+  +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpSumRefresh()">\u21bb Refresh</button>'
+  +     '<select class="rp-in" style="width:auto;min-width:100px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpSumSetYear(this.value)">'
+  +       years.map(function(y){ return '<option value="'+y+'"'+(y===rpSumYear?' selected':'')+' style="color:#1a1d2e">'+y+'</option>'; }).join('')
+  +     '</select></div>'
+  + '</div>';
+
+  // ---- KPI strip ----------------------------------------------------
+  h += '<div class="rp-kpis">'
+  +   '<div class="rp-kpi" style="border-bottom-color:#311A8E"><div class="k">Total expense '+rpSumYear+'</div>'
+  +     '<div class="v">'+rpPeso(mx.grand)+'</div><div class="s">'+nm+' month'+(nm===1?'':'s')+' with activity</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:#025AC6"><div class="k">Daily Expense</div>'
+  +     '<div class="v" style="color:#025AC6">'+rpPesoShort(mx.daily_total)+'</div>'
+  +     '<div class="s">'+(Number(mx.grand)?Math.round(mx.daily_total/mx.grand*100):0)+'% of total \u00b7 from Collections</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:#C01176"><div class="k">Admin &amp; Capital</div>'
+  +     '<div class="v" style="color:#C01176">'+rpPesoShort(mx.admin_total)+'</div>'
+  +     '<div class="s">'+(Number(mx.grand)?Math.round(mx.admin_total/mx.grand*100):0)+'% of total \u00b7 Sir Wendell</div></div>'
+  +   '<div class="rp-kpi" style="border-bottom-color:'+(mom>0?'#DF1A35':'#028867')+'"><div class="k">'+RP_MONTHS[lastM]+' vs '+(prevM?RP_MONTHS[prevM]:'\u2014')+'</div>'
+  +     '<div class="v" style="color:'+(mom>0?'#DF1A35':'#028867')+'">'+(prevM?(mom>0?'+':'')+rpPesoShort(mom):'\u2014')+'</div>'
+  +     '<div class="s">'+(prevM?(momP>0?'+':'')+momP+'% \u00b7 average '+rpPesoShort(mx.grand/nm)+'/mo':'no earlier month')+'</div></div>'
+  + '</div>';
+
+  // ---- the sheet ----------------------------------------------------
+  const th = function(label){ return '<th class="rp-num" style="white-space:nowrap;background:#f0f4ff;position:sticky;top:0;z-index:2">'+label+'</th>'; };
+  const stickyL = 'position:sticky;left:0;background:#fff;z-index:1;min-width:190px';
+
+  h += '<div class="rp-card" style="padding:0;overflow:hidden">'
+    +  '<div style="padding:11px 14px;font-size:12px;font-weight:800;color:#025AC6;border-bottom:1px solid #e8eeff;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">'
+    +    '<span>\u{1F4D2} Expense sheet \u2014 every line by month</span>'
+    +    '<span style="font-weight:600;color:#8b93ad;font-size:10.5px">TOTAL and Avg/mo on the right \u00b7 % is the share of the year</span>'
+    +  '</div>'
+    +  '<div style="overflow:auto;max-height:640px"><table class="rp-t" style="min-width:'+(320 + nm*92)+'px;font-variant-numeric:tabular-nums">'
+    +  '<thead><tr>'
+    +    '<th style="'+stickyL+';background:#f0f4ff;position:sticky;top:0;left:0;z-index:3">Line</th>'
+    +    months.map(function(m){ return th(RP_MONTHS[m].slice(0,3).toUpperCase()); }).join('')
+    +    th('TOTAL') + th('Avg/mo') + th('%')
+    +  '</tr></thead><tbody>';
+
+  // section renderer ---------------------------------------------------
+  function section(title, sub, color, bg, rows, monthFn, sectionTotal){
+    var s = '<tr style="background:'+bg+'"><td style="'+stickyL+';background:'+bg+';padding:8px;font-weight:800;font-size:11.5px;color:'+color+'">'
+      + rpEsc(title) + '<span style="font-weight:400;color:#8b93ad;font-size:10px"> \u00b7 '+sub+'</span></td>'
+      + months.map(function(){ return '<td style="background:'+bg+'"></td>'; }).join('')
+      + '<td colspan="3" style="background:'+bg+'"></td></tr>';
+
+    (rows||[]).forEach(function(r){
+      s += '<tr>'
+        + '<td style="'+stickyL+';font-weight:600;font-size:11.5px">'
+        +   '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+(r.color||'#94a3b8')+';margin-right:7px"></span>'
+        +   rpEsc(r.label)+'</td>'
+        + months.map(function(m){
+            const v = rpSumMv(r, m);
+            return '<td class="rp-num" style="font-size:11.5px;color:'+(v?'#1a1d2e':'#c9cfe0')+'">'+rpSumCell(v)+'</td>';
+          }).join('')
+        + '<td class="rp-num" style="font-weight:800;background:#f6f9ff;color:'+color+'">'+rpSumCell(r.total)+'</td>'
+        + '<td class="rp-num" style="color:#8b93ad;font-size:11px">'+rpSumCell(Number(r.total)/nm)+'</td>'
+        + '<td class="rp-num" style="color:#8b93ad;font-size:11px">'+(Number(mx.grand)?(Number(r.total)/Number(mx.grand)*100).toFixed(1)+'%':'\u2014')+'</td>'
+        + '</tr>';
+    });
+
+    s += '<tr style="background:'+bg+'"><td style="'+stickyL+';background:'+bg+';font-weight:800;font-size:11.5px;color:'+color+'">Subtotal \u2014 '+rpEsc(title)+'</td>'
+      + months.map(function(m){
+          return '<td class="rp-num" style="font-weight:800;font-size:11.5px;color:'+color+'">'+rpSumCell(monthFn(m))+'</td>';
+        }).join('')
+      + '<td class="rp-num" style="font-weight:800;background:#f6f9ff;color:'+color+'">'+rpSumCell(sectionTotal)+'</td>'
+      + '<td class="rp-num" style="font-weight:700;color:'+color+';font-size:11px">'+rpSumCell(Number(sectionTotal)/nm)+'</td>'
+      + '<td class="rp-num" style="font-weight:700;color:'+color+';font-size:11px">'+(Number(mx.grand)?(Number(sectionTotal)/Number(mx.grand)*100).toFixed(1)+'%':'\u2014')+'</td>'
+      + '</tr>';
+    return s;
+  }
+
+  h += section('Daily Expense', 'paid from Collections', '#025AC6', '#eef4ff',
+               mx.daily, dly, mx.daily_total);
+  h += section('Admin & Capital', 'paid by Sir Wendell', '#C01176', '#fdf2f9',
+               mx.admin, adm, mx.admin_total);
+
+  // grand total + movement rows ----------------------------------------
+  h += '<tr style="background:#e8f0ff"><td style="'+stickyL+';background:#e8f0ff;padding:10px 8px;font-weight:800;font-size:13px;color:#311A8E">TOTAL EXPENSE</td>'
+    +  months.map(function(m){
+         return '<td class="rp-num" style="padding:10px 4px;font-weight:800;font-size:12.5px;color:#311A8E">'+rpSumCell(tot(m))+'</td>';
+       }).join('')
+    +  '<td class="rp-num" style="padding:10px 4px;font-weight:800;font-size:12.5px;background:#dbe6ff;color:#311A8E">'+rpSumCell(mx.grand)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E;font-size:11.5px">'+rpSumCell(Number(mx.grand)/nm)+'</td>'
+    +  '<td class="rp-num" style="font-weight:800;color:#311A8E;font-size:11.5px">100%</td></tr>';
+
+  // change vs the month before, in pesos then in per cent
+  h += '<tr><td style="'+stickyL+';font-weight:700;font-size:11px;color:#6b7394">Change vs previous month</td>'
+    +  months.map(function(m, i){
+         if(i === 0) return '<td class="rp-num" style="font-size:11px;color:#c9cfe0">\u2014</td>';
+         const d = tot(m) - tot(months[i-1]);
+         return '<td class="rp-num" style="font-size:11px;font-weight:700;color:'+(d>0?'#DF1A35':'#028867')+'">'
+           + (d>0?'+':'') + rpPesoShort(Math.abs(d)===0?0:d) + '</td>';
+       }).join('')
+    +  '<td colspan="3" style="background:#f6f9ff"></td></tr>';
+
+  h += '<tr><td style="'+stickyL+';font-weight:700;font-size:11px;color:#6b7394">Change %</td>'
+    +  months.map(function(m, i){
+         if(i === 0) return '<td class="rp-num" style="font-size:11px;color:#c9cfe0">\u2014</td>';
+         const p = tot(months[i-1]);
+         const d = tot(m) - p;
+         const pc = p ? Math.round(d/p*100) : 0;
+         return '<td class="rp-num" style="font-size:11px;font-weight:700;color:'+(d>0?'#DF1A35':'#028867')+'">'
+           + (p ? (d>0?'+':'')+pc+'%' : '\u2014') + '</td>';
+       }).join('')
+    +  '<td colspan="3" style="background:#f6f9ff"></td></tr>';
+
+  // daily vs admin split per month, as a share
+  h += '<tr><td style="'+stickyL+';font-weight:700;font-size:11px;color:#6b7394">Daily / Admin split</td>'
+    +  months.map(function(m){
+         const t = tot(m);
+         const dp = t ? Math.round(dly(m)/t*100) : 0;
+         return '<td class="rp-num" style="font-size:10.5px;color:#8b93ad">'+(t? dp+'% / '+(100-dp)+'%' : '\u2014')+'</td>';
+       }).join('')
+    +  '<td colspan="3" style="background:#f6f9ff"></td></tr>';
+
+  h += '</tbody></table></div>'
+    +  '<div style="padding:10px 14px;font-size:10.5px;color:#8b93ad;border-top:1px solid #e8eeff">'
+    +  'The two books are never added together inside a line \u2014 Daily is the Collections fund, Admin &amp; Capital is Sir Wendell\u2019s. '
+    +  'They only meet at TOTAL EXPENSE, which is what the net income formula subtracts. '
+    +  (hiM ? 'Heaviest month was '+RP_MONTHS[hiM]+' at '+rpPesoShort(hiV)+'. ' : '')
+    +  'Download CSV opens straight in Excel with the same layout.</div>'
+    +  '</div>';
+
+  return h;
+}
+
+window.rpSumSetYear = function(y){ rpSumYear = parseInt(y,10); rpRenderSummary(); };
+window.rpSumRefresh = function(){ rpRenderSummary(); };
+window.rpSumToggleExact = function(){
+  rpSumExact = !rpSumExact;
+  const host = document.getElementById('rp-mode-summary');
+  if(host && rpSumMx) host.innerHTML = rpSumHtml(rpSumMx);
+};
+
 window.rpExportSummary = function(){
-  const c = window.__rpSummaryCache; if(!c) return;
-  const head = ['Expense Type'].concat(c.months.map(function(m){ return RP_MONTHS[m]; })).concat(['TOTAL']);
-  const lines = [head.join(',')];
-  c.rows.forEach(function(r){
-    lines.push(['"'+r.category+'"'].concat(c.months.map(function(m){ return Number(r.months[m])||0; })).concat([Number(r.total)||0]).join(','));
+  const mx = rpSumMx; if(!mx) return;
+  const months = (mx.months||[]).map(Number);
+  const mt = mx.month_totals || {};
+  const q = function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
+  const num = function(v){ return Number(v)||0; };
+  const line = function(label, vals, total){ return [q(label)].concat(vals).concat([total]).join(','); };
+  const L = [];
+  L.push(['Expense Summary '+mx.year].join(','));
+  L.push([q('Line')].concat(months.map(function(m){ return q(RP_MONTHS[m]); })).concat([q('TOTAL'), q('Avg/mo')]).join(','));
+
+  L.push(q('DAILY EXPENSE (Collections)'));
+  (mx.daily||[]).forEach(function(r){
+    L.push(line(r.label, months.map(function(m){ return rpSumMv(r,m); }), num(r.total)) + ',' + (num(r.total)/months.length).toFixed(2));
   });
-  lines.push(['TOTAL'].concat(c.months.map(function(m){ return c.colTotal[m]; })).concat([c.grand]).join(','));
-  const blob = new Blob([lines.join('\n')], { type:'text/csv' });
+  L.push(line('Subtotal - Daily Expense',
+        months.map(function(m){ return num((mt[String(m)]||{}).daily); }), num(mx.daily_total))
+        + ',' + (num(mx.daily_total)/months.length).toFixed(2));
+
+  L.push(q('ADMIN & CAPITAL (Sir Wendell)'));
+  (mx.admin||[]).forEach(function(r){
+    L.push(line(r.label, months.map(function(m){ return rpSumMv(r,m); }), num(r.total)) + ',' + (num(r.total)/months.length).toFixed(2));
+  });
+  L.push(line('Subtotal - Admin & Capital',
+        months.map(function(m){ return num((mt[String(m)]||{}).admin); }), num(mx.admin_total))
+        + ',' + (num(mx.admin_total)/months.length).toFixed(2));
+
+  L.push(line('TOTAL EXPENSE',
+        months.map(function(m){ return num((mt[String(m)]||{}).tot); }), num(mx.grand))
+        + ',' + (num(mx.grand)/months.length).toFixed(2));
+  L.push(line('Change vs previous month',
+        months.map(function(m, i){ return i===0 ? '' : num((mt[String(m)]||{}).tot) - num((mt[String(months[i-1])]||{}).tot); }), ''));
+
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'spawn-expense-summary-' + c.yr + '.csv';
+  a.href = URL.createObjectURL(new Blob([L.join('\n')], { type:'text/csv;charset=utf-8' }));
+  a.download = 'spawn-expense-summary-' + mx.year + '.csv';
   a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
 };
 
 // ══════════════════════════════════════════════════════════
