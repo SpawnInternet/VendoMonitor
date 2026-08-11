@@ -1763,7 +1763,7 @@ const RP_ADM_G = [
   ['personnel',   '4. Personnel',             '#FFB725', 'Salaries & advances'],
   ['admin',       '5. Admin & General',       '#C01176', 'Cards & general']
 ];
-let rpAdmRows = null, rpAdmMonth = null, rpAdmPending = [];
+let rpAdmRows = null, rpAdmMonth = null, rpAdmPending = [], rpAdmTab = 'overview';
 
 async function rpRenderWendell(){
   const host = document.getElementById('rp-mode-wendell');
@@ -1794,9 +1794,42 @@ function rpAdmMonthLabel(m){
   return RP_MONTHS[Number(p[1])] + ' ' + p[0];
 }
 
+function rpAdmTabBtn(id, label, sub){
+  const on = rpAdmTab === id;
+  return '<button onclick="rpAdmSetTab(\'' + id + '\')" style="flex:1;min-width:120px;text-align:left;cursor:pointer;'
+    + 'border:1px solid ' + (on ? '#C01176' : '#e8eeff') + ';background:' + (on ? '#fdf2f9' : '#fff') + ';'
+    + 'border-radius:10px;padding:8px 12px;line-height:1.25">'
+    + '<div style="font-size:12px;font-weight:800;color:' + (on ? '#C01176' : '#6b7394') + '">' + label + '</div>'
+    + '<div style="font-size:10px;color:#8b93ad;margin-top:1px">' + sub + '</div></button>';
+}
+
 function rpAdmHtml(months){
   const rows  = rpAdmRows.filter(function(r){ return String(r.expense_date).slice(0,7) === rpAdmMonth; });
   const total = rows.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
+
+  var h = ''
+  + '<div style="background:linear-gradient(135deg,#C01176,#311A8E);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+  +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B3} Admin &amp; Capital Expense</div>'
+  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Paid by Sir Wendell \u00b7 separate book from Daily Expense</div></div>'
+  +   '<div style="display:flex;gap:6px;align-items:center">'
+  +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpAdmRefresh()" title="Re-read the admin book from the database">\u21bb Refresh</button>'
+  +     '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpAdmSetMonth(this.value)">'
+  +       months.map(function(m){
+            return '<option value="'+m+'"'+(m===rpAdmMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>';
+          }).join('')
+  +     '</select></div>'
+  + '</div>'
+
+  + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+  +   rpAdmTabBtn('overview', 'Monthly Overview', 'Totals \u00b7 by group')
+  +   rpAdmTabBtn('entries',  'Payments',         rows.length + ' rows \u00b7 ' + rpPesoShort(total))
+  + '</div>';
+
+  return h + (rpAdmTab === 'entries' ? rpAdmEntriesHtml(rows, total) : rpAdmOverviewHtml(rows, total, months));
+}
+
+// ---- TAB 1: monthly overview -----------------------------------------
+function rpAdmOverviewHtml(rows, total, months){
   const uncl  = rows.filter(function(r){ return !r.statement_group; });
   const unclA = uncl.reduce(function(s,r){ return s + (Number(r.amount)||0); }, 0);
 
@@ -1808,20 +1841,7 @@ function rpAdmHtml(months){
   const delta = prev ? total - prevT : 0;
   const dPct  = prev && prevT ? Math.round(delta / prevT * 100) : 0;
 
-  var h = ''
-  + '<div style="background:linear-gradient(135deg,#C01176,#311A8E);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
-  +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B3} Admin &amp; Capital Expense</div>'
-  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Paid by Sir Wendell \u00b7 separate book from Daily Expense</div></div>'
-  +   '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;margin-right:6px" onclick="rpAdmRefresh()" title="Re-read the admin book from the database">\u21bb Refresh</button>'
-  +   '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpAdmSetMonth(this.value)">'
-  +     months.map(function(m){
-          return '<option value="'+m+'"'+(m===rpAdmMonth?' selected':'')+' style="color:#1a1d2e">'+rpAdmMonthLabel(m)+'</option>';
-        }).join('')
-  +   '</select>'
-  + '</div>'
-
-  // KPIs
-  + '<div class="rp-kpis">'
+  var h = '<div class="rp-kpis">'
   +   '<div class="rp-kpi" style="border-bottom-color:#C01176"><div class="k">'+rpAdmMonthLabel(rpAdmMonth)+' total</div>'
   +     '<div class="v">'+rpPeso(total)+'</div><div class="s">'+rows.length+' entries</div></div>'
   +   '<div class="rp-kpi" style="border-bottom-color:'+(delta>0?'#DF1A35':'#028867')+'"><div class="k">vs previous month</div>'
@@ -1831,43 +1851,6 @@ function rpAdmHtml(months){
   +     '<div class="v" style="color:'+(unclA?'#8a6100':'#028867')+'">'+(unclA?rpPeso(unclA):'All set')+'</div>'
   +     '<div class="s">'+uncl.length+' of '+rows.length+' entries</div></div>'
   + '</div>';
-
-  // Entry form. The tab decides the book: anything added here is admin &
-  // capital, never daily. No password to add — only editing and voiding
-  // ask for one.
-  h += '<div class="rp-card" style="border-color:#f3c2e2">'
-    +  '<div style="font-size:12px;font-weight:800;color:#C01176;margin-bottom:9px">\u2795 Add an admin expense</div>'
-    +  '<div style="display:grid;grid-template-columns:130px minmax(0,2fr) 110px minmax(0,1.2fr) auto;gap:7px;align-items:end">'
-    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Date</label>'
-    +      '<input type="date" id="rp-adm-date" class="rp-in" value="'+rpPhToday()+'"></div>'
-    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Particulars</label>'
-    +      '<input id="rp-adm-desc" class="rp-in" list="rp-adm-descs" placeholder="e.g. Globe Bill"></div>'
-    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Amount</label>'
-    +      '<input id="rp-adm-amt" class="rp-in" type="number" step="0.01" min="0" placeholder="0.00"></div>'
-    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Remarks</label>'
-    +      '<input id="rp-adm-rem" class="rp-in" placeholder="optional"></div>'
-    +    '<button class="rp-btn pri" id="rp-adm-save" onclick="rpAdmAdd()">Add</button>'
-    +  '</div>'
-    +  '<datalist id="rp-adm-descs">'
-    +    Array.from(new Set(rpAdmRows.map(function(r){ return r.description; }).filter(Boolean)))
-           .slice(0,300).map(function(d){ return '<option value="'+rpEsc(d)+'">'; }).join('')
-    +  '</datalist>'
-    +  '<div id="rp-adm-msg" style="font-size:11px;margin-top:7px;min-height:14px"></div>'
-    +  '<div style="font-size:10.5px;color:#8b93ad">Written to the "Expenses paid by Wendell" sheet first, then read back \u2014 '
-    +  'so the sheet and the dashboard can never disagree. Its group is assigned automatically on the way in.</div>'
-    + '</div>';
-
-  if(rpAdmPending && rpAdmPending.length){
-    h += '<div class="rp-card" style="border-color:#FFB725;background:#fffdf5">'
-      +  '<div style="font-size:12px;font-weight:800;color:#8a6100;margin-bottom:7px">\u23f3 Waiting to reach the sheet \u2014 '+rpAdmPending.length+'</div>'
-      +  rpAdmPending.map(function(p){
-           const q = p.payload || {};
-           return '<div style="font-size:11.5px;padding:3px 0;display:flex;justify-content:space-between;gap:8px">'
-             + '<span>'+rpEsc(q.expense_date||'')+' \u00b7 '+rpEsc(q.description||'')+'</span>'
-             + '<span style="font-weight:700">'+rpPeso(q.amount)+'</span></div>';
-         }).join('')
-      +  '<div style="font-size:10.5px;color:#8a6100;margin-top:6px">These appear above within about a minute.</div></div>';
-  }
 
   // Statement groups, broken down to the lines inside each one
   h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:4px">Breakdown \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>'
@@ -1917,29 +1900,128 @@ function rpAdmHtml(months){
 
   h += '<tr><td colspan="2" style="padding:10px 8px;border-top:2px solid #e8eeff;font-weight:800;font-size:13px;color:#311A8E">TOTAL</td>'
     +  '<td class="rp-num" style="padding:10px 8px;border-top:2px solid #e8eeff;font-weight:800;font-size:13px;color:#311A8E">'+rpPeso(total)+'</td></tr>'
-    +  '</tbody></table></div>';
-
-  // Entries
-  h += '<div class="rp-card"><div style="font-size:12px;font-weight:800;color:#025AC6;margin-bottom:8px">Entries \u2014 '+rows.length+'</div>'
-    +  '<div style="max-height:420px;overflow-y:auto"><table class="rp-t">'
-    +  '<thead><tr><th>Date</th><th>Description</th><th>Group</th><th>Vendor</th><th class="rp-num">Amount</th></tr></thead><tbody>'
-    +  rows.slice().sort(function(a,b){ return String(a.expense_date) < String(b.expense_date) ? 1 : -1; })
-         .map(function(r){
-           const g = RP_ADM_G.filter(function(x){ return x[0] === r.statement_group; })[0];
-           return '<tr'+(r.statement_group?'':' style="background:#fffdf5"')+'>'
-             + '<td style="white-space:nowrap;color:#6b7394">'+rpEsc(String(r.expense_date).slice(5))+'</td>'
-             + '<td>'+rpEsc(r.description||'\u2014')
-             +   (r.note?'<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.note)+'</div>':'')+'</td>'
-             + '<td style="font-size:11px;font-weight:700;color:'+(g?g[2]:'#8a6100')+'">'+(g?rpEsc(g[1].replace(/^\d\.\s*/,'')):'\u26a0\uFE0F needs group')+'</td>'
-             + '<td style="font-size:11px;color:#6b7394">'+rpEsc(r.vendor||'\u2014')+'</td>'
-             + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td></tr>';
-         }).join('')
-    +  '</tbody></table></div>'
-    +  '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Synced from the "Expenses paid by Wendell" sheet \u2014 '
-    +  'the bridge reads it every 10 seconds and new rows are filed every 5 minutes. '
-    +  'Press \u21bb Refresh to pull the latest without reloading the page.</div></div>';
+    +  '</tbody></table>'
+    +  '<div style="font-size:10.5px;color:#8b93ad;margin-top:7px">Every peso here is Sir Wendell\u2019s book. '
+    +  'Open the <b>Payments</b> tab for the line-by-line entries behind these totals.</div></div>';
   return h;
 }
+
+// ---- TAB 2: payments, line by line -----------------------------------
+function rpAdmEntriesHtml(rows, total){
+  // Entry form. The tab decides the book: anything added here is admin &
+  // capital, never daily. No password to add — only editing and voiding
+  // ask for one.
+  var h = '<div class="rp-card" style="border-color:#f3c2e2">'
+    +  '<div style="font-size:12px;font-weight:800;color:#C01176;margin-bottom:9px">\u2795 Add an admin expense</div>'
+    +  '<div style="display:grid;grid-template-columns:130px minmax(0,2fr) 110px minmax(0,1.2fr) auto;gap:7px;align-items:end">'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Date</label>'
+    +      '<input type="date" id="rp-adm-date" class="rp-in" value="'+rpPhToday()+'"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Particulars</label>'
+    +      '<input id="rp-adm-desc" class="rp-in" list="rp-adm-descs" placeholder="e.g. Globe Bill"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Amount</label>'
+    +      '<input id="rp-adm-amt" class="rp-in" type="number" step="0.01" min="0" placeholder="0.00"></div>'
+    +    '<div><label style="font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em">Remarks</label>'
+    +      '<input id="rp-adm-rem" class="rp-in" placeholder="optional"></div>'
+    +    '<button class="rp-btn pri" id="rp-adm-save" onclick="rpAdmAdd()">Add</button>'
+    +  '</div>'
+    +  '<datalist id="rp-adm-descs">'
+    +    Array.from(new Set(rpAdmRows.map(function(r){ return r.description; }).filter(Boolean)))
+           .slice(0,300).map(function(d){ return '<option value="'+rpEsc(d)+'">'; }).join('')
+    +  '</datalist>'
+    +  '<div id="rp-adm-msg" style="font-size:11px;margin-top:7px;min-height:14px"></div>'
+    +  '<div style="font-size:10.5px;color:#8b93ad">Written to the "Expenses paid by Wendell" sheet first, then read back \u2014 '
+    +  'so the sheet and the dashboard can never disagree. Its group is assigned automatically on the way in.</div>'
+    + '</div>';
+
+  if(rpAdmPending && rpAdmPending.length){
+    h += '<div class="rp-card" style="border-color:#FFB725;background:#fffdf5">'
+      +  '<div style="font-size:12px;font-weight:800;color:#8a6100;margin-bottom:7px">\u23f3 Waiting to reach the sheet \u2014 '+rpAdmPending.length+'</div>'
+      +  rpAdmPending.map(function(p){
+           const q = p.payload || {};
+           return '<div style="font-size:11.5px;padding:3px 0;display:flex;justify-content:space-between;gap:8px">'
+             + '<span>'+rpEsc(q.expense_date||'')+' \u00b7 '+rpEsc(q.description||'')+'</span>'
+             + '<span style="font-weight:700">'+rpPeso(q.amount)+'</span></div>';
+         }).join('')
+      +  '<div style="font-size:10.5px;color:#8a6100;margin-top:6px">These appear below within about a minute.</div></div>';
+  }
+
+  const sorted = rows.slice().sort(function(a,b){
+    if(String(a.expense_date) !== String(b.expense_date)) return String(a.expense_date) < String(b.expense_date) ? 1 : -1;
+    return (b.id||0) - (a.id||0);
+  });
+  const uncl = sorted.filter(function(r){ return !r.statement_group; }).length;
+
+  h += '<div class="rp-card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:9px">'
+    +   '<div><div style="font-size:12px;font-weight:800;color:#025AC6">Payments \u2014 '+rpAdmMonthLabel(rpAdmMonth)+'</div>'
+    +     '<div id="rp-adm-pay-count" style="font-size:10.5px;color:#8b93ad;margin-top:2px">'+sorted.length+' rows \u00b7 '+rpPeso(total)+'</div></div>'
+    +   '<div style="display:flex;gap:6px;align-items:center">'
+    +     '<input class="rp-in" id="rp-adm-pay-q" placeholder="Search particulars, group, vendor, remarks\u2026" '
+    +       'style="width:280px;max-width:52vw" oninput="rpAdmSearch(this.value)">'
+    +     '<button class="rp-btn" onclick="rpAdmPayCsv()">\u2913 CSV</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="max-height:520px;overflow:auto"><table class="rp-t" style="min-width:800px">'
+    + '<thead><tr>'
+    +   '<th style="white-space:nowrap">Date</th>'
+    +   '<th>Description</th>'
+    +   '<th style="white-space:nowrap">Group</th>'
+    +   '<th>Vendor</th>'
+    +   '<th class="rp-num" style="white-space:nowrap">Amount</th>'
+    + '</tr></thead><tbody id="rp-adm-pay-body">'
+    + sorted.map(function(r){
+        const g = RP_ADM_G.filter(function(x){ return x[0] === r.statement_group; })[0];
+        const hay = [r.expense_date, r.description, r.note, r.vendor, g?g[1]:'ungrouped', r.amount]
+                      .map(function(x){ return String(x==null?'':x); }).join(' ').toLowerCase();
+        return '<tr data-amt="'+(Number(r.amount)||0)+'" data-s="'+rpEsc(hay)+'"'+(r.statement_group?'':' style="background:#fffdf5"')+'>'
+          + '<td style="white-space:nowrap;color:#6b7394">'+rpEsc(String(r.expense_date).slice(5))+'</td>'
+          + '<td>'+rpEsc(r.description||'\u2014')
+          +   (r.note?'<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.note)+'</div>':'')+'</td>'
+          + '<td style="font-size:11px;font-weight:700;white-space:nowrap;color:'+(g?g[2]:'#8a6100')+'">'+(g?rpEsc(g[1].replace(/^\d\.\s*/,'')):'\u26a0\uFE0F needs group')+'</td>'
+          + '<td style="font-size:11px;color:#6b7394">'+rpEsc(r.vendor||'\u2014')+'</td>'
+          + '<td class="rp-num" style="font-weight:700;white-space:nowrap">'+rpPeso(r.amount)+'</td></tr>';
+      }).join('')
+    + '</tbody></table></div>'
+    + '<div style="margin-top:9px;font-size:10.5px;color:#8b93ad">Synced from the "Expenses paid by Wendell" sheet \u2014 '
+    + 'the bridge reads it every 10 seconds and new rows are filed every 5 minutes. '
+    + 'Press \u21bb Refresh to pull the latest without reloading the page. '
+    + (uncl ? 'Cream rows are the '+uncl+' entr'+(uncl>1?'ies':'y')+' still waiting for a statement group.' : '')
+    + '</div></div>';
+  return h;
+}
+
+window.rpAdmSearch = function(q){
+  const t = String(q||'').toLowerCase().trim();
+  const body = document.getElementById('rp-adm-pay-body');
+  if(!body) return;
+  var shown = 0, sum = 0;
+  Array.prototype.forEach.call(body.getElementsByTagName('tr'), function(tr){
+    const hit = !t || (tr.getAttribute('data-s')||'').indexOf(t) >= 0;
+    tr.style.display = hit ? '' : 'none';
+    if(hit){ shown++; sum += Number(tr.getAttribute('data-amt'))||0; }
+  });
+  const c = document.getElementById('rp-adm-pay-count');
+  if(c) c.textContent = shown+' rows \u00b7 '+rpPeso(sum)+(t?' (filtered)':'');
+};
+
+window.rpAdmPayCsv = function(){
+  const rows = (rpAdmRows||[]).filter(function(r){ return String(r.expense_date).slice(0,7) === rpAdmMonth; })
+    .sort(function(a,b){ return String(a.expense_date) < String(b.expense_date) ? 1 : -1; });
+  const q = function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
+  const csv = ['Date,Description,Group,Vendor,Remarks,Amount']
+    .concat(rows.map(function(r){
+      const g = RP_ADM_G.filter(function(x){ return x[0] === r.statement_group; })[0];
+      return [q(r.expense_date), q(r.description||''), q(g?g[1].replace(/^\d\.\s*/,''):'ungrouped'),
+              q(r.vendor||''), q(r.note||''), (Number(r.amount)||0)].join(',');
+    })).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  a.download = 'admin_expenses_'+rpAdmMonth+'.csv';
+  a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
+};
+
+window.rpAdmSetTab = function(t){ rpAdmTab = t; rpRenderWendell(); };
 
 window.rpAdmSetMonth = function(m){ rpAdmMonth = m; rpRenderWendell(); };
 window.rpRenderWendell = rpRenderWendell;
