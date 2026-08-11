@@ -71,6 +71,21 @@
             white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .kpi .k-s{font-size:10px;color:var(--tx2);margin-top:2px;font-weight:600;line-height:1.3;}
   .kpi.tap:active{background:#f7f9fc;}
+  .cal-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;}
+  .cal-chip{flex:0 0 auto;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;
+            border:1px solid #e3e8f2;background:#fff;color:var(--tx2);white-space:nowrap;}
+  .cal-chip.on{background:#C01176;border-color:#C01176;color:#fff;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:10px;}
+  .cal-dow{font-size:9px;font-weight:800;color:var(--tx3);text-align:center;padding:2px 0;
+           text-transform:uppercase;letter-spacing:.3px;}
+  .cal-cell{aspect-ratio:1/1;border-radius:7px;background:#f4f6fa;padding:3px 2px 0;
+            display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+            min-width:0;overflow:hidden;}
+  .cal-cell.pad{background:transparent;}
+  .cal-d{font-size:9px;font-weight:700;color:var(--tx3);line-height:1;}
+  .cal-a{font-size:9.5px;font-weight:800;line-height:1.15;margin-top:2px;text-align:center;}
+  .cal-dot{width:4px;height:4px;border-radius:50%;background:#C01176;margin-top:1px;}
+  .cal-cell.hit:active{outline:2px solid #C01176;}
   .stat .s-n{font-size:21px;font-weight:500;margin-top:3px;}
   .stat .chev{position:absolute;top:12px;right:12px;color:var(--tx3);}
   .stat .chev svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;}
@@ -189,6 +204,7 @@
       <div id="groups"></div>
     </div>
 
+    <div id="mob-expcal" style="margin-top:14px;"></div>
     <div id="mob-lastmonth" style="margin-top:14px;"></div>
     <div id="mob-collperf" style="margin-top:14px;"></div>
 
@@ -1086,7 +1102,7 @@ async function loadOverview(){
     const groups=ov.harvest_by_group||[]; const max=Math.max.apply(null,groups.map(g=>+g.spawn||0).concat([1]));
     const gc={Dipolog:'#025AC6',Dapitan:'#FFB725',Polanco:'#028867',Roxas:'#C01176'};
     document.getElementById('groups').innerHTML=groups.map(g=>'<div class="grp-row"><span class="grp-n">'+g.grp+'</span><div class="grp-bar"><div style="width:'+Math.round((+g.spawn||0)/max*100)+'%;background:'+(gc[g.grp]||'#025AC6')+'"></div></div><span class="grp-v">'+peso(g.spawn)+'</span></div>').join('');
-    try{ mobMonthLabels(); mobLastMonth(ov); MOB_CP=ov.collector_perf||[]; mobCollPerf(); }catch(e){ console.warn('mob cards',e); }
+    try{ mobMonthLabels(); mobLastMonth(ov); MOB_CP=ov.collector_perf||[]; mobCollPerf(); mobExpCal(); }catch(e){ console.warn('mob cards',e); }
     // Overdue total (unharvested vendos) via owner RPC — also cached for the Overdue screen
     try{
       const ro=await gw({kind:'rpc',fn:'spawn_owner_overview',body:{}});
@@ -1097,6 +1113,116 @@ async function loadOverview(){
   }catch(e){ console.warn('overview failed',e); document.getElementById('hl-sub').textContent='couldn\u2019t load \u2014 tap refresh'; }
   finally{ rb.classList.remove('spin'); document.querySelector('.body').classList.remove('loading'); }
 }
+
+// ── Expense calendar (mobile) ──────────────────────────────
+var MOB_CAL=null, MOB_CAL_MONTH=null;
+
+async function mobExpCal(ym){
+  var el=document.getElementById('mob-expcal'); if(!el) return;
+  MOB_CAL_MONTH = ym || MOB_CAL_MONTH || mobYm();
+  el.innerHTML='<div class="card" style="margin:0;"><div class="card-h"><span class="t">EXPENSE CALENDAR</span></div>'
+    +'<div style="padding:14px 0;text-align:center;color:var(--tx2);font-size:12px">Loading\u2026</div></div>';
+  try{
+    var r=await gw({kind:'rpc',fn:'spawn_expense_calendar',body:{p_ym:MOB_CAL_MONTH}});
+    var c=await r.json(); if(Array.isArray(c)) c=c[0]; if(c&&c.spawn_expense_calendar) c=c.spawn_expense_calendar;
+    MOB_CAL=c||{};
+    el.innerHTML=mobCalHtml(MOB_CAL);
+  }catch(e){
+    el.innerHTML='<div class="card" style="margin:0;"><div class="card-h"><span class="t">EXPENSE CALENDAR</span></div>'
+      +'<div style="padding:14px 0;text-align:center;color:#DF1A35;font-size:12px">Could not load</div></div>';
+  }
+}
+function mobYm(){ try{
+    var d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }catch(e){ return '2026-08'; } }
+function mobMonName(ym){
+  var p=String(ym).split('-');
+  var M=['','January','February','March','April','May','June','July','August','September','October','November','December'];
+  return M[Number(p[1])]+' '+p[0];
+}
+function mobCalHtml(c){
+  var N=function(v){ return Number(v)||0; };
+  var days=c.days||[], byDay={};
+  days.forEach(function(d){ byDay[N(d.day)]=d; });
+  var max=N(c.max_day)||1, dim=N(c.days_in)||31, pad=(N(c.first_dow)||1)-1;
+
+  var chips=(c.months||[]).slice(0,8).map(function(m){
+    return '<button class="cal-chip'+(m===MOB_CAL_MONTH?' on':'')+'" onclick="mobExpCal(\''+m+'\')">'+mobMonName(m)+'</button>';
+  }).join('');
+
+  var h='<div class="card" style="margin:0;">'
+    + '<div class="card-h"><span class="t">EXPENSE CALENDAR</span></div>'
+    + '<div class="cal-chips">'+chips+'</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin-top:10px">'
+    +   '<span style="font-size:21px;font-weight:800;color:#C01176">'+peso(c.total)+'</span>'
+    +   '<span style="font-size:11px;color:var(--tx2);font-weight:600">Daily '+mobShort(c.daily)
+    +     ' \u00B7 Admin '+mobShort(c.admin)+'</span>'
+    + '</div>'
+    + '<div style="font-size:10.5px;color:var(--tx3);margin-top:2px">'
+    +   N(c.entries)+' entries over '+N(c.active_days)+' day'+(N(c.active_days)===1?'':'s')
+    +   ' \u00B7 tap a day for the list</div>'
+    + '<div class="cal-grid">'
+    + ['M','T','W','T','F','S','S'].map(function(d){ return '<div class="cal-dow">'+d+'</div>'; }).join('');
+
+  for(var i=0;i<pad;i++) h+='<div class="cal-cell pad"></div>';
+  for(var d=1;d<=dim;d++){
+    var row=byDay[d];
+    if(!row){
+      h+='<div class="cal-cell"><span class="cal-d">'+d+'</span></div>';
+      continue;
+    }
+    var t=N(row.total);
+    var w=Math.min(1, t/max);
+    var bg='rgba(192,17,118,'+(0.10+w*0.62).toFixed(2)+')';
+    var fg=w>0.45?'#fff':'#8a1156';
+    h+='<div class="cal-cell hit" style="background:'+bg+'" onclick="mobCalDay(\''+row.date+'\')">'
+      +  '<span class="cal-d" style="color:'+(w>0.45?'rgba(255,255,255,.85)':'#a8558a')+'">'+d+'</span>'
+      +  '<span class="cal-a" style="color:'+fg+'">'+mobShort(t)+'</span>'
+      +  (N(row.admin)?'<span class="cal-dot" style="background:'+(w>0.45?'#fff':'#311A8E')+'"></span>':'')
+      +'</div>';
+  }
+  h+='</div>';
+
+  var top=days.slice().sort(function(a,b){ return N(b.total)-N(a.total); }).slice(0,3);
+  if(top.length){
+    h+='<div style="margin-top:11px;border-top:1px solid #eef1f6;padding-top:9px">'
+      +'<div style="font-size:10px;font-weight:800;color:var(--tx3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px">Heaviest days</div>'
+      + top.map(function(r){
+          return '<div class="sh-row" style="cursor:pointer" onclick="mobCalDay(\''+r.date+'\')">'
+            + '<span>'+mobMonName(MOB_CAL_MONTH).split(' ')[0]+' '+N(r.day)
+            + ' <span style="color:var(--tx3);font-size:10px">\u00B7 '+N(r.entries)+' entries</span></span>'
+            + '<span class="v">'+peso(r.total)+'</span></div>';
+        }).join('')
+      +'</div>';
+  }
+  h+='<div style="font-size:9.5px;color:var(--tx3);margin-top:8px;line-height:1.4">'
+    +'Shade follows the size of the day. A dot marks a day with admin spending in it.</div>';
+  return h+'</div>';
+}
+
+window.mobCalDay=async function(dt){
+  openSheet(dt, '<div class="sh-row"><span>Loading\u2026</span></div>');
+  try{
+    var r=await gw({kind:'rest',table:'expenses',method:'GET',
+      query:'select=description,amount,category,statement_group,book,co&voided_at=is.null'
+            +'&expense_date=eq.'+dt+'&order=amount.desc&limit=200'});
+    var rows=await r.json();
+    if(!rows||!rows.length){ openSheet(dt,'<div class="sh-row"><span>No expenses that day</span></div>'); return; }
+    var tot=rows.reduce(function(a,x){ return a+(Number(x.amount)||0); },0);
+    var body=rows.map(function(x){
+      var tag=x.book==='admin' ? (x.statement_group||'admin') : (x.category||'\u2014');
+      return '<div class="sh-row"><span>'+(x.description||'\u2014')
+        + '<div style="font-size:10px;color:var(--tx3)">'+tag
+        + (x.co?' \u00B7 c/o '+x.co:'')
+        + (x.book==='admin'?' \u00B7 admin book':'')+'</div></span>'
+        + '<span class="v">'+peso(x.amount)+'</span></div>';
+    }).join('');
+    openSheet(dt+' \u00B7 '+peso(tot), body);
+  }catch(e){
+    openSheet(dt,'<div class="sh-row"><span>Could not load</span></div>');
+  }
+};
 
 // ── Overview KPI strip (mirrors the dashboard header cards) ──
 var MOB_OVERDUE=null;
