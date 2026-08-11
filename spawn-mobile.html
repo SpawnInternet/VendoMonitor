@@ -1125,6 +1125,93 @@ async function loadOverview(){
   finally{ rb.classList.remove('spin'); document.querySelector('.body').classList.remove('loading'); }
 }
 
+// ── Bar-graph breakdowns behind the Last Month Summary cards ──
+var MOB_BRK=null, MOB_BRK_YM=null;
+var MOB_BRK_DEF={
+  harvest:    { t:'Harvest spawn share', key:'harvest',    tot:'harvest_total',    c:'#028867' },
+  subscriber: { t:'Subscriber income',   key:'subscriber', tot:'subscriber_total', c:'#FFB725' },
+  expense:    { t:'Expense by group',    key:'expense',    tot:'expense_total',    c:'#C01176' }
+};
+
+window.mobBreak=async function(kind){
+  var def=MOB_BRK_DEF[kind];
+  var title=(def?def.t:'Breakdown')+(MOB_BRK_YM?' \u00B7 '+mobMonName(MOB_BRK_YM):'');
+  openSheet(title, '<div class="sh-row"><span>Loading\u2026</span></div>');
+  try{
+    if(!MOB_BRK || MOB_BRK.month !== MOB_BRK_YM){
+      var r=await gw({kind:'rpc',fn:'spawn_month_breakdown',body:{p_ym:MOB_BRK_YM}});
+      var j=await r.json(); if(Array.isArray(j)) j=j[0]; if(j&&j.spawn_month_breakdown) j=j.spawn_month_breakdown;
+      MOB_BRK=j||{};
+    }
+    openSheet(title, kind==='net' ? mobNetBars(MOB_BRK) : mobBars(MOB_BRK, def));
+  }catch(e){
+    openSheet(title, '<div class="sh-row"><span>Could not load</span></div>');
+  }
+};
+
+function mobBarRow(label, amt, max, total, color, sub){
+  var w=max?Math.max(2, Math.round(amt/max*100)):0;
+  return '<div style="margin-bottom:11px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px">'
+    +   '<span style="font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+label+'</span>'
+    +   '<span style="font-size:12.5px;font-weight:800;white-space:nowrap">'+peso(amt)+'</span>'
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:7px">'
+    +   '<div style="flex:1;background:var(--bg);border-radius:4px;height:11px;overflow:hidden">'
+    +     '<div style="height:100%;width:'+w+'%;background:'+color+';border-radius:4px"></div></div>'
+    +   '<span style="font-size:10px;color:var(--tx3);width:34px;text-align:right">'
+    +     (total?(amt/total*100).toFixed(0)+'%':'')+'</span>'
+    + '</div>'
+    + (sub?'<div style="font-size:10px;color:var(--tx3);margin-top:1px">'+sub+'</div>':'')
+    + '</div>';
+}
+
+function mobBars(d, def){
+  var rows=(d[def.key]||[]), total=Number(d[def.tot])||0;
+  if(!rows.length) return '<div class="sh-row"><span>Nothing recorded that month</span></div>';
+  var max=rows.reduce(function(a,r){ return Math.max(a, Number(r.amt)||0); }, 0);
+  var head='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line)">'
+    + '<span style="font-size:11px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px">Total</span>'
+    + '<span style="font-size:19px;font-weight:800;color:'+def.c+'">'+peso(total)+'</span></div>';
+  if(def.key==='expense'){
+    head+='<div style="display:flex;gap:8px;margin-bottom:12px">'
+      + '<div style="flex:1;background:var(--bg);border-radius:8px;padding:7px 9px">'
+      +   '<div style="font-size:9.5px;color:var(--tx3);font-weight:700;text-transform:uppercase">Daily book</div>'
+      +   '<div style="font-size:14px;font-weight:800;color:#025AC6">'+peso(d.expense_daily)+'</div></div>'
+      + '<div style="flex:1;background:var(--bg);border-radius:8px;padding:7px 9px">'
+      +   '<div style="font-size:9.5px;color:var(--tx3);font-weight:700;text-transform:uppercase">Admin book</div>'
+      +   '<div style="font-size:14px;font-weight:800;color:#C01176">'+peso(d.expense_admin)+'</div></div>'
+      + '</div>';
+  }
+  return head + rows.map(function(r){
+    var col = def.key==='expense'
+      ? (r.book==='admin' ? '#C01176' : '#025AC6')
+      : def.c;
+    var sub = Number(r.n) ? Number(r.n).toLocaleString()+' '
+              + (def.key==='harvest' ? 'harvests' : def.key==='subscriber' ? 'payments' : 'entries')
+              + (def.key==='expense' ? ' \u00B7 '+(r.book==='admin'?'admin book':'daily book') : '')
+            : '';
+    return mobBarRow(r.label, Number(r.amt)||0, max, total, col, sub);
+  }).join('')
+  + (def.key==='expense'
+     ? '<div style="font-size:10px;color:var(--tx3);margin-top:6px;line-height:1.4">Blue is the Collections book, magenta is Sir Wendell\u2019s. The two are kept separate and only meet at the total.</div>'
+     : '');
+}
+
+function mobNetBars(d){
+  var harv=Number(d.harvest_total)||0, sub=Number(d.subscriber_total)||0, exp=Number(d.expense_total)||0;
+  var net=harv+sub-exp, max=Math.max(harv,sub,exp,Math.abs(net));
+  return '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line)">'
+    + '<span style="font-size:11px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px">Net income</span>'
+    + '<span style="font-size:19px;font-weight:800;color:'+(net<0?'#DF1A35':'#0F6E56')+'">'+peso(net)+'</span></div>'
+    + mobBarRow('Harvest spawn share', harv, max, 0, '#028867', 'money in')
+    + mobBarRow('Subscriber collections', sub, max, 0, '#FFB725', 'money in')
+    + mobBarRow('Expenses', exp, max, 0, '#C01176', 'money out \u00B7 daily '+mobShort(d.expense_daily)+' + admin '+mobShort(d.expense_admin))
+    + '<div style="font-size:10.5px;color:var(--tx3);margin-top:8px;line-height:1.45">'
+    + 'Net = harvest + subscriber \u2212 daily expense \u2212 admin expense. '
+    + 'Harvest is Spawn\u2019s 75% share, not the gross coins.</div>';
+}
+
 // ── Hero: net income and its three parts ────────────
 function mobHero(ov){
   var N=function(v){ return Number(v)||0; };
@@ -1317,10 +1404,12 @@ function mobLastMonth(ov){
   var el=document.getElementById('mob-lastmonth'); if(!el) return;
   var expTot=Number(ov.prev_exp_daily||0)+Number(ov.prev_exp_admin||0);
   var subInc=Number(ov.prev_sub||0);
+  MOB_BRK_YM=ov.prev_ym||null;
   // Net = Harvest + Subscriber Collection \u2212 Daily Expense \u2212 Admin Expense
   var net=Number(ov.prev_harvest||0)+subInc-expTot;
-  function cell(label,value,color,sub,wide){
-    return '<div style="background:#f7f9fc;border-radius:10px;border-bottom:3px solid '+color+';padding:10px 11px;'+(wide?'grid-column:1/-1;':'')+'">'
+  function cell(label,value,color,sub,wide,tap){
+    return '<div style="background:#f7f9fc;border-radius:10px;border-bottom:3px solid '+color+';padding:10px 11px;'+(wide?'grid-column:1/-1;':'')+(tap?'cursor:pointer;':'')+'"'
+      +(tap?' onclick="mobBreak(\''+tap+'\')"':'')+'>'
       +'<div style="font-size:10px;color:var(--tx2);font-weight:700;text-transform:uppercase;letter-spacing:.3px;line-height:1.3">'+label+'</div>'
       +'<div style="font-size:18px;font-weight:800;color:'+color+';margin-top:3px">'+value+'</div>'
       +(sub?'<div style="font-size:10px;color:var(--tx2);margin-top:1px;font-weight:600">'+sub+'</div>':'')
@@ -1333,12 +1422,12 @@ function mobLastMonth(ov){
     +'</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
     +cell('Telegram Sales',peso(ov.prev_tg),'#025AC6')
-    +cell('Harvested Spawn',peso(ov.prev_harvest),'#028867')
-    +cell('Subscriber Income',peso(subInc),'#FFB725')
+    +cell('Harvested Spawn',peso(ov.prev_harvest),'#028867',null,false,'harvest')
+    +cell('Subscriber Income',peso(subInc),'#FFB725',null,false,'subscriber')
     +cell('Spawn Cloud',peso(ov.prev_cloud),'#311A8E')
     +cell('Suspicious Txns',Number(ov.prev_sus_cnt||0).toLocaleString(),'#DF1A35',peso(ov.prev_sus_amt))
-    +cell('Expense',peso(expTot),'#C01176','Daily '+mobShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?mobShort(ov.prev_exp_admin):'\u2014'))
-    +cell('Net Income',peso(net),(net<0?'#DF1A35':'#0F6E56'),'Harvest '+mobShort(ov.prev_harvest)+' + subscriber '+mobShort(subInc)+' \u2212 expense '+mobShort(expTot),true)
+    +cell('Expense',peso(expTot),'#C01176','Daily '+mobShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?mobShort(ov.prev_exp_admin):'\u2014'),false,'expense')
+    +cell('Net Income',peso(net),(net<0?'#DF1A35':'#0F6E56'),'Harvest '+mobShort(ov.prev_harvest)+' + subscriber '+mobShort(subInc)+' \u2212 expense '+mobShort(expTot),true,'net')
     +'</div></div>';
 }
 var MOB_CP=[], MOB_CP_MONTH=null;
