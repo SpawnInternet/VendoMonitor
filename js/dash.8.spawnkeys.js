@@ -533,7 +533,7 @@
   // Step 1 — look the fob up and ask for confirmation.
   window.skFbBind=async function(force){
     var msg=document.getElementById('fb-bind-msg');
-    var code=(document.getElementById('fb-code').value||'').trim().toUpperCase();
+    var code=(document.getElementById('fb-code').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
     if(!_fbVendo){ msg.innerHTML='<span style="color:#DF1A35;">Pick a vendo first.</span>'; return; }
     if(!code){ msg.innerHTML='<span style="color:#DF1A35;">Enter the fob code.</span>'; return; }
     msg.innerHTML='<span style="color:#6b7280;">Checking fob&hellip;</span>';
@@ -580,7 +580,7 @@
       +   '<div style="margin-bottom:18px;">'+fbKtPill(fob.key_type)+'</div>'
       +   '<div style="display:flex;gap:9px;">'
       +     fbBtn('Cancel','#9ca3af','skFbCloseModal()')
-      +     fbBtn('Confirm bind','#028867','skFbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+      +     fbBtn('Confirm bind','#028867','skFbConfirmBind(\''+code+'\','+(force?'true':'false')+')')
       +   '</div>'
       + '</div>'
     );
@@ -611,7 +611,7 @@
         +   '<div style="font-size:13px;color:#4b5563;margin-bottom:16px;">'+esc(d.error||'')+'</div>'
         +   '<div style="display:flex;gap:9px;">'
         +     fbBtn('Cancel','#9ca3af','skFbCloseModal()')
-        +     fbBtn('Move it here','#028867','skFbConfirmBind('+JSON.stringify(code)+',true)')
+        +     fbBtn('Move it here','#028867','skFbConfirmBind(\''+code+'\',true)')
         +   '</div>'
         + '</div>'
       );
@@ -634,7 +634,7 @@
         +   '<div style="font-size:12px;color:#9ca3af;margin-bottom:16px;">'+esc((d&&d.error)||'The write did not land. Do not assume it is bound \u2014 try again.')+'</div>'
         +   '<div style="display:flex;gap:9px;">'
         +     fbBtn('Close','#9ca3af','skFbCloseModal()')
-        +     fbBtn('Try again','#025AC6','skFbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+        +     fbBtn('Try again','#025AC6','skFbConfirmBind(\''+code+'\','+(force?'true':'false')+')')
         +   '</div>'
         + '</div>'
       );
