@@ -3202,7 +3202,7 @@ function lmVendoInput(){
   _lmVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
-      .then(r=>r.json())
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
@@ -3216,7 +3216,7 @@ function lmVendoInput(){
         }).join('');
         box.style.display='block';
       })
-      .catch(()=>{ box.style.display='none'; });
+      .catch(e=>{ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#DF1A35;font-weight:700;">Search failed \u2014 '+(e&&e.message||'error')+'</div>'; box.style.display='block'; });
   }, 300);
 }
 
@@ -3968,7 +3968,7 @@ function kcVendoInput(){
   _kcVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
-      .then(r=>r.json())
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
@@ -3983,7 +3983,7 @@ function kcVendoInput(){
         }).join('');
         box.style.display='block';
       })
-      .catch(()=>{ box.style.display='none'; });
+      .catch(e=>{ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#DF1A35;font-weight:700;">Search failed \u2014 '+(e&&e.message||'error')+'</div>'; box.style.display='block'; });
   }, 300);
 }
 
@@ -4203,7 +4203,7 @@ function viVendoInput(){
   _viVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,server_name&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
-      .then(r=>r.json())
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ New vendo — just type the name, it will still save.</div>'; box.style.display='block'; return; }
         box.innerHTML = '<div style="padding:8px 12px;font-size:11px;color:#6b7280;background:#fafafa;border-bottom:1px solid #f1f5f9;">Click to link an existing vendo, or just type for a new one:</div>'
@@ -4223,7 +4223,7 @@ function viVendoInput(){
         }).join('');
         box.style.display='block';
       })
-      .catch(()=>{ box.style.display='none'; });
+      .catch(e=>{ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#DF1A35;font-weight:700;">Search failed \u2014 '+(e&&e.message||'error')+'</div>'; box.style.display='block'; });
   }, 300);
 }
 
@@ -4630,7 +4630,7 @@ function viTgInput(){
         ).join('');
         box.style.display='block';
       })
-      .catch(()=>{ box.style.display='none'; });
+      .catch(e=>{ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#DF1A35;font-weight:700;">Search failed \u2014 '+(e&&e.message||'error')+'</div>'; box.style.display='block'; });
   }, 300);
 }
 
@@ -4756,7 +4756,7 @@ function ktVendoInput(){
   _ktVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
     fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
-      .then(r=>r.json())
+      .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
         box.innerHTML = rows.map(v=>{
@@ -4770,7 +4770,7 @@ function ktVendoInput(){
         }).join('');
         box.style.display='block';
       })
-      .catch(()=>{ box.style.display='none'; });
+      .catch(e=>{ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#DF1A35;font-weight:700;">Search failed \u2014 '+(e&&e.message||'error')+'</div>'; box.style.display='block'; });
   }, 300);
 }
 
