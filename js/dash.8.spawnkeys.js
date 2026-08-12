@@ -504,27 +504,161 @@
     document.getElementById('fb-vendo-picked').textContent='✓ '+name;
   };
 
+  // ── confirm modal ──────────────────────────────────────────────
+  //  The old flow fired spawn_qr_bind the instant Bind was clicked and
+  //  trusted the RPC's reply. If that reply arrived but the row had not
+  //  actually changed, the green line still appeared and the bind was
+  //  silently lost. Now: confirm what is about to be bound, then verify
+  //  the row on the server before showing success.
+  window.skFbCloseModal=function(){
+    var m=document.getElementById('fb-modal'); if(m) m.remove();
+  };
+  function fbModal(inner){
+    window.skFbCloseModal();
+    var ov=document.createElement('div');
+    ov.id='fb-modal';
+    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML='<div onclick="event.stopPropagation()" style="background:#fff;border-radius:18px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:inherit;">'+inner+'</div>';
+    ov.onclick=window.skFbCloseModal;
+    document.body.appendChild(ov);
+  }
+  function fbBtn(label,color,onclick){
+    return '<button onclick="'+onclick+'" style="flex:1;padding:11px 14px;background:'+color+';color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">'+label+'</button>';
+  }
+  function fbKtPill(kt){
+    var c={pungpung:'#311A8E',duplicate:'#025AC6',board:'#028867'}[kt]||'#6b7280';
+    return '<span style="display:inline-block;background:'+c+';color:#fff;padding:3px 12px;border-radius:99px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">'+esc(kt||'unknown')+' key</span>';
+  }
+
+  // Step 1 — look the fob up and ask for confirmation.
   window.skFbBind=async function(force){
     var msg=document.getElementById('fb-bind-msg');
     var code=(document.getElementById('fb-code').value||'').trim().toUpperCase();
     if(!_fbVendo){ msg.innerHTML='<span style="color:#DF1A35;">Pick a vendo first.</span>'; return; }
     if(!code){ msg.innerHTML='<span style="color:#DF1A35;">Enter the fob code.</span>'; return; }
-    msg.innerHTML='<span style="color:#6b7280;">Binding…</span>';
+    msg.innerHTML='<span style="color:#6b7280;">Checking fob&hellip;</span>';
+
+    var fob=null;
     try{
-      var body={p_qr:code, p_vendo_id:_fbVendo.id, p_account:'dashboard', p_force:!!force};
+      var rows=await skGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status&qr_code=eq.'+encodeURIComponent(code));
+      fob=Array.isArray(rows)&&rows.length?rows[0]:null;
+    }catch(e){
+      msg.innerHTML='<span style="color:#DF1A35;">Could not reach the server \u2014 nothing was bound. Try again.</span>';
+      return;
+    }
+    if(!fob){
+      msg.innerHTML='<span style="color:#DF1A35;">\u274c '+esc(code)+' is not a Spawn fob code.</span>';
+      return;
+    }
+    msg.innerHTML='';
+
+    // Already bound elsewhere → warn before overwriting.
+    var warn='';
+    if(fob.vendo_id && fob.vendo_id!==_fbVendo.id){
+      var curName='vendo #'+fob.vendo_id;
+      try{
+        var cur=await skGet('vendos?select=sheet_name,tg_name,owner_name&id=eq.'+fob.vendo_id);
+        if(Array.isArray(cur)&&cur.length) curName=cur[0].sheet_name||cur[0].owner_name||cur[0].tg_name||curName;
+      }catch(e){}
+      warn='<div style="background:#FEF3C7;border:1.5px solid #F59E0B;color:#92400E;border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;margin-bottom:12px;">\u26a0 This fob is already bound to <b>'+esc(curName)+'</b>. Binding here will move it.</div>';
+    }
+    if(fob.vendo_id===_fbVendo.id){
+      warn='<div style="background:#E0F2FE;border:1.5px solid #0284C7;color:#075985;border-radius:10px;padding:10px 12px;font-size:12px;font-weight:700;margin-bottom:12px;">This fob is already bound to this vendo. Confirming will just re-save it.</div>';
+    }
+
+    fbModal(
+      '<div style="background:#025AC6;color:#fff;padding:18px;text-align:center;">'
+      +   '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;opacity:.9;">Confirm bind</div>'
+      + '</div>'
+      + '<div style="padding:18px;">'
+      +   warn
+      +   '<div style="font-size:11px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;">Vendo</div>'
+      +   '<div style="font-size:17px;font-weight:800;margin-bottom:14px;">'+esc(_fbVendo.name)+'</div>'
+      +   '<div style="font-size:11px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;">Fob code</div>'
+      +   '<div style="font-family:monospace;font-size:19px;font-weight:800;letter-spacing:.08em;margin-bottom:14px;">'+esc(code)+'</div>'
+      +   '<div style="font-size:11px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Key type</div>'
+      +   '<div style="margin-bottom:18px;">'+fbKtPill(fob.key_type)+'</div>'
+      +   '<div style="display:flex;gap:9px;">'
+      +     fbBtn('Cancel','#9ca3af','skFbCloseModal()')
+      +     fbBtn('Confirm bind','#028867','skFbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+      +   '</div>'
+      + '</div>'
+    );
+  };
+
+  // Step 2 — write it, then read the row back and prove it saved.
+  window.skFbConfirmBind=async function(code,force){
+    var vendo=_fbVendo;
+    if(!vendo){ window.skFbCloseModal(); return; }
+    fbModal('<div style="padding:34px 20px;text-align:center;color:#6b7280;font-size:14px;font-weight:700;">Binding&hellip;</div>');
+
+    var d=null;
+    try{
+      var body={p_qr:code, p_vendo_id:vendo.id, p_account:'dashboard', p_force:!!force};
       var r=await fetch(SK_SB+'/rest/v1/rpc/spawn_qr_bind',{method:'POST',headers:SK_HDR,body:JSON.stringify(body)});
-      var d=await r.json();
-      if(d && d.already_bound){
-        msg.innerHTML='<span style="color:#d97706;">⚠ '+esc(d.error)+'</span> '
-          +'<button onclick="skFbBind(true)" style="margin-left:8px;padding:5px 12px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Rebind here</button>';
-        return;
-      }
-      if(!d || !d.ok){ msg.innerHTML='<span style="color:#DF1A35;">❌ '+esc((d&&d.error)||'Bind failed')+'</span>'; return; }
-      var kt=(d.key_type||'').charAt(0).toUpperCase()+(d.key_type||'').slice(1);
-      msg.innerHTML='<span style="color:#028867;font-weight:800;">✅ Bound '+esc(code)+' ('+esc(kt)+') → '+esc(d.vendo||_fbVendo.name)+'</span>';
-      document.getElementById('fb-code').value='';
-      await skFobsLoad();
-    }catch(e){ msg.innerHTML='<span style="color:#DF1A35;">Error: '+esc(String(e&&e.message||e))+'</span>'; }
+      var txt=await r.text();
+      try{ d=JSON.parse(txt); }
+      catch(e){ d={ok:false, error:'HTTP '+r.status+' \u2014 '+txt.slice(0,120)}; }
+    }catch(e){
+      d={ok:false, error:'No connection \u2014 bind not saved.'};
+    }
+
+    if(d && d.already_bound && !force){
+      fbModal(
+        '<div style="background:#F59E0B;color:#fff;padding:18px;text-align:center;"><div style="font-size:32px;line-height:1;">\u26a0</div>'
+        + '<div style="font-weight:800;font-size:16px;margin-top:5px;">Already bound</div></div>'
+        + '<div style="padding:18px;">'
+        +   '<div style="font-size:13px;color:#4b5563;margin-bottom:16px;">'+esc(d.error||'')+'</div>'
+        +   '<div style="display:flex;gap:9px;">'
+        +     fbBtn('Cancel','#9ca3af','skFbCloseModal()')
+        +     fbBtn('Move it here','#028867','skFbConfirmBind('+JSON.stringify(code)+',true)')
+        +   '</div>'
+        + '</div>'
+      );
+      return;
+    }
+
+    // Read-back verification. The RPC saying ok is not proof; the row is.
+    var saved=null;
+    try{
+      var chk=await skGet('vendo_key_qr?select=qr_code,key_type,vendo_id,bound_at,bound_by&qr_code=eq.'+encodeURIComponent(code));
+      saved=Array.isArray(chk)&&chk.length?chk[0]:null;
+    }catch(e){}
+
+    if(!saved || saved.vendo_id!==vendo.id){
+      fbModal(
+        '<div style="background:#DF1A35;color:#fff;padding:20px;text-align:center;"><div style="font-size:36px;line-height:1;">\u274c</div>'
+        + '<div style="font-weight:800;font-size:17px;margin-top:5px;">NOT SAVED</div></div>'
+        + '<div style="padding:18px;">'
+        +   '<div style="font-size:13px;color:#4b5563;margin-bottom:6px;">The database still does not show this fob on <b>'+esc(vendo.name)+'</b>.</div>'
+        +   '<div style="font-size:12px;color:#9ca3af;margin-bottom:16px;">'+esc((d&&d.error)||'The write did not land. Do not assume it is bound \u2014 try again.')+'</div>'
+        +   '<div style="display:flex;gap:9px;">'
+        +     fbBtn('Close','#9ca3af','skFbCloseModal()')
+        +     fbBtn('Try again','#025AC6','skFbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+        +   '</div>'
+        + '</div>'
+      );
+      return;
+    }
+
+    fbModal(
+      '<div style="background:linear-gradient(135deg,#0f9d63,#16a34a);color:#fff;padding:22px 18px;text-align:center;">'
+      +   '<div style="font-size:40px;line-height:1;">\u2705</div>'
+      +   '<div style="font-weight:800;font-size:20px;margin-top:5px;">BOUND</div>'
+      +   '<div style="font-size:14px;margin-top:5px;opacity:.95;"><b>'+esc(d&&d.vendo?d.vendo:vendo.name)+'</b></div>'
+      +   '<div style="margin-top:9px;">'+fbKtPill(saved.key_type)+'</div>'
+      +   '<div style="font-family:monospace;font-size:12px;margin-top:9px;opacity:.9;">'+esc(code)+'</div>'
+      + '</div>'
+      + '<div style="padding:16px 18px;">'
+      +   '<div style="font-size:12px;color:#028867;font-weight:700;text-align:center;margin-bottom:14px;">\u2713 Verified saved in the database</div>'
+      +   fbBtn('Done','#025AC6','skFbCloseModal()')
+      + '</div>'
+    );
+
+    var msg=document.getElementById('fb-bind-msg');
+    if(msg) msg.innerHTML='<span style="color:#028867;font-weight:800;">\u2705 '+esc(code)+' \u2192 '+esc(vendo.name)+'</span>';
+    var ci=document.getElementById('fb-code'); if(ci) ci.value='';
+    await skFobsLoad();
   };
 
 
