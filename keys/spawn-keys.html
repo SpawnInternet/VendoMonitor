@@ -1968,6 +1968,37 @@ async function bindShow(d,qr){
       +'<button class="btn btn-gray" style="width:100%;margin-top:16px" onclick="skCloseModal()">Close</button></div>');
     return;
   }
+  // ── Read-back verification ──
+  // spawn_qr_bind replying ok is not proof the row changed. A reply can reach
+  // the phone while the write never landed, and the old code painted the green
+  // BINDED screen off that reply alone — so binds were lost silently and the
+  // keeper walked away believing the fob was registered. Check the row itself.
+  skModal('<div style="padding:34px 20px;text-align:center;color:#7a869c;font-size:14px;font-weight:700">Verifying…</div>');
+  let savedRow=null;
+  try{
+    const chk=await sbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,bound_at,bound_by&qr_code=eq.'+encodeURIComponent(qr));
+    savedRow=Array.isArray(chk)&&chk.length?chk[0]:null;
+  }catch(e){ savedRow=null; }
+
+  if(!savedRow || !BIND_VENDO || savedRow.vendo_id!==BIND_VENDO.id){
+    try{ navigator.vibrate && navigator.vibrate([80,60,80,60,80]); }catch(e){}
+    skModal(
+      '<div style="background:#DF1A35;color:#fff;padding:22px 18px;text-align:center;border-radius:18px 18px 0 0">'
+      + '<div style="font-size:40px;line-height:1">❌</div>'
+      + '<div style="font-weight:800;font-size:20px;margin-top:6px">NOT SAVED</div>'
+      + '<div style="font-family:monospace;font-size:12px;margin-top:8px;opacity:.9">'+esc(qr)+'</div>'
+      + '</div>'
+      + '<div style="padding:16px 18px">'
+      +   '<div style="font-size:13px;color:#4b5563">The database does not show this fob on <b>'
+      +     esc((BIND_VENDO&&(BIND_VENDO.sheet_name||BIND_VENDO.tg_name))||'this vendo')+'</b>.</div>'
+      +   '<div style="font-size:12px;color:#9aa5b5;margin-top:6px">Do NOT assume it is bound. Scan it again on a good signal.</div>'
+      +   '<button class="btn btn-pri" style="width:100%;margin-top:14px" onclick="skCloseModal();bindOnCode('+JSON.stringify(qr)+')">Try again</button>'
+      +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal()">Close</button>'
+      + '</div>'
+    );
+    return;
+  }
+
   toast('✅ Binded — '+(d.vendo||BIND_VENDO.sheet_name||'key'), 3000);
   try{ navigator.vibrate && navigator.vibrate([30,40,30]); }catch(e){}
   const same=d.already_bound_same?' (already bound)':'';
@@ -1981,6 +2012,7 @@ async function bindShow(d,qr){
     + '<div style="font-size:12px;margin-top:10px;font-family:monospace;opacity:.9">'+esc(qr)+(d.by?' · by '+esc(d.by):'')+'</div>'
     + '</div>'
     + '<div style="padding:16px 18px">'
+    +   '<div style="text-align:center;color:#028867;font-size:12px;font-weight:800;padding:0 0 10px">✓ Verified saved in the database</div>'
     +   '<div id="bind-modal-profile"><div style="text-align:center;color:#9aa5b5;font-size:12px;padding:8px">Loading vendo details…</div></div>'
     +   '<button class="btn btn-pri" style="width:100%;margin-top:14px" onclick="skCloseModal();bindStartScan()">📷 Scan another fob for this vendo</button>'
     +   '<button class="btn btn-gray" style="width:100%;margin-top:8px" onclick="skCloseModal();openBind()">Bind a different vendo</button>'
