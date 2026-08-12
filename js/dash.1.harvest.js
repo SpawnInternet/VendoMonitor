@@ -3185,6 +3185,14 @@ const LM_KEYS = [
 ];
 const LM_SHORT = { coin_original:'Coins (Original)', coin_duplicate:'Coins (Duplicate)', coin_pungpung:'Coins (Pungpung)', board:'Board' };
 
+
+/* Vendo name lookups are plain reads and must not depend on the admin gateway
+   token. _HDR uses apikey 'gw', which dash.0.core.js reroutes through
+   spawn-gw-admin; with no token in the session it 401s and the search box
+   silently showed "No vendo found." _VS_HDR talks straight to PostgREST with
+   the anon key, exactly like the Fobs pane already does. */
+var _VS_HDR = {'apikey':_ANON,'Authorization':'Bearer '+_ANON,'Content-Type':'application/json'};
+
 function lmVendoInput(){
   clearTimeout(_lmVT);
   const q = (document.getElementById('kl-lm-vq')||{}).value.trim();
@@ -3193,7 +3201,7 @@ function lmVendoInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _lmVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
-    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
@@ -3959,7 +3967,7 @@ function kcVendoInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _kcVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
-    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
@@ -4194,7 +4202,7 @@ function viVendoInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _viVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
-    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,server_name&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,server_name&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#028867;font-weight:700;">✏️ New vendo — just type the name, it will still save.</div>'; box.style.display='block'; return; }
@@ -4747,7 +4755,7 @@ function ktVendoInput(){
   if(q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
   _ktVT = setTimeout(()=>{
     const enc = encodeURIComponent('*'+q+'*');
-    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_HDR})
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12', {headers:_VS_HDR})
       .then(r=>r.json())
       .then(rows=>{
         if(!Array.isArray(rows) || !rows.length){ box.innerHTML='<div style="padding:10px 12px;font-size:12px;color:#6b7280;">No vendo found.</div>'; box.style.display='block'; return; }
