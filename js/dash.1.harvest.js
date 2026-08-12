@@ -5884,7 +5884,7 @@ function _fbBigKt(kt){
 
 async function fbBind(force){
   const msg=document.getElementById('fb-bind-msg');
-  const code=(document.getElementById('fb-code').value||'').trim().toUpperCase();
+  const code=(document.getElementById('fb-code').value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   if(!_fbVendo){ msg.innerHTML='<span style="color:#DF1A35;">Pick a vendo first.</span>'; return; }
   if(!code){ msg.innerHTML='<span style="color:#DF1A35;">Enter the fob code.</span>'; return; }
   msg.innerHTML='<span style="color:#6b7280;">Checking fob…</span>';
@@ -5926,7 +5926,7 @@ async function fbBind(force){
     +   '<div style="margin-bottom:18px;">'+_fbBigKt(fob.key_type)+'</div>'
     +   '<div style="display:flex;gap:9px;">'
     +     _fbBtn('Cancel','#9ca3af','fbCloseBindModal()')
-    +     _fbBtn('Confirm bind','#028867','fbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+    +     _fbBtn('Confirm bind','#028867','fbConfirmBind(\''+code+'\','+(force?'true':'false')+')')
     +   '</div>'
     + '</div>'
   );
@@ -5953,7 +5953,7 @@ async function fbConfirmBind(code,force){
       +   '<div style="font-size:13px;color:#4b5563;margin-bottom:16px;">'+_fbEsc(d.error||'')+'</div>'
       +   '<div style="display:flex;gap:9px;">'
       +     _fbBtn('Cancel','#9ca3af','fbCloseBindModal()')
-      +     _fbBtn('Move it here','#028867','fbConfirmBind('+JSON.stringify(code)+',true)')
+      +     _fbBtn('Move it here','#028867','fbConfirmBind(\''+code+'\',true)')
       +   '</div>'
       + '</div>'
     );
@@ -5976,7 +5976,7 @@ async function fbConfirmBind(code,force){
       +   '<div style="font-size:12px;color:#9ca3af;margin-bottom:16px;">'+_fbEsc((d&&d.error)||'The write did not land. Do not assume it is bound — try again.')+'</div>'
       +   '<div style="display:flex;gap:9px;">'
       +     _fbBtn('Close','#9ca3af','fbCloseBindModal()')
-      +     _fbBtn('Try again','#025AC6','fbConfirmBind('+JSON.stringify(code)+','+(force?'true':'false')+')')
+      +     _fbBtn('Try again','#025AC6','fbConfirmBind(\''+code+'\','+(force?'true':'false')+')')
       +   '</div>'
       + '</div>'
     );
