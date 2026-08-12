@@ -5708,7 +5708,7 @@ async function fobsLoad(){
   if(!pane) return;
   pane.innerHTML='<div style="padding:24px;color:#6b7280;">Loading fobs…</div>';
   try{
-    const fobs=await _fbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status,borrowed_by,borrowed_at&vendo_id=not.is.null&order=vendo_id.asc');
+    const fobs=await _fbGet('vendo_key_qr?select=qr_code,key_type,vendo_id,loan_status,borrowed_by,borrowed_at,bound_at,bound_by&vendo_id=not.is.null&order=bound_at.desc.nullslast');
     const F=Array.isArray(fobs)?fobs:[];
     const ids=[]; F.forEach(f=>{ if(ids.indexOf(f.vendo_id)<0) ids.push(f.vendo_id); });
     const vmap={};
@@ -5733,8 +5733,15 @@ async function fobsLoad(){
     F.forEach(f=>{ (byV[f.vendo_id]=byV[f.vendo_id]||[]).push(f); });
     _fobRows=Object.keys(byV).map(vid=>{
       const v=vmap[vid]||{};
-      return { vendo_id:+vid, name:v.sheet_name||v.tg_name||('#'+vid), area:v.area||'', code:v.vendo_code||'', address:v.address||'', group:gmap[vid]||'—', keys:byV[vid] };
-    }).sort((a,b)=>a.name.localeCompare(b.name));
+      /* newest bind on this vendo drives its position in the list */
+      const newest=byV[vid].reduce((mx,k)=>{
+        const t=k.bound_at?new Date(k.bound_at).getTime():0;
+        return t>mx?t:mx;
+      },0);
+      const keys=byV[vid].slice().sort((x,y)=>
+        (y.bound_at?new Date(y.bound_at).getTime():0)-(x.bound_at?new Date(x.bound_at).getTime():0));
+      return { vendo_id:+vid, name:v.sheet_name||v.tg_name||('#'+vid), area:v.area||'', code:v.vendo_code||'', address:v.address||'', group:gmap[vid]||'—', keys:keys, newest:newest };
+    }).sort((a,b)=>b.newest-a.newest);
     fobsRender();
   }catch(err){
     pane.innerHTML='<div style="padding:20px;color:#DF1A35;font-size:13px;">Could not load fobs: '+_fbEsc(err&&err.message)+'</div>';
@@ -5781,11 +5788,13 @@ function fobsRenderList(rows){
     const outN=r.keys.filter(k=>k.loan_status==='out').length;
     const chips=r.keys.map(k=>_fbKt(k.key_type)).join(' ');
     const outBadge=outN?'<span style="margin-left:8px;font-size:10px;font-weight:800;color:#DF1A35;background:#fde8ea;padding:2px 8px;border-radius:99px;">'+outN+' OUT</span>':'';
+    const isNew=r.newest && (Date.now()-r.newest)<3600000;
+    const newBadge=isNew?'<span style="margin-left:6px;font-size:10px;font-weight:800;color:#fff;background:#028867;padding:2px 8px;border-radius:99px;">NEW</span>':'';
     return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:8px;overflow:hidden;">'
       + '<div onclick="fobOpenModal('+r.vendo_id+')" style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;">'
       +   '<div style="min-width:0;">'
-      +     '<div style="font-weight:800;font-size:14px;color:#111827;">'+_fbEsc(r.name)+outBadge+'</div>'
-      +     '<div style="font-size:12px;color:#6b7280;margin-top:2px;">'+_fbEsc(r.area)+(r.code?' · '+_fbEsc(r.code):'')+' · '+r.keys.length+' key'+(r.keys.length===1?'':'s')+'</div>'
+      +     '<div style="font-weight:800;font-size:14px;color:#111827;">'+_fbEsc(r.name)+newBadge+outBadge+'</div>'
+      +     '<div style="font-size:12px;color:#6b7280;margin-top:2px;">'+_fbEsc(r.area)+(r.code?' · '+_fbEsc(r.code):'')+' · '+r.keys.length+' key'+(r.keys.length===1?'':'s')+(r.newest?' · <span style="color:#025AC6;font-weight:700;">bound '+_fbAgo(new Date(r.newest).toISOString())+'</span>':'')+'</div>'
       +     '<div style="margin-top:5px;">'+chips+'</div>'
       +   '</div>'
       +   '<span style="color:#c7c7c7;font-size:18px;">›</span>'
