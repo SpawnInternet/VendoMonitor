@@ -1993,11 +1993,14 @@ async function csRemove(id, name) {
   }catch(e){toast('Error: '+e.message);}
 }
 
-async function loadDashboard() {
+async function loadDashboard(force) {
   if (typeof updateCacheIndicator === 'function') updateCacheIndicator();
   ['hv-tab-audited','hv-overlay-recon','hv-overlay-records'].forEach(function(oid){ var el=document.getElementById(oid); if(el) el.style.display='none'; });
-  // Overview fully handled by overviewLoad() in dash.6.overview.js (TG sales + harvest spawn)
-  if (typeof overviewLoad === 'function') { overviewLoad(); }
+  // Overview fully handled by overviewLoad() in dash.6.overview.js (TG sales + harvest spawn).
+  // force=true skips the Storage bucket cache and re-reads live from the DB;
+  // only the header Refresh button passes it. Automatic/periodic calls use the
+  // bucket so they cost nothing.
+  if (typeof overviewLoad === 'function') { overviewLoad(force); }
 }
 
 // ══════════════════════════════════════════════════════════
