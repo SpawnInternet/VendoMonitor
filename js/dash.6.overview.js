@@ -48,18 +48,33 @@ function _ovCacheSet(d){
 // same payload into a public Storage bucket, so the normal path is a ~5KB CDN
 // GET with no database involvement at all. The live RPC stays as the fallback
 // and as the "force" path behind the Refresh button.
-const OV_BUCKET_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/overview.json';
+// The cache lives in the PRIVATE admin-cache bucket and is read back through
+// spawn-gw-admin (kind:"cacheread"), which requires the admin gateway token —
+// the same door as every other call on this dashboard. It is deliberately NOT
+// a public CDN object: the payload carries revenue, expenses, net income and
+// per-collector performance.
+const OV_BUCKET  = 'admin-cache';
+const OV_OBJECT  = 'overview.json';
 const OV_BUCKET_MAX_AGE = 20 * 60 * 1000;   // older than this -> distrust, go live
 
 async function _ovFetchBucket(){
   try {
+    const TOKEN = window.__ADMIN_GW_TOKEN;
+    if (!TOKEN) return null;                 // not logged in -> no cached figures
+    const base = (typeof _SB!=='undefined'?_SB:'https://cviraqfhphhsonjmrtvu.supabase.co');
     const ctl = new AbortController();
     const kill = setTimeout(() => ctl.abort(), 4000);
-    const r = await fetch(OV_BUCKET_URL, { signal: ctl.signal });
+    const r = await fetch(base + '/functions/v1/spawn-gw-admin', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-gw-token': TOKEN },
+      body: JSON.stringify({ kind:'cacheread', bucket: OV_BUCKET, path: OV_OBJECT }),
+      signal: ctl.signal,
+      cache: 'no-store'
+    });
     clearTimeout(kill);
     if (!r.ok) return null;
     const j = await r.json();
-    if (!j || typeof j !== 'object' || !Object.keys(j).length) return null;
+    if (!j || typeof j !== 'object' || !Object.keys(j).length || j.error) return null;
     const age = Date.now() - new Date(j.generated_at || 0).getTime();
     if (!isFinite(age) || age < 0 || age > OV_BUCKET_MAX_AGE) return null;
     window.__ovSource = 'bucket';
