@@ -1,6 +1,7 @@
 
 // ── OVERVIEW TAB (rebuilt: Telegram sales + Harvest spawn share, brand colors) ──
 let _overviewChart = null;
+let _ovLastApiData = {};   // last apiLoad payload, reused so phase 1 isn't blank
 let _areaChart = null;
 
 // Brand palette
@@ -130,23 +131,38 @@ async function overviewLoad(force) {
     ov = cached || {};
   }
 
-  // Render the main overview immediately from the RPC (never blocks on apiLoad)
-  let data = {};
-  try {
-    if (typeof apiLoad === 'function') {
-      const p = apiLoad();
-      if (p && typeof p.then === 'function') { data = await Promise.race([p, new Promise(res=>setTimeout(()=>res({}), 4000))]) || {}; }
+  // ── PHASE 1: paint NOW from the overview payload ──
+  // This used to sit behind `await Promise.race([apiLoad(), 4000ms])`, so even
+  // when the overview arrived in 200ms the page still showed "Loading..." for
+  // up to four more seconds waiting on apiLoad's 158KB summary.json. Nothing in
+  // the main render actually needs it: overviewRender only pulls `stats` and
+  // `suspicious` from that payload and both already default safely. So paint
+  // immediately and let the rest arrive late.
+  const paint = (o, d) => {
+    try { overviewRender(o||{}, d||{}); }
+    catch(e){
+      console.error('overviewRender error', e);
+      const el = document.getElementById("dash-stats");
+      if (el) el.innerHTML =
+        '<div style="padding:20px;color:#dc2626;font-size:12px">Overview error: '+(e&&e.message||e)+'</div>';
     }
-  } catch(e){ console.warn('apiLoad failed', e && e.message); data = {}; }
+  };
+
+  paint(ov, _ovLastApiData);
 
   try { overdueCardLoad(); systemCheckLoad(); } catch(e){ console.warn('side cards', e); }
 
-  try { overviewRender(ov||{}, data||{}); }
-  catch(e){
-    console.error('overviewRender error', e);
-    document.getElementById("dash-stats").innerHTML =
-      '<div style="padding:20px;color:#dc2626;font-size:12px">Overview error: '+(e&&e.message||e)+'</div>';
-  }
+  // ── PHASE 2: apiLoad in the background, repaint only if it adds something ──
+  try {
+    if (typeof apiLoad === 'function') {
+      Promise.resolve(apiLoad()).then(d => {
+        if (d && typeof d === 'object' && Object.keys(d).length) {
+          _ovLastApiData = d;
+          paint(ov, d);
+        }
+      }).catch(e => console.warn('apiLoad failed', e && e.message));
+    }
+  } catch(e){ console.warn('apiLoad dispatch failed', e && e.message); }
 }
 
 // _php is already defined globally in dash.1.harvest.js (loads first) — reuse it.
