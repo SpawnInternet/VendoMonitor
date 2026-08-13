@@ -1546,10 +1546,11 @@ document.getElementById('mBody').addEventListener('click', async e=>{
   try{
     if(pick){
       const name=pick.dataset.pickname, area=pick.dataset.pickarea||null;
+      // link only — stays UNLOCKED until the details are complete and Lock is pressed
       await rosterUpsert(ppp,{roster_name:name,area,match_status:'matched',score:1,
-        confirmed_by:'dicayas-match',confirmed_at:new Date().toISOString()});
+        confirmed_by:null,confirmed_at:null});
       ROSTER.set(ppp,{ppp_name:ppp,roster_name:name,area,match_status:'matched',
-        confirmed_at:new Date().toISOString()});
+        confirmed_by:null,confirmed_at:null});
       document.getElementById('rq').value='';
       toast('Linked to '+name);
     } else if(act){
@@ -2400,7 +2401,7 @@ function lockRowHtml(ppp){
   const r=ROSTER.get(ppp), locked=!!(r&&r.confirmed_at);
   return `<div class="lockrow ${locked?'locked':''}">
     <span class="lockstate">${locked?'\ud83d\udd12 Locked \u2014 match finalized'
-      :'\ud83d\udd13 Not locked \u2014 lock to finalize this match'}</span>
+      :'\ud83d\udd13 Not locked \u2014 complete the details, then lock'}</span>
     ${locked
       ? `<button class="lnk link" data-lockact="unlock" data-p="${esc(ppp)}">\ud83d\udd13 Unlock to edit</button>`
       : `<button class="lnk lockbtn" data-lockact="lock" data-p="${esc(ppp)}">\ud83d\udd12 Lock (finalize)</button>`}
@@ -2738,16 +2739,16 @@ document.addEventListener('click', async e=>{
     if(link){
       const name=link.dataset.mwname, area=link.dataset.mwarea||null;
       await rosterUpsert(ppp,{roster_name:name, area, match_status:'matched', score:1,
-        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+        confirmed_by:null, confirmed_at:null});
       ROSTER.set(ppp,{ppp_name:ppp, roster_name:name, area, match_status:'matched',
-        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+        confirmed_by:null, confirmed_at:null});
       if(card){ card.classList.add('done'); card.innerHTML=`<div class="mw-ok">✔ ${esc(ppp)} → ${esc(name)}</div>`; }
       toast('Linked to '+name);
     } else {
       await rosterUpsert(ppp,{roster_name:null, area:null, match_status:'rejected',
-        score:null, confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+        score:null, confirmed_by:null, confirmed_at:null});
       ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:'rejected',
-        confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()});
+        confirmed_by:null, confirmed_at:null});
       if(card){ card.classList.add('done'); card.innerHTML=`<div class="mw-ok" style="color:#7a8aa0">✖ ${esc(ppp)} — marked not billable</div>`; }
       toast('Marked not billable');
     }
@@ -2870,10 +2871,10 @@ document.addEventListener('click', async e=>{
   const ppp=CUR_PPP; if(!ppp) return;
   const name=b.dataset.pslink, area=b.dataset.psarea||null;
   const stamp={ppp_name:ppp, roster_name:name, area, match_status:'matched',
-               confirmed_by:'dicayas-match', confirmed_at:new Date().toISOString()};
+               confirmed_by:null, confirmed_at:null};
   try{
     await rosterUpsert(ppp,{roster_name:name, area, match_status:'matched', score:1,
-      confirmed_by:stamp.confirmed_by, confirmed_at:stamp.confirmed_at});
+      confirmed_by:null, confirmed_at:null});
     ROSTER.set(ppp,stamp);
     MW_HIDE.add(ppp);
     toast('Linked to '+name);
