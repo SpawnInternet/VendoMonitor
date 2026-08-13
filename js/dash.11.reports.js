@@ -286,7 +286,9 @@ async function rpRenderExpense(){
   +   '<span style="display:flex;align-items:center;gap:9px">'
   +     '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
   +     (rpFund === 'Sir Wendell' ? '' :
-         '<button id="rp-sync-sheet" onclick="rpSyncSheet()" title="Push every daily expense not yet in the DAILY EXPENSE 2026 sheet. Safe to press more than once - already-mirrored rows are skipped." '
+         '<span id="rp-mirror-badge" title="Checking whether every entry is in the sheet…" '
+       + 'style="padding:3px 9px;border-radius:20px;background:rgba(255,255,255,.16);color:#fff;font-size:10.5px;font-weight:700;white-space:nowrap">\u22ef checking\u2026</span>'
+       + '<button id="rp-sync-sheet" onclick="rpSyncSheet()" title="Push every daily expense not yet in the DAILY EXPENSE 2026 sheet. Safe to press more than once - already-mirrored rows are skipped." '
        + 'style="padding:4px 11px;border:1px solid rgba(255,255,255,.45);border-radius:7px;background:rgba(255,255,255,.16);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">'
        + '\u2191 Sync to Sheet</button>')
   +   '</span>'
@@ -360,6 +362,10 @@ async function rpRenderExpense(){
   rpDrawRows();
   rpGridBind();
   rpDrawSaved();
+  // Verify against the sheet in the background - never block the grid on it.
+  if(rpFund !== 'Sir Wendell' && typeof rpMirrorCheck === 'function'){
+    setTimeout(function(){ rpMirrorCheck(); }, 60);
+  }
   setTimeout(function(){ const f = document.querySelector('#rp-rows [data-r="0"][data-c="0"]'); if(f) f.focus(); }, 40);
 }
 
@@ -2690,5 +2696,59 @@ window.rpSyncSheet = async function(){
     if(typeof window.toast === 'function') toast('Sync failed: ' + (e && e.message || e));
     else alert('Sync failed: ' + (e && e.message || e));
   }
+  // Re-verify so the badge reflects what just happened.
+  try { if(typeof rpMirrorCheck === 'function') await rpMirrorCheck(); } catch(_){}
   setTimeout(function(){ btn.disabled = false; btn.textContent = label; }, 3500);
+};
+
+
+// ── Mirror verifier badge ─────────────────────────────────────────
+// Answers one question at a glance: is every daily expense actually in the
+// DAILY EXPENSE 2026 sheet? Uses the same content diff as the sync button, so
+// the badge and the button can never disagree.
+window.rpMirrorCheck = async function(){
+  const el = document.getElementById('rp-mirror-badge');
+  if(!el) return null;
+  try {
+    const r = await rpRpc('spawn_daily_expense_mirror_status', {});
+    const st = Array.isArray(r) ? r[0] : r;
+    if(!st) throw new Error('no status');
+
+    const missing = Number(st.missing_rows || 0);
+    const pending = Number(st.pending_rows || 0);
+    const failed  = Number(st.failed_rows || 0);
+
+    let text, bg, tip;
+    if(failed > 0){
+      text = '\u26a0 ' + failed + ' failed';
+      bg   = 'rgba(223,26,53,.85)';
+      tip  = failed + ' row(s) could not be written to the sheet. Check the bridge logs.';
+    } else if(missing > 0){
+      const days = (st.missing_days || []).join(', ');
+      text = '\u26a0 ' + missing + ' not in sheet';
+      bg   = 'rgba(255,183,37,.9)';
+      tip  = missing + ' entr(y/ies) worth ' + rpPeso(st.missing_pesos)
+           + ' are not in the sheet yet' + (days ? ' \u2014 ' + days : '')
+           + '. Press Sync to Sheet, or wait for the half-hourly auto-sync.';
+    } else if(pending > 0){
+      text = '\u21bb ' + pending + ' sending';
+      bg   = 'rgba(255,255,255,.30)';
+      tip  = pending + ' row(s) queued \u2014 the bridge appends them within a few minutes.';
+    } else {
+      text = '\u2713 all in sheet';
+      bg   = 'rgba(2,136,103,.9)';
+      tip  = st.db_rows + ' entries, all present in the sheet.'
+           + (st.last_sent_at ? ' Last write ' + new Date(st.last_sent_at).toLocaleString() + '.' : '');
+    }
+    el.textContent = text;
+    el.style.background = bg;
+    el.title = tip;
+    return st;
+  } catch(e){
+    console.warn('rpMirrorCheck failed', e);
+    el.textContent = '\u2014 check failed';
+    el.style.background = 'rgba(255,255,255,.16)';
+    el.title = 'Could not verify against the sheet: ' + (e && e.message || e);
+    return null;
+  }
 };
