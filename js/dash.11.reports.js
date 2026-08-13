@@ -1783,14 +1783,18 @@ window.rpxLoadCharts = async function(){
       if(!f) continue;
       ms.push(MON[m]); mc.push(Number(f.collections)||0); mw.push(Number(f.wendell)||0);
     }
-    const ml = document.getElementById('rpx-m-tot'); if(ml) ml.textContent = rpPeso(sum.grand);
+    // This card is "Capital & Admin Expense" — show ONLY the admin/Wendell book.
+    // It used to also plot the Daily series and print sum.grand (daily + admin,
+    // whole year to date) in the header, so the figure never matched the title:
+    // it read millions against a month's worth of admin spend.
+    const admTot = mw.reduce(function(a,b){ return a + (Number(b)||0); }, 0);
+    const ml = document.getElementById('rpx-m-tot'); if(ml) ml.textContent = rpPeso(admTot);
 
     if(_rpxMonth) _rpxMonth.destroy();
     _rpxMonth = new Chart(document.getElementById('rpx-month-chart'), {
       type: 'bar',
       data: { labels: ms, datasets: [
-        { label:'Daily Expense', data: mc, backgroundColor: RP_BRAND.blue },
-        { label:'Admin Expense', data: mw, backgroundColor: RP_BRAND.magenta }
+        { label:'Capital & Admin Expense', data: mw, backgroundColor: RP_BRAND.magenta }
       ]},
       options: { responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:true, labels:{ boxWidth:9, font:{size:9} } },
