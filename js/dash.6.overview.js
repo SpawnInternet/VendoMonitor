@@ -26,6 +26,15 @@ function _ovCacheGet(){
     return (Date.now() - o.ts > OV_CACHE_TTL) ? null : o.data;
   } catch(e){ return null; }
 }
+function _ovCacheGetAny(){
+  // Same as _ovCacheGet but with no expiry, for the instant first paint.
+  try {
+    if (typeof lsGet === 'function') return lsGet('overview_v2', 1e12);
+    const raw = localStorage.getItem('spawn_overview_v2');
+    if (!raw) return null;
+    return JSON.parse(raw).data || null;
+  } catch(e){ return null; }
+}
 function _ovCacheSet(d){
   try {
     if (typeof lsSet === 'function') { lsSet('overview_v2', d); return; }
@@ -33,19 +42,57 @@ function _ovCacheSet(d){
   } catch(e){}
 }
 
-async function _ovFetch(){
+// dashboard_overview_v2() scans the 847MB transactions table ~10x and takes
+// ~6s cold. Making every page view pay that is why the cards sat blank, worst
+// on mobile. A cron (refresh-overview-cache, every 5 min) now precomputes the
+// same payload into a public Storage bucket, so the normal path is a ~5KB CDN
+// GET with no database involvement at all. The live RPC stays as the fallback
+// and as the "force" path behind the Refresh button.
+const OV_BUCKET_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/dashboard-cache/overview.json';
+const OV_BUCKET_MAX_AGE = 20 * 60 * 1000;   // older than this -> distrust, go live
+
+async function _ovFetchBucket(){
+  try {
+    const ctl = new AbortController();
+    const kill = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch(OV_BUCKET_URL, { signal: ctl.signal });
+    clearTimeout(kill);
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || typeof j !== 'object' || !Object.keys(j).length) return null;
+    const age = Date.now() - new Date(j.generated_at || 0).getTime();
+    if (!isFinite(age) || age < 0 || age > OV_BUCKET_MAX_AGE) return null;
+    window.__ovSource = 'bucket';
+    window.__ovAgeMs = age;
+    return j;
+  } catch(e){ return null; }
+}
+
+async function _ovFetchLive(){
   const base = (typeof _SB!=='undefined'?_SB:(typeof SB_URL!=='undefined'?SB_URL:'https://cviraqfhphhsonjmrtvu.supabase.co'));
   const hdr = (typeof _HDR!=='undefined'?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'});
   const r = await fetch(`${base}/rest/v1/rpc/dashboard_overview_v2`, { method:'POST', headers:hdr, body:'{}' });
   let j = await r.json();
   if (Array.isArray(j)) j = j[0];
   if (j && j.dashboard_overview_v2) j = j.dashboard_overview_v2;
+  window.__ovSource = 'live';
+  window.__ovAgeMs = 0;
   return j || {};
 }
 
-async function overviewLoad() {
-  // ── Fast path: repaint from the last good payload before touching the network
-  const cached = _ovCacheGet();
+async function _ovFetch(force){
+  if (!force) {
+    const cached = await _ovFetchBucket();
+    if (cached) return cached;
+  }
+  return await _ovFetchLive();
+}
+
+async function overviewLoad(force) {
+  // ── Fast path: repaint from the last good payload before touching the network.
+  // Ignore the TTL here: a 3-hour-old paint marked "stale" beats an empty page
+  // while the network is in flight. The fresh result always overwrites it.
+  const cached = _ovCacheGet() || _ovCacheGetAny();
   if (cached) {
     try {
       overviewRender(cached, {});
@@ -60,7 +107,7 @@ async function overviewLoad() {
   // fetch the combined overview (TG sales + harvest spawn) via gateway RPC
   let ov = null;
   try {
-    ov = await _ovFetch();
+    ov = await _ovFetch(force);
     if (ov && Object.keys(ov).length) _ovCacheSet(ov);
   } catch(e){
     console.warn('overview rpc failed', e && e.message);
