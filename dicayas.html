@@ -1411,7 +1411,17 @@ function renderSubModal(){
           ${line('Address', val(rec.address),                       btn('address'))}
           ${line('Phone',   val(rec.phone),                         btn('phone'))}
           ${line('FB name', val(rec.fb_name),                       btn('fb_name'))}
-          ${line('Plan',    val(rec.plan_type),                     btn('plan_type'))}
+          ${(()=>{
+              const prof = m.ppp_profile||'';
+              const cur  = rec.plan_type==null?'':String(rec.plan_type);
+              const same = prof && cur.toLowerCase()===prof.toLowerCase();
+              const badge = !prof ? ''
+                : same ? ' <span class="vlanok">✓ matches router</span>'
+                       : ` <span class="vlanmismatch" title="The PPPoE profile on the MikroTik">router says ${esc(prof)}</span>`;
+              const setBtn = (prof && !same)
+                ? `<button class="lnk link" onclick='setSubPlan(${JSON.stringify(String(rec.id))},${attrJS(prof)})'>Set ${esc(prof)}</button>` : '';
+              return line('Plan', val(rec.plan_type)+badge, setBtn+btn('plan_type'));
+            })()}
           ${line('Monthly', rec.monthly_amount==null?none:'₱'+esc(rec.monthly_amount), btn('monthly_amount'))}
           ${line('Due day', val(rec.due_day),                       btn('due_day'))}
           ${line('GPS', rec.lat
@@ -2321,7 +2331,7 @@ const SUB_FIELDS={
   address:       {label:'Address',   icon:'📍', ph:'e.g. Purok 2, Upper Dicayas'},
   phone:         {label:'Phone',     icon:'📞', ph:'09xxxxxxxxx'},
   fb_name:       {label:'FB name',   icon:'👥', ph:'e.g. Geneza Tigulo'},
-  plan_type:     {label:'Plan',      icon:'📶', ph:'e.g. monthly'},
+  plan_type:     {label:'Plan',      icon:'📶', ph:'e.g. 50M'},
   monthly_amount:{label:'Monthly',   icon:'💵', ph:'e.g. 800', num:true},
   due_day:       {label:'Due day',   icon:'🗓️', ph:'1–31', num:true},
   gps:           {label:'GPS',       icon:'🗺️', ph:'8.60245, 123.37160'}
@@ -3100,6 +3110,26 @@ function changeArea(vid){
   document.getElementById('areaOv').classList.add('show');
 }
 function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; _areaSub=null; }
+
+// The MikroTik PPPoE profile is the real plan (20M / 50M / 100M ...). The
+// plan_type column was carrying "monthly" — a payment frequency, not a plan —
+// so the router is treated as the source of truth and copied on request.
+async function setSubPlan(subId, plan){
+  const rec=SUBRECS.find(x=>String(x.id)===String(subId));
+  if(!rec){ toast('Subscriber record not loaded'); return; }
+  const pwd=await askPasswordValue(`Set ${rec.name}'s plan to ${plan} (from the router)?`);
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  try{
+    const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
+      method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({plan_type:plan, last_updated_by:'plan-from-router', last_updated_at:new Date().toISOString()})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    rec.plan_type=plan;
+    toast('Plan set to '+plan);
+    renderSubModal(); renderSubs();
+  }catch(e){ toast('Failed: '+e.message); }
+}
 
 // ---- SUBSCRIBER AREA ----
 // Same picker as the vendo one, but writes to subscribers and then repairs
