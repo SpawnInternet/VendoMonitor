@@ -229,6 +229,15 @@
   .mw-search{width:100%;margin-top:8px;padding:8px 10px;border:1px solid #dbe2ec;
              border-radius:8px;font-size:13px;font-family:inherit}
   .mw-none{font-size:12px;color:#7a8aa0;padding:6px 2px}
+  .mw .candhead{justify-content:space-between}
+  .mw .mw-meta{text-transform:none;letter-spacing:0;font-weight:600}
+  .mw .routerbar{margin-bottom:2px}
+  .mw .routerbar .rfix{font-size:9px;font-weight:800;color:#7a8aa0;letter-spacing:.03em}
+  .mw .linkrow{border-bottom:none;padding:9px 0 7px}
+  .mw .linkrow .k{font-size:12.5px}
+  .mw .linkrow .v{font-size:13.5px}
+  .mw-sec{font-size:9.5px;font-weight:900;color:var(--dim);text-transform:uppercase;
+          letter-spacing:.05em;margin:2px 0 6px}
   .mw-ok{font-size:12.5px;font-weight:600;color:#028867}
   .newbtn{width:100%;margin-top:10px;border:1.5px dashed #b6c6de;background:#f7faff;color:#025AC6;
           border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer}
@@ -2595,7 +2604,20 @@ function renderMatch(){
   const el=document.getElementById('grid-subs-match'); if(!el) return;
   const q=(document.getElementById('subq').value||'').toLowerCase().trim();
   let queue=matchQueue().filter(m=>!MW_HIDE.has(m.ppp_name));
-  if(q) queue=queue.filter(m=>(m.ppp_name||'').toLowerCase().includes(q));
+
+  // Candidates are scored once per row, then reused by both the search filter
+  // and the render below (mwCandidates rebuilds the taken-set on every call).
+  const CAND=new Map();
+  queue.forEach(m=>CAND.set(m.ppp_name, mwCandidates(m.ppp_name,4)));
+
+  // Search matches the PPPoE name AND the sheet/subscriber side, so Sir Wendell
+  // can type the sheet name he is looking for instead of the router name.
+  if(q) queue=queue.filter(m=>{
+    if((m.ppp_name||'').toLowerCase().includes(q)) return true;
+    const r=ROSTER.get(m.ppp_name);
+    if(r&&r.roster_name&&r.roster_name.toLowerCase().includes(q)) return true;
+    return (CAND.get(m.ppp_name)||[]).some(c=>(c.rec.name||'').toLowerCase().includes(q));
+  });
 
   if(!queue.length){
     el.innerHTML=`<div class="banner">✅ Nothing left in the queue${q?' for that search':''}.
@@ -2603,16 +2625,25 @@ function renderMatch(){
     return;
   }
   el.innerHTML =
-    `<div class="banner">🔗 ${queue.length} account${queue.length===1?'':'s'} still need a subscriber name.
-      Tap a suggestion to link it — it saves straight to the subscriber record.
-      Green = strong match, amber = check it first.</div>` +
+    `<div class="banner">🔗 ${queue.length} account${queue.length===1?'':'s'} still need a sheet name.
+      PPPoE is fixed by the router — only the Sheet row changes.
+      Search box above also finds sheet names. Green = strong match, amber = check it first.</div>` +
     queue.map(m=>{
       const r=ROSTER.get(m.ppp_name);
       const prob = r && r.match_status==='probable' && r.roster_name;
-      const cands=mwCandidates(m.ppp_name,4);
-      const tag = prob
-        ? `<span class="mw-tag prob">fuzzy guess: ${esc(r.roster_name)}</span>`
-        : `<span class="mw-tag none">no subscriber yet</span>`;
+      const cands=CAND.get(m.ppp_name)||[];
+      const none='<i style="color:var(--dim)">(none)</i>';
+
+      // Sheet row = the only editable side. Mirrors the vendo Names & Group panel.
+      const sheetVal = prob
+        ? `${esc(r.roster_name)} <span class="mw-tag prob">unconfirmed</span>`
+        : none;
+      const sheetBtn = prob
+        ? `<button class="lnk link" data-mwlink="${esc(m.ppp_name)}" data-mwname="${esc(r.roster_name)}"
+             data-mwarea="${esc(r.area||'')}">Confirm</button>
+           <button class="lnk unlink" data-mwfocus="${esc(m.ppp_name)}">Change</button>`
+        : `<button class="lnk link" data-mwfocus="${esc(m.ppp_name)}">Link</button>`;
+
       const rows = cands.length
         ? cands.map((c,i)=>`
             <div class="mw-c ${i===0&&c.s>=0.72?'top':''}" data-mwlink="${esc(m.ppp_name)}"
@@ -2622,15 +2653,25 @@ function renderMatch(){
               </span>
               <span class="mw-score ${c.s<0.72?'mid':''}">${Math.round(c.s*100)}%</span>
             </div>`).join('')
-        : `<div class="mw-none">No close subscriber name. Search below, or mark it not billable.</div>`;
+        : `<div class="mw-none">No close sheet name. Search below, or mark it not billable.</div>`;
+
       return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
-        <div class="mw-hd">
-          <span class="mw-ppp">${esc(m.ppp_name)}</span>
+        <div class="candhead">
+          <span>${prob?'CHECK THIS GUESS':'NO SHEET NAME YET'}</span>
           <span class="mw-meta">${m.online?'🟢 online':'🔴 offline'}${m.ip?' · '+esc(m.ip):''}${m.ppp_profile?' · '+esc(m.ppp_profile):''}</span>
-          ${tag}
         </div>
+        <div class="routerbar">
+          <div class="rl"><span>📡 Router says · PPPoE</span><span class="rfix">fixed — change in MikroTik</span></div>
+          <div class="rv">${esc(m.ppp_name)}</div>
+        </div>
+        <div class="linkrow">
+          <span class="k">🧾 Sheet</span>
+          <span class="v">${sheetVal}</span>
+          ${sheetBtn}
+        </div>
+        <div class="mw-sec">Suggested sheet names — tap one to link</div>
         <div class="mw-cands">${rows}</div>
-        <input class="mw-search" data-mwq="${esc(m.ppp_name)}" placeholder="Search a different subscriber name…">
+        <input class="mw-search" data-mwq="${esc(m.ppp_name)}" placeholder="Search a different sheet name…">
         <div class="mw-acts">
           <button class="mw-btn skip" data-mwskip="${esc(m.ppp_name)}">✖ Not billable</button>
           <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
@@ -2638,6 +2679,13 @@ function renderMatch(){
       </div>`;
     }).join('');
 }
+
+// "Link" / "Change" on the Sheet row just jumps to that row's search box
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-mwfocus]'); if(!b) return;
+  const box=document.querySelector(`.mw[data-mwrow="${CSS.escape(b.dataset.mwfocus)}"] .mw-search`);
+  if(box){ box.focus(); box.scrollIntoView({block:'center',behavior:'smooth'}); }
+});
 
 // live search inside a worklist row
 document.addEventListener('input', e=>{
