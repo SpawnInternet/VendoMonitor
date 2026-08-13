@@ -283,7 +283,13 @@ async function rpRenderExpense(){
   host.innerHTML = ''
   + '<div style="background:'+rpFundColor()+';color:#fff;border-radius:10px;padding:9px 14px;margin-bottom:11px;font-size:12px;font-weight:800;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
   +   '<span>'+(rpFund === 'Sir Wendell' ? '\u{1F4B3} Admin Expense \u2014 capital & admin, paid by Sir Wendell' : '\u{1F4B8} Daily Expense \u2014 paid from Collections')+'</span>'
-  +   '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
+  +   '<span style="display:flex;align-items:center;gap:9px">'
+  +     '<span style="font-weight:600;opacity:.92;font-size:11px">' + lastLine + '</span>'
+  +     (rpFund === 'Sir Wendell' ? '' :
+         '<button id="rp-sync-sheet" onclick="rpSyncSheet()" title="Push every daily expense not yet in the DAILY EXPENSE 2026 sheet. Safe to press more than once - already-mirrored rows are skipped." '
+       + 'style="padding:4px 11px;border:1px solid rgba(255,255,255,.45);border-radius:7px;background:rgba(255,255,255,.16);color:#fff;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">'
+       + '\u2191 Sync to Sheet</button>')
+  +   '</span>'
   + '</div>'
   + '<div class="rp-kpis tight">'
   +   '<div class="rp-kpi" style="border-bottom-color:'+rpFundColor()+'"><div class="k">Selected day</div><div class="v" id="rp-kpi-day">'+rpPeso(day.total)+'</div><div class="s">'+(day.count||0)+' entries \u00b7 '+rpDate+'</div></div>'
@@ -2650,3 +2656,39 @@ window.rpRecCsv = function(){
   setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1500);
 };
 
+
+
+// ── Sync to Sheet (Daily Expense) ─────────────────────────────────
+// Pushes any daily expense that is not yet mirrored into the DAILY EXPENSE
+// 2026 sheet. The RPC diffs on row CONTENT against what the outbox already
+// sent, so pressing this twice queues nothing the second time and it can
+// never duplicate a row that is already in the sheet.
+window.rpSyncSheet = async function(){
+  const btn = document.getElementById('rp-sync-sheet');
+  if(!btn || btn.disabled) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = '\u21bb Syncing\u2026';
+  try {
+    const r = await rpRpc('spawn_sync_daily_expense_sheet', {});
+    const res = Array.isArray(r) ? r[0] : r;
+    const n = Number((res && res.queued) || 0);
+    const pesos = Number((res && res.pesos) || 0);
+    if(n > 0){
+      btn.textContent = '\u2713 Queued ' + n;
+      if(typeof window.toast === 'function'){
+        toast(n + ' row(s) queued to the sheet \u00b7 ' + rpPeso(pesos) + ' \u2014 the bridge appends them within a few minutes.');
+      } else {
+        alert(n + ' row(s) queued to the sheet (' + rpPeso(pesos) + ').\nThe bridge appends them within a few minutes.');
+      }
+    } else {
+      btn.textContent = '\u2713 Up to date';
+      if(typeof window.toast === 'function') toast('Sheet already has every daily expense \u2014 nothing to push.');
+    }
+  } catch(e){
+    console.warn('rpSyncSheet failed', e);
+    btn.textContent = '\u26a0 Failed';
+    if(typeof window.toast === 'function') toast('Sync failed: ' + (e && e.message || e));
+    else alert('Sync failed: ' + (e && e.message || e));
+  }
+  setTimeout(function(){ btn.disabled = false; btn.textContent = label; }, 3500);
+};
