@@ -1406,6 +1406,8 @@ function renderSubModal(){
                    : (probP?`<button class="lnk link" data-pslink="${esc(r.roster_name)}" data-psarea="${esc((rec&&rec.area)||r.area||'')}">Confirm</button>`:'')
                      +`<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
         ${rec?`
+          ${line('Area',    val(rec.area),
+              locked?'':`<button class="lnk link" onclick='changeSubArea(${JSON.stringify(String(rec.id))})'>Change</button>`)}
           ${line('Address', val(rec.address),                       btn('address'))}
           ${line('Phone',   val(rec.phone),                         btn('phone'))}
           ${line('FB name', val(rec.fb_name),                       btn('fb_name'))}
@@ -3097,7 +3099,47 @@ function changeArea(vid){
     <div class="pickitem" onclick='pickArea(${attrJS(a)})'>${esc(a)}${a===cur?' <span class="area">current</span>':''}</div>`).join('');
   document.getElementById('areaOv').classList.add('show');
 }
-function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; }
+function closeArea(){ document.getElementById('areaOv').classList.remove('show'); _areaVid=null; _areaSub=null; }
+
+// ---- SUBSCRIBER AREA ----
+// Same picker as the vendo one, but writes to subscribers and then repairs
+// ppp_roster.area, which holds a copy taken at link time and would otherwise
+// keep showing the old area forever.
+let _areaSub=null;
+function changeSubArea(subId){
+  const rec=SUBRECS.find(x=>String(x.id)===String(subId));
+  if(!rec){ toast('Subscriber record not loaded'); return; }
+  _areaSub=String(subId); _areaVid=null;
+  const cur=rec.area||null;
+  document.getElementById('areaList').innerHTML=AREA_OPTS.map(a=>`
+    <div class="pickitem" onclick='pickSubArea(${attrJS(a)})'>${esc(a)}${a===cur?' <span class="area">current</span>':''}</div>`).join('');
+  document.getElementById('areaOv').classList.add('show');
+}
+async function pickSubArea(area){
+  const subId=_areaSub; if(!subId) return;
+  const rec=SUBRECS.find(x=>String(x.id)===String(subId));
+  closeArea();
+  if(!rec) return;
+  const pwd=await askPasswordValue(`Enter password to move ${rec.name} to ${area}.`);
+  if(pwd===null) return;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  try{
+    const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
+      method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({area, last_updated_by:'area-edit', last_updated_at:new Date().toISOString()})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    rec.area=area;
+    // keep the roster copy honest
+    if(rec.name){
+      await fetch(SB+'/rest/v1/ppp_roster?roster_name=eq.'+encodeURIComponent(rec.name),{
+        method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
+        body:JSON.stringify({area, updated_at:new Date().toISOString()})}).catch(()=>{});
+      ROSTER.forEach((v,k)=>{ if(v.roster_name===rec.name) ROSTER.set(k,{...v, area}); });
+    }
+    toast('Area changed to '+area);
+    renderSubModal(); renderSubs();
+  }catch(e){ toast('Failed: '+e.message); }
+}
 async function changeAddress(vid){
   const v=VENDOS.find(x=>x.id===vid);
   const cur=v?(v.address||''):'';
