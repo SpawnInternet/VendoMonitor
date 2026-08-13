@@ -2926,8 +2926,14 @@ function bhFb(raw){
   return v.length>2 ? v : null;
 }
 function bhNum(raw){ const n=Number(String(raw||'').replace(/[^\d.]/g,'')); return isFinite(n)&&n>0?n:null; }
-function bashangFor(name){
-  if(!name || !BASHANG.length) return null;
+function bashangFor(name, acct){
+  if(!BASHANG.length) return null;
+  // an account number is an exact identity — no fuzzy scoring needed
+  if(acct){
+    const hit=BASHANG.find(b=>b.acct_no && String(b.acct_no)===String(acct));
+    if(hit) return {row:hit, s:1, byAcct:true};
+  }
+  if(!name) return null;
   let best=null;
   BASHANG.forEach(b=>{
     const s=mwScore(name, b.raw_name);
@@ -2936,11 +2942,12 @@ function bashangFor(name){
   return (best && best.s>=0.55) ? best : null;
 }
 function bashangCardHtml(name, rec){
-  const hit=bashangFor(name);
+  const hit=bashangFor(name, rec&&rec.acct_no);
   if(!hit) return `<div class="candbox"><div class="candhead"><span>📗 BASHANG SHEET</span></div>
     <div class="mw-none">No BASHANG row close to "${esc(name)}".</div></div>`;
   const b=hit.row, sid=rec?rec.id:null;
   const pairs=[
+    ['acct_no',        '🔖 Account', b.acct_no||null,        rec?rec.acct_no:null],
     ['phone',          '📞 Phone',   bhPhone(b.raw_contact), rec?rec.phone:null],
     ['fb_name',        '👥 FB name', bhFb(b.raw_contact),    rec?rec.fb_name:null],
     ['address',        '📍 Address', b.raw_address||null,    rec?rec.address:null],
@@ -2964,9 +2971,10 @@ function bashangCardHtml(name, rec){
   return `<div class="candbox">
     <div class="candhead">
       <span>📗 BASHANG SHEET</span>
-      <span class="mw-score ${hit.s<0.72?'mid':''}">${Math.round(hit.s*100)}% match</span>
+      <span class="mw-score ${hit.byAcct?'':(hit.s<0.72?'mid':'')}">${hit.byAcct?'matched on account no':Math.round(hit.s*100)+'% match'}</span>
     </div>
     <div class="linkrow"><span class="k">Sheet name</span><span class="v">${esc(b.raw_name)}</span></div>
+    ${b.last_paid?`<div class="linkrow"><span class="k">Last paid</span><span class="v">${esc(b.last_paid)}</span></div>`:''}
     ${b.raw_contact?`<div class="linkrow"><span class="k">Raw contact</span><span class="v" style="font-size:12px">${esc(b.raw_contact)}</span></div>`:''}
     ${rows}
     ${(sid&&blanks>1)?`<div class="mw-acts"><button class="mw-btn" data-bhall="${sid}">⬇ Pull all ${blanks} blank field(s)</button></div>`:''}
@@ -3889,8 +3897,8 @@ async function boot(){
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
-      sb("subscribers?select=id,name,area,phone,fb_name,address,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
-      sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,due_raw,amount_raw&limit=2000").catch(()=>[])
+      sb("subscribers?select=id,name,area,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
+      sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     buildRoster(roster);
