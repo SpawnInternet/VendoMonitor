@@ -232,7 +232,7 @@
   .mw .candhead{justify-content:space-between}
   .mw .mw-meta{text-transform:none;letter-spacing:0;font-weight:600}
   .mw .routerbar{margin-bottom:2px}
-  .mw .routerbar .rfix{font-size:9px;font-weight:800;color:#7a8aa0;letter-spacing:.03em}
+  .routerbar .rfix{font-size:9px;font-weight:800;color:#7a8aa0;letter-spacing:.03em}
   .mw .linkrow{border-bottom:none;padding:9px 0 7px}
   .mw .linkrow .k{font-size:12.5px}
   .mw .linkrow .v{font-size:13.5px}
@@ -1382,12 +1382,13 @@ function renderSubModal(){
     // Two different names live here, so label them unambiguously:
     //   1. the PPPoE account on the MikroTik  (read-only from this page)
     //   2. the paying subscriber it is linked to (editable)
-    html+=`<div class="linkrow" style="background:#fff8e8;border-radius:9px;padding:9px 11px;margin-bottom:10px">
-      <span class="k" style="color:#8a6500">📡 PPPoE account<br><small style="font-weight:600;text-transform:none;letter-spacing:0">on the router — change it in MikroTik</small></span>
-      <span class="v gold">${esc(m.ppp_name)||'(blank)'}</span>
+    html+=`<div class="routerbar">
+      <div class="rl"><span>📡 Router says · PPPoE</span><span class="rfix">fixed — change in MikroTik</span></div>
+      <div class="rv">${esc(m.ppp_name)||'(blank)'}</div>
     </div>`;
     const rec = (r&&r.roster_name) ? SUBRECS.find(x=>x.name===r.roster_name) : null;
     const locked = !!(r&&r.confirmed_at);
+    const probP  = !!(r && r.roster_name && r.match_status==='probable' && !r.confirmed_at);
     if(r&&r.roster_name){
       const btn=(f)=>rec?`<button class="lnk link" onclick='changeSubField(${JSON.stringify(String(rec.id))},${JSON.stringify(f)})'>Edit</button>`:'';
       const none='<i style="color:var(--dim)">(none)</i>';
@@ -1395,9 +1396,10 @@ function renderSubModal(){
       const val=v=>(v==null||v==='')?none:esc(v);
       html+=`<div class="candbox">
         <div class="candhead">${esc((rec&&rec.area)||r.area||'—')}</div>
-        ${line('👤 Subscriber', esc(r.roster_name),
+        ${line('🧾 Sheet', esc(r.roster_name)+(probP?' <span class="mw-tag prob">unconfirmed</span>':''),
             locked ? ''
-                   : `<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
+                   : (probP?`<button class="lnk link" data-pslink="${esc(r.roster_name)}" data-psarea="${esc((rec&&rec.area)||r.area||'')}">Confirm</button>`:'')
+                     +`<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
         ${rec?`
           ${line('Address', val(rec.address),                       btn('address'))}
           ${line('Phone',   val(rec.phone),                         btn('phone'))}
@@ -1412,8 +1414,25 @@ function renderSubModal(){
         ${lockRowHtml(m.ppp_name)}
       </div>`;
     } else {
-      html+=`<div class="raw" style="margin:10px 0;color:var(--red);font-weight:700">
-        Not linked to a subscriber — search below to attach one.</div>`;
+      // Same card as the Match Names worklist, so linking works from here too.
+      const cands=mwCandidates(m.ppp_name,4);
+      html+=`<div class="candbox">
+        <div class="candhead"><span>NO SHEET NAME YET</span></div>
+        <div class="linkrow">
+          <span class="k">🧾 Sheet</span>
+          <span class="v"><i style="color:var(--dim)">(none)</i></span>
+          <button class="lnk link" onclick="showSubSearch()">Link</button>
+        </div>
+        ${cands.length?`<div class="mw-sec">Suggested sheet names — tap one to link</div>
+        <div class="mw-cands">${cands.map((c,i)=>`
+          <div class="mw-c ${i===0&&c.s>=0.72?'top':''}" data-pslink="${esc(c.rec.name)}" data-psarea="${esc(c.rec.area||'')}">
+            <span class="mw-c-name">${esc(c.rec.name)}
+              <span class="mw-c-sub">${esc(c.rec.area||'no area')}${c.rec.phone?' · '+esc(c.rec.phone):''}</span>
+            </span>
+            <span class="mw-score ${c.s<0.72?'mid':''}">${Math.round(c.s*100)}%</span>
+          </div>`).join('')}</div>`
+        :`<div class="mw-none">No close sheet name — search below to attach one.</div>`}
+      </div>`;
     }
     // search stays hidden until "Change" is pressed, unless nothing is linked yet
     html+=`<div class="rsec" id="subsearch" style="display:${(r&&r.roster_name)?'none':'block'}">
@@ -2738,6 +2757,23 @@ document.addEventListener('click', async e=>{
     toast('Save failed — '+err.message);
   }
 });
+// Tap a suggestion / Confirm inside the subscriber popup
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-pslink]'); if(!b) return;
+  const ppp=CUR_PPP; if(!ppp) return;
+  const name=b.dataset.pslink, area=b.dataset.psarea||null;
+  const stamp={ppp_name:ppp, roster_name:name, area, match_status:'matched',
+               confirmed_by:'dicayas-popup', confirmed_at:new Date().toISOString()};
+  try{
+    await rosterUpsert(ppp,{roster_name:name, area, match_status:'matched', score:1,
+      confirmed_by:stamp.confirmed_by, confirmed_at:stamp.confirmed_at});
+    ROSTER.set(ppp,stamp);
+    MW_HIDE.add(ppp);
+    toast('Linked to '+name);
+    renderSubModal(); renderSubs();
+  }catch(err){ toast('Save failed — '+err.message); }
+});
+
 function rosterState(m){
   const r=ROSTER.get(m.ppp_name);
   if(!r || !r.roster_name) return 'nomatch';
