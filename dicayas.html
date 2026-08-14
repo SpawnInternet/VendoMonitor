@@ -2453,12 +2453,65 @@ function bhPrefillNewForm(){
   if(amt) set('nfAmt', amt);
   // area often falls out of the address text
   const area=document.getElementById('nfArea');
-  if(area && b.raw_address){
-    const up=String(b.raw_address).toUpperCase();
-    const opt=Array.from(area.options).find(o=>o.value && up.includes(o.value.toUpperCase()));
-    if(opt) area.value=opt.value;
-  }
+  if(area){ const g=bhGuessArea(b.raw_address); if(g) area.value=g; }
   return b;
+}
+
+function bhGuessArea(addr){
+  if(!addr) return null;
+  const up=String(addr).toUpperCase();
+  return AREA_OPTS.find(a=>a!=='UNKNOWN' && up.includes(a)) || null;
+}
+
+// Confirm on a link whose roster name has no subscriber record behind it.
+// Rather than locking an empty link, build the record from the BASHANG row so
+// the details are actually there to see.
+async function bhCreateFromRoster(ppp, rosterName){
+  const hit = bashangFor(rosterName, null);
+  if(!hit){
+    toast('No BASHANG row for "'+rosterName+'" — use Change → Create a new subscriber');
+    try{ showSubSearch(); }catch(e){}
+    return false;
+  }
+  const b = hit.row;
+  const body = {
+    name: rosterName,
+    area: bhGuessArea(b.raw_address),
+    address: b.raw_address || null,
+    phone: bhPhone(b.raw_contact),
+    fb_name: bhFb(b.raw_contact),
+    acct_no: b.acct_no || null,
+    due_day: bhNum(b.due_raw),
+    monthly_amount: bhNum(b.amount_raw),
+    plan_type: 'monthly',
+    status: 'active',
+    notes: 'created on confirm from BASHANG row "'+b.raw_name+'" for PPPoE account: '+ppp
+  };
+  const shown = Object.entries({Area:body.area, Address:body.address, Phone:body.phone,
+                                'Due day':body.due_day, Monthly:body.monthly_amount})
+                 .filter(([,v])=>v!=null && v!=='')
+                 .map(([k,v])=>'  • '+k+': '+v).join('\n');
+  if(!confirm('No subscriber record exists for "'+rosterName+'".\n\n'
+      +'Create it from BASHANG "'+b.raw_name+'"?\n\n'+(shown||'  (sheet has no details beyond the name)')
+      +'\n\nYou can edit anything afterwards, then lock.')) return false;
+
+  const pwd=await askPasswordValue('Enter password to create this subscriber.');
+  if(pwd===null) return false;
+  if(pwd!==NET_PWD){ toast('Wrong password'); return false; }
+
+  try{
+    const r=await fetch(SB+"/rest/v1/subscribers",{
+      method:"POST",
+      headers:{...H,"Content-Type":"application/json","Prefer":"return=representation"},
+      body:JSON.stringify(body)});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const rec=(await r.json())[0];
+    SUBRECS.push(rec);
+    SUBRECS.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    toast('✔ '+rec.name+' created — check the details, then lock');
+    renderSubModal(); renderSubs();
+    return true;
+  }catch(e){ toast('Create failed: '+e.message); return false; }
 }
 
 document.addEventListener('click', e=>{
@@ -2574,7 +2627,16 @@ document.addEventListener('click', async e=>{
   const ppp=b.getAttribute('data-p'); if(!ppp) return;
   b.disabled=true;
   try{
-    if(b.getAttribute('data-lockact')==='lock') await lockRoster(ppp);
+    if(b.getAttribute('data-lockact')==='lock'){
+      // Locking a name with no subscriber record behind it just freezes an
+      // empty link — make the record first so there are details to confirm.
+      const r=ROSTER.get(ppp);
+      if(r && r.roster_name && !SUBRECS.find(x=>x.name===r.roster_name)){
+        await bhCreateFromRoster(ppp, r.roster_name);
+        return;
+      }
+      await lockRoster(ppp);
+    }
     else await unlockRoster(ppp);
   } finally { b.disabled=false; }
 });
