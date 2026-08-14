@@ -257,7 +257,12 @@
              margin:0 0 12px;font-size:13px;font-weight:800}
   .liststrip .ls-tag{font-size:11px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                      padding:3px 9px;border-radius:999px;white-space:nowrap}
-  .liststrip .ls-who{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .liststrip .ls-who{font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+  .liststrip .ls-confirm{margin-left:auto;flex-shrink:0;border:none;cursor:pointer;font-family:inherit;
+                     font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+                     padding:6px 13px;border-radius:999px;background:#028867;color:#fff;white-space:nowrap}
+  .liststrip .ls-confirm:hover{background:#046b52}
+  .liststrip .ls-confirm:disabled{opacity:.55;cursor:progress}
   .ls-yes{background:#e9f7f1;border:1px solid #b6e3d3;color:#046b52}
   .ls-yes .ls-tag{background:#028867;color:#fff}
   .ls-maybe{background:#fff7e6;border:1px solid #f0d488;color:#8a6500}
@@ -2251,9 +2256,15 @@ function rosterStrip(m){
     </div>`;
   }
   const locked=!!r.confirmed_at;
+  // Unconfirmed matches get a Confirm button right here, so the match can be
+  // finalized without scrolling to the lock row at the bottom of the card.
+  // Same password-gated path as that button — this is a shortcut, not a bypass.
+  const btn = locked ? ''
+    : `<button class="ls-confirm" data-lockact="lock" data-p="${esc(m.ppp_name)}">\u2714 Confirm</button>`;
   return `<div class="liststrip ${locked?'ls-yes':'ls-maybe'}">
     <span class="ls-tag">${locked?'\u2714 on the list':'? on the list'}</span>
     <span class="ls-who">${esc(r.roster_name)}${locked?' \u00b7 \ud83d\udd12 locked':' \u00b7 not confirmed yet'}</span>
+    ${btn}
   </div>`;
 }
 
@@ -2416,6 +2427,18 @@ async function unlockRoster(ppp){
   toast("\ud83d\udd13 Unlocked \u2014 you can edit now");
   renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
+// The [data-lockact] buttons had no listener, so Lock and Unlock rendered but
+// did nothing when tapped. This wires them to the functions above.
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-lockact]'); if(!b) return;
+  const ppp=b.getAttribute('data-p'); if(!ppp) return;
+  b.disabled=true;
+  try{
+    if(b.getAttribute('data-lockact')==='lock') await lockRoster(ppp);
+    else await unlockRoster(ppp);
+  } finally { b.disabled=false; }
+});
+
 function lockRowHtml(ppp){
   const r=ROSTER.get(ppp), locked=!!(r&&r.confirmed_at);
   return `<div class="lockrow ${locked?'locked':''}">
