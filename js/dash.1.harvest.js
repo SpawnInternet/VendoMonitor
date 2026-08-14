@@ -4678,7 +4678,8 @@ function viTgState(){
 }
 
 /* ══ PUNGPUNG TRANSFER — keys to move into a collector's bunch ══ */
-let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false, _ktDetails = {};
+let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false, _ktDetails = {}
+let _ktShowUnlinked = false;
 
 function ktLoad(){
   const list = document.getElementById('kt-list');
@@ -5594,8 +5595,13 @@ const KT_SRC = {
 function ktRenderPending(){
   const box = document.getElementById('kt-pending');
   if(!box) return;
-  const rows = _ktPending || [];
-  if(!rows.length){
+  const all = _ktPending || [];
+  // Hand-typed lineman returns have no vendo_id, so they can't be transferred
+  // without someone picking the vendo first. They clutter the working list, so
+  // they're folded away behind a one-line toggle rather than dropped entirely.
+  const rows     = all.filter(r=>r.vendo_id);
+  const unlinked = all.filter(r=>!r.vendo_id);
+  if(!rows.length && !unlinked.length){
     box.innerHTML = '<div style="background:#f0fdf9;border:1.5px solid #028867;border-radius:10px;padding:11px 13px;font-size:12px;color:#065f46;font-weight:700;">'
       + '✅ Nothing waiting — every key given to the office is already logged for transfer.</div>';
     return;
@@ -5613,9 +5619,9 @@ function ktRenderPending(){
     +   '<button type="button" onclick="ktAddAllPending()" style="padding:5px 11px;background:#92400e;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add all</button>'
     + '</div>'
     + '<div style="font-size:10px;color:#78350f;font-weight:600;margin-bottom:9px;line-height:1.5;">Keys the office has received but that are not on a pungpung yet. Tap Add to move one across — nothing is saved until you do.</div>'
+    + (rows.length ? '' : '<div style="font-size:11px;color:#065f46;font-weight:700;padding:4px 0 8px;">✅ Nothing linked is waiting.</div>')
     + rows.map(r=>{
         const s = KT_SRC[r.source] || {icon:'🔑', label:r.source, color:'#6b7280'};
-        if(!r.vendo_id) return ktPendingUnlinked(r, s);
         const already = _ktVendos.some(v=>v.id===r.vendo_id);
         return '<div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;margin-bottom:6px;">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
@@ -5635,8 +5641,22 @@ function ktRenderPending(){
               : '<button type="button" onclick=\'ktAddPending('+klArg(r.vendo_id,r.vendo_name||'',r.area||'',r.detail||'')+')\' style="padding:5px 11px;background:#028867;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">+ Add</button>')
           + '</div></div>';
       }).join('')
+    + (unlinked.length
+        ? '<div style="border-top:1px dashed #fcd34d;margin-top:4px;padding-top:8px;">'
+          + '<button type="button" onclick="ktToggleUnlinked()" style="background:none;border:none;padding:0;color:#92400e;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;text-decoration:underline;">'
+          + (_ktShowUnlinked ? '▾ Hide' : '▸ Show')+' '+unlinked.length+' hand-typed return'+(unlinked.length===1?'':'s')+' with no vendo linked'
+          + '</button>'
+          + (_ktShowUnlinked
+              ? '<div style="margin-top:8px;">'
+                + unlinked.map(r=>ktPendingUnlinked(r, KT_SRC[r.source] || {icon:'🔑', label:r.source, color:'#6b7280'})).join('')
+                + '</div>'
+              : '')
+          + '</div>'
+        : '')
     + '</div>';
 }
+
+function ktToggleUnlinked(){ _ktShowUnlinked = !_ktShowUnlinked; ktRenderPending(); }
 
 /* move one suggestion into the manual basket — still not saved */
 /* parse the lineman-return detail text into a stored key kind */
@@ -5723,7 +5743,7 @@ function ktAddPending(id, name, area, detail){
 
 function ktAddAllPending(){
   let n = 0;
-  (_ktPending||[]).forEach(r=>{
+  (_ktPending||[]).filter(r=>r.vendo_id).forEach(r=>{
     if(!_ktVendos.some(v=>v.id===r.vendo_id)){
       _ktVendos.push({row:++_ktSeq, id:r.vendo_id, name:r.vendo_name||('#'+r.vendo_id), area:r.area||'', coin_variant:ktParseVariant(r.detail)});
       n++;
