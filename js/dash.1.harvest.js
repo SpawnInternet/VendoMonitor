@@ -5753,30 +5753,49 @@ function fobsRender(){
   if(!pane) return;
   const total=_fobRows.reduce((n,r)=>n+r.keys.length,0);
   pane.innerHTML =
-    '<div style="padding:12px 14px;">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
+    '<div style="padding:12px 14px;display:flex;flex-direction:column;height:calc(100vh - 210px);min-height:380px;box-sizing:border-box;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;flex:none;">'
     +   '<div style="font-size:13px;color:#6b7280;font-weight:700;">'+_fobRows.length+' vendo'+(_fobRows.length===1?'':'s')+' · '+total+' fob'+(total===1?'':'s')+' bound</div>'
     +   '<button onclick="fobsLoad()" style="padding:7px 14px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>'
     + '</div>'
-    + '<div style="background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px;">'
-    +   '<div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#025AC6;margin-bottom:10px;">Bind a fob</div>'
-    +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
-    +     '<div style="flex:1;min-width:200px;position:relative;">'
-    +       '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;">1 · Vendo</div>'
-    +       '<input id="fb-vendo-q" placeholder="Search vendo name / code…" oninput="fbSearch()" autocomplete="off" style="width:100%;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;" />'
-    +       '<div id="fb-vendo-res" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;margin-top:3px;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>'
-    +       '<div id="fb-vendo-picked" style="font-size:12px;color:#028867;font-weight:700;margin-top:5px;"></div>'
+
+    /* ══ two-column split, mirroring the Borrow Log ══ */
+    + '<div style="display:flex;gap:0;flex:1;min-height:0;border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#fff;">'
+
+    /* ── LEFT: bind form ── */
+    +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid #e5e7eb;">'
+    +     '<div style="padding:12px 14px;border-bottom:1.5px solid #f1f5f9;flex:none;">'
+    +       '<div style="font-size:15px;font-weight:800;color:#025AC6;">🏷️ Bind a Fob</div>'
+    +       '<div style="font-size:11px;color:#6b7280;margin-top:2px;">Pick the vendo, type the code on the fob, press Bind</div>'
     +     '</div>'
-    +     '<div style="flex:1;min-width:140px;">'
-    +       '<div style="font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;">2 · Fob code</div>'
-    +       '<input id="fb-code" placeholder="e.g. MJWDL" oninput="this.value=this.value.toUpperCase()" style="width:100%;padding:9px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:monospace;text-transform:uppercase;box-sizing:border-box;" />'
+    +     '<div style="flex:1;overflow-y:auto;padding:14px;">'
+    +       '<div style="background:#fff;border:2px solid #025AC6;border-radius:12px;padding:14px;">'
+    +         '<div style="position:relative;margin-bottom:14px;">'
+    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">1 · VENDO</div>'
+    +           '<input id="fb-vendo-q" placeholder="Search vendo name / code…" oninput="fbSearch()" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" />'
+    +           '<div id="fb-vendo-res" style="display:none;position:absolute;z-index:20;left:0;right:0;top:100%;background:#fff;border:1.5px solid #025AC6;border-radius:9px;margin-top:3px;max-height:240px;overflow-y:auto;box-shadow:0 8px 20px rgba(0,0,0,.15);"></div>'
+    +           '<div id="fb-vendo-picked" style="font-size:12px;color:#028867;font-weight:700;margin-top:5px;"></div>'
+    +         '</div>'
+    +         '<div style="margin-bottom:14px;">'
+    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">2 · FOB CODE</div>'
+    +           '<input id="fb-code" maxlength="5" placeholder="e.g. MJWDL" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fbBind();}" style="width:100%;padding:11px 12px;border:2px solid #FFB725;border-radius:9px;font:800 19px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center;text-transform:uppercase;color:#311A8E;box-sizing:border-box;outline:none;" />'
+    +         '</div>'
+    +         '<button onclick="fbBind()" style="width:100%;padding:12px;background:#028867;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Bind</button>'
+    +         '<div id="fb-bind-msg" style="margin-top:10px;font-size:13px;"></div>'
+    +       '</div>'
     +     '</div>'
-    +     '<button onclick="fbBind()" style="padding:10px 20px;background:#028867;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">Bind</button>'
     +   '</div>'
-    +   '<div id="fb-bind-msg" style="margin-top:10px;font-size:13px;"></div>'
+
+    /* ── RIGHT: bound fobs list ── */
+    +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fafbfc;">'
+    +     '<div style="padding:12px 14px;border-bottom:1.5px solid #f1f5f9;flex:none;">'
+    +       '<div style="font-size:15px;font-weight:800;color:#DF1A35;margin-bottom:8px;">🔑 Bound Fobs</div>'
+    +       '<input id="fb-list-q" placeholder="🔍 Filter bound vendos…" oninput="fobsFilter()" style="width:100%;padding:8px 11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:12px;font-family:inherit;box-sizing:border-box;outline:none;" />'
+    +     '</div>'
+    +     '<div id="fb-list" style="flex:1;overflow-y:auto;padding:12px 14px;"></div>'
+    +   '</div>'
+
     + '</div>'
-    + '<input id="fb-list-q" placeholder="Filter bound vendos…" oninput="fobsFilter()" style="width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;margin-bottom:10px;box-sizing:border-box;" />'
-    + '<div id="fb-list"></div>'
     + '</div>';
   fobsRenderList(_fobRows);
 }
