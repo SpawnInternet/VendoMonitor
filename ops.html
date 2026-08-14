@@ -475,8 +475,47 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 // ── SUPABASE ───────────────────────────────────────────────────
+// ============================================================
+// SECURITY: no service_role key in this file.
+// Every Supabase call below is transparently rerouted through the
+// spawn-gw-field edge function, which holds the service key server
+// side and enforces a narrow table + method allow-list.
+// The browser holds only the shared field token.
+//
+// NOTE: this is spawn-gw-FIELD, a separate function from spawn-gw.
+// harvest_v3 talks to spawn-gw and is untouched by this change.
+// ============================================================
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const KEY = 'gw';
+(function installFieldGateway(){
+  const GW    = SB + '/functions/v1/spawn-gw-field';
+  const TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';
+  const _f    = window.fetch.bind(window);
+  const RPC_RE  = /\/rest\/v1\/rpc\/([a-z_0-9]+)$/;
+  const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  const post = (payload) => _f(GW, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-gw-token':TOKEN },
+    body: JSON.stringify(payload)
+  });
+  window.fetch = function(input, init){
+    try{
+      const url  = (typeof input === 'string') ? input : (input && input.url) || '';
+      const o    = init || {};
+      const h    = o.headers || {};
+      if (url.indexOf(SB) === 0 && (h.apikey === 'gw' || h['x-spawn-gw'] === '1')) {
+        const method = (o.method || 'GET').toUpperCase();
+        const body   = o.body ? JSON.parse(o.body) : undefined;
+        const rpcm = url.match(RPC_RE);
+        if (rpcm) return post({ kind:'rpc', fn: rpcm[1], body });
+        const m = url.match(REST_RE);
+        if (m) return post({ kind:'rest', table:m[1], method, query:m[3] || '', body,
+                             prefer: h['Prefer'] || h['prefer'] || '' });
+      }
+    }catch(e){ console.warn('[GW-FIELD] passthrough:', e && e.message); }
+    return _f(input, init);
+  };
+})();
 const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
 
 async function sb(method, path, body){
@@ -671,7 +710,7 @@ async function loadStaffForRole(role){
   const render = (list) => {
     loading.style.display = 'none';
     el.innerHTML = list.map(s=>`
-      <div class="role-btn" onclick="selectStaff(this,'${s.name.replace(/'/g,"\\'")}','${(s.pin||'0000')}')" data-name="${s.name}">
+      <div class="role-btn" onclick="selectStaff(this,'${s.name.replace(/'/g,"\\'")}')" data-name="${s.name}">
         <div style="width:40px;height:40px;border-radius:50%;background:#e8edf8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#1e2d5a;margin:0 auto 8px;transition:.15s" class="col-av">${s.name[0].toUpperCase()}</div>
         <div class="role-btn-name" style="font-size:13px">${s.name}</div>
       </div>`).join('');
@@ -679,23 +718,21 @@ async function loadStaffForRole(role){
   render(fallback);
 
   try{
-    const data = await sb('GET', `staff?role=eq.${role}&active=eq.true&order=display_name.asc`);
+    // PINs never leave the server — this RPC returns names only.
+    const data = await sb('POST', 'rpc/spawn_staff_list', {p_role: role});
     if(Array.isArray(data) && data.length){
       _staffData = data;
-      const mapped = data.map(s=>({name:s.display_name||s.name||'Staff', pin:s.pin||'0000', id:s.id}));
-      render(mapped);
+      render(data.map(s=>({name:s.display_name||s.name||'Staff', id:s.id})));
     }
   }catch(e){
     _staffData = fallback;
   }
 }
 
-let _cachedPin = null;
-function selectStaff(el, name, pin){
+function selectStaff(el, name){
   document.querySelectorAll('#modal-name-list .role-btn').forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
   _selectedName = name;
-  _cachedPin = pin;
 
   // Show the selected name pill + PIN step
   document.getElementById('modal-selected-avatar').textContent = name[0].toUpperCase();
@@ -730,24 +767,21 @@ async function doLogin(){
   btn.disabled=true; btn.textContent='Checking…';
   errEl.style.display='none';
 
-  // Try DB verification first
+  // The PIN is checked on the server. Nothing here can be bypassed by
+  // reading the page source, and there is no blanket default-PIN escape.
   let ok = false;
   try{
-    const rows = await sb('GET',
-      `staff?role=eq.${_selectedRole}&active=eq.true`+
-      `&or=(display_name.eq.${encodeURIComponent(_selectedName)},name.eq.${encodeURIComponent(_selectedName)})`
-    );
+    const rows = await sb('POST', 'rpc/spawn_staff_login',
+      {p_name: _selectedName, p_pin: pin});
     if(Array.isArray(rows) && rows.length){
-      const staff = rows[0];
-      ok = (staff.pin === pin) || pin === '0000'; // 0000 is default — allow until set
-      if(ok) STATE.staffId = staff.id;
-    } else {
-      // Not in staff table yet — allow default PIN 0000
-      ok = (pin === '0000');
+      ok = true;
+      STATE.staffId = rows[0].id;
     }
   }catch(e){
-    // Offline — allow cached PIN
-    ok = (_cachedPin === pin) || (pin === '0000');
+    errEl.textContent='⚠️ No connection — log in once while online';
+    errEl.style.display='';
+    btn.disabled=false; btn.textContent='Login →';
+    return;
   }
 
   if(!ok){
