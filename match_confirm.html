@@ -89,9 +89,23 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--t
 .empty{text-align:center;padding:40px;color:var(--mu);}
 .empty-ico{font-size:48px;margin-bottom:10px;}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+
+<div id="mc-login" style="position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit">
+  <div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:26px">
+    <div style="font-size:18px;font-weight:800;color:#1e2d5a;margin-bottom:4px">🔒 Admin sign in</div>
+    <div style="font-size:12px;color:#64748b;margin-bottom:18px">This tool edits and removes vendo records.</div>
+    <input id="mc-user" placeholder="Username" autocomplete="username"
+      style="width:100%;padding:11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;margin-bottom:9px;box-sizing:border-box;font-family:inherit">
+    <input id="mc-pass" type="password" placeholder="Password" autocomplete="current-password"
+      style="width:100%;padding:11px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;box-sizing:border-box;font-family:inherit"
+      onkeydown="if(event.key==='Enter')mcLogin()">
+    <div id="mc-err" style="color:#dc2626;font-size:12px;font-weight:700;margin-top:9px;display:none">Incorrect username or password</div>
+    <button onclick="mcLogin()" id="mc-btn"
+      style="width:100%;margin-top:16px;padding:12px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">Sign in →</button>
+  </div>
+</div>
 
 <div class="top">
   <div>
@@ -130,8 +144,63 @@ body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;color:var(--t
 </div>
 
 <script>
+// ============================================================
+// SECURITY: no service_role key in this file. The admin password is
+// exchanged for a gateway token by spawn-admin-login; every DB call
+// then goes through spawn-gw-admin, which holds the service key
+// server side and enforces a table + method allow-list.
+// ============================================================
 const SB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const GW_URL    = SB + '/functions/v1/spawn-gw-admin';
+const LOGIN_URL = SB + '/functions/v1/spawn-admin-login';
+const MC_KEY    = 'spawn_admin_auth';
+let GW_TOKEN = null;
+
+async function gwRest(table, method, query, body, prefer){
+  const r = await fetch(GW_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+    body: JSON.stringify({kind:'rest', table, method, query: query||'', body, prefer: prefer||''})
+  });
+  const txt = await r.text();
+  if(!r.ok) throw new Error(txt || ('HTTP '+r.status));
+  return txt ? JSON.parse(txt) : null;
+}
+
+async function mcLogin(){
+  const u = (document.getElementById('mc-user').value||'').trim();
+  const p = (document.getElementById('mc-pass').value||'').trim();
+  const btn = document.getElementById('mc-btn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  try{
+    const r = await fetch(LOGIN_URL, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:u, password:p})});
+    const d = await r.json().catch(()=>({}));
+    if(!(r.ok && d.ok && d.token)) throw new Error('invalid');
+    GW_TOKEN = d.token;
+    sessionStorage.setItem(MC_KEY, JSON.stringify({token:d.token, ts:Date.now()}));
+    document.getElementById('mc-login').style.display='none';
+    loadSuggestions();
+  }catch(e){
+    document.getElementById('mc-err').style.display='';
+    document.getElementById('mc-pass').value='';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Sign in →';
+  }
+}
+
+function mcBoot(){
+  try{
+    const s = JSON.parse(sessionStorage.getItem(MC_KEY)||'null');
+    if(s && s.token && Date.now()-s.ts < 24*60*60*1000){
+      GW_TOKEN = s.token;
+      document.getElementById('mc-login').style.display='none';
+      loadSuggestions();
+      return;
+    }
+  }catch(e){}
+  const u=document.getElementById('mc-user'); if(u) u.focus();
+}
 
 let allSuggestions = [];
 let confirmed = 0, skipped = 0;
@@ -142,29 +211,14 @@ let currentFilter = 'all';
 // Load suggestions via SQL query
 async function loadSuggestions() {
   try {
-    const db = supabase.createClient(SB, KEY);
-    
-    console.log('Fetching TG vendos...');
-    const { data: tgVendos, error: e1 } = await db
-      .from('vendos')
-      .select('id,tg_name,area,vlan')
-      .not('tg_name', 'is', null)
-      .is('sheet_name', null)
-      .not('vlan', 'is', null)
-      .order('area').order('vlan')
-      .limit(2000);
-    if (e1) throw new Error('TG fetch: ' + e1.message);
+    const tgVendos = await gwRest('vendos','GET',
+      'select=id,tg_name,area,vlan&tg_name=not.is.null&sheet_name=is.null&vlan=not.is.null'+
+      '&order=area.asc,vlan.asc&limit=2000');
     console.log('TG vendos loaded:', tgVendos.length);
 
-    const { data: sheetVendos, error: e2 } = await db
-      .from('vendos')
-      .select('id,sheet_name,area,vlan')
-      .is('tg_name', null)
-      .not('sheet_name', 'is', null)
-      .not('vlan', 'is', null)
-      .order('area').order('vlan')
-      .limit(2000);
-    if (e2) throw new Error('Sheet fetch: ' + e2.message);
+    const sheetVendos = await gwRest('vendos','GET',
+      'select=id,sheet_name,area,vlan&tg_name=is.null&sheet_name=not.is.null&vlan=not.is.null'+
+      '&order=area.asc,vlan.asc&limit=2000');
     console.log('Sheet vendos loaded:', sheetVendos.length);
 
     // Build suggestions: for each TG vendo, find sheet vendos with same area+vlan
@@ -370,11 +424,9 @@ async function confirmMatch(idx) {
   const vlan = s.tg.vlan;
 
   try {
-    const db = supabase.createClient(SB, KEY);
-    const { error: e1 } = await db.from('vendos').update({ sheet_name: sheetName, vlan: vlan, is_traced: true }).eq('id', tgId);
-    if (e1) throw new Error(e1.message);
-    const { error: e2 } = await db.from('vendos').delete().eq('id', sheetId);
-    if (e2) throw new Error(e2.message);
+    await gwRest('vendos','PATCH', 'id=eq.'+tgId,
+      { sheet_name: sheetName, vlan: vlan, is_traced: true }, 'return=minimal');
+    await gwRest('vendos','DELETE', 'id=eq.'+sheetId, undefined, 'return=minimal');
 
     allSuggestions[idx].status = 'confirmed';
     confirmed++;
@@ -448,7 +500,8 @@ function searchCards(q) {
   container.innerHTML = filtered.map((s, i) => buildCard(s, allSuggestions.indexOf(s))).join('');
 }
 
-loadSuggestions();
+// Nothing loads until the admin password is accepted.
+mcBoot();
 </script>
 </body>
 </html>
