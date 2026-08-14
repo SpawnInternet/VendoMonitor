@@ -191,6 +191,9 @@
     if(v.length === 5) skQbGo();
   };
 
+  window.skQbDismiss = function(){ _qbMsg = ''; qbRefresh();
+    var el=document.getElementById('sk-qb-code'); if(el) el.focus(); };
+
   window.skQbClearFeed = function(){ _qbFeed = []; _qbMsg = ''; qbRefresh();
     var el=document.getElementById('sk-qb-code'); if(el) el.focus(); };
 
@@ -231,7 +234,8 @@
       }
       await skReloadQuiet();
     }catch(err){
-      qbPush({ok:false, mode:_qbMode, code:code, msg:String((err && err.message) || err)});
+      // failures are shouted at the top, never filed in the session list
+      _qbMsg = code+' — '+String((err && err.message) || err);
     }finally{
       _qbBusy = false;
       // refresh whichever Borrow Log is on screen (v1 list or v2 panels)
@@ -317,13 +321,25 @@
       +      'style="width:170px;padding:9px 12px;border:2px solid '+accent+';border-radius:9px;background:#fff;'
       +      'font:800 21px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;text-align:center;color:#311A8E;outline:none;">'
       +  '</div>'
-      +  '<div style="flex:none;font-size:11px;color:#6b7280;padding-bottom:10px;">'
-      +    (_qbBusy ? '<span style="color:#025AC6;font-weight:800;">Saving&hellip;</span>' : 'auto-saves on the 5th letter')
+      +  '<div style="flex:none;">'
+      +    '<button onclick="skQbGo()" '+(_qbBusy?'disabled ':'')
+      +      'style="padding:11px 22px;border:none;border-radius:9px;font-size:14px;font-weight:800;cursor:'+(_qbBusy?'default':'pointer')+';font-family:inherit;'
+      +      'background:'+(_qbBusy?'#9ca3af':(isRet?'#028867':'#DF1A35'))+';color:#fff;">'
+      +      (_qbBusy ? 'Saving&hellip;' : (isRet ? '&#9989; Confirm Return' : '&#10003; Confirm Borrow'))
+      +    '</button>'
       +  '</div>'
+      +  '<div style="flex:none;font-size:11px;color:#6b7280;padding-bottom:11px;">or it fires by itself on the 5th letter</div>'
       + '</div>';
 
     if(_qbMsg){
-      h += '<div style="margin-top:9px;font-size:12px;font-weight:700;color:'+(_qbMsg.indexOf('Undone')>=0?'#028867':'#DF1A35')+';">'+esc(_qbMsg)+'</div>';
+      var good = (_qbMsg.indexOf('Undone') >= 0);
+      h += '<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;'
+        +  'background:'+(good?'#E6F7F0':'#fef2f2')+';border:1.5px solid '+(good?'#028867':'#DF1A35')+';border-radius:10px;padding:9px 12px;">'
+        +  '<div style="font-size:12.5px;font-weight:800;color:'+(good?'#028867':'#DF1A35')+';">'
+        +    (good?'':'&#9888; ')+esc(_qbMsg)+'</div>'
+        +  '<button onclick="skQbDismiss()" style="flex:none;background:none;border:none;color:'+(good?'#028867':'#DF1A35')
+        +    ';font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;line-height:1;">&#10005;</button>'
+        + '</div>';
     }
 
     if(_qbFeed.length){
