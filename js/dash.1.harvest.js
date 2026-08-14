@@ -4719,13 +4719,8 @@ function ktLoad(){
 function ktRenderCustodians(){
   const dl = document.getElementById('kt-holder-list');
   if(dl) dl.innerHTML = _ktCustodians.map(n=>'<option value="'+klEsc(n)+'">').join('');
-  const box = document.getElementById('kt-holder-chips');
-  if(!box) return;
-  box.innerHTML = _ktCustodians.length
-    ? _ktCustodians.map(n=>
-        '<button type="button" onclick="ktPickHolder('+JSON.stringify(n)+')" style="padding:4px 10px;background:#f5f3ff;color:#311A8E;border:1.5px solid #c4b5fd;border-radius:14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">👤 '+klEsc(n)+'</button>'
-      ).join('')
-    : '<span style="font-size:11px;color:#9ca3af;">No saved custodian yet — just type, it will be remembered.</span>';
+  // Chips removed — names live in the kt-holder-list datalist, which drops
+  // down from the search box itself. ktPickHolder is kept for any old caller.
 }
 
 function ktWireHolder(){
@@ -4804,6 +4799,13 @@ function ktRenderVendos(){
 }
 
 function ktCompile(){
+  // label both confirm buttons with what is actually staged
+  const n = _ktVendos.length;
+  ['kt-add-btn','kt-add-btn-top'].forEach(id=>{
+    const b = document.getElementById(id); if(!b) return;
+    b.textContent = n ? ('✓ Log '+n+' key'+(n===1?'':'s')+' for Transfer') : '✓ Log Keys for Transfer';
+    b.style.background = n ? '#311A8E' : '#9ca3af';
+  });
   const pv = document.getElementById('kt-preview');
   if(!pv) return;
   if(!_ktVendos.length){ pv.style.display='none'; return; }
@@ -4828,11 +4830,12 @@ function ktAdd(){
   const rows = _ktVendos.map(v=>({
     vendo_id:v.id, vendo_name:v.name, area:v.area,
     held_by:holder, added_to_pungpung:false, notes:notes,
-    key_kind:v.coin_variant?'coin':null, coin_variant:v.coin_variant||null
+    key_kind:v.coin_variant?'coin':null, coin_variant:v.coin_variant||null,
+    destination:({pungpung:'pungpung', board:'board_box', duplicate:'duplicate_box'})[v.coin_variant] || null
   }));
-  const btn = document.getElementById('kt-add-btn');
+  const btns = ['kt-add-btn','kt-add-btn-top'].map(i=>document.getElementById(i)).filter(Boolean);
   _ktBusy = true;
-  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  btns.forEach(b=>{ b.disabled = true; b.style.opacity = '.6'; });
   ktRememberCustodian(holder)
     .then(()=>fetch(_SB+'/rest/v1/key_transfers', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(rows)}))
     .then(r=>{
@@ -4849,7 +4852,7 @@ function ktAdd(){
       if(/key_transfers_one_open_per_vendo/.test(m)) m = 'That vendo already has an open transfer for this custodian.';
       alert('Save failed: '+m);
     })
-    .finally(()=>{ _ktBusy=false; if(btn){ btn.disabled=false; btn.style.opacity='1'; } });
+    .finally(()=>{ _ktBusy=false; btns.forEach(b=>{ b.disabled=false; b.style.opacity='1'; }); });
 }
 
 /* The 3 key kinds are segregated into 3 different boxes. destination says
