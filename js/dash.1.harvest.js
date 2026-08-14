@@ -5919,8 +5919,8 @@ function fobsRender(){
     +           '<div id="fb-vendo-picked" style="font-size:12px;color:#028867;font-weight:700;margin-top:5px;"></div>'
     +         '</div>'
     +         '<div style="margin-bottom:14px;">'
-    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">2 · FOB CODE</div>'
-    +           '<input id="fb-code" maxlength="5" placeholder="e.g. MJWDL" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fbBind();}" style="width:100%;padding:11px 12px;border:2px solid #FFB725;border-radius:9px;font:800 19px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center;text-transform:uppercase;color:#311A8E;box-sizing:border-box;outline:none;" />'
+    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">2 · FOB CODE <span style="font-weight:600;color:#9ca3af;">— confirms on the 5th letter</span></div>'
+    +           '<input id="fb-code" maxlength="5" placeholder="e.g. MJWDL" oninput="fbCodeInput(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fbBind();}" style="width:100%;padding:11px 12px;border:2px solid #FFB725;border-radius:9px;font:800 19px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center;text-transform:uppercase;color:#311A8E;box-sizing:border-box;outline:none;" />'
     +         '</div>'
     +         '<button onclick="fbBind()" style="width:100%;padding:12px;background:#028867;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Bind</button>'
     +         '<div id="fb-bind-msg" style="margin-top:10px;font-size:13px;"></div>'
@@ -6058,6 +6058,26 @@ function _fbBtn(label,color,onclick){
 function _fbBigKt(kt){
   const c={pungpung:'#311A8E',duplicate:'#C01176',board:'#028867',coin:'#025AC6'}[kt]||'#6b7280';
   return '<span style="display:inline-block;background:'+c+';color:#fff;padding:4px 14px;border-radius:99px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">'+_fbEsc(kt||'unknown')+' key</span>';
+}
+
+/* Fob codes are always 5 characters, so there is nothing to wait for once the
+   5th lands — open the confirm modal straight away. The modal is still the
+   thing that binds; this only saves the trip to the Bind button. */
+let _fbAutoBusy = false;
+function fbCodeInput(el){
+  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el.value = v;
+  if(v.length !== 5) return;
+  if(_fbAutoBusy) return;                                   // fbBind is async
+  if(document.getElementById('fb-bind-modal')) return;       // already asking
+  if(!_fbVendo){                                             // no vendo yet
+    const m=document.getElementById('fb-bind-msg');
+    if(m) m.innerHTML='<span style="color:#DF1A35;font-weight:700;">Pick the vendo first, then the code will confirm by itself.</span>';
+    const q=document.getElementById('fb-vendo-q'); if(q) q.focus();
+    return;
+  }
+  _fbAutoBusy = true;
+  Promise.resolve(fbBind()).catch(()=>{}).finally(()=>{ _fbAutoBusy = false; });
 }
 
 async function fbBind(force){
