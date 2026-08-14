@@ -1504,6 +1504,7 @@ function renderSubModal(){
       const line=(k,v,b)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${b||''}</div>`;
       const val=v=>(v==null||v==='')?none:esc(v);
       const sysFill = !!(rec && rec.last_updated_by==='bashang-backfill');
+      const bplan = rec ? bhPlan(r.roster_name, rec) : null;
       html+=`<div class="candbox">
         <div class="candhead">
           <span>${esc((rec&&rec.area)||r.area||'—')}</span>
@@ -1516,9 +1517,9 @@ function renderSubModal(){
         ${rec?`
           ${line('Area',    val(rec.area),
               `<button class="lnk link" onclick='changeSubArea(${JSON.stringify(String(rec.id))})'>Change</button>`)}
-          ${line('Address', val(rec.address),                       btn('address'))}
-          ${line('Phone',   val(rec.phone),                         btn('phone'))}
-          ${line('FB name', val(rec.fb_name),                       btn('fb_name'))}
+          ${line('Address', val(rec.address)+bhNote(bplan,'address'), btn('address'))}
+          ${line('Phone',   val(rec.phone)+bhNote(bplan,'phone'),     btn('phone'))}
+          ${line('FB name', val(rec.fb_name)+bhNote(bplan,'fb_name'), btn('fb_name'))}
           ${(()=>{
               const prof = m.ppp_profile||'';
               const cur  = rec.plan_type==null?'':String(rec.plan_type);
@@ -1530,16 +1531,18 @@ function renderSubModal(){
                 ? `<button class="lnk link" onclick='setSubPlan(${JSON.stringify(String(rec.id))},${attrJS(prof)})'>Set ${esc(prof)}</button>` : '';
               return line('Plan', val(rec.plan_type)+badge, setBtn+btn('plan_type'));
             })()}
-          ${line('Monthly', rec.monthly_amount==null?none:'₱'+esc(rec.monthly_amount), btn('monthly_amount'))}
-          ${line('Due day', val(rec.due_day),                       btn('due_day'))}
+          ${line('Monthly', (rec.monthly_amount==null?none:'₱'+esc(rec.monthly_amount))+bhNote(bplan,'monthly_amount'), btn('monthly_amount'))}
+          ${line('Due day', val(rec.due_day)+bhNote(bplan,'due_day'), btn('due_day'))}
+          ${(bplan&&bplan.fields.acct_no)?line('Account', val(rec.acct_no)+bhNote(bplan,'acct_no'), btn('acct_no')):''}
           ${line('GPS', rec.lat
               ? `<a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a>`
               : none,
               `<button class="lnk link" onclick='subPhotoGps(${JSON.stringify(String(rec.id))})' title="Read GPS out of a stamped photo">📷 Photo</button>`+btn('gps'))}
           ${rec.gps_place?line('Landmark', val(rec.gps_place)):''}
         `:`<div class="raw" style="margin:8px 0;color:var(--red);font-weight:700">Linked name is not a subscriber record — use Change.</div>`}
+        ${bhStripHtml(bplan)}
         ${lockRowHtml(m.ppp_name)}
-      </div>` + bashangCardHtml(r.roster_name, rec);
+      </div>`;
     } else {
       // Same card as the Match Names worklist, so linking works from here too.
       const cands=mwCandidates(m.ppp_name,4);
@@ -3081,6 +3084,60 @@ function bashangFor(name, acct){
   });
   return (best && best.s>=0.55) ? best : null;
 }
+// What the BASHANG row can contribute to this record, field by field.
+// Blank-on-record + present-on-sheet is the only thing the merge button writes;
+// a value that disagrees with the record is shown but never auto-overwritten.
+function bhPlan(name, rec){
+  const hit = bashangFor(name, rec && rec.acct_no);
+  if(!hit || !rec) return null;
+  const b = hit.row;
+  const defs = [
+    ['acct_no',        'Account',  b.acct_no||null],
+    ['phone',          'Phone',    bhPhone(b.raw_contact)],
+    ['fb_name',        'FB name',  bhFb(b.raw_contact)],
+    ['address',        'Address',  b.raw_address||null],
+    ['due_day',        'Due day',  bhNum(b.due_raw)],
+    ['monthly_amount', 'Monthly',  bhNum(b.amount_raw)]
+  ];
+  const fields = {};
+  let blanks = 0, diffs = 0;
+  defs.forEach(([f,label,sheetVal])=>{
+    if(sheetVal==null || sheetVal==='') return;
+    const cur   = rec[f];
+    const blank = (cur==null || cur==='');
+    const same  = String(cur??'').trim().toLowerCase()===String(sheetVal).trim().toLowerCase();
+    if(blank) blanks++; else if(!same) diffs++;
+    fields[f] = {f, label, sheetVal, cur, blank, same};
+  });
+  return {hit, row:b, fields, blanks, diffs, sid:rec.id};
+}
+
+// Small inline note that sits on a field row of the main card.
+function bhNote(plan, f){
+  if(!plan) return '';
+  const x = plan.fields[f];
+  if(!x || x.same) return '';
+  if(x.blank) return ` <span class="mw-tag prob" title="On the BASHANG sheet but blank here">sheet: ${esc(String(x.sheetVal))}</span>`;
+  return ` <span class="vlanmismatch" title="The BASHANG sheet disagrees with this record">≠ sheet says ${esc(String(x.sheetVal))}</span>`
+       + ` <button class="lnk unlink" data-bhpull="${f}" data-bhval="${esc(String(x.sheetVal))}" data-bhid="${plan.sid}" data-bhover="1">Use sheet</button>`;
+}
+
+// The provenance strip + the single merge button, folded into the main card.
+function bhStripHtml(plan){
+  if(!plan) return '';
+  const b = plan.row;
+  const score = plan.hit.byAcct ? 'matched on account no' : Math.round(plan.hit.s*100)+'% match';
+  const bits = [];
+  if(b.last_paid)    bits.push('Last paid '+esc(b.last_paid));
+  if(b.raw_contact)  bits.push('Raw contact '+esc(b.raw_contact));
+  return `<div class="linkrow" style="border-top:1px dashed var(--line);margin-top:4px;padding-top:8px;">
+      <span class="k">📗 BASHANG</span>
+      <span class="v" style="font-size:12px">${esc(b.raw_name)} <span class="mw-score ${plan.hit.byAcct?'':(plan.hit.s<0.72?'mid':'')}">${score}</span></span>
+    </div>
+    ${bits.length?`<div class="linkrow"><span class="k"></span><span class="v" style="font-size:12px;color:var(--dim)">${bits.join(' · ')}</span></div>`:''}
+    ${plan.blanks?`<div class="mw-acts"><button class="mw-btn" data-bhmerge="${plan.sid}">⬇ Merge ${plan.blanks} blank field${plan.blanks===1?'':'s'} from BASHANG</button></div>`:''}`;
+}
+
 function bashangCardHtml(name, rec){
   const hit=bashangFor(name, rec&&rec.acct_no);
   if(!hit) return `<div class="candbox"><div class="candhead"><span>📗 BASHANG SHEET</span></div>
@@ -3128,6 +3185,31 @@ async function bhPatch(sid, body){
   const rec=SUBRECS.find(x=>String(x.id)===String(sid));
   if(rec) Object.assign(rec, body);
 }
+// One-tap merge: fill every blank field from the matched BASHANG row.
+// Only blanks — anything already on the record is left alone, so this can
+// never quietly overwrite something a person typed.
+document.addEventListener('click', async e=>{
+  const mg = e.target.closest('[data-bhmerge]');
+  if(!mg) return;
+  const sid = mg.dataset.bhmerge;
+  const rec = SUBRECS.find(x=>String(x.id)===String(sid));
+  const plan = rec ? bhPlan(rec.name, rec) : null;
+  if(!plan || !plan.blanks){ toast('Nothing blank to merge'); return; }
+  const body = {}, lines = [];
+  Object.values(plan.fields).forEach(x=>{
+    if(!x.blank) return;
+    body[x.f] = (x.f==='due_day'||x.f==='monthly_amount') ? Number(x.sheetVal) : String(x.sheetVal);
+    lines.push('  • '+x.label+': '+x.sheetVal);
+  });
+  if(!confirm('Merge from BASHANG "'+plan.row.raw_name+'"?\n\n'+lines.join('\n')
+      +'\n\nOnly blank fields are filled. Nothing already on the record is changed.')) return;
+  try{
+    await bhPatch(sid, body);
+    toast('Merged '+Object.keys(body).length+' field(s) from BASHANG');
+    renderSubModal(); renderSubs();
+  }catch(err){ toast('Merge failed — '+err.message); }
+});
+
 // Pull one field / pull every blank field from the BASHANG row
 document.addEventListener('click', async e=>{
   const one=e.target.closest('[data-bhpull]'), all=e.target.closest('[data-bhall]');
