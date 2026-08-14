@@ -4852,8 +4852,21 @@ function ktAdd(){
     .finally(()=>{ _ktBusy=false; if(btn){ btn.disabled=false; btn.style.opacity='1'; } });
 }
 
+/* The 3 key kinds are segregated into 3 different boxes. destination says
+   which box a key belongs in; added_to_pungpung says it is already in it. */
+const KT_BOX = {
+  pungpung:      {label:'Pungpung',      short:'PUNGPUNG',  icon:'🔗', color:'#311A8E', verb:'Added to the Pungpung'},
+  board_box:     {label:'Board Box',     short:'BOARD',     icon:'📦', color:'#028867', verb:'Put in the Board Box'},
+  duplicate_box: {label:'Duplicate Box', short:'DUPLICATE', icon:'📦', color:'#C01176', verb:'Put in the Duplicate Box'}
+};
+function ktBox(r){
+  return KT_BOX[r && r.destination] ||
+    {label:'Kind not set', short:'NOT SET', icon:'❓', color:'#92400e', verb:'Mark as placed'};
+}
+
 function ktClearFilters(){
   const a=document.getElementById('kt-area'); if(a) a.value='';
+  const b=document.getElementById('kt-box');  if(b) b.value='';
   const q=document.getElementById('kt-q');    if(q) q.value='';
   ktRender();
 }
@@ -4889,6 +4902,11 @@ function ktRender(){
   }
   if(areaPick) rows = rows.filter(r=>(r.area||'(no area)')===areaPick);
 
+  // ── box filter: work one box at a time (board keys, duplicates, pungpung)
+  const boxSel = document.getElementById('kt-box');
+  const boxPick = boxSel ? (boxSel.value||'') : '';
+  if(boxPick) rows = rows.filter(r=>(r.destination||'')===(boxPick==='unset'?'':boxPick));
+
   if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.held_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.transferred_by||'')+' '+(r.transferred_to||'')).toLowerCase().includes(q));
 
   const pend = _ktRows.filter(r=>!r.added_to_pungpung).length;
@@ -4914,16 +4932,16 @@ function ktRender(){
       + items.map(r=>{
           const done = !!r.added_to_pungpung;
           const bd = done ? '#028867' : '#DF1A35';
+          const bxb = ktBox(r);
           const badge = done
-            ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ SA PUNGPUNG</span>'
+            ? '<span style="background:#028867;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">✅ SA '+klEsc(bxb.short)+'</span>'
             : '<span style="background:#DF1A35;color:#fff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;">🔴 PENDING</span>';
+          const bx = ktBox(r);
           const actions = done
             ? '<button onclick="event.stopPropagation();ktUndo('+r.id+')" style="padding:6px 10px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Undo</button>'
-            : '<button onclick="event.stopPropagation();ktTransfer('+r.id+')" style="padding:6px 12px;background:#311A8E;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Added to the Pungpung</button>';
+            : '<button onclick="event.stopPropagation();ktTransfer('+r.id+')" style="padding:6px 12px;background:'+bx.color+';color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">'+bx.icon+' '+bx.verb+'</button>';
           const det = _ktDetails[r.vendo_id];
-          const kindChip = r.coin_variant
-            ? '<span style="background:#EBF0FB;color:#025AC6;padding:1px 7px;border-radius:6px;font-size:10px;font-weight:800;margin-left:6px;">'+klEsc((r.coin_variant||'').toUpperCase())+'</span>'
-            : '';
+          const kindChip = '<span style="background:#EBF0FB;color:'+bxb.color+';padding:1px 7px;border-radius:6px;font-size:10px;font-weight:800;margin-left:6px;">'+bxb.icon+' '+klEsc(bxb.short)+'</span>';
           return '<div onclick="ktDetail('+JSON.stringify(r.vendo_id)+','+r.id+')" style="cursor:pointer;background:#fff;border:1.5px solid #e5e7eb;border-left:4px solid '+bd+';border-radius:9px;padding:10px 13px;margin-bottom:7px;">'
             + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
             +   '<div style="font-size:13px;font-weight:800;color:#311A8E;">🔑 '+klEsc(r.vendo_name)+kindChip+'</div>'+badge
@@ -5034,7 +5052,7 @@ function ktTransfer(id){
   ov.innerHTML =
     '<div style="background:#fff;border-radius:18px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;font-family:inherit;">'
     + '<div style="background:linear-gradient(135deg,#311A8E,#025AC6);padding:20px 22px;color:#fff;">'
-    +   '<div style="font-size:19px;font-weight:800;">🔗 Added to the Pungpung</div>'
+    +   '<div style="font-size:19px;font-weight:800;">'+ktBox(rec).icon+' '+klEsc(ktBox(rec).verb)+'</div>'
     +   '<div style="font-size:12px;opacity:.9;margin-top:3px;">'+klEsc(rec.vendo_name||'')+(rec.area?(' · '+klEsc(rec.area)):'')+'</div>'
     + '</div>'
     + '<div style="padding:20px 22px;">'
@@ -5042,7 +5060,8 @@ function ktTransfer(id){
     +     '👤 Currently held by: <b>'+klEsc(rec.held_by||'—')+'</b></div>'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Who did the transfer?</label>'
     +   '<input id="kt-m-by" list="kt-holder-list" placeholder="e.g. Joi" value="'+klEsc(rec.held_by||'')+'" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
-    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">Into whose pungpung? (optional)</label>'
+    +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">'
+    +     (rec.destination==='pungpung'||!rec.destination ? 'Into whose pungpung? (optional)' : 'Into whose keeping? (optional)')+'</label>'
     +   '<input id="kt-m-to" list="kc-by-list" placeholder="collector name" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:12px;outline:none;">'
     +   '<label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:5px;">🔒 Password</label>'
     +   '<input id="kt-m-pw" type="password" inputmode="numeric" placeholder="Enter password to confirm" style="width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" onkeydown="if(event.key===\'Enter\')ktConfirm('+id+')">'
