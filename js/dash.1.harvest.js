@@ -4851,6 +4851,12 @@ function ktAdd(){
     .finally(()=>{ _ktBusy=false; if(btn){ btn.disabled=false; btn.style.opacity='1'; } });
 }
 
+function ktClearFilters(){
+  const a=document.getElementById('kt-area'); if(a) a.value='';
+  const q=document.getElementById('kt-q');    if(q) q.value='';
+  ktRender();
+}
+
 function ktRender(){
   const list = document.getElementById('kt-list');
   const lbl  = document.getElementById('kt-lbl');
@@ -4860,11 +4866,40 @@ function ktRender(){
   let rows = _ktRows.slice();
   if(filt==='pending')   rows = rows.filter(r=>!r.added_to_pungpung);
   else if(filt==='done') rows = rows.filter(r=>r.added_to_pungpung);
+
+  // ── area dropdown: built from the rows in scope, so it only ever offers
+  //    areas that actually have something in them, with live pending counts.
+  const areaSel = document.getElementById('kt-area');
+  const areaPick = areaSel ? (areaSel.value||'') : '';
+  if(areaSel){
+    const counts = {};
+    rows.forEach(r=>{ const a = r.area || '(no area)';
+      if(!counts[a]) counts[a] = {n:0, pend:0};
+      counts[a].n++; if(!r.added_to_pungpung) counts[a].pend++; });
+    const names = Object.keys(counts).sort();
+    const opts = ['<option value="">📍 All areas ('+rows.length+')</option>'].concat(
+      names.map(a=>'<option value="'+klEsc(a)+'"'+(a===areaPick?' selected':'')+'>'+klEsc(a)
+        +' · '+counts[a].n+(counts[a].pend?' ('+counts[a].pend+' pending)':'')+'</option>'));
+    // keep a vanished area selectable so the view doesn't silently reset
+    if(areaPick && names.indexOf(areaPick)<0)
+      opts.push('<option value="'+klEsc(areaPick)+'" selected>'+klEsc(areaPick)+' · 0</option>');
+    const joined = opts.join('');
+    if(areaSel.innerHTML !== joined) areaSel.innerHTML = joined;
+  }
+  if(areaPick) rows = rows.filter(r=>(r.area||'(no area)')===areaPick);
+
   if(q) rows = rows.filter(r=>((r.vendo_name||'')+' '+(r.held_by||'')+' '+(r.area||'')+' '+(r.notes||'')+' '+(r.transferred_by||'')+' '+(r.transferred_to||'')).toLowerCase().includes(q));
 
   const pend = _ktRows.filter(r=>!r.added_to_pungpung).length;
-  if(lbl) lbl.textContent = rows.length+' key(s) shown · '+pend+' not yet in a pungpung';
-  if(!rows.length){ list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;">No records.</div>'; return; }
+  if(lbl) lbl.textContent = rows.length+' key(s) shown'+(areaPick?' in '+areaPick:'')+' · '+pend+' not yet in a pungpung';
+  if(!rows.length){
+    const why = (areaPick||q)
+      ? 'Nothing matches'+(areaPick?' in '+klEsc(areaPick):'')+(q?' for "'+klEsc(q)+'"':'')+'.'
+        +'<div style="margin-top:8px;"><button onclick="ktClearFilters()" style="padding:6px 12px;background:#311A8E;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">Clear filters</button></div>'
+      : 'No records.';
+    list.innerHTML='<div style="padding:20px;text-align:center;color:#6b7280;font-size:13px;">'+why+'</div>';
+    return;
+  }
 
   // group by area
   const byArea = {};
