@@ -181,7 +181,7 @@
 
   window.skQbMode = function(m){
     _qbMode = m;
-    skRerender();
+    qbRefresh();
     var el = document.getElementById('sk-qb-code'); if(el) el.focus();
   };
 
@@ -191,7 +191,7 @@
     if(v.length === 5) skQbGo();
   };
 
-  window.skQbClearFeed = function(){ _qbFeed = []; _qbMsg = ''; skRerender();
+  window.skQbClearFeed = function(){ _qbFeed = []; _qbMsg = ''; qbRefresh();
     var el=document.getElementById('sk-qb-code'); if(el) el.focus(); };
 
   function qbPush(o){ o.ts = Date.now(); _qbFeed.unshift(o); if(_qbFeed.length > 10) _qbFeed.pop(); }
@@ -200,17 +200,17 @@
     if(_qbBusy) return;
     var el = document.getElementById('sk-qb-code');
     var code = ((el||{}).value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').trim();
-    if(code.length !== 5){ _qbMsg = 'Fob codes are 5 letters.'; skRerender(); if(el) el.focus(); return; }
+    if(code.length !== 5){ _qbMsg = 'Fob codes are 5 letters.'; qbRefresh(); if(el) el.focus(); return; }
     if(_qbMode === 'borrow' && !_qbWho){
       _qbMsg = 'Type who is borrowing first.';
-      skRerender();
+      qbRefresh();
       var w = document.getElementById('sk-qb-who'); if(w) w.focus();
       return;
     }
 
     _qbBusy = true; _qbMsg = '';
     if(el){ el.value = ''; el.disabled = true; }
-    skRerender();
+    qbRefresh();
 
     try{
       if(_qbMode === 'return'){
@@ -234,7 +234,9 @@
       qbPush({ok:false, mode:_qbMode, code:code, msg:String((err && err.message) || err)});
     }finally{
       _qbBusy = false;
-      skRerender();
+      // refresh whichever Borrow Log is on screen (v1 list or v2 panels)
+      try{ if(typeof window.klLoad === 'function' && document.getElementById('kl-list')) window.klLoad(); }catch(_){}
+      qbRefresh();
       var e2 = document.getElementById('sk-qb-code'); if(e2){ e2.disabled = false; e2.focus(); }
     }
   };
@@ -242,7 +244,7 @@
   window.skQbUndo = async function(code){
     if(_qbBusy) return;
     if(!confirm('Undo the borrow of fob '+code+'?')) return;
-    _qbBusy = true; skRerender();
+    _qbBusy = true; qbRefresh();
     try{
       var d = await skRpc('spawn_key_undo_borrow', {p_qr:code, p_account:'dashboard'});
       if(!d || !d.ok) throw new Error((d && d.error) || 'Undo failed');
@@ -252,10 +254,38 @@
     }catch(err){
       _qbMsg = 'Undo failed: '+String((err && err.message) || err);
     }finally{
-      _qbBusy = false; skRerender();
+      _qbBusy = false;
+      try{ if(typeof window.klLoad === 'function' && document.getElementById('kl-list')) window.klLoad(); }catch(_){}
+      qbRefresh();
       var e2 = document.getElementById('sk-qb-code'); if(e2) e2.focus();
     }
   };
+
+  // Paint the bar into every VISIBLE .sk-qb-host container. Hidden hosts are
+  // emptied so the input ids stay unique across the v1 / v2 duality.
+  function qbPaint(){
+    var all = document.querySelectorAll('.sk-qb-host');
+    var vis = [];
+    for(var i=0;i<all.length;i++){
+      var visible = (all[i].offsetParent !== null) || (all[i].getClientRects().length > 0);
+      if(visible) vis.push(all[i]); else all[i].innerHTML = '';
+    }
+    for(var j=0;j<vis.length;j++) vis[j].innerHTML = qbBar();
+  }
+  window.skQbPaint = qbPaint;
+
+  // Focus-preserving refresh used by every quick-borrow action.
+  function qbRefresh(){
+    var af=document.activeElement, afId=(af&&af.id)||'', s=null, e=null;
+    try{ s=af.selectionStart; e=af.selectionEnd; }catch(_){}
+    var body=document.getElementById('sk-body');
+    if(body && (body.offsetParent!==null || body.getClientRects().length)) skRerender(); // v2 (repaints hosts itself)
+    else qbPaint();                                                                     // v1
+    if(afId){
+      var back=document.getElementById(afId);
+      if(back && back.focus){ back.focus(); if(s!=null){ try{ back.setSelectionRange(s,e); }catch(_){} } }
+    }
+  }
 
   function qbBar(){
     var isRet = (_qbMode === 'return');
@@ -350,11 +380,13 @@
       + '</div>'
       + '<button onclick="skLoad()" style="padding:7px 14px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">&#8635; Refresh</button>'
       + '</div>'
-      + qbBar()
+      + '<div class="sk-qb-host"></div>'
       + '<div style="display:flex;gap:0;border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;height:calc(100vh - 360px);min-height:320px;background:#fff;">'
       +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid #e5e7eb;">'+ringsPanel(rf)+'</div>'
       +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fafbfc;">'+logPanel(lf,q)+'</div>'
       + '</div>';
+
+    qbPaint();
 
     if(_afId){
       var back=document.getElementById(_afId);
@@ -856,4 +888,15 @@
   };
 
 
+
+  // auto-mount the quick-borrow bar wherever a .sk-qb-host appears
+  setInterval(function(){
+    try{
+      var all=document.querySelectorAll('.sk-qb-host');
+      for(var i=0;i<all.length;i++){
+        var visible=(all[i].offsetParent!==null)||(all[i].getClientRects().length>0);
+        if(visible && !all[i].innerHTML){ qbPaint(); return; }   // only when unpainted — never wipes typing
+      }
+    }catch(e){}
+  }, 800);
 })();
