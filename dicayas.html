@@ -2430,10 +2430,44 @@ async function createSubscriberFor(ppp){
   renderSubModal(); renderSubs();
 }
 
+// When a roster link points at a sheet name with no subscriber record behind
+// it, the details already exist on the BASHANG sheet — so prefill the create
+// form from there instead of making someone retype what is already known.
+function bhPrefillNewForm(){
+  const set=(id,v)=>{ const el=document.getElementById(id);
+                      if(el && v!=null && v!=='' && !el.value) el.value=v; };
+  const link = (typeof CUR_PPP!=='undefined' && CUR_PPP && ROSTER.get) ? ROSTER.get(CUR_PPP) : null;
+  const rosterName = link && link.roster_name;
+  // the sheet name is the billed identity — prefer it over the PPPoE login
+  if(rosterName){
+    const n=document.getElementById('nfName');
+    if(n) n.value = rosterName;
+  }
+  const hit = bashangFor(rosterName || (document.getElementById('nfName')||{}).value, null);
+  if(!hit) return null;
+  const b = hit.row;
+  set('nfAddr', b.raw_address||'');
+  set('nfPhone', bhPhone(b.raw_contact)||'');
+  const due=bhNum(b.due_raw), amt=bhNum(b.amount_raw);
+  if(due) set('nfDue', due);
+  if(amt) set('nfAmt', amt);
+  // area often falls out of the address text
+  const area=document.getElementById('nfArea');
+  if(area && b.raw_address){
+    const up=String(b.raw_address).toUpperCase();
+    const opt=Array.from(area.options).find(o=>o.value && up.includes(o.value.toUpperCase()));
+    if(opt) area.value=opt.value;
+  }
+  return b;
+}
+
 document.addEventListener('click', e=>{
   if(e.target.id==='newSubBtn'){
     document.getElementById('newSubForm').style.display='block';
     e.target.style.display='none';
+    let from=null;
+    try{ from=bhPrefillNewForm(); }catch(err){ console.warn('prefill failed', err); }
+    if(from) toast('Prefilled from BASHANG "'+from.raw_name+'" — check before saving');
     const n=document.getElementById('nfName'); if(n){ n.focus(); n.select(); }
   } else if(e.target.id==='nfCancel'){
     document.getElementById('newSubForm').style.display='none';
