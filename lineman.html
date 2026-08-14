@@ -110,8 +110,47 @@
 </div>
 
 <script>
+// ============================================================
+// SECURITY: no service_role key in this file.
+// Every Supabase call below is transparently rerouted through the
+// spawn-gw-field edge function, which holds the service key server
+// side and enforces a narrow table + method allow-list.
+// The browser holds only the shared field token.
+//
+// NOTE: this is spawn-gw-FIELD, a separate function from spawn-gw.
+// harvest_v3 talks to spawn-gw and is untouched by this change.
+// ============================================================
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTY5NjYxOSwiZXhwIjoyMDkxMjcyNjE5fQ.qLPX_TW2U6W51nbOiotRdjUoofXnoWHi3oNfcIDmsek';
+const KEY = 'gw';
+(function installFieldGateway(){
+  const GW    = SB + '/functions/v1/spawn-gw-field';
+  const TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';
+  const _f    = window.fetch.bind(window);
+  const RPC_RE  = /\/rest\/v1\/rpc\/([a-z_0-9]+)$/;
+  const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  const post = (payload) => _f(GW, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-gw-token':TOKEN },
+    body: JSON.stringify(payload)
+  });
+  window.fetch = function(input, init){
+    try{
+      const url  = (typeof input === 'string') ? input : (input && input.url) || '';
+      const o    = init || {};
+      const h    = o.headers || {};
+      if (url.indexOf(SB) === 0 && (h.apikey === 'gw' || h['x-spawn-gw'] === '1')) {
+        const method = (o.method || 'GET').toUpperCase();
+        const body   = o.body ? JSON.parse(o.body) : undefined;
+        const rpcm = url.match(RPC_RE);
+        if (rpcm) return post({ kind:'rpc', fn: rpcm[1], body });
+        const m = url.match(REST_RE);
+        if (m) return post({ kind:'rest', table:m[1], method, query:m[3] || '', body,
+                             prefer: h['Prefer'] || h['prefer'] || '' });
+      }
+    }catch(e){ console.warn('[GW-FIELD] passthrough:', e && e.message); }
+    return _f(input, init);
+  };
+})();
 const HDR = {'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
 const PING_MS = 15000;            // ping every 15s
 const QKEY = 'spawn_gps_queue';   // offline queue
