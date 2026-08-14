@@ -5613,6 +5613,71 @@ function ktParseVariant(detail){
   return null;
 }
 
+/* ── Add a vendo to the transfer list by typing its fob code ──────────────
+   Resolves the 5-letter code through spawn_key_scan (same RPC the Spawn Keys
+   app and the Quick Borrow bar use), so the key type on the fob decides the
+   coin_variant instead of staff picking it by hand. Nothing is saved here —
+   it just drops the vendo into the list below, same as clicking "+ Add". */
+let _ktCodeBusy = false;
+
+function ktCodeMsg(text, good){
+  const el = document.getElementById('kt-code-msg');
+  if(!el){ if(text) alert(text); return; }
+  if(!text){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;'
+    + 'background:'+(good?'#E6F7F0':'#fef2f2')+';border:1.5px solid '+(good?'#028867':'#DF1A35')+';'
+    + 'border-radius:8px;padding:8px 11px;font-size:12px;font-weight:800;color:'+(good?'#028867':'#DF1A35')+';">'
+    + '<span>'+(good?'':'⚠ ')+klEsc(text)+'</span>'
+    + '<button onclick="ktCodeMsg(\'\')" style="background:none;border:none;color:inherit;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;line-height:1;">✕</button>'
+    + '</div>';
+}
+
+function ktCodeInput(el){
+  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el.value = v;
+  if(v.length === 5) ktCodeAdd();
+}
+
+function ktCodeAdd(){
+  if(_ktCodeBusy) return;
+  const el = document.getElementById('kt-code');
+  const code = ((el||{}).value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').trim();
+  if(code.length !== 5){ ktCodeMsg('Fob codes are 5 letters.', false); if(el) el.focus(); return; }
+
+  _ktCodeBusy = true;
+  const btn = document.getElementById('kt-code-btn');
+  if(btn){ btn.disabled = true; btn.style.opacity = '.6'; }
+  if(el) el.disabled = true;
+  ktCodeMsg('');
+
+  // anon header — spawn_key_scan is SECURITY DEFINER and anon-executable
+  fetch(_SB+'/rest/v1/rpc/spawn_key_scan', {method:'POST', headers:_VS_HDR, body:JSON.stringify({p_qr:code})})
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d || !d.ok) throw new Error((d && d.error) || 'Unknown fob code');
+      if(!d.bound)    throw new Error('Fob '+code+' is not bound to a vendo yet');
+      const id   = d.vendo_id;
+      const name = d.vendo || d.tg_name || ('#'+id);
+      if(_ktVendos.some(v=>v.id===id)){ ktCodeMsg(name+' is already in the list.', false); return; }
+      // the fob itself tells us which key this is — no guessing
+      const variant = (d.key_type==='board') ? 'board'
+                    : (d.key_type==='pungpung') ? 'pungpung'
+                    : (d.key_type==='duplicate') ? 'duplicate' : null;
+      _ktVendos.push({row:++_ktSeq, id:id, name:name, area:d.area||'', coin_variant:variant});
+      ktRenderVendos();
+      ktRenderPending();
+      ktCodeMsg('✓ '+code+' — '+name+(d.key_type?' ('+d.key_type+')':'')+' added below.', true);
+      if(el) el.value = '';
+    })
+    .catch(e=>{ ktCodeMsg(code+' — '+(e && e.message || 'lookup failed'), false); })
+    .finally(()=>{
+      _ktCodeBusy = false;
+      if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
+      const e2 = document.getElementById('kt-code');
+      if(e2){ e2.disabled = false; e2.value = ''; e2.focus(); }
+    });
+}
+
 function ktAddPending(id, name, area, detail){
   if(_ktVendos.some(v=>v.id===id)) return;
   _ktVendos.push({row:++_ktSeq, id:id, name:name, area:area, coin_variant:ktParseVariant(detail)});
