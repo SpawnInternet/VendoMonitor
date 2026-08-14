@@ -32,6 +32,23 @@
     return r.json();
   }
 
+  async function skRpc(fn, body){
+    var r = await fetch(SK_SB+'/rest/v1/rpc/'+fn, {method:'POST', headers:SK_HDR, body:JSON.stringify(body||{})});
+    var t = await r.text(), j = null;
+    try{ j = t ? JSON.parse(t) : null; }catch(e){}
+    if(!r.ok) throw new Error((j && (j.message||j.error)) || t || ('HTTP '+r.status));
+    return j;
+  }
+
+  async function skReloadQuiet(){
+    try{
+      var rings = await skGet('key_rings?select=*&active=eq.true&order=area.asc,label.asc');
+      var logs  = await skGet('key_logs?select=*&order=taken_at.desc&limit=120');
+      if(Array.isArray(rings)) _rings = rings;
+      if(Array.isArray(logs))  _logs  = logs;
+    }catch(e){ console.warn('[keys] quiet reload failed', e); }
+  }
+
   var _rings = [], _logs = [], _subtab = 'borrow';
 
   // ── sub-tab bar (mirrors v1) ────────────────────────────────────
@@ -148,9 +165,177 @@
     return h;
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  QUICK BORROW — type the 5-letter fob code, nothing else.
+  //  Borrower is typed once and remembered; the code box auto-fires
+  //  on the 5th character and re-focuses itself, so a whole handful
+  //  of keys is just: type, type, type.
+  // ══════════════════════════════════════════════════════════════
+  var _qbWho = '', _qbMode = 'borrow', _qbFeed = [], _qbBusy = false, _qbMsg = '';
+  try{ _qbWho = localStorage.getItem('sk_qb_who') || ''; }catch(e){}
+
+  window.skQbWho = function(v){
+    _qbWho = String(v||'').trim();
+    try{ localStorage.setItem('sk_qb_who', _qbWho); }catch(e){}
+  };
+
+  window.skQbMode = function(m){
+    _qbMode = m;
+    skRerender();
+    var el = document.getElementById('sk-qb-code'); if(el) el.focus();
+  };
+
+  window.skQbType = function(el){
+    var v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+    el.value = v;
+    if(v.length === 5) skQbGo();
+  };
+
+  window.skQbClearFeed = function(){ _qbFeed = []; _qbMsg = ''; skRerender();
+    var el=document.getElementById('sk-qb-code'); if(el) el.focus(); };
+
+  function qbPush(o){ o.ts = Date.now(); _qbFeed.unshift(o); if(_qbFeed.length > 10) _qbFeed.pop(); }
+
+  window.skQbGo = async function(){
+    if(_qbBusy) return;
+    var el = document.getElementById('sk-qb-code');
+    var code = ((el||{}).value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').trim();
+    if(code.length !== 5){ _qbMsg = 'Fob codes are 5 letters.'; skRerender(); if(el) el.focus(); return; }
+    if(_qbMode === 'borrow' && !_qbWho){
+      _qbMsg = 'Type who is borrowing first.';
+      skRerender();
+      var w = document.getElementById('sk-qb-who'); if(w) w.focus();
+      return;
+    }
+
+    _qbBusy = true; _qbMsg = '';
+    if(el){ el.value = ''; el.disabled = true; }
+    skRerender();
+
+    try{
+      if(_qbMode === 'return'){
+        var rr = await skRpc('spawn_key_return', {p_qr:code, p_account:'dashboard'});
+        if(!rr || !rr.ok) throw new Error((rr && rr.error) || 'Return failed');
+        qbPush({ok:true, mode:'return', code:code, vendo:rr.vendo||code, key_type:rr.key_type,
+                who:rr.was_borrowed_by||'', queued:!!rr.queued_for_pungpung});
+      } else {
+        var d = await skRpc('spawn_key_scan', {p_qr:code});
+        if(!d || !d.ok) throw new Error((d && d.error) || 'Unknown fob code');
+        if(!d.bound) throw new Error('Fob '+code+' is not bound to a vendo yet');
+        if(d.loan_status === 'out') throw new Error('Already out with '+(d.borrowed_by||'—'));
+        var r = await skRpc('spawn_key_loan', {p_qr:code, p_borrower:_qbWho, p_account:'dashboard'});
+        if(!r || !r.ok) throw new Error((r && r.error) || 'Borrow failed');
+        qbPush({ok:true, mode:'borrow', code:code, vendo:r.vendo||d.vendo||code,
+                vendo_code:r.vendo_code||d.vendo_code||'', key_type:r.key_type||d.key_type,
+                who:_qbWho, area:d.area||''});
+      }
+      await skReloadQuiet();
+    }catch(err){
+      qbPush({ok:false, mode:_qbMode, code:code, msg:String((err && err.message) || err)});
+    }finally{
+      _qbBusy = false;
+      skRerender();
+      var e2 = document.getElementById('sk-qb-code'); if(e2){ e2.disabled = false; e2.focus(); }
+    }
+  };
+
+  window.skQbUndo = async function(code){
+    if(_qbBusy) return;
+    if(!confirm('Undo the borrow of fob '+code+'?')) return;
+    _qbBusy = true; skRerender();
+    try{
+      var d = await skRpc('spawn_key_undo_borrow', {p_qr:code, p_account:'dashboard'});
+      if(!d || !d.ok) throw new Error((d && d.error) || 'Undo failed');
+      _qbFeed = _qbFeed.filter(function(f){ return !(f.ok && f.mode==='borrow' && f.code===code); });
+      _qbMsg = '↩ Undone — '+(d.vendo||code);
+      await skReloadQuiet();
+    }catch(err){
+      _qbMsg = 'Undo failed: '+String((err && err.message) || err);
+    }finally{
+      _qbBusy = false; skRerender();
+      var e2 = document.getElementById('sk-qb-code'); if(e2) e2.focus();
+    }
+  };
+
+  function qbBar(){
+    var isRet = (_qbMode === 'return');
+    var accent = isRet ? '#028867' : '#FFB725';
+    var h = '<div style="border:1.5px solid '+accent+';background:'+(isRet?'#F0FBF7':'#FFFBEF')
+      + ';border-radius:14px;padding:12px 14px;margin-bottom:12px;">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
+      +   '<div style="font-size:14px;font-weight:800;color:#311A8E;">&#9889; Quick '+(isRet?'Return':'Borrow')
+      +     ' <span style="font-weight:600;color:#6b7280;font-size:11px;">&mdash; type the fob code only, it saves by itself</span></div>'
+      +   '<div style="display:flex;gap:6px;flex:none;">'
+      +     '<button onclick="skQbMode(\'borrow\')" style="padding:5px 13px;border-radius:20px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;border:1.5px solid '+(isRet?'#e5e7eb':'#DF1A35')+';background:'+(isRet?'#fff':'#DF1A35')+';color:'+(isRet?'#374151':'#fff')+';">&#128308; Borrow</button>'
+      +     '<button onclick="skQbMode(\'return\')" style="padding:5px 13px;border-radius:20px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;border:1.5px solid '+(isRet?'#028867':'#e5e7eb')+';background:'+(isRet?'#028867':'#fff')+';color:'+(isRet?'#fff':'#374151')+';">&#9989; Return</button>'
+      +   '</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">';
+
+    if(!isRet){
+      h += '<div style="flex:1;min-width:180px;">'
+        +    '<label style="display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">Who is borrowing</label>'
+        +    '<input id="sk-qb-who" value="'+esc(_qbWho)+'" oninput="skQbWho(this.value)" placeholder="type once, it is remembered" autocomplete="off" '
+        +      'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;outline:none;">'
+        +  '</div>';
+    }
+
+    h += '<div style="flex:none;">'
+      +    '<label style="display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px;">Fob code</label>'
+      +    '<input id="sk-qb-code" maxlength="5" '+(_qbBusy?'disabled ':'')+'oninput="skQbType(this)" '
+      +      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();skQbGo();}" placeholder="ABCDE" autocomplete="off" spellcheck="false" '
+      +      'style="width:170px;padding:9px 12px;border:2px solid '+accent+';border-radius:9px;background:#fff;'
+      +      'font:800 21px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;text-align:center;color:#311A8E;outline:none;">'
+      +  '</div>'
+      +  '<div style="flex:none;font-size:11px;color:#6b7280;padding-bottom:10px;">'
+      +    (_qbBusy ? '<span style="color:#025AC6;font-weight:800;">Saving&hellip;</span>' : 'auto-saves on the 5th letter')
+      +  '</div>'
+      + '</div>';
+
+    if(_qbMsg){
+      h += '<div style="margin-top:9px;font-size:12px;font-weight:700;color:'+(_qbMsg.indexOf('Undone')>=0?'#028867':'#DF1A35')+';">'+esc(_qbMsg)+'</div>';
+    }
+
+    if(_qbFeed.length){
+      h += '<div style="margin-top:11px;border-top:1px solid #eef1f6;padding-top:9px;">'
+        +  '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        +    '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;">This session &mdash; '+_qbFeed.length+'</div>'
+        +    '<button onclick="skQbClearFeed()" style="background:none;border:none;color:#6b7280;font-size:11px;cursor:pointer;font-family:inherit;text-decoration:underline;">clear</button>'
+        +  '</div>';
+      _qbFeed.forEach(function(f){
+        if(!f.ok){
+          h += '<div style="display:flex;align-items:center;gap:8px;background:#fef2f2;border-left:3px solid #DF1A35;border-radius:0 8px 8px 0;padding:7px 10px;margin-bottom:5px;">'
+            +  '<b style="font:800 12px ui-monospace,monospace;color:#DF1A35;letter-spacing:.1em;">'+esc(f.code)+'</b>'
+            +  '<span style="font-size:11px;color:#DF1A35;">'+esc(f.msg)+'</span></div>';
+          return;
+        }
+        var ret = (f.mode === 'return');
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid #e5e7eb;border-left:3px solid '+(ret?'#028867':'#025AC6')+';border-radius:0 8px 8px 0;padding:7px 10px;margin-bottom:5px;">'
+          +  '<div style="min-width:0;">'
+          +    '<b style="font:800 12px ui-monospace,monospace;color:'+(ret?'#028867':'#025AC6')+';letter-spacing:.1em;">'+esc(f.code)+'</b>'
+          +    ' <span style="font-size:12px;font-weight:700;color:#111;">'+esc(f.vendo||'')+'</span>'
+          +    (f.key_type?' <span style="font-size:9px;font-weight:800;background:#311A8E;color:#fff;padding:1px 6px;border-radius:4px;">'+esc(String(f.key_type).toUpperCase())+'</span>':'')
+          +    '<div style="font-size:10px;color:#6b7280;margin-top:2px;">'
+          +      (ret ? '&#9989; returned'+(f.who?' by '+esc(f.who):'')+(f.queued?' &middot; queued for Pungpung':'')
+                      : '&#128100; '+esc(f.who||'')+(f.area?' &middot; '+esc(f.area):''))
+          +    '</div>'
+          +  '</div>'
+          +  (ret ? '' : '<button onclick="skQbUndo('+JSON.stringify(f.code)+')" style="flex:none;background:#fff;border:1.5px solid #fca5a5;color:#DF1A35;padding:4px 10px;border-radius:7px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">Undo</button>')
+          + '</div>';
+      });
+      h += '</div>';
+    }
+
+    h += '</div>';
+    return h;
+  }
+
   window.skRerender = function(){
     var root=document.getElementById('sk-body');
     if(!root) return;
+    // remember what the user was typing in, so a re-render doesn't steal focus
+    var _af=document.activeElement, _afId=(_af&&_af.id)||'', _selS=null, _selE=null;
+    try{ _selS=_af.selectionStart; _selE=_af.selectionEnd; }catch(e){}
     var rf=(document.getElementById('sk-ring-filter')||{}).value||'out';
     var lf=(document.getElementById('sk-log-filter')||{}).value||'out';
     var q =(document.getElementById('sk-log-search')||{}).value||'';
@@ -165,10 +350,19 @@
       + '</div>'
       + '<button onclick="skLoad()" style="padding:7px 14px;background:#025AC6;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">&#8635; Refresh</button>'
       + '</div>'
-      + '<div style="display:flex;gap:0;border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;height:calc(100vh - 250px);min-height:340px;background:#fff;">'
+      + qbBar()
+      + '<div style="display:flex;gap:0;border:1.5px solid #e5e7eb;border-radius:14px;overflow:hidden;height:calc(100vh - 360px);min-height:320px;background:#fff;">'
       +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;border-right:2px solid #e5e7eb;">'+ringsPanel(rf)+'</div>'
       +   '<div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#fafbfc;">'+logPanel(lf,q)+'</div>'
       + '</div>';
+
+    if(_afId){
+      var back=document.getElementById(_afId);
+      if(back && back.focus){
+        back.focus();
+        if(_selS!=null){ try{ back.setSelectionRange(_selS,_selE); }catch(e){} }
+      }
+    }
   };
 
   window.skLoad = async function(){
