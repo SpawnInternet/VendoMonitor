@@ -2084,7 +2084,11 @@ async function submitHarvest(){
 
     // Rebuild dashboard caches so Vendos tab + overview reflect this harvest immediately
     if(navigator.onLine){
-      const _cHdr = { 'x-cache-secret': 'spawn-cache-2026', apikey: SB.includes('cviraq') ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwNDI0MzYsImV4cCI6MjA1ODYxODQzNn0.jLOKxStPP8S1wRlXBiHY4RO9JFBFMsLPqGKEgGdxjqs' : '' };
+      // write-vendos-cache and write-dashboard-cache both run with verify_jwt:false,
+      // so the apikey header was never doing anything — x-cache-secret is the real
+      // gate. Dropping it removes the last Supabase JWT from this file, so a key
+      // rotation cannot break the cache trigger here.
+      const _cHdr = { 'x-cache-secret': 'spawn-cache-2026' };
       fetch(`${SB}/functions/v1/write-vendos-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
       fetch(`${SB}/functions/v1/write-dashboard-cache`, { method:'POST', headers:_cHdr }).catch(()=>{});
     }
