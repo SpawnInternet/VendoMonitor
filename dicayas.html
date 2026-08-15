@@ -1716,6 +1716,10 @@ document.getElementById('mBody').addEventListener('click', async e=>{
         confirmed_by:null,confirmed_at:null});
       document.getElementById('rq').value='';
       toast('Linked to '+name);
+      if(!SUBRECS.find(x=>x.name===name)){
+        // no customer record behind this name yet — build it from the sheet now
+        await bhCreateFromRoster(ppp, name);
+      }
     } else if(act){
       const a=act.dataset.ra, cur=ROSTER.get(ppp);
       if(a==='ok'){
@@ -2549,16 +2553,10 @@ async function bhCreateFromRoster(ppp, rosterName){
                                 'Due day':body.due_day, Monthly:body.monthly_amount})
                  .filter(([,v])=>v!=null && v!=='')
                  .map(([k,v])=>'  • '+k+': '+v).join('\n');
-  const go = await prettyPrompt({
-    title:'➕ Create "'+rosterName+'"?',
-    message:'No subscriber record exists yet. This builds one from BASHANG row "'
-            +b.raw_name+'":\n\n'+(shown||'  (sheet has no details beyond the name)')
-            +'\n\nEverything stays editable afterwards. Nothing is locked.',
-    value:rosterName, okText:'Create'});
-  if(go===null) return false;
-  if(String(go).trim().length>=3) body.name=String(go).trim();   // name is editable here
-
-  const pwd=await askPasswordValue('Enter password to create this subscriber.');
+  const pwd=await askPasswordValue(
+    'Create "'+rosterName+'" from BASHANG "'+b.raw_name+'"?\n'
+    +(shown? shown.replace(/\n/g,'   ') : '(sheet has no details beyond the name)')
+    +'\nEnter password to create. Everything stays editable, nothing is locked.');
   if(pwd===null) return false;
   if(pwd!==NET_PWD){ toast('Wrong password'); return false; }
 
