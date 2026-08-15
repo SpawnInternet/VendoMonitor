@@ -279,6 +279,9 @@
   #rlist{max-height:190px;overflow:auto;margin-bottom:6px}
   .ritem{padding:9px 11px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
   .ritem:hover{background:#eef2f8}
+  .ritem.off-server{opacity:.62}
+  .ritem.off-server small{color:#a31c2e;font-weight:700}
+  .mw-c.off-server{opacity:.62}
   .ritem small{display:block;color:var(--dim);font-size:11px}
   .rdet{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
   .rdet label{display:block;font-size:11px;font-weight:800;color:var(--dim);margin:7px 0 3px;text-transform:uppercase;letter-spacing:.05em}
@@ -1651,10 +1654,15 @@ function drawRosterList(q){
   const el=document.getElementById('rlist'); if(!el) return;
   q=(q||'').toLowerCase().trim();
   if(!q){ el.innerHTML=''; return; }
-  const hits=SUBRECS.filter(x=>(x.name||'').toLowerCase().includes(q)).slice(0,40);
+  const hits=SUBRECS.filter(x=>(x.name||'').toLowerCase().includes(q))
+    .sort((a,b)=>{const oa=subOffServer(a),ob=subOffServer(b); return oa===ob?0:(oa?1:-1);})
+    .slice(0,40);
   el.innerHTML = hits.length
-    ? hits.map(x=>`<div class="ritem" data-pickname="${esc(x.name)}" data-pickarea="${esc(x.area||'')}">
-         ${esc(x.name)}<small>${esc(x.area||'—')}</small></div>`).join('')
+    ? hits.map(x=>{
+        const off=subOffServer(x);
+        return `<div class="ritem${off?' off-server':''}" data-pickname="${esc(x.name)}" data-pickarea="${esc(x.area||'')}">
+         ${esc(x.name)}<small>${esc(x.area||'—')}${off?' · ⚠ not on Dicayas — likely another server':''}</small></div>`;
+      }).join('')
     : '<div class="ritem" style="color:var(--dim)">no subscriber matches that</div>';
 }
 function drawRosterDetails(name){
@@ -2754,13 +2762,29 @@ function mwTakenNames(){
   ROSTER.forEach(r=>{ if(r.roster_name && (r.match_status==='matched'||r.confirmed_at)) t.add(r.roster_name); });
   return t;
 }
+/* This page only sees the Dicayas MikroTik. A subscriber served by another
+   server can never own a PPPoE account here, so offering them as a match is
+   how wrong links get made — 6 already exist (Dohinob and Dapitan customers
+   attached to Dicayas accounts by name similarity alone).
+
+   They are flagged and pushed down rather than hidden: server_name is only
+   filled for the 140 the router proves, so a hard filter would also hide the
+   ~96 Dipolog subscribers who genuinely belong here but aren't linked yet. */
+const OFF_SERVER_AREAS = new Set(['ROXAS','DAPITAN','SINDANGAN']);
+function subOffServer(rec){
+  if(!rec) return false;
+  if(rec.server_name && rec.server_name!=='Dicayas Server') return true;
+  return OFF_SERVER_AREAS.has(String(rec.area||'').toUpperCase());
+}
+
 function mwCandidates(pppName, limit){
   const taken=mwTakenNames();
   return SUBRECS
     .filter(x=>x.name && !taken.has(x.name))
-    .map(x=>({rec:x, s:mwScore(pppName, x.name)}))
+    .map(x=>({rec:x, s:mwScore(pppName, x.name), off:subOffServer(x)}))
     .filter(x=>x.s>=0.34)
-    .sort((a,b)=>b.s-a.s)
+    // a strong name match on another server is still the wrong customer
+    .sort((a,b)=>(a.off===b.off) ? b.s-a.s : (a.off?1:-1))
     .slice(0, limit||4);
 }
 function matchQueue(){
@@ -2952,10 +2976,10 @@ function renderMatch(){
 
       const rows = cands.length
         ? cands.map((c,i)=>`
-            <div class="mw-c ${i===0&&c.s>=0.72?'top':''}" data-mwlink="${esc(m.ppp_name)}"
+            <div class="mw-c ${c.off?'off-server':(i===0&&c.s>=0.72?'top':'')}" data-mwlink="${esc(m.ppp_name)}"
                  data-mwname="${esc(c.rec.name)}" data-mwarea="${esc(c.rec.area||'')}">
               <span class="mw-c-name">${esc(c.rec.name)}
-                <span class="mw-c-sub">${esc(c.rec.area||'no area')}${c.rec.phone?' · '+esc(c.rec.phone):''}</span>
+                <span class="mw-c-sub">${esc(c.rec.area||'no area')}${c.rec.phone?' · '+esc(c.rec.phone):''}${c.off?' · ⚠ another server':''}</span>
               </span>
               <span class="mw-score ${c.s<0.72?'mid':''}">${Math.round(c.s*100)}%</span>
             </div>`).join('')
@@ -4316,7 +4340,7 @@ async function boot(){
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
-      sb("subscribers?select=id,name,area,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
+      sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
       sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
