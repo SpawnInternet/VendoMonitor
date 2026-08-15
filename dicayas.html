@@ -270,6 +270,14 @@
   .ls-maybe .ls-tag{background:#FFB725;color:#4a3400}
   .ls-no{background:#fdeaed;border:1px solid #f5c2ca;color:#a31c2e}
   .ls-no .ls-tag{background:#DF1A35;color:#fff}
+  /* A PPPoE line running a standalone vendo. Same magenta as the Vendo PPPoE tab. */
+  .ls-vendo{background:#fbe7f2;border:1px solid #f0bcda;color:#8d0d57}
+  .ls-vendo .ls-tag{background:#C01176;color:#fff}
+  .liststrip .ls-alt{margin-left:auto;flex-shrink:0;border:none;cursor:pointer;font-family:inherit;
+                     font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+                     padding:6px 13px;border-radius:999px;background:#C01176;color:#fff;white-space:nowrap}
+  .liststrip .ls-alt:hover{background:#8d0d57}
+  .liststrip .ls-alt:disabled{opacity:.55;cursor:progress}
   .rsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .rhead{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
   .rnow{font-size:14px;font-weight:700;margin-bottom:9px;word-break:break-word}
@@ -1620,7 +1628,29 @@ function renderSubModal(){
     const rec = (r&&r.roster_name) ? SUBRECS.find(x=>x.name===r.roster_name) : null;
     const locked = !!(r&&r.confirmed_at);
     const probP  = !!(r && r.roster_name && r.match_status==='probable' && !r.confirmed_at);
-    if(r&&r.roster_name){
+    // A standalone vendo has no customer behind it, so none of the subscriber
+    // matching UI applies — showing it invites someone to link a machine to a
+    // person. Show the vendo record instead.
+    const isVendoLine = !!(r && r.match_status==='vendo');
+    if(isVendoLine){
+      const v=vendoMatchFor(m.ppp_name);
+      html+=`<div class="candbox">
+        <div class="candhead"><span>\ud83d\udd79\ufe0f STANDALONE VENDO</span>
+          <span class="mw-meta">not billed as a subscriber</span></div>
+        <div class="linkrow">
+          <span class="k">\ud83c\udfb0 Vendo record</span>
+          <span class="v">${v?esc(((v.sheet_name||v.tg_name||'')+' \u00b7 '+(v.vendo_code||'')).replace(/ \u00b7 $/,''))
+                            :'<i style="color:var(--dim)">no matching vendo row</i>'}</span>
+        </div>
+        ${v&&v.area?`<div class="linkrow"><span class="k">Area</span><span class="v">${esc(v.area)}</span></div>`:''}
+        ${v&&v.vlan?`<div class="linkrow"><span class="k">VLAN</span><span class="v">${esc(String(v.vlan))}</span></div>`:''}
+        ${v?'':`<div class="mw-none">This PPPoE line is flagged as a vendo but no row in
+           <b>vendos</b> matches the name — worth checking the vendo is registered.</div>`}
+        <div class="mw-acts">
+          <button class="mw-btn" data-vpppback="${esc(m.ppp_name)}">\u21a9 Move back to subscribers</button>
+        </div>
+      </div>`;
+    } else if(r&&r.roster_name){
       const btn=(f)=>rec?`<button class="lnk link" onclick='changeSubField(${JSON.stringify(String(rec.id))},${JSON.stringify(f)})'>Edit</button>`:'';
       const none='<i style="color:var(--dim)">(none)</i>';
       const line=(k,v,b)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${b||''}</div>`;
@@ -1737,7 +1767,7 @@ function renderSubModal(){
       </div>`;
     }
     // search stays hidden until "Change" is pressed, unless nothing is linked yet
-    html+=`<div class="rsec" id="subsearch" style="display:${(r&&r.roster_name)?'none':'block'}">
+    if(!isVendoLine) html+=`<div class="rsec" id="subsearch" style="display:${(r&&r.roster_name)?'none':'block'}">
       <div class="rhead">${r&&r.roster_name?'Pick a different subscriber':'Attach subscriber'}</div>
       <div class="rnow" id="rNow" style="display:none"></div>
       <div class="racts" id="rActs" style="display:none"></div>
@@ -2549,10 +2579,25 @@ function renderCompare(txByVlan){
 // so the state is never hidden behind a tab switch.
 function rosterStrip(m){
   const r=ROSTER.get(m.ppp_name);
+  // A line already flagged as a standalone vendo. It has no roster_name, so
+  // without this it fell through to "not on the list" and read as unresolved
+  // when it is in fact settled — and the only way back was the Vendo PPPoE tab.
+  if(r && r.match_status==='vendo'){
+    return `<div class="liststrip ls-vendo">
+      <span class="ls-tag">\ud83d\udd79\ufe0f vendo line</span>
+      <span class="ls-who">a piso-wifi machine on this PPPoE line \u2014 not billed as a subscriber</span>
+      <button class="ls-alt" data-vpppback="${esc(m.ppp_name)}">\u21a9 Move back to subscribers</button>
+    </div>`;
+  }
   if(!r || !r.roster_name){
+    // Standalone vendos run their own PPPoE line, so this state is not always a
+    // missing customer — offer the vendo flag here rather than making the run
+    // go back out to Match Names for it.
     return `<div class="liststrip ls-no">
       <span class="ls-tag">\u2716 not on the list</span>
       <span class="ls-who">no subscriber linked \u2014 piso-wifi, internal, test, or unbilled</span>
+      <button class="ls-alt" data-vpppmark="${esc(m.ppp_name)}"
+        title="A standalone piso-wifi machine on this line, not a customer">\ud83d\udd79\ufe0f It's a vendo</button>
     </div>`;
   }
   const locked=!!r.confirmed_at;
