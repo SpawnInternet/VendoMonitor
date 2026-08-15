@@ -1556,11 +1556,14 @@ function renderSubs(){
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
-function openSub(mk){
+function openSub(mk, tab){
   window._curMk=null;             // leaving vendo context
   window._curSubMk = mk;
   buildSubNavList(mk);
-  if(!window._curSubTab) window._curSubTab='stats';
+  // Opened from a matching worklist? Go straight to the subscriber details —
+  // landing on MikroTik Stats meant the popup looked empty until you clicked over.
+  if(tab) window._curSubTab = tab;
+  else if(!window._curSubTab) window._curSubTab='stats';
   renderSubModal();
 }
 function setSubTab(t){ window._curSubTab=t; renderSubModal(); }
@@ -3182,7 +3185,7 @@ document.addEventListener('click', async e=>{
   const open=e.target.closest('[data-mwopen]');
   if(!link && !skip && !open) return;
 
-  if(open){ openSub(open.dataset.mwopen); return; }
+  if(open){ openSub(open.dataset.mwopen, 'sub'); return; }
 
   const ppp = link ? link.dataset.mwlink : skip.dataset.mwskip;
   const card= document.querySelector(`.mw[data-mwrow="${CSS.escape(ppp)}"]`);
