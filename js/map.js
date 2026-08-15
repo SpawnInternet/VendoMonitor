@@ -23,7 +23,12 @@ async function vmTopLoad(){
   try{
     let all=[],off=0;
     while(true){
-      const r=await fetch(`${SB_URL}/rest/v1/vendos?status=eq.active&lat=not.is.null&select=id,sheet_name,tg_name,area,address,contact_number,lat,lng,last_harvest_date,vlan&order=sheet_name.asc&limit=1000&offset=${off}`,{headers:HDR});
+      const q=`status=eq.active&lat=not.is.null&select=id,sheet_name,tg_name,area,address,contact_number,lat,lng,last_harvest_date,vlan&order=sheet_name.asc&limit=1000&offset=${off}`;
+      const r=await fetch(`${SB_URL}/functions/v1/spawn-gw`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
+        body:JSON.stringify({kind:'rest',table:'vendos',method:'GET',query:q})
+      });
       const b=await r.json();
       if(!Array.isArray(b)||!b.length) break;
       all.push(...b);
@@ -67,5 +72,5 @@ setInterval(()=>{if(document.getElementById('panel-vmap-top')?.classList.contain
 
 // Config — var (not const) so shared.js can also declare without conflict
 var SB_URL = "https://cviraqfhphhsonjmrtvu.supabase.co";
-var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
+var GW_TOKEN = "X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U";  // gateway secret, not a Supabase key
 
