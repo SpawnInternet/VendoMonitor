@@ -175,6 +175,8 @@
   .subtab[data-sv="match"].active .cnt{background:#fff4de;color:#9a6b00}
   .subtab[data-sv="vendo"].active{border-bottom-color:var(--magenta,#C01176)}
   .subtab[data-sv="vendo"].active .cnt{background:#fbe7f2;color:#8d0d57}
+  .subtab[data-sv="vppp"].active{border-bottom-color:var(--magenta,#C01176)}
+  .subtab[data-sv="vppp"].active .cnt{background:#fbe7f2;color:#8d0d57}
   .subtab[data-sv="pay"].active{border-bottom-color:var(--teal,#028867)}
   .subtab[data-sv="pay"].active .cnt{background:#e6f4ee;color:#028867}
   .pm-f{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -579,12 +581,14 @@
       <div class="subtab"        data-sv="inactive" id="stab-inactive">🔴 Inactive</div>
       <div class="subtab"        data-sv="match"    id="stab-match">🔗 Match Names</div>
       <div class="subtab"        data-sv="vendo"    id="stab-vendo">🎰 Vendo Subs</div>
+      <div class="subtab"        data-sv="vppp"     id="stab-vppp">🕹️ Vendo PPPoE</div>
       <div class="subtab"        data-sv="pay"      id="stab-pay">💵 Match Payments</div>
     </div>
     <div class="grid" id="grid-subs-on"></div>
     <div class="grid" id="grid-subs-off" style="display:none !important"></div>
     <div id="grid-subs-match" style="display:none"></div>
     <div class="grid" id="grid-subs-vendo" style="display:none !important"></div>
+    <div id="grid-subs-vppp" style="display:none"></div>
     <div id="grid-subs-pay" style="display:none"></div>
   </div>
   <div id="pane-search" class="pane" style="display:none">
@@ -1384,6 +1388,94 @@ function renderVendoSubs(){
   return list.length;
 }
 
+/* Standalone vendo PPPoE accounts.
+   A piso-wifi machine on a PPPoE line is not a customer: it has no BASHANG row,
+   pays no monthly, and should never sit in the subscriber match queue. Marking
+   one moves it here (ppp_roster.match_status='vendo') and takes it out of the
+   worklist. Where the router name matches a row in `vendos`, that machine is
+   shown alongside so the two systems line up. */
+function vendoPppList(){
+  const q=(document.getElementById('subq').value||'').toLowerCase().trim();
+  return SUBS.filter(m=>{
+    const r=ROSTER.get(m.ppp_name||'');
+    if(!r || r.match_status!=='vendo') return false;
+    if(q && !((m.ppp_name||'')+' '+(m.ip||'')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+}
+let _vbnIndex=null, _vbnLen=-1;
+function vendoMatchFor(name){
+  if(!name || !Array.isArray(VENDOS) || !VENDOS.length) return null;
+  if(_vbnIndex===null || _vbnLen!==VENDOS.length){
+    _vbnIndex=new Map(); _vbnLen=VENDOS.length;
+    VENDOS.forEach(v=>{
+      [v.tg_name, v.sheet_name].forEach(n=>{
+        if(n) _vbnIndex.set(String(n).toLowerCase().trim(), v);
+      });
+    });
+  }
+  return _vbnIndex.get(String(name).toLowerCase().trim())||null;
+}
+function renderVendoPpp(){
+  const el=document.getElementById('grid-subs-vppp'); if(!el) return 0;
+  const list=vendoPppList();
+  if(!list.length){
+    el.innerHTML=`<div class="banner">🕹️ Nothing here yet. On a PPPoE account that is actually a
+      piso-wifi machine, press <b>🕹️ It's a vendo</b> — it moves here and leaves the Match Names queue.</div>`;
+    return 0;
+  }
+  el.innerHTML=`<div class="banner">🕹️ ${list.length} PPPoE line${list.length===1?'':'s'} running a vendo,
+     not a subscriber. These are excluded from subscriber matching and billing.</div>`
+   + list.map(m=>{
+      const v=vendoMatchFor(m.ppp_name);
+      return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
+        <div class="candhead">
+          <span>VENDO PPPoE</span>
+          <span class="mw-meta">${m.online?'🟢 online':'🔴 offline'}${m.ip?' · '+esc(m.ip):''}${m.ppp_profile?' · '+esc(m.ppp_profile):''}</span>
+        </div>
+        <div class="routerbar">
+          <div class="rl"><span>📡 Router says · PPPoE</span><span class="rfix">fixed — change in MikroTik</span></div>
+          <div class="rv">${esc(m.ppp_name)}</div>
+        </div>
+        <div class="linkrow">
+          <span class="k">🎰 Vendo record</span>
+          <span class="v">${v?esc((v.sheet_name||v.tg_name||'')+' · '+(v.vendo_code||'')) 
+                            :'<i style="color:var(--dim)">no matching vendo row</i>'}</span>
+        </div>
+        ${v&&v.area?`<div class="linkrow"><span class="k">Area</span><span class="v">${esc(v.area)}</span></div>`:''}
+        ${v&&v.vlan?`<div class="linkrow"><span class="k">VLAN</span><span class="v">${esc(String(v.vlan))}</span></div>`:''}
+        <div class="mw-acts">
+          <button class="mw-btn" data-vpppback="${esc(m.ppp_name)}">↩ Move back to subscribers</button>
+          <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
+        </div>
+      </div>`;
+   }).join('');
+  return list.length;
+}
+
+// Mark a PPPoE line as a vendo, or send it back to the subscriber queue.
+async function setPppVendo(ppp, isVendo){
+  try{
+    await rosterUpsert(ppp, isVendo
+      ? {roster_name:null, area:null, match_status:'vendo', score:null,
+         confirmed_by:null, confirmed_at:null}
+      : {roster_name:null, area:null, match_status:null, score:null,
+         confirmed_by:null, confirmed_at:null});
+    if(isVendo) ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:'vendo'});
+    else        ROSTER.delete(ppp);
+    MW_HIDE.delete(ppp);
+    toast(isVendo?'Moved to Vendo PPPoE':'Moved back to subscribers');
+    renderSubs(); renderMatch(); renderVendoPpp();
+    if(window._curSubMk!=null) renderSubModal();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+document.addEventListener('click', e=>{
+  const a=e.target.closest('[data-vpppmark]');
+  const b=e.target.closest('[data-vpppback]');
+  if(a) setPppVendo(a.dataset.vpppmark, true);
+  else if(b) setPppVendo(b.dataset.vpppback, false);
+});
+
 function renderSubs(){
   const q=(document.getElementById('subq').value||"").toLowerCase();
   const f=document.getElementById('subflt').value;
@@ -1409,17 +1501,20 @@ function renderSubs(){
   const isMatch = (SUBVIEW==='match');
   const isVendo = (SUBVIEW==='vendo');
   const isPay   = (SUBVIEW==='pay');
-  const showOn  = !isMatch && !isVendo && !isPay && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
-  const showOff = !isMatch && !isVendo && !isPay && !showOn;
+  const isVppp  = (SUBVIEW==='vppp');
+  const showOn  = !isMatch && !isVendo && !isPay && !isVppp && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
+  const showOff = !isMatch && !isVendo && !isPay && !isVppp && !showOn;
   const gOn=document.getElementById('grid-subs-on'), gOff=document.getElementById('grid-subs-off');
   const gM =document.getElementById('grid-subs-match');
   const gV =document.getElementById('grid-subs-vendo');
   const gP =document.getElementById('grid-subs-pay');
+  const gVP=document.getElementById('grid-subs-vppp');
   if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
   if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
   if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
   if(gP)   gP.style.setProperty('display',   isPay?'block':'none','important');
+  if(gVP)  gVP.style.setProperty('display',  isVppp?'block':'none','important');
   if(isMatch) renderMatch();
   if(isPay)   payTabOpen();
   const nVendo = renderVendoSubs();
@@ -1438,6 +1533,11 @@ function renderSubs(){
   if(tv){
     tv.innerHTML='🎰 Vendo Subs<span class="cnt">'+nVendo+'</span>';
     tv.classList.toggle('active', isVendo);
+  }
+  const tvp=document.getElementById('stab-vppp');
+  if(tvp){
+    tvp.innerHTML='🕹️ Vendo PPPoE<span class="cnt">'+renderVendoPpp()+'</span>';
+    tvp.classList.toggle('active', isVppp);
   }
   const tp=document.getElementById('stab-pay');
   if(tp){
@@ -2832,6 +2932,7 @@ function matchQueue(){
     if(!m.ppp_name) return false;
     const r=ROSTER.get(m.ppp_name);
     if(!r) return true;                                   // never seen
+    if(r.match_status==='vendo') return false;            // it is a machine, not a customer
     if(r.match_status==='rejected') return true;          // marked wrong, still open
     if(!r.roster_name) return true;                       // cleared
     if(r.match_status==='probable' && !r.confirmed_at) return true;  // fuzzy, unconfirmed
@@ -3044,6 +3145,7 @@ function renderMatch(){
         <input class="mw-search" data-mwq="${esc(m.ppp_name)}" placeholder="Search a different sheet name…">
         <div class="mw-acts">
           <button class="mw-btn skip" data-mwskip="${esc(m.ppp_name)}">✖ Not billable</button>
+          <button class="mw-btn" data-vpppmark="${esc(m.ppp_name)}" title="A piso-wifi machine on this line, not a customer">🕹️ It's a vendo</button>
           <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
         </div>
       </div>`;
