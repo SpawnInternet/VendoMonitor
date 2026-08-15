@@ -397,7 +397,7 @@
   .finalrow{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #c8ecd6;font-size:14px}
   .finalrow .k{color:#1f7d4d;font-weight:700}
   .finalrow .v{font-weight:800;color:var(--navy)}
-  .subtabs{display:flex;gap:8px;margin-bottom:14px}
+  .subtabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
   .subtab{padding:7px 14px;border-radius:9px;background:var(--panel);border:1px solid var(--border);color:var(--dim);font-weight:800;font-size:13px;cursor:pointer}
   .subtab.active{background:var(--panel2);color:var(--navy);border-color:var(--magenta)}
   .restore-card{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:12px 14px;cursor:pointer;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(33,48,64,.06)}
@@ -1392,7 +1392,7 @@ function renderVendoSubs(){
   const g=document.getElementById('grid-subs-vendo');
   if(g) g.innerHTML = list.length
     ? list.map(vendoSubCard).join('')
-    : '<div class="empty">No vendo subscribers yet — flag a subscriber with is_vendo_owner to see them here.</div>';
+    : '<div class="empty">No vendo subscribers yet — a <b>vendo subscriber</b> is a person who owns a machine, flagged with is_vendo_owner.<br>Looking for a PPPoE line that <i>is</i> a machine? That is the 🕹️ Vendo PPPoE tab.</div>';
   return list.length;
 }
 
@@ -1488,6 +1488,11 @@ function renderSubs(){
   const q=(document.getElementById('subq').value||"").toLowerCase();
   const f=document.getElementById('subflt').value;
   let list=SUBS.filter(m=>{
+    // A line flagged as a standalone vendo is not a customer, so it does not
+    // belong in the subscriber lists at all. It lives on the Vendo PPPoE tab,
+    // which has its own search over the same box.
+    const rv=ROSTER.get(m.ppp_name||'');
+    if(rv && rv.match_status==='vendo') return false;
     if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
@@ -1557,10 +1562,15 @@ function renderSubs(){
   const offl=SUBS.filter(m=>!m.online && m.offline_since);
   const counts={}; offl.forEach(m=>{const k=m.offline_since.slice(0,16);counts[k]=(counts[k]||0)+1;});
   const big=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
-  const nIn=SUBS.filter(m=>rosterOf(m)).length;
+  // Vendo lines are not billable, so they are not part of "should be on the
+  // roster". A rejected or cleared row is not a match either — only a row that
+  // actually carries a roster_name counts.
+  const nVppp=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='vendo';}).length;
+  const nBill=SUBS.length-nVppp;
+  const nIn=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.roster_name;}).length;
   const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
   const rbEl=document.getElementById('banner-roster');
-  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${SUBS.length} PPPoE accounts match your subscriber roster · ${SUBS.length-nIn} not on it · ${nRev} need confirming.</div>`;
+  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}</div>`;
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
