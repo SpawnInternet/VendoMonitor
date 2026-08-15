@@ -2491,10 +2491,29 @@ function bhPrefillNewForm(){
   return b;
 }
 
+/* Addresses name a barangay, not an area — "Purok Pinya Dicayas" contains none
+   of the eight area words, so the old check returned null and every subscriber
+   created from the sheet landed with no area at all.
+
+   This map is derived from the 382 existing subscribers that already have both
+   an address and an area: only barangay words appearing 6+ times AND never
+   under more than one area were kept, so nothing here is guesswork. The area
+   word itself still wins when the address states it outright. */
+const BRGY_AREA = {
+  DICAYAS:'DIPOLOG', SINAMAN:'DIPOLOG', PUNTA:'DIPOLOG', PINYA:'DIPOLOG',
+  MINAOG:'DIPOLOG',  COGON:'DIPOLOG',   LALAWAN:'DIPOLOG', TURNO:'DIPOLOG',
+  SANGKOL:'DIPOLOG', RELOCATION:'DIPOLOG', GULAYON:'DIPOLOG', ESTAKA:'DIPOLOG',
+  DOHINOB:'ROXAS',   MADASIGON:'ROXAS',  MATULUNGIN:'ROXAS', GALUKSO:'ROXAS',
+  IRASAN:'ROXAS',    LABAKID:'ROXAS',
+  TAGUILON:'DAPITAN', LUCAS:'DAPITAN',   TALISAY:'DAPITAN',  BANONONG:'DAPITAN'
+};
 function bhGuessArea(addr){
   if(!addr) return null;
   const up=String(addr).toUpperCase();
-  return AREA_OPTS.find(a=>a!=='UNKNOWN' && up.includes(a)) || null;
+  const named = AREA_OPTS.find(a=>a!=='UNKNOWN' && up.includes(a));
+  if(named) return named;
+  for(const [brgy, area] of Object.entries(BRGY_AREA)) if(up.includes(brgy)) return area;
+  return null;
 }
 
 // Confirm on a link whose roster name has no subscriber record behind it.
@@ -2519,6 +2538,9 @@ async function bhCreateFromRoster(ppp, rosterName){
     monthly_amount: bhNum(b.amount_raw),
     plan_type: 'monthly',
     status: 'active',
+    server_name: 'Dicayas Server',   // created from the Dicayas monitor — the
+                                     // PPPoE account is on this router by definition
+
     notes: 'created on confirm from BASHANG row "'+b.raw_name+'" for PPPoE account: '+ppp
   };
   const shown = Object.entries({Area:body.area, Address:body.address, Phone:body.phone,
