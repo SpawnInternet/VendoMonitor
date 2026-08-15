@@ -1694,6 +1694,13 @@ function renderSubModal(){
     } else {
       // Same card as the Match Names worklist, so linking works from here too.
       const cands=mwCandidates(m.ppp_name,4);
+      // Nothing is linked here, so there is no roster_name to look BASHANG up
+      // by — use the PPPoE account name itself. Without this the sheet stays
+      // invisible on exactly the accounts that have never been matched, and the
+      // only suggestion offered comes from `subscribers`, which may be empty.
+      const bhit=bashangFor(m.ppp_name,null);
+      const bb=bhit&&bhit.row;
+      const bcell=(k,v)=>v?`<div class="linkrow"><span class="k">${k}</span><span class="v">${esc(String(v))}</span></div>`:'';
       html+=`<div class="candbox">
         <div class="candhead"><span>NO SHEET NAME YET</span></div>
         <div class="linkrow">
@@ -1709,7 +1716,24 @@ function renderSubModal(){
             </span>
             <span class="mw-score ${c.s<0.72?'mid':''}">${Math.round(c.s*100)}%</span>
           </div>`).join('')}</div>`
-        :`<div class="mw-none">No close sheet name — search below to attach one.</div>`}
+        :(bb?`<div class="mw-none">No subscriber record close to this name — but the BASHANG sheet has one, below.</div>`
+            :`<div class="mw-none">No close sheet name — search below to attach one.</div>`)}
+      </div>`;
+      if(bb) html+=`<div class="candbox" style="margin-top:8px">
+        <div class="candhead"><span>📗 BASHANG SAYS</span>
+          <span class="mw-score ${bhit.s<0.72?'mid':''}">${Math.round(bhit.s*100)}% match</span></div>
+        ${bcell('Sheet name', bb.raw_name)}
+        ${bcell('🔖 Account', bb.acct_no)}
+        ${bcell('📍 Address', bb.raw_address)}
+        ${bcell('📞 Phone',   bhPhone(bb.raw_contact))}
+        ${bcell('👥 FB name', bhFb(bb.raw_contact))}
+        ${bcell('🗓️ Due day', bhNum(bb.due_raw))}
+        ${bcell('💵 Monthly', bhNum(bb.amount_raw)?'₱'+bhNum(bb.amount_raw):null)}
+        ${bcell('Last paid',  bb.last_paid)}
+        <div class="mw-acts">
+          <button class="mw-btn" data-bhmake="${esc(m.ppp_name)}">➕ Create this subscriber</button>
+          <button class="mw-btn" onclick="showSubSearch()">🔍 Link an existing one</button>
+        </div>
       </div>`;
     }
     // search stays hidden until "Change" is pressed, unless nothing is linked yet
@@ -1776,13 +1800,24 @@ function drawRosterList(q){
   const hits=SUBRECS.filter(x=>(x.name||'').toLowerCase().includes(q))
     .sort((a,b)=>{const oa=subOffServer(a),ob=subOffServer(b); return oa===ob?0:(oa?1:-1);})
     .slice(0,40);
-  el.innerHTML = hits.length
-    ? hits.map(x=>{
+  if(hits.length){
+    el.innerHTML = hits.map(x=>{
         const off=subOffServer(x);
         return `<div class="ritem${off?' off-server':''}" data-pickname="${esc(x.name)}" data-pickarea="${esc(x.area||'')}">
          ${esc(x.name)}<small>${esc(x.area||'—')}${off?' · ⚠ not on Dicayas — likely another server':''}</small></div>`;
-      }).join('')
-    : '<div class="ritem" style="color:var(--dim)">no subscriber matches that</div>';
+      }).join('');
+    return;
+  }
+  // No subscriber record — the name may exist on the BASHANG sheet only, which
+  // is the usual case for an account that has never been matched. Offer those
+  // rows instead of a dead end.
+  const bh=BASHANG.filter(x=>(x.raw_name||'').toLowerCase().includes(q)).slice(0,20);
+  el.innerHTML = bh.length
+    ? '<div class="mw-sec">Not a subscriber yet — found on the BASHANG sheet</div>'
+      + bh.map(x=>`<div class="ritem">${esc(x.raw_name)}
+          <small>${esc(x.raw_address||'—')}</small>
+          <button class="mw-btn" data-bhcreate="${esc(x.raw_name)}">➕ Create &amp; link</button></div>`).join('')
+    : '<div class="ritem" style="color:var(--dim)">no subscriber or BASHANG row matches that</div>';
 }
 function drawRosterDetails(name){
   const el=document.getElementById('rdet'); if(!el) return;
@@ -2694,6 +2729,39 @@ async function bhCreateFromRoster(ppp, rosterName){
   }catch(e){ toast('Create failed: '+e.message); return false; }
 }
 
+// Same as bhCreateFromRoster, but for an account with no ppp_roster link yet.
+// Creating alone would leave the new subscriber orphaned — nothing would point
+// the PPPoE account at it — so link first, then build the record.
+async function bhCreateAndLink(ppp, nm){
+  if(!ppp||!nm) return false;
+  const hit=bashangFor(nm,null);
+  const area=hit&&hit.row?bhGuessArea(hit.row.raw_address):null;
+  try{
+    await rosterUpsert(ppp,{roster_name:nm, area, match_status:'matched', score:1,
+      confirmed_by:null, confirmed_at:null});
+    ROSTER.set(ppp,{ppp_name:ppp, roster_name:nm, area, match_status:'matched',
+      confirmed_by:null, confirmed_at:null});
+  }catch(err){ toast('Link failed: '+err.message); return false; }
+  toast('Linked to '+nm);
+  const made=await bhCreateFromRoster(ppp, nm);   // password gate lives in there
+  MW_HIDE.add(ppp);
+  const tm=document.getElementById('stab-match');
+  if(tm) tm.innerHTML='🔗 Match Names<span class="cnt">'+matchQueue().filter(x=>!MW_HIDE.has(x.ppp_name)).length+'</span>';
+  const rq=document.getElementById('rq'); if(rq) rq.value='';
+  drawRoster(); renderSubs();
+  if(window._curSubMk!=null) renderSubModal();
+  return made;
+}
+
+// "➕ Create & link" on a BASHANG-only row in the Attach-subscriber search.
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-bhcreate]'); if(!b) return;
+  const ppp=CUR_PPP; if(!ppp){ toast('No account open'); return; }
+  b.disabled=true;
+  try{ await bhCreateAndLink(ppp, b.dataset.bhcreate); }
+  finally{ b.disabled=false; }
+});
+
 document.addEventListener('click', e=>{
   if(e.target.id==='newSubBtn'){
     document.getElementById('newSubForm').style.display='block';
@@ -2806,9 +2874,14 @@ async function unlockRoster(ppp){
 document.addEventListener('click', async e=>{
   const b=e.target.closest('[data-bhmake]'); if(!b) return;
   const ppp=b.dataset.bhmake, r=ROSTER.get(ppp);
-  if(!r||!r.roster_name){ toast('Nothing linked yet'); return; }
+  const linked = !!(r && r.roster_name);
+  // On the "no sheet name yet" card there is no roster_name, but the card was
+  // rendered from a BASHANG match on the PPPoE name — use that same row.
+  const hit = linked ? null : bashangFor(ppp,null);
+  const nm = linked ? r.roster_name : (hit && hit.row && hit.row.raw_name);
+  if(!nm){ toast('Nothing linked yet'); return; }
   b.disabled=true;
-  try{ await bhCreateFromRoster(ppp, r.roster_name); }
+  try{ await (linked ? bhCreateFromRoster(ppp, nm) : bhCreateAndLink(ppp, nm)); }
   finally{ b.disabled=false; }
 });
 
