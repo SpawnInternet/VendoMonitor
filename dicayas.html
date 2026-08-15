@@ -871,6 +871,22 @@ function ago(ts){
   return Math.round(s/86400)+"d";
 }
 function agoHrs(ts){ if(!ts)return 1e9; return (Date.now()-new Date(ts).getTime())/3600000; }
+/* PostgREST always explains a rejection in the response body — the missing
+   grant that broke every subscriber write said so plainly, but the page threw
+   `HTTP 401` and dropped the reason, so it looked like a mystery for an hour.
+   This reads the body and surfaces the real message. */
+async function sbFail(r, what){
+  let detail='';
+  try{
+    const t=await r.text();
+    try{ const j=JSON.parse(t); detail=[j.message,j.details,j.hint].filter(Boolean).join(' — '); }
+    catch{ detail=t.slice(0,180); }
+  }catch{}
+  if(r.status===401||r.status===403){
+    detail = detail || 'no permission on this table for the app key';
+  }
+  return new Error((what?what+': ':'')+'HTTP '+r.status+(detail?' — '+detail:''));
+}
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Safe JSON value for embedding inside a single-quoted HTML attribute (onclick='...').
 // Apostrophes in data (e.g. "BADEY'S EATERY") would otherwise close the attribute early.
@@ -1684,7 +1700,7 @@ async function rosterPatch(ppp, body){
     headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
     body:JSON.stringify({...body, updated_at:new Date().toISOString()})
   });
-  if(!r.ok) throw new Error("HTTP "+r.status);
+  if(!r.ok) throw await sbFail(r);
 }
 async function rosterUpsert(ppp, body){
   // the account may have no ppp_roster row yet (it was 'not in list')
@@ -1694,7 +1710,7 @@ async function rosterUpsert(ppp, body){
     headers:{...H,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
     body:JSON.stringify({ppp_name:ppp, ...body, updated_at:new Date().toISOString()})
   });
-  if(!r.ok) throw new Error("HTTP "+r.status);
+  if(!r.ok) throw await sbFail(r);
 }
 
 document.getElementById('mBody').addEventListener('input', e=>{
@@ -1749,7 +1765,7 @@ document.getElementById('mBody').addEventListener('click', async e=>{
         headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
         body:JSON.stringify(body)
       });
-      if(!r.ok) throw new Error("HTTP "+r.status);
+      if(!r.ok) throw await sbFail(r);
       const rec=SUBRECS.find(x=>String(x.id)===String(id));
       if(rec) Object.assign(rec, body);
       toast('Details saved');
@@ -2044,13 +2060,13 @@ async function pickGroup(gid){
         method:"PATCH", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
         body:JSON.stringify({group_run_id:g.id})
       });
-      if(!r.ok) throw new Error("HTTP "+r.status);
+      if(!r.ok) throw await sbFail(r);
     } else {
       const r=await fetch(SB+`/rest/v1/harvest_group_items`,{
         method:"POST", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
         body:JSON.stringify({vendo_id:vid, group_run_id:g.id})
       });
-      if(!r.ok) throw new Error("HTTP "+r.status);
+      if(!r.ok) throw await sbFail(r);
     }
     delete HARVEST_INFO[vid];
     await loadHarvestInfo([vid]);
@@ -2451,7 +2467,7 @@ async function createSubscriberFor(ppp){
       method:"POST",
       headers:{...H,"Content-Type":"application/json","Prefer":"return=representation"},
       body:JSON.stringify(body)});
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(!r.ok) throw await sbFail(r);
     rec=(await r.json())[0];
   }catch(e){ toast("Create failed: "+e.message); return; }
 
@@ -2565,7 +2581,7 @@ async function bhCreateFromRoster(ppp, rosterName){
       method:"POST",
       headers:{...H,"Content-Type":"application/json","Prefer":"return=representation"},
       body:JSON.stringify(body)});
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(!r.ok) throw await sbFail(r);
     const rec=(await r.json())[0];
     SUBRECS.push(rec);
     SUBRECS.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
@@ -2641,7 +2657,7 @@ async function changeSubField(subId, field){
       method:"PATCH",
       headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
       body:JSON.stringify(body)});
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(!r.ok) throw await sbFail(r);
   }catch(e){ toast("Failed: "+e.message); return; }
   Object.assign(rec, body);
   toast(`${cfg.label} updated`);
@@ -3226,7 +3242,7 @@ async function subPhotoGps(subId){
       const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
         method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
         body:JSON.stringify({...body, last_updated_by:'photo-gps', last_updated_at:new Date().toISOString()})});
-      if(!r.ok) throw new Error('HTTP '+r.status);
+      if(!r.ok) throw await sbFail(r);
       Object.assign(rec, body);
       toast('GPS saved from photo');
       renderSubModal(); renderSubs();
@@ -3366,7 +3382,7 @@ async function bhPatch(sid, body){
   const r=await fetch(SB+"/rest/v1/subscribers?id=eq."+encodeURIComponent(sid),{
     method:"PATCH", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
     body:JSON.stringify({...body, last_updated_by:'dicayas-bashang', last_updated_at:new Date().toISOString()})});
-  if(!r.ok) throw new Error("HTTP "+r.status);
+  if(!r.ok) throw await sbFail(r);
   const rec=SUBRECS.find(x=>String(x.id)===String(sid));
   if(rec) Object.assign(rec, body);
 }
@@ -3517,7 +3533,7 @@ async function setSubPlan(subId, plan){
     const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
       method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
       body:JSON.stringify({plan_type:plan, last_updated_by:'plan-from-router', last_updated_at:new Date().toISOString()})});
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok) throw await sbFail(r);
     rec.plan_type=plan;
     toast('Plan set to '+plan);
     renderSubModal(); renderSubs();
@@ -3550,7 +3566,7 @@ async function pickSubArea(area){
     const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
       method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
       body:JSON.stringify({area, last_updated_by:'area-edit', last_updated_at:new Date().toISOString()})});
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok) throw await sbFail(r);
     rec.area=area;
     // keep the roster copy honest
     if(rec.name){
@@ -3717,7 +3733,7 @@ async function sbPatch(vid, body){
     headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
     body:JSON.stringify({...body, updated_at:new Date().toISOString()})
   });
-  if(!r.ok) throw new Error("HTTP "+r.status);
+  if(!r.ok) throw await sbFail(r);
 }
 function refreshVendoLocal(vid, patch){
   if(vid!=null && vid>=0) VENDOS.forEach(v=>{ if(v.id===vid) Object.assign(v,patch); });
@@ -4274,7 +4290,7 @@ async function pullOut(kind, key, label){
       headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
       body:JSON.stringify(row)
     });
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(!r.ok) throw await sbFail(r);
   }catch(e){ toast("Failed: "+e.message); return; }
   if(kind!=="vendo") SUBS=SUBS.filter(x=>x.ppp_name!==key);
   closeM();
@@ -4291,7 +4307,7 @@ async function restore(kind, key, label){
     const r=await fetch(SB+"/rest/v1/mikrotik_suppress?"+filter,{
       method:"DELETE", headers:{...H,"Prefer":"return=minimal"}
     });
-    if(!r.ok) throw new Error("HTTP "+r.status);
+    if(!r.ok) throw await sbFail(r);
   }catch(e){ toast("Failed: "+e.message); return; }
   await loadSuppress();
   await boot();
