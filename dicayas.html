@@ -1539,7 +1539,33 @@ function renderSubModal(){
               : none,
               `<button class="lnk link" onclick='subPhotoGps(${JSON.stringify(String(rec.id))})' title="Read GPS out of a stamped photo">📷 Photo</button>`+btn('gps'))}
           ${rec.gps_place?line('Landmark', val(rec.gps_place)):''}
-        `:`<div class="raw" style="margin:8px 0;color:var(--red);font-weight:700">Linked name is not a subscriber record — use Change.</div>`}
+        `:(()=>{
+            // No subscriber record behind this link yet. Show what BASHANG holds
+            // for the name so the details are visible before anything is created,
+            // and offer the create as a button rather than a dead red line.
+            const hit=bashangFor(r.roster_name,null);
+            const b=hit&&hit.row;
+            const cell=(k,v)=>v?`<div class="linkrow"><span class="k">${k}</span><span class="v">${esc(String(v))}</span></div>`:'';
+            return `<div class="raw" style="margin:8px 0;color:var(--red);font-weight:700">
+                No subscriber record for this name yet.</div>`
+              + (b?`<div class="candbox" style="margin-top:8px">
+                    <div class="candhead"><span>📗 BASHANG SAYS</span>
+                      <span class="mw-score ${hit.s<0.72?'mid':''}">${hit.byAcct?'account no':Math.round(hit.s*100)+'% match'}</span></div>
+                    ${cell('Sheet name', b.raw_name)}
+                    ${cell('🔖 Account', b.acct_no)}
+                    ${cell('📍 Address', b.raw_address)}
+                    ${cell('📞 Phone',   bhPhone(b.raw_contact))}
+                    ${cell('👥 FB name', bhFb(b.raw_contact))}
+                    ${cell('🗓️ Due day', bhNum(b.due_raw))}
+                    ${cell('💵 Monthly', bhNum(b.amount_raw)?'₱'+bhNum(b.amount_raw):null)}
+                    ${cell('Last paid',  b.last_paid)}
+                    <div class="mw-acts">
+                      <button class="mw-btn" data-bhmake="${esc(m.ppp_name)}">➕ Create this subscriber</button>
+                      <button class="mw-btn" onclick="showSubSearch()">🔍 Link an existing one</button>
+                    </div>
+                  </div>`
+                 :`<div class="mw-none">No BASHANG row close to "${esc(r.roster_name)}" either — use Change to link or create one.</div>`);
+          })()}
         ${bhStripHtml(bplan)}
         ${lockRowHtml(m.ppp_name)}
       </div>`;
@@ -2491,9 +2517,14 @@ async function bhCreateFromRoster(ppp, rosterName){
                                 'Due day':body.due_day, Monthly:body.monthly_amount})
                  .filter(([,v])=>v!=null && v!=='')
                  .map(([k,v])=>'  • '+k+': '+v).join('\n');
-  if(!confirm('No subscriber record exists for "'+rosterName+'".\n\n'
-      +'Create it from BASHANG "'+b.raw_name+'"?\n\n'+(shown||'  (sheet has no details beyond the name)')
-      +'\n\nYou can edit anything afterwards, then lock.')) return false;
+  const go = await prettyPrompt({
+    title:'➕ Create "'+rosterName+'"?',
+    message:'No subscriber record exists yet. This builds one from BASHANG row "'
+            +b.raw_name+'":\n\n'+(shown||'  (sheet has no details beyond the name)')
+            +'\n\nEverything stays editable afterwards. Nothing is locked.',
+    value:rosterName, okText:'Create'});
+  if(go===null) return false;
+  if(String(go).trim().length>=3) body.name=String(go).trim();   // name is editable here
 
   const pwd=await askPasswordValue('Enter password to create this subscriber.');
   if(pwd===null) return false;
@@ -2620,6 +2651,16 @@ async function unlockRoster(ppp){
   toast("\ud83d\udd13 Unlocked \u2014 you can edit now");
   renderSubs(); if(window._curSubMk!=null) renderSubModal();
 }
+// Create-from-BASHANG button on the "no subscriber record" card.
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-bhmake]'); if(!b) return;
+  const ppp=b.dataset.bhmake, r=ROSTER.get(ppp);
+  if(!r||!r.roster_name){ toast('Nothing linked yet'); return; }
+  b.disabled=true;
+  try{ await bhCreateFromRoster(ppp, r.roster_name); }
+  finally{ b.disabled=false; }
+});
+
 // The [data-lockact] buttons had no listener, so Lock and Unlock rendered but
 // did nothing when tapped. This wires them to the functions above.
 document.addEventListener('click', async e=>{
