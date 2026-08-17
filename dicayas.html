@@ -1432,6 +1432,26 @@ function notInSweep(m){
 }
 /* One timestamp shared by a crowd of lines is a batch stamp, not an outage.
    Treat that value as unknown rather than presenting a confident duration. */
+let JOBFLOOR=new Map();   // ppp/customer -> earliest open repair order
+function buildJobFloor(rows){
+  JOBFLOOR=new Map();
+  (rows||[]).forEach(j=>{
+    const t=Date.parse(j.created_at||''); if(!isFinite(t)) return;
+    const keys=[j.customer, (String(j.notes||'').match(/PPP:\s*([^|]+)/)||[])[1]];
+    keys.forEach(k=>{
+      k=String(k||'').trim().toLowerCase(); if(!k) return;
+      if(!JOBFLOOR.has(k) || t<JOBFLOOR.get(k)) JOBFLOOR.set(k,t);
+    });
+  });
+}
+function jobFloorFor(m){
+  const r=ROSTER.get(m&&m.ppp_name||'');
+  for(const k of [m&&m.ppp_name, r&&r.roster_name]){
+    const t=JOBFLOOR.get(String(k||'').trim().toLowerCase());
+    if(t) return t;
+  }
+  return null;
+}
 let BATCH_TS=null;
 function findBatchStamp(){
   const c=new Map();
@@ -1444,6 +1464,14 @@ function downSince(m){
   if(!m.offline_since) return null;
   if(BATCH_TS && m.offline_since===BATCH_TS) return null;   // batch-stamped
   return m.offline_since;
+}
+// {txt, atLeast} — atLeast means the real outage is this long or longer
+function downFor(m){
+  const exact=downSince(m);
+  if(exact) return {txt:ago(exact), atLeast:false, ts:exact};
+  const floor=jobFloorFor(m);
+  if(floor) return {txt:'≥ '+ago(new Date(floor).toISOString()), atLeast:true, ts:new Date(floor).toISOString()};
+  return {txt:m.offline_since?'⚠ unknown':'—', atLeast:false, ts:null};
 }
 function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
@@ -1482,17 +1510,18 @@ function downTable(list){
     const contact = phone ? `<span class="wnum">${phone}</span>`
                   : fb ? `<span class="wdim">fb: ${fb}</span>`
                   : '<span class="wzero">no contact</span>';
-    const since = downSince(m);
-    const down = since ? ago(since)
-               : m.offline_since ? '⚠ unknown' : '—';
-    const longDown = since && (Date.now()-Date.parse(since)) > 3*864e5;
+    const d = downFor(m);
+    const down = d.txt;
+    const longDown = d.ts && (Date.now()-Date.parse(d.ts)) > 3*864e5;
     return `<tr data-openppp="${esc(m.match_key)}" style="cursor:pointer">
       <td class="wnamecell"><div class="wname" title="${esc(m.ppp_name||'')}">${esc(rec&&rec.name||m.ppp_name||'')}</div>
           <div class="warea">${esc(m.ppp_name||'')}</div></td>
       <td>${rec&&rec.area?esc(rec.area):'<span class="wzero">—</span>'}</td>
       <td class="wnamecell"><div class="wname" title="${esc(rec&&rec.address||'')}">${esc(rec&&rec.address||'')||'<span class="wzero">no address</span>'}</div></td>
       <td>${contact}</td>
-      <td><span class="wst ${longDown?'waiting':''}" title="${since?'':'This line shares one timestamp with a batch of others — the poller stamped them together, so the real outage time is not known.'}">${esc(down)}</span></td>
+      <td><span class="wst ${longDown?'waiting':''}" title="${
+        d.atLeast?'The poller batch-stamped this line, so the exact drop time is lost — but a repair order was already raised on '+new Date(d.ts).toISOString().slice(0,10)+', so it was down by then.'
+        : d.ts?'' : 'Batch-stamped by the poller and no repair order on file — the real outage time is not known.'}">${esc(down)}</span></td>
       <td class="wdim">${rec&&rec.due_day!=null?'due '+esc(rec.due_day):'—'}</td>
       <td class="wnum">${rec&&rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'<span class="wzero">—</span>'}</td>
     </tr>`;
@@ -1598,7 +1627,7 @@ function subCard(m){
     ? '⚠ not reporting · last seen '+ago(m.last_seen||m.updated_at)
     : m.online
       ? (isParked(m) ? (routerCut?'Cut on router · link still up':'Link still up') : 'Online')
-      : 'Offline'+(downSince(m)?' '+ago(downSince(m)):(m.offline_since?' · since unknown':''))+throttleNote;
+      : 'Offline'+(m.offline_since?' '+downFor(m).txt:'')+throttleNote;
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
     <span class="rdot" style="background:${stale?'#7a8aa0':(m.online?'#028867':'#DF1A35')}"></span>
     <div class="rmain">
@@ -5439,7 +5468,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
@@ -5449,12 +5478,14 @@ async function boot(){
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
       sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
-      sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[])
+      sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[]),
+      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     buildRoster(roster);
     SUBRECS=subrecs||[];
     BASHANG=bashang||[];
+    buildJobFloor(jobs);
     renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
