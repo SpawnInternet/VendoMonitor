@@ -340,6 +340,8 @@
                 font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                 padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
   .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
+  .rrow .rsug{margin-top:3px;font-size:12px;font-weight:700;color:#8a6500;
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .unconf{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
                 display:inline-block;padding:2px 8px;border-radius:999px;background:#fff4de;color:#8a6500}
   .rrow .dupclaim{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
@@ -1364,7 +1366,7 @@ let INVIEW='down';      // which slice of Inactive is showing
    Status is free text on subscribers, so match loosely rather than exactly. */
 function inBucket(m){
   const r=ROSTER.get(m.ppp_name||'');
-  const rec=(r&&r.roster_name)?subRecOf(r.roster_name):null;
+  const rec=isLinked(r)?subRecOf(r.roster_name):null;
   if(!rec) return 'other';
   const st=String(rec.status||'active').toLowerCase();
   if(st.includes('cut')) return 'cut';
@@ -1406,15 +1408,17 @@ function subCard(m){
   const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
   const mates=claimMates(m);
   const st=rosterState(m);
-  const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
-  const sub = (r&&r.roster_name)
-    ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
-    : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
+  const cls = st==='confirmed'?'ok' : 'no';   // a guess is not a link, so: red
+  const sub = st==='confirmed'
+    ? `<div class="rsub yes">🔒 ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
+    : st==='suggested'
+      ? `<div class="nolink">✖ not linked <small>· tap to confirm</small></div>
+         <div class="rsug">💡 suggested: ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
+      : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
   const warn = mates.length
     ? `<div class="dupclaim">⚠ same subscriber as ${mates.length} other line${mates.length===1?'':'s'}<small>${esc(mates.join(' · '))}</small></div>`
     : '';
-  const unconf = (r && r.roster_name && !r.confirmed_at)
-    ? `<div class="unconf">? guess — not confirmed</div>` : '';
+  const unconf = '';
   const gaps = rec ? `<div class="rgap">
       <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
       <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
@@ -2023,9 +2027,9 @@ function renderSubs(){
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
     const r=rosterOf(m);
-    if(f==="inlist"&&!r)return false;
-    if(f==="notinlist"&&r)return false;
-    if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
+    if(f==="inlist"&&!isLinked(r))return false;
+    if(f==="notinlist"&&isLinked(r))return false;
+    if(f==="review"&&!(r&&r.roster_name&&!r.confirmed_at))return false;
     if(f==="dupname"&&!claimMates(m).length)return false;
     const rec=subRecOf(r&&r.roster_name);
     if(f==="gps"      && !(rec&&rec.lat))               return false;
@@ -2035,7 +2039,7 @@ function renderSubs(){
     return true;
   });
   // Unlinked lines lead each list: they are the ones still waiting to be filed.
-  const unlinked=m=>{const r=ROSTER.get(m.ppp_name); return !(r && r.roster_name);};
+  const unlinked=m=>!isLinked(ROSTER.get(m.ppp_name));
   list.sort((a,b)=>{
     const ua=unlinked(a), ub=unlinked(b);
     if(ua!==ub) return ua?-1:1;
@@ -2135,7 +2139,7 @@ function renderSubs(){
   const nBill=SUBS.length-nVppp-nNsub;
   // a vendo line may carry an owner name — that is ownership, not a billed match
   const nIn=SUBS.filter(m=>{const r=rosterOf(m);
-    return r && r.roster_name && r.match_status!=='vendo' && r.match_status!=='not_sub';}).length;
+    return isLinked(r) && r.match_status!=='vendo' && r.match_status!=='not_sub';}).length;
   const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
   const rbEl=document.getElementById('banner-roster');
   if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}${nNsub?` · 🚫 ${nNsub} not-subscriber line${nNsub===1?'':'s'} excluded`:''}</div>`;
@@ -3200,10 +3204,18 @@ function rosterStrip(m){
   // Same password-gated path as that button — this is a shortcut, not a bypass.
   const btn = locked ? ''
     : `<button class="ls-confirm" data-lockact="lock" data-p="${esc(m.ppp_name)}">\u2714 Confirm</button>`;
-  return `<div class="liststrip ${locked?'ls-yes':'ls-maybe'}">
-    <span class="ls-tag">${locked?'\u2714 on the list':'? on the list'}</span>
-    <span class="ls-who">${esc(r.roster_name)}${locked?' \u00b7 \ud83d\udd12 locked':' \u00b7 not confirmed yet'}</span>
-    ${btn}
+  // Not confirmed means not linked, so it wears the same red as a bare line —
+  // the guessed name rides along as a suggestion, not as a settled answer.
+  if(!locked){
+    return `<div class="liststrip ls-no">
+      <span class="ls-tag">\u2716 not linked</span>
+      <span class="ls-who">\ud83d\udca1 suggested: ${esc(r.roster_name)} \u00b7 confirm to link</span>
+      ${btn}
+    </div>`;
+  }
+  return `<div class="liststrip ls-yes">
+    <span class="ls-tag">\u2714 on the list</span>
+    <span class="ls-who">${esc(r.roster_name)} \u00b7 \ud83d\udd12 locked</span>
   </div>`;
 }
 
@@ -4280,11 +4292,14 @@ document.addEventListener('click', async e=>{
   }catch(err){ toast('Save failed — '+err.message); }
 });
 
+// A suggestion is not a link. Until a person presses Confirm the line counts as
+// unlinked everywhere — lists, counts, filters and colour — and the guessed name
+// is shown only as a suggestion to act on.
+function isLinked(r){ return !!(r && r.roster_name && r.confirmed_at); }
 function rosterState(m){
   const r=ROSTER.get(m.ppp_name);
   if(!r || !r.roster_name) return 'nomatch';
-  if(r.confirmed_at) return 'confirmed';
-  return r.match_status==='matched' ? 'review' : 'review';
+  return r.confirmed_at ? 'confirmed' : 'suggested';
 }
 document.addEventListener('click', e=>{
   const row=e.target.closest('[data-openppp]'); if(!row) return;
