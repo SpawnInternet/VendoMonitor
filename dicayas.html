@@ -1440,6 +1440,7 @@ function vendoSubCard(rec){
       <span class="k">${x.online?'🟢':'🔴'} ${esc(x.ppp_name)}</span>
       <span class="v">${v?esc(vendoLabel(v))+(r.vendo_id!=null?' <span class="mw-tag">linked</span>':' <span class="mw-tag prob">name match</span>')
                         :'<i style="color:var(--dim)">no vendo row</i>'}</span>
+      <button class="lnk link" data-mwopen="${esc(x.match_key)}">Open ›</button>
       <button class="lnk unlink" data-vsunown="${esc(x.ppp_name)}">Remove</button>
     </div>`;
   }).join('');
@@ -2022,7 +2023,8 @@ function renderSubs(){
            itD.classList.toggle('active', INVIEW==='down'); }
   if(itC){ itC.innerHTML='✂️ Cut Off<span class="cnt">'+nCut+'</span>';
            itC.classList.toggle('active', INVIEW==='cut'); }
-  if(itO){ itO.innerHTML='🚫 Not Sub / Transferred to VLAN<span class="cnt">'+nOther+'</span>';
+  if(itO){ itO.innerHTML='🚫 Not Sub / Transferred to VLAN<span class="cnt">'+nOther+'</span>'
+             +(nUnOff?'<span class="cnt bad">'+nUnOff+' unlinked</span>':'');
            itO.classList.toggle('active', INVIEW==='other'); }
   document.getElementById('grid-subs-off').innerHTML = offBucket.length?offBucket.map(subCard).join('')
     : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
@@ -2059,7 +2061,7 @@ function renderSubs(){
   if(ta&&ti){
     const un=n=>n?'<span class="cnt bad">'+n+' unlinked</span>':'';
     ta.innerHTML='🟢 Active<span class="cnt">'+on.length+'</span>'+un(nUnOn);
-    ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>'+un(nUnOff);
+    ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>';
     ta.classList.toggle('active', showOn);
     ti.classList.toggle('active', showOff);
   }
