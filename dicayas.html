@@ -331,15 +331,16 @@
   .rrow:hover{box-shadow:0 2px 8px rgba(20,32,58,.13)}
   .rrow.ok{border-left-color:#028867}.rrow.rev{border-left-color:#FFB725}.rrow.no{border-left-color:#DF1A35}
   .rrow .rmain{flex:1 1 auto;min-width:0;max-width:100%;overflow:hidden}
-  .rrow .rmeta{font-size:11.5px;color:var(--dim);font-weight:600;margin-top:2px}
+  .rrow .rmeta{font-size:11.5px;color:var(--dim);font-weight:600;margin-top:2px;line-height:1.3;
+               overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;
+               -webkit-box-orient:vertical;overflow:hidden}
   /* Two lines beats a silent truncation: rows are equal height anyway, so the
      wrap usually lands in space the card already had. */
   .rrow .rppp{font-weight:800;font-size:14px;line-height:1.25;overflow-wrap:anywhere;
               display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .rrow .rsub{font-size:12.5px;font-weight:700;margin-top:2px;line-height:1.3;overflow-wrap:anywhere;
               display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .rrow .rarea{display:inline-block;margin-top:3px;font-size:10px;font-weight:900;letter-spacing:.05em;
-               padding:1px 7px;border-radius:999px;background:#eef2f8;color:#5b6b82}
+  .rrow .rmeta b{font-weight:800;color:#5b6b82}
   .rrow .rsub.yes{color:#028867}.rrow .rsub.rev{color:#a86a00}.rrow .rsub.no{color:#DF1A35;font-style:italic}
   /* Unlinked lines are the work queue — a thin red edge read the same as
      "offline", so these get a wash, a dashed edge and a badge you cannot miss. */
@@ -1435,14 +1436,11 @@ function subCard(m){
   const mates=claimMates(m);
   const st=rosterState(m);
   const cls = st==='confirmed'?'ok' : 'no';   // a guess is not a link, so: red
-  // Area is what disambiguates similar names, so it gets its own line rather
-  // than being the first thing an ellipsis eats.
-  const area = rec&&rec.area ? `<span class="rarea">${esc(rec.area)}</span>` : '';
   const sub = st==='confirmed'
-    ? `<div class="rsub yes" title="${esc(r.roster_name)}">🔒 ${esc(r.roster_name)}</div>${area}`
+    ? `<div class="rsub yes" title="${esc(r.roster_name)}">🔒 ${esc(r.roster_name)}</div>`
     : st==='suggested'
       ? `<div class="nolink">✖ not linked <small>· tap to confirm</small></div>
-         <div class="rsug" title="suggested: ${esc(r.roster_name)}">💡 ${esc(r.roster_name)}</div>${area}`
+         <div class="rsug" title="suggested: ${esc(r.roster_name)}">💡 ${esc(r.roster_name)}</div>`
       : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
   // The label used to eat the pill and clip the one thing that matters — the
   // name of the other line. Label short, payload first-class, full text in title.
@@ -1460,7 +1458,7 @@ function subCard(m){
     <span class="rdot" style="background:${m.online?'#028867':'#DF1A35'}"></span>
     <div class="rmain">
       <div class="rppp" title="${esc(m.ppp_name||'')}">${esc(m.ppp_name)||'(no name)'}</div>
-      <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}</div>
+      <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}${rec&&rec.area?' · <b>'+esc(rec.area)+'</b>':''}</div>
       ${sub}
       ${unconf}
       ${warn}
