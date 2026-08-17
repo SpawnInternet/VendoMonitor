@@ -361,13 +361,8 @@
   .rrow .rsug{margin-top:3px;font-size:12px;font-weight:700;color:#8a6500;line-height:1.3;
               overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;
               -webkit-box-orient:vertical;overflow:hidden}
-  .rrow .unconf{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
-                display:inline-block;padding:2px 8px;border-radius:999px;background:#fff4de;color:#8a6500}
-  .rrow .dupclaim{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
-                  padding:3px 9px;border-radius:8px;background:#fdeaed;color:#a31c2e;border:1px solid #f5c2ca;
-                  line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;
-                  -webkit-box-orient:vertical;overflow:hidden}
-  .rrow .dupclaim small{font-weight:800;letter-spacing:0;text-transform:none;color:#7d2130;font-size:11px}
+  .rrow .gp.dup{background:#fdeaed;color:#a31c2e;border:1px solid #f5c2ca;max-width:100%;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:none;letter-spacing:0}
   .rrow .rmain>*{max-width:100%}
   .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
   .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
@@ -1445,13 +1440,13 @@ function subCard(m){
   // The label used to eat the pill and clip the one thing that matters — the
   // name of the other line. Label short, payload first-class, full text in title.
   const warn = mates.length
-    ? `<div class="dupclaim" title="also on: ${esc(mates.join(', '))}">⚠ also: <small>${esc(mates.join(' · '))}</small></div>`
+    ? `<span class="gp dup" title="also on: ${esc(mates.join(', '))}">⚠ also: ${esc(mates.join(' · '))}</span>`
     : '';
-  const unconf = '';
-  const gaps = rec ? `<div class="rgap">
-      <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
+  const gaps = (rec||warn) ? `<div class="rgap">
+      ${warn}
+      ${rec?`<span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
       <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
-      <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>
+      <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>`:''}
     </div>` : '';
   const state = m.online ? 'Online' : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
@@ -1460,8 +1455,6 @@ function subCard(m){
       <div class="rppp" title="${esc(m.ppp_name||'')}">${esc(m.ppp_name)||'(no name)'}</div>
       <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}${rec&&rec.area?' · <b>'+esc(rec.area)+'</b>':''}</div>
       ${sub}
-      ${unconf}
-      ${warn}
       ${gaps}
     </div>
     <span class="chev">›</span>
