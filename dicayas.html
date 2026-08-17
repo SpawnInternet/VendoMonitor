@@ -1416,6 +1416,35 @@ let INVIEW='down';      // which slice of Inactive is showing
      other — no subscriber linked, or the customer moved to a VLAN connection
    Status is free text on subscribers, so match loosely rather than exactly. */
 const PPP_STALE_MS = 45*60*1000;   // several missed sweeps, not one slow one
+/* Was this row in the poller's most recent sweep? Measured against the newest
+   write in the dataset, not the clock, so a stalled poller does not condemn
+   every line at once. A row the router stopped reporting is a line that no
+   longer exists there — renamed or deleted — and nobody should be dispatched
+   to it. */
+function lastSweepAt(){
+  let t=0; (SUBS||[]).forEach(m=>{ const u=Date.parse(m.updated_at||''); if(u>t) t=u; });
+  return t;
+}
+function notInSweep(m){
+  const sweep=lastSweepAt(); if(!sweep) return false;
+  const u=Date.parse(m&&m.updated_at||'');
+  return isFinite(u) && (sweep-u) > PPP_STALE_MS;
+}
+/* One timestamp shared by a crowd of lines is a batch stamp, not an outage.
+   Treat that value as unknown rather than presenting a confident duration. */
+let BATCH_TS=null;
+function findBatchStamp(){
+  const c=new Map();
+  (SUBS||[]).forEach(m=>{ if(!m.online && m.offline_since)
+    c.set(m.offline_since,(c.get(m.offline_since)||0)+1); });
+  BATCH_TS=null;
+  c.forEach((n,ts)=>{ if(n>=10) BATCH_TS=ts; });
+}
+function downSince(m){
+  if(!m.offline_since) return null;
+  if(BATCH_TS && m.offline_since===BATCH_TS) return null;   // batch-stamped
+  return m.offline_since;
+}
 function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
   if(!m || !m.online) return false;
@@ -1453,15 +1482,17 @@ function downTable(list){
     const contact = phone ? `<span class="wnum">${phone}</span>`
                   : fb ? `<span class="wdim">fb: ${fb}</span>`
                   : '<span class="wzero">no contact</span>';
-    const down = m.offline_since ? ago(m.offline_since) : '—';
-    const longDown = m.offline_since && (Date.now()-Date.parse(m.offline_since)) > 3*864e5;
+    const since = downSince(m);
+    const down = since ? ago(since)
+               : m.offline_since ? '⚠ unknown' : '—';
+    const longDown = since && (Date.now()-Date.parse(since)) > 3*864e5;
     return `<tr data-openppp="${esc(m.match_key)}" style="cursor:pointer">
       <td class="wnamecell"><div class="wname" title="${esc(m.ppp_name||'')}">${esc(rec&&rec.name||m.ppp_name||'')}</div>
           <div class="warea">${esc(m.ppp_name||'')}</div></td>
       <td>${rec&&rec.area?esc(rec.area):'<span class="wzero">—</span>'}</td>
       <td class="wnamecell"><div class="wname" title="${esc(rec&&rec.address||'')}">${esc(rec&&rec.address||'')||'<span class="wzero">no address</span>'}</div></td>
       <td>${contact}</td>
-      <td><span class="wst ${longDown?'waiting':''}">${esc(down)}</span></td>
+      <td><span class="wst ${longDown?'waiting':''}" title="${since?'':'This line shares one timestamp with a batch of others — the poller stamped them together, so the real outage time is not known.'}">${esc(down)}</span></td>
       <td class="wdim">${rec&&rec.due_day!=null?'due '+esc(rec.due_day):'—'}</td>
       <td class="wnum">${rec&&rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'<span class="wzero">—</span>'}</td>
     </tr>`;
@@ -1474,6 +1505,8 @@ function downTable(list){
 function inBucket(m){
   const st=subStatusOf(m);
   if(st==='cut')   return 'cut';
+  // gone from the router: not a job order, whatever the record says
+  if(!m.online && notInSweep(m)) return 'other';
   if(st==='moved') return 'other';
   if(st===null)    return 'other';   // nobody billed behind it
   return 'down';
@@ -1565,7 +1598,7 @@ function subCard(m){
     ? '⚠ not reporting · last seen '+ago(m.last_seen||m.updated_at)
     : m.online
       ? (isParked(m) ? (routerCut?'Cut on router · link still up':'Link still up') : 'Online')
-      : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'')+throttleNote;
+      : 'Offline'+(downSince(m)?' '+ago(downSince(m)):(m.offline_since?' · since unknown':''))+throttleNote;
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
     <span class="rdot" style="background:${stale?'#7a8aa0':(m.online?'#028867':'#DF1A35')}"></span>
     <div class="rmain">
@@ -2160,6 +2193,7 @@ function renderSubs(){
   const q=(document.getElementById('subq').value||"").toLowerCase();
   const f=document.getElementById('subflt').value;
   buildClaims();
+  findBatchStamp();
   let list=SUBS.filter(m=>{
     // A line flagged as a standalone vendo is not a customer, so it does not
     // belong in the subscriber lists at all. It lives on the Vendo PPPoE tab,
