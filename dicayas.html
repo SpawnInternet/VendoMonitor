@@ -340,6 +340,14 @@
                 font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                 padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
   .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  .tcol{display:flex;flex-direction:column;gap:10px;min-width:0}
+  .tchead{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.06em;
+          text-transform:uppercase;padding:7px 11px;border-radius:9px}
+  .tchead.ok{background:#e9f7f1;color:#046b52;border:1px solid #b6e3d3}
+  .tchead.no{background:#fdeaed;color:#a31c2e;border:1px solid #f5c2ca}
+  .tchead .tcn{margin-left:auto;background:rgba(255,255,255,.75);padding:1px 9px;border-radius:999px}
+  @media(max-width:900px){ .twocol{grid-template-columns:1fr} }
   .rrow .rsug{margin-top:3px;font-size:12px;font-weight:700;color:#8a6500;
               overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .unconf{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
@@ -2068,7 +2076,19 @@ function renderSubs(){
     : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
         : INVIEW==='cut'?'Nobody marked cut off. Open a line and set its connection to ✂️ Cut off.'
         : 'Nothing here — no unlinked or transferred lines are offline.'}</div>`;
-  document.getElementById('grid-subs-on').innerHTML  = on.length ? on.map(subCard).join(''):'<div class="empty">None active</div>';
+  const onLinked=on.filter(m=>!unlinked(m)), onOpen=on.filter(unlinked);
+  document.getElementById('grid-subs-on').innerHTML = on.length
+    ? `<div class="twocol">
+         <div class="tcol">
+           <div class="tchead ok">🔒 Linked<span class="tcn">${onLinked.length}</span></div>
+           ${onLinked.length?onLinked.map(subCard).join(''):'<div class="empty">None linked yet</div>'}
+         </div>
+         <div class="tcol">
+           <div class="tchead no">✖ Not linked<span class="tcn">${onOpen.length}</span></div>
+           ${onOpen.length?onOpen.map(subCard).join(''):'<div class="empty">Nothing waiting — every online line is confirmed</div>'}
+         </div>
+       </div>`
+    : '<div class="empty">None active</div>';
   // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
   const isMatch = (SUBVIEW==='match');
   const isVendo = (SUBVIEW==='vendo');
@@ -2083,7 +2103,7 @@ function renderSubs(){
   const gP =document.getElementById('grid-subs-pay');
   const gVP=document.getElementById('grid-subs-vppp');
   const gNS=document.getElementById('grid-subs-nsub');
-  if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
+  if(gOn)  gOn.style.setProperty('display',  showOn?'block':'none','important');
   if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
   if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
