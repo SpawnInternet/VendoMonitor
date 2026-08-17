@@ -340,6 +340,12 @@
                 font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                 padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
   .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
+  .rrow .unconf{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+                display:inline-block;padding:2px 8px;border-radius:999px;background:#fff4de;color:#8a6500}
+  .rrow .dupclaim{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+                  padding:3px 9px;border-radius:8px;background:#fdeaed;color:#a31c2e;border:1px solid #f5c2ca}
+  .rrow .dupclaim small{display:block;font-weight:700;letter-spacing:0;text-transform:none;
+                        color:#8b3a46;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
   .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
             background:#fdeaed;color:#DF1A35}
@@ -609,6 +615,7 @@
         <option value="inlist">On the roster</option>
         <option value="notinlist">NOT on the roster</option>
         <option value="review">Needs confirming</option>
+        <option value="dupname">⚠ Same subscriber on 2+ lines</option>
         <option value="gps">📍 Has GPS</option>
         <option value="nogps">Missing GPS</option>
         <option value="nophone">Missing phone</option>
@@ -1378,13 +1385,36 @@ function buildRoster(rows){
 }
 function rosterOf(m){ return ROSTER.get(m.ppp_name)||null; }
 
+/* Two PPPoE lines pointing at one customer. Sometimes real — a house and a
+   store on the same account — but just as often a guess that grabbed a name
+   already taken, leaving the actual customer with no line at all. Either way
+   the operator should see it on the card, not discover it in the sheet. */
+let CLAIMS=new Map();
+function buildClaims(){
+  CLAIMS=new Map();
+  ROSTER.forEach(r=>{
+    if(!r || !r.roster_name || r.match_status==='vendo') return;
+    CLAIMS.set(r.roster_name,(CLAIMS.get(r.roster_name)||[]).concat(r.ppp_name));
+  });
+}
+function claimMates(m){
+  const r=ROSTER.get(m.ppp_name);
+  if(!r || !r.roster_name) return [];
+  return (CLAIMS.get(r.roster_name)||[]).filter(n=>n!==m.ppp_name);
+}
 function subCard(m){
   const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
+  const mates=claimMates(m);
   const st=rosterState(m);
   const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
   const sub = (r&&r.roster_name)
     ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
     : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
+  const warn = mates.length
+    ? `<div class="dupclaim">⚠ same subscriber as ${mates.length} other line${mates.length===1?'':'s'}<small>${esc(mates.join(' · '))}</small></div>`
+    : '';
+  const unconf = (r && r.roster_name && !r.confirmed_at)
+    ? `<div class="unconf">? guess — not confirmed</div>` : '';
   const gaps = rec ? `<div class="rgap">
       <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
       <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
@@ -1397,6 +1427,8 @@ function subCard(m){
       <div class="rppp">${esc(m.ppp_name)||'(no name)'}</div>
       <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}</div>
       ${sub}
+      ${unconf}
+      ${warn}
       ${gaps}
     </div>
     <span class="chev">›</span>
@@ -1977,6 +2009,7 @@ document.addEventListener('click', e=>{
 function renderSubs(){
   const q=(document.getElementById('subq').value||"").toLowerCase();
   const f=document.getElementById('subflt').value;
+  buildClaims();
   let list=SUBS.filter(m=>{
     // A line flagged as a standalone vendo is not a customer, so it does not
     // belong in the subscriber lists at all. It lives on the Vendo PPPoE tab,
@@ -1993,6 +2026,7 @@ function renderSubs(){
     if(f==="inlist"&&!r)return false;
     if(f==="notinlist"&&r)return false;
     if(f==="review"&&!(r&&r.match_status==='probable'&&!r.confirmed_at))return false;
+    if(f==="dupname"&&!claimMates(m).length)return false;
     const rec=subRecOf(r&&r.roster_name);
     if(f==="gps"      && !(rec&&rec.lat))               return false;
     if(f==="nogps"    &&  (rec&&rec.lat))               return false;
