@@ -1403,20 +1403,28 @@ function pppStale(m){
 }
 // "Online" must mean the poller saw it recently, not that it was up once.
 function subOnline(m){ return !!m.online && !pppStale(m); }
-function isParked(m){
-  const r=ROSTER.get(m.ppp_name||'');
+// Two sources can say a line is cut: the subscriber record (what the office
+// set) and the router's own service_state (what is actually enforced). Either
+// counts, so a cut line files correctly even when one side is behind.
+function subStatusOf(m){
+  const r=ROSTER.get(m&&m.ppp_name||'');
   const rec=isLinked(r)?subRecOf(r.roster_name):null;
-  if(!rec) return false;
-  const st=String(rec.status||'').toLowerCase();
-  return st.includes('cut') || st.includes('transfer') || st.includes('vlan');
+  const office=String(rec&&rec.status||'').toLowerCase();
+  const router=String(m&&m.service_state||'').toLowerCase();
+  if(office.includes('cut') || router==='cutoff') return 'cut';
+  if(office.includes('transfer') || office.includes('vlan')) return 'moved';
+  if(office.includes('duplicate')) return 'moved';
+  return rec ? 'active' : null;   // null = no customer behind this line
+}
+function isParked(m){
+  const st=subStatusOf(m);
+  return st==='cut' || st==='moved';
 }
 function inBucket(m){
-  const r=ROSTER.get(m.ppp_name||'');
-  const rec=isLinked(r)?subRecOf(r.roster_name):null;
-  if(!rec) return 'other';
-  const st=String(rec.status||'active').toLowerCase();
-  if(st.includes('cut')) return 'cut';
-  if(st.includes('transfer') || st.includes('vlan') || st.includes('duplicate')) return 'other';
+  const st=subStatusOf(m);
+  if(st==='cut')   return 'cut';
+  if(st==='moved') return 'other';
+  if(st===null)    return 'other';   // nobody billed behind it
   return 'down';
 }
 document.addEventListener('click', e=>{
@@ -1498,10 +1506,11 @@ function subCard(m){
       <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>`:''}
     </div>` : '';
   const stale = pppStale(m);
+  const routerCut = String(m.service_state||'').toLowerCase()==='cutoff';
   const state = stale
     ? '⚠ not reporting · last seen '+ago(m.last_seen||m.updated_at)
     : m.online
-      ? (isParked(m) ? 'Link still up' : 'Online')
+      ? (isParked(m) ? (routerCut?'Cut on router · link still up':'Link still up') : 'Online')
       : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
     <span class="rdot" style="background:${stale?'#7a8aa0':(m.online?'#028867':'#DF1A35')}"></span>
