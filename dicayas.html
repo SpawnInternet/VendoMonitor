@@ -342,7 +342,7 @@
                 font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                 padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
   .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
-  .openbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  .openbar{grid-column:1/-1;cursor:pointer;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
            padding:9px 13px;border-radius:10px;font-size:12.5px;font-weight:900;
            background:#fdeaed;border:1px solid #f5c2ca;color:#a31c2e}
   .openbar small{font-weight:700;font-size:11.5px;color:#8b3a46;letter-spacing:0}
@@ -1387,7 +1387,8 @@ function inBucket(m){
 document.addEventListener('click', e=>{
   const b=e.target.closest('[data-onlyopen]'); if(!b) return;
   const sel=document.getElementById('subflt');
-  if(sel){ sel.value='notinlist'; safeRender('subscribers', renderSubs); }
+  if(sel){ sel.value = (b.dataset.onlyopen==='all') ? 'all' : 'notinlist';
+           safeRender('subscribers', renderSubs); }
 });
 document.addEventListener('click', e=>{
   const t=e.target.closest('[data-iv]'); if(!t) return;
@@ -2058,11 +2059,7 @@ function renderSubs(){
   const unlinked=m=>!isLinked(ROSTER.get(m.ppp_name));
   const byName=(a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||'', undefined,
                         {sensitivity:'base', numeric:true});
-  list.sort((a,b)=>{
-    const ua=unlinked(a), ub=unlinked(b);
-    if(ua!==ub) return ua?-1:1;   // waiting work first, alphabetical inside each group
-    return byName(a,b);
-  });
+  list.sort(byName);   // one straight A–Z run; the banner isolates the unlinked
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
   const nUnOn=on.filter(unlinked).length, nUnOff=off.filter(unlinked).length;
   // Offline is not one problem. A paying customer with no link needs a job
@@ -2086,14 +2083,19 @@ function renderSubs(){
     : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
         : INVIEW==='cut'?'Nobody marked cut off. Open a line and set its connection to ✂️ Cut off.'
         : 'Nothing here — no unlinked or transferred lines are offline.'}</div>`;
-  // One grid as before — unlinked lines still sort to the front, with a banner
-  // over them saying how many are waiting and a way to see only those.
+  // Everything sits in one A–Z run, so the banner is the way to pull the queue
+  // out of it: tap to show only the unlinked, tap again to go back to all.
   const onOpen=on.filter(unlinked).length;
-  const openBanner = onOpen
-    ? `<div class="openbar">✖ ${onOpen} of ${on.length} online line${on.length===1?'':'s'} not linked
-         <small>they lead the list below — red card = still waiting</small>
-         <button class="openbtn" data-onlyopen="1">Show only these</button></div>`
-    : `<div class="openbar ok">🔒 All ${on.length} online line${on.length===1?'':'s'} linked and confirmed</div>`;
+  const onlyOpen=(f==='notinlist');
+  const openBanner = onlyOpen
+    ? `<div class="openbar" data-onlyopen="all">✖ showing only the ${on.length} unlinked line${on.length===1?'':'s'}
+         <small>the rest are hidden</small>
+         <button class="openbtn" data-onlyopen="all">Show all</button></div>`
+    : onOpen
+      ? `<div class="openbar" data-onlyopen="open">✖ ${onOpen} of ${on.length} online line${on.length===1?'':'s'} not linked
+           <small>red cards, mixed through the A–Z list</small>
+           <button class="openbtn" data-onlyopen="open">Show only these</button></div>`
+      : `<div class="openbar ok">🔒 All ${on.length} online line${on.length===1?'':'s'} linked and confirmed</div>`;
   document.getElementById('grid-subs-on').innerHTML = on.length
     ? openBanner + on.map(subCard).join('')
     : '<div class="empty">None active</div>';
