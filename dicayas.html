@@ -273,6 +273,13 @@
   /* A PPPoE line running a standalone vendo. Same magenta as the Vendo PPPoE tab. */
   .ls-vendo{background:#fbe7f2;border:1px solid #f0bcda;color:#8d0d57}
   .ls-vendo .ls-tag{background:#C01176;color:#fff}
+  /* A PPPoE line that is nobody's billed account. Same purple as the Not Subscriber tab. */
+  .ls-nsub{background:#eceaf7;border:1px solid #c6c0e6;color:#311A8E}
+  .ls-nsub .ls-tag{background:#311A8E;color:#fff}
+  .liststrip .ls-alt2{flex-shrink:0;border:none;cursor:pointer;font-family:inherit;
+                     font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+                     padding:6px 13px;border-radius:999px;background:#311A8E;color:#fff;white-space:nowrap}
+  .liststrip .ls-alt2:hover{background:#221263}
   .liststrip .ls-alt{margin-left:auto;flex-shrink:0;border:none;cursor:pointer;font-family:inherit;
                      font-size:11px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
                      padding:6px 13px;border-radius:999px;background:#C01176;color:#fff;white-space:nowrap}
@@ -590,6 +597,7 @@
       <div class="subtab"        data-sv="match"    id="stab-match">🔗 Match Names</div>
       <div class="subtab"        data-sv="vendo"    id="stab-vendo">🎰 Vendo Subs</div>
       <div class="subtab"        data-sv="vppp"     id="stab-vppp">🕹️ Vendo PPPoE</div>
+      <div class="subtab"        data-sv="nsub"     id="stab-nsub">🚫 Not Subscriber</div>
       <div class="subtab"        data-sv="pay"      id="stab-pay">💵 Match Payments</div>
     </div>
     <div class="grid" id="grid-subs-on"></div>
@@ -597,6 +605,7 @@
     <div id="grid-subs-match" style="display:none"></div>
     <div class="grid" id="grid-subs-vendo" style="display:none !important"></div>
     <div id="grid-subs-vppp" style="display:none"></div>
+    <div id="grid-subs-nsub" style="display:none"></div>
     <div id="grid-subs-pay" style="display:none"></div>
   </div>
   <div id="pane-search" class="pane" style="display:none">
@@ -1454,6 +1463,7 @@ function renderVendoPpp(){
         ${v&&v.vlan?`<div class="linkrow"><span class="k">VLAN</span><span class="v">${esc(String(v.vlan))}</span></div>`:''}
         <div class="mw-acts">
           <button class="mw-btn" data-vpppback="${esc(m.ppp_name)}">↩ Move back to subscribers</button>
+          <button class="mw-btn" data-nsubmark="${esc(m.ppp_name)}" title="Not a machine — just a line that is not a paying customer">🚫 Not a subscriber</button>
           <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
         </div>
       </div>`;
@@ -1461,27 +1471,82 @@ function renderVendoPpp(){
   return list.length;
 }
 
-// Mark a PPPoE line as a vendo, or send it back to the subscriber queue.
-async function setPppVendo(ppp, isVendo){
+/* Not-a-subscriber PPPoE accounts.
+   Not every PPPoE line is a paying customer and not every one is a vendo either:
+   staff lines, office/internal links, test accounts, free/courtesy lines. Marked
+   ones land here (ppp_roster.match_status='not_sub') and stay out of the Match
+   Names queue for good — unlike "not billable", which only hid the row for the
+   session and came back on the next reload. */
+function notSubList(){
+  const q=(document.getElementById('subq').value||'').toLowerCase().trim();
+  return SUBS.filter(m=>{
+    const r=ROSTER.get(m.ppp_name||'');
+    if(!r || r.match_status!=='not_sub') return false;
+    if(q && !((m.ppp_name||'')+' '+(m.ip||'')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+}
+function renderNotSub(){
+  const el=document.getElementById('grid-subs-nsub'); if(!el) return 0;
+  const list=notSubList();
+  if(!list.length){
+    el.innerHTML=`<div class="banner">🚫 Nothing here yet. On a PPPoE account that is not a paying
+      customer — staff, office, test, free line — press <b>🚫 Not a subscriber</b>. It moves here and
+      leaves the Match Names queue for good.</div>`;
+    return 0;
+  }
+  el.innerHTML=`<div class="banner">🚫 ${list.length} PPPoE line${list.length===1?'':'s'} not on the
+     subscriber list. These are excluded from subscriber matching and billing.</div>`
+   + list.map(m=>{
+      return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
+        <div class="candhead">
+          <span>NOT A SUBSCRIBER</span>
+          <span class="mw-meta">${m.online?'🟢 online':'🔴 offline'}${m.ip?' · '+esc(m.ip):''}${m.ppp_profile?' · '+esc(m.ppp_profile):''}</span>
+        </div>
+        <div class="routerbar">
+          <div class="rl"><span>📡 Router says · PPPoE</span><span class="rfix">fixed — change in MikroTik</span></div>
+          <div class="rv">${esc(m.ppp_name)}</div>
+        </div>
+        <div class="mw-acts">
+          <button class="mw-btn" data-nsubback="${esc(m.ppp_name)}">↩ Move back to subscribers</button>
+          <button class="mw-btn" data-vpppmark="${esc(m.ppp_name)}" title="Actually a piso-wifi machine on this line">🕹️ It's a vendo</button>
+          <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
+        </div>
+      </div>`;
+   }).join('');
+  return list.length;
+}
+
+// Park a PPPoE line outside the subscriber queue, or send it back.
+// status: 'vendo' (a machine), 'not_sub' (nobody's billed account), or null (back).
+async function setPppMark(ppp, status){
   try{
-    await rosterUpsert(ppp, isVendo
-      ? {roster_name:null, area:null, match_status:'vendo', score:null,
+    await rosterUpsert(ppp, status
+      ? {roster_name:null, area:null, match_status:status, score:null,
          confirmed_by:null, confirmed_at:null}
       : {roster_name:null, area:null, match_status:null, score:null,
          confirmed_by:null, confirmed_at:null});
-    if(isVendo) ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:'vendo'});
-    else        ROSTER.delete(ppp);
+    if(status) ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:status});
+    else       ROSTER.delete(ppp);
     MW_HIDE.delete(ppp);
-    toast(isVendo?'Moved to Vendo PPPoE':'Moved back to subscribers');
-    renderSubs(); renderMatch(); renderVendoPpp();
+    toast(status==='vendo' ? 'Moved to Vendo PPPoE'
+        : status==='not_sub' ? 'Moved to Not Subscriber'
+        : 'Moved back to subscribers');
+    renderSubs(); renderMatch(); renderVendoPpp(); renderNotSub();
     if(window._curSubMk!=null) renderSubModal();
   }catch(e){ toast('Failed: '+e.message); }
 }
+// kept for older call sites
+function setPppVendo(ppp, isVendo){ return setPppMark(ppp, isVendo?'vendo':null); }
 document.addEventListener('click', e=>{
   const a=e.target.closest('[data-vpppmark]');
   const b=e.target.closest('[data-vpppback]');
-  if(a) setPppVendo(a.dataset.vpppmark, true);
-  else if(b) setPppVendo(b.dataset.vpppback, false);
+  const c=e.target.closest('[data-nsubmark]');
+  const d=e.target.closest('[data-nsubback]');
+  if(a)      setPppMark(a.dataset.vpppmark, 'vendo');
+  else if(c) setPppMark(c.dataset.nsubmark, 'not_sub');
+  else if(b) setPppMark(b.dataset.vpppback, null);
+  else if(d) setPppMark(d.dataset.nsubback, null);
 });
 
 function renderSubs(){
@@ -1493,6 +1558,9 @@ function renderSubs(){
     // which has its own search over the same box.
     const rv=ROSTER.get(m.ppp_name||'');
     if(rv && rv.match_status==='vendo') return false;
+    // same idea for a line that is nobody's billed account — it lives on the
+    // 🚫 Not Subscriber tab, not in Active/Inactive.
+    if(rv && rv.match_status==='not_sub') return false;
     if(q && !((m.ppp_name||"")+" "+(m.ip||"")).toLowerCase().includes(q)) return false;
     if(f==="online"&&!m.online)return false;
     if(f==="offline"&&m.online)return false;
@@ -1515,19 +1583,22 @@ function renderSubs(){
   const isVendo = (SUBVIEW==='vendo');
   const isPay   = (SUBVIEW==='pay');
   const isVppp  = (SUBVIEW==='vppp');
-  const showOn  = !isMatch && !isVendo && !isPay && !isVppp && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
-  const showOff = !isMatch && !isVendo && !isPay && !isVppp && !showOn;
+  const isNsub  = (SUBVIEW==='nsub');
+  const showOn  = !isMatch && !isVendo && !isPay && !isVppp && !isNsub && (SUBVIEW!=='inactive');   // anything unexpected falls back to Active
+  const showOff = !isMatch && !isVendo && !isPay && !isVppp && !isNsub && !showOn;
   const gOn=document.getElementById('grid-subs-on'), gOff=document.getElementById('grid-subs-off');
   const gM =document.getElementById('grid-subs-match');
   const gV =document.getElementById('grid-subs-vendo');
   const gP =document.getElementById('grid-subs-pay');
   const gVP=document.getElementById('grid-subs-vppp');
+  const gNS=document.getElementById('grid-subs-nsub');
   if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
   if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
   if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
   if(gP)   gP.style.setProperty('display',   isPay?'block':'none','important');
   if(gVP)  gVP.style.setProperty('display',  isVppp?'block':'none','important');
+  if(gNS)  gNS.style.setProperty('display',  isNsub?'block':'none','important');
   if(isMatch) renderMatch();
   if(isPay)   payTabOpen();
   const nVendo = renderVendoSubs();
@@ -1552,6 +1623,11 @@ function renderSubs(){
     tvp.innerHTML='🕹️ Vendo PPPoE<span class="cnt">'+renderVendoPpp()+'</span>';
     tvp.classList.toggle('active', isVppp);
   }
+  const tns=document.getElementById('stab-nsub');
+  if(tns){
+    tns.innerHTML='🚫 Not Subscriber<span class="cnt">'+renderNotSub()+'</span>';
+    tns.classList.toggle('active', isNsub);
+  }
   const tp=document.getElementById('stab-pay');
   if(tp){
     const nP=PAYQ.filter(r=>pmState(r)==='pending').length;
@@ -1566,11 +1642,12 @@ function renderSubs(){
   // roster". A rejected or cleared row is not a match either — only a row that
   // actually carries a roster_name counts.
   const nVppp=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='vendo';}).length;
-  const nBill=SUBS.length-nVppp;
+  const nNsub=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='not_sub';}).length;
+  const nBill=SUBS.length-nVppp-nNsub;
   const nIn=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.roster_name;}).length;
   const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
   const rbEl=document.getElementById('banner-roster');
-  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}</div>`;
+  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}${nNsub?` · 🚫 ${nNsub} not-subscriber line${nNsub===1?'':'s'} excluded`:''}</div>`;
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
     ? `<div class="banner">ℹ️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}). Either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
 }
@@ -2599,15 +2676,27 @@ function rosterStrip(m){
       <button class="ls-alt" data-vpppback="${esc(m.ppp_name)}">\u21a9 Move back to subscribers</button>
     </div>`;
   }
+  // Settled the other way: a real line that simply is not a billed customer.
+  // Same reasoning as the vendo state — without this it read as unresolved.
+  if(r && r.match_status==='not_sub'){
+    return `<div class="liststrip ls-nsub">
+      <span class="ls-tag">\ud83d\udeab not a subscriber</span>
+      <span class="ls-who">not on the subscriber list \u2014 staff, internal, test, or free line</span>
+      <button class="ls-alt" data-nsubback="${esc(m.ppp_name)}">\u21a9 Move back to subscribers</button>
+    </div>`;
+  }
   if(!r || !r.roster_name){
     // Standalone vendos run their own PPPoE line, so this state is not always a
     // missing customer — offer the vendo flag here rather than making the run
-    // go back out to Match Names for it.
+    // go back out to Match Names for it. And some lines are neither: staff,
+    // office, test — those get parked on the Not Subscriber tab instead.
     return `<div class="liststrip ls-no">
       <span class="ls-tag">\u2716 not on the list</span>
       <span class="ls-who">no subscriber linked \u2014 piso-wifi, internal, test, or unbilled</span>
       <button class="ls-alt" data-vpppmark="${esc(m.ppp_name)}"
         title="A standalone piso-wifi machine on this line, not a customer">\ud83d\udd79\ufe0f It's a vendo</button>
+      <button class="ls-alt2" data-nsubmark="${esc(m.ppp_name)}"
+        title="A real line that is not a paying customer \u2014 staff, office, test, free">\ud83d\udeab Not a subscriber</button>
     </div>`;
   }
   const locked=!!r.confirmed_at;
@@ -3064,6 +3153,7 @@ function matchQueue(){
     const r=ROSTER.get(m.ppp_name);
     if(!r) return true;                                   // never seen
     if(r.match_status==='vendo') return false;            // it is a machine, not a customer
+    if(r.match_status==='not_sub') return false;          // settled: nobody's billed account
     if(r.match_status==='rejected') return true;          // marked wrong, still open
     if(!r.roster_name) return true;                       // cleared
     if(r.match_status==='probable' && !r.confirmed_at) return true;  // fuzzy, unconfirmed
@@ -3277,6 +3367,7 @@ function renderMatch(){
         <div class="mw-acts">
           <button class="mw-btn skip" data-mwskip="${esc(m.ppp_name)}">✖ Not billable</button>
           <button class="mw-btn" data-vpppmark="${esc(m.ppp_name)}" title="A piso-wifi machine on this line, not a customer">🕹️ It's a vendo</button>
+          <button class="mw-btn" data-nsubmark="${esc(m.ppp_name)}" title="A real line that is not a paying customer — staff, office, test, free">🚫 Not a subscriber</button>
           <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
         </div>
       </div>`;
