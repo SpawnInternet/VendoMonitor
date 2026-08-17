@@ -342,22 +342,15 @@
                 font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
                 padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
   .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
-  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
-  /* Each side fills its half with as many cards as fit, so a wide screen is not
-     two thin ribbons with a gutter of dead space down the middle. */
-  .tcol{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
-        gap:9px;align-content:start;min-width:0}
-  .tchead{grid-column:1/-1;position:sticky;top:0;z-index:3;
-          display:flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.06em;
-          text-transform:uppercase;padding:7px 11px;border-radius:9px}
-  .tchead.ok{background:#e0f3ea;color:#046b52;border:1px solid #b6e3d3}
-  .tchead.no{background:#fbdfe4;color:#a31c2e;border:1px solid #f5c2ca}
-  .tchead .tcn{margin-left:auto;background:rgba(255,255,255,.8);padding:1px 9px;border-radius:999px}
-  .tcol .empty{grid-column:1/-1}
-  /* .rrow sizes to its content by default; inside a column that leaves ragged
-     card widths, so stretch them to the track instead. */
-  .tcol .rrow{align-self:stretch;width:100%;margin:0}
-  @media(max-width:900px){ .twocol{grid-template-columns:1fr} }
+  .openbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+           padding:9px 13px;border-radius:10px;font-size:12.5px;font-weight:900;
+           background:#fdeaed;border:1px solid #f5c2ca;color:#a31c2e}
+  .openbar small{font-weight:700;font-size:11.5px;color:#8b3a46;letter-spacing:0}
+  .openbar.ok{background:#e9f7f1;border-color:#b6e3d3;color:#046b52}
+  .openbtn{margin-left:auto;border:none;cursor:pointer;font-family:inherit;font-size:11px;
+           font-weight:900;letter-spacing:.04em;text-transform:uppercase;
+           padding:6px 13px;border-radius:999px;background:#DF1A35;color:#fff;white-space:nowrap}
+  .openbtn:hover{background:#b3142a}
   .rrow .rsug{margin-top:3px;font-size:12px;font-weight:700;color:#8a6500;
               overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .unconf{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
@@ -1392,6 +1385,11 @@ function inBucket(m){
   return 'down';
 }
 document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-onlyopen]'); if(!b) return;
+  const sel=document.getElementById('subflt');
+  if(sel){ sel.value='notinlist'; safeRender('subscribers', renderSubs); }
+});
+document.addEventListener('click', e=>{
   const t=e.target.closest('[data-iv]'); if(!t) return;
   INVIEW = t.dataset.iv || 'down';
   safeRender('subscribers', renderSubs);
@@ -2086,18 +2084,16 @@ function renderSubs(){
     : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
         : INVIEW==='cut'?'Nobody marked cut off. Open a line and set its connection to ✂️ Cut off.'
         : 'Nothing here — no unlinked or transferred lines are offline.'}</div>`;
-  const onLinked=on.filter(m=>!unlinked(m)), onOpen=on.filter(unlinked);
+  // One grid as before — unlinked lines still sort to the front, with a banner
+  // over them saying how many are waiting and a way to see only those.
+  const onOpen=on.filter(unlinked).length;
+  const openBanner = onOpen
+    ? `<div class="openbar">✖ ${onOpen} of ${on.length} online line${on.length===1?'':'s'} not linked
+         <small>they lead the list below — red card = still waiting</small>
+         <button class="openbtn" data-onlyopen="1">Show only these</button></div>`
+    : `<div class="openbar ok">🔒 All ${on.length} online line${on.length===1?'':'s'} linked and confirmed</div>`;
   document.getElementById('grid-subs-on').innerHTML = on.length
-    ? `<div class="twocol">
-         <div class="tcol">
-           <div class="tchead ok">🔒 Linked<span class="tcn">${onLinked.length}</span></div>
-           ${onLinked.length?onLinked.map(subCard).join(''):'<div class="empty">None linked yet</div>'}
-         </div>
-         <div class="tcol">
-           <div class="tchead no">✖ Not linked<span class="tcn">${onOpen.length}</span></div>
-           ${onOpen.length?onOpen.map(subCard).join(''):'<div class="empty">Nothing waiting — every online line is confirmed</div>'}
-         </div>
-       </div>`
+    ? openBanner + on.map(subCard).join('')
     : '<div class="empty">None active</div>';
   // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
   const isMatch = (SUBVIEW==='match');
@@ -2113,7 +2109,7 @@ function renderSubs(){
   const gP =document.getElementById('grid-subs-pay');
   const gVP=document.getElementById('grid-subs-vppp');
   const gNS=document.getElementById('grid-subs-nsub');
-  if(gOn)  gOn.style.setProperty('display',  showOn?'block':'none','important');
+  if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
   if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
   if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
