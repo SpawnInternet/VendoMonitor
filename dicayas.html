@@ -320,6 +320,7 @@
                  font-family:inherit;font-size:11.5px;font-weight:800;padding:6px 10px;border-radius:999px}
   .routebar .rtb:hover{border-color:#025AC6;color:#025AC6}
   .routebar .rtb.on{background:#025AC6;border-color:#025AC6;color:#fff;cursor:default}
+  .routebar .rtwhere{margin-left:auto;font-size:11px;font-weight:800;color:#5b6b82;white-space:nowrap}
   .routebar .rtb:disabled{opacity:1}
   .rsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .rhead{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
@@ -605,6 +606,7 @@
     <button id="refreshCacheBtn" class="cachebtn" onclick="refreshDashboardCache()" title="Rebuild the dashboard cache so name/area/group changes show there now">🔄 Sync dashboard</button>
     <span class="pill" id="lastUpd">loading…</span>
     <span class="pill hbpill" id="pollerHb" title="Poller heartbeat">poller…</span>
+    <span class="pill" id="buildPill" title="Reload the page if this is older than a change you just asked for">build 2026-08-17 07:13 UTC</span>
   </div>
   <div class="summary" id="summary"></div>
   <div id="harvestBanner"></div>
@@ -1850,11 +1852,16 @@ function stateBar(m){
             : (st.includes('transfer')||st.includes('vlan')) ? 'transferred_vlan' : 'active';
   const b=(key,label,title)=>`<button class="rtb ${cur===key?'on':''}" data-ss="${key}"
       data-ssid="${esc(rec.id)}" title="${esc(title)}"${cur===key?' disabled':''}>${label}</button>`;
+  const bucket = inBucket(m);
+  const where = bucket==='cut' ? '✂️ Cut Off'
+              : bucket==='other' ? '🚫 Not Sub / Transferred'
+              : subOnline(m) ? '🟢 Active' : '🔌 No connection';
   return `<div class="routebar">
     <span class="rtk">Connection</span>
     ${b('active','🟢 Active','Billed and expected to be online')}
     ${b('cutoff','✂️ Cut off','Disconnected on purpose — offline is normal')}
     ${b('transferred_vlan','🔀 Moved to VLAN','Now on a VLAN connection, not this PPPoE line')}
+    <span class="rtwhere" title="Which list this line appears in right now">files under ${where}</span>
   </div>`;
 }
 async function setSubStatus(sid, status){
