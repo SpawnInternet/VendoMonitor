@@ -1427,7 +1427,10 @@ function subStatusOf(m){
   const rec=isLinked(r)?subRecOf(r.roster_name):null;
   const office=String(rec&&rec.status||'').toLowerCase();
   const router=String(m&&m.service_state||'').toLowerCase();
-  if(office.includes('cut') || router==='cutoff') return 'cut';
+  // "20k" and anything else measured in kilobits is a throttle, not a plan.
+  const prof=String(m&&m.ppp_profile||'').trim();
+  const throttled=/^\s*\d+(\.\d+)?\s*k\s*$/i.test(prof);
+  if(office.includes('cut') || router==='cutoff' || throttled) return 'cut';
   if(office.includes('transfer') || office.includes('vlan')) return 'moved';
   if(office.includes('duplicate')) return 'moved';
   return rec ? 'active' : null;   // null = no customer behind this line
@@ -1522,12 +1525,15 @@ function subCard(m){
       <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>`:''}
     </div>` : '';
   const stale = pppStale(m);
-  const routerCut = String(m.service_state||'').toLowerCase()==='cutoff';
+  const routerCut = String(m.service_state||'').toLowerCase()==='cutoff'
+                 || /^\s*\d+(\.\d+)?\s*k\s*$/i.test(String(m.ppp_profile||''));
+  const throttleNote = /^\s*\d+(\.\d+)?\s*k\s*$/i.test(String(m.ppp_profile||''))
+                     ? ' · throttled '+esc(String(m.ppp_profile).trim()) : '';
   const state = stale
     ? '⚠ not reporting · last seen '+ago(m.last_seen||m.updated_at)
     : m.online
       ? (isParked(m) ? (routerCut?'Cut on router · link still up':'Link still up') : 'Online')
-      : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
+      : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'')+throttleNote;
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
     <span class="rdot" style="background:${stale?'#7a8aa0':(m.online?'#028867':'#DF1A35')}"></span>
     <div class="rmain">
@@ -5411,14 +5417,27 @@ async function refreshStatus(){
   if(document.hidden) return;              // don't poll a backgrounded tab
   if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
   try{
-    const [status, subs, vouchers, devices, hb] = await Promise.all([
+    const [status, subs, vouchers, devices, hb, roster, subrecs] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
-      sb(HB_PATH).catch(()=>null)
+      sb(HB_PATH).catch(()=>null),
+      sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>null),
+      sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=2000").catch(()=>null)
     ]);
     STATUS=status||[]; SUBS=subs||[];
+    // roster and subscriber state drive which bucket a line lands in, so they
+    // ride the same tick — otherwise the job-order queue shows stale reasons
+    if(Array.isArray(roster) && roster.length) buildRoster(roster);
+    if(Array.isArray(subrecs) && subrecs.length){
+      // merge, so fields the light select omits are not wiped off the records
+      const by=new Map(subrecs.map(r=>[String(r.id),r]));
+      SUBRECS=(SUBRECS||[]).map(old=>{ const fresh=by.get(String(old.id));
+                                       if(fresh) by.delete(String(old.id));
+                                       return fresh?{...old,...fresh}:old; })
+                           .concat([...by.values()]);
+    }
     renderHeartbeat(hb);
     buildVouch(vouchers);
     buildDevs(devices);
