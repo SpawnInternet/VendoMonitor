@@ -370,8 +370,9 @@
      than as an artifact, and keep the other-line name whole: that name is the
      entire point of the badge, and 23px is a fair price for it. */
   .rrow .gp.dup{flex:0 0 100%;order:-1;margin-bottom:1px;background:#fff2f4;color:#a31c2e;
-                border:1px solid #f0ccd4;max-width:100%;overflow:hidden;text-overflow:ellipsis;
-                white-space:nowrap;text-transform:none;letter-spacing:0}
+                border:1px solid #f0ccd4;max-width:100%;text-transform:none;letter-spacing:0;
+                white-space:normal;overflow-wrap:anywhere;line-height:1.35;
+                display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .rrow .rmain>*{max-width:100%}
   .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
   .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
@@ -1443,7 +1444,16 @@ function claimMates(m){
   if(r && r.roster_name)
     (CLAIMS.get(r.roster_name)||[]).forEach(n=>{ if(n!==m.ppp_name) out.add(n); });
   (TWINS.get(nameKey(m.ppp_name))||[]).forEach(n=>{ if(n!==m.ppp_name) out.add(n); });
+  if(!out.size) return [];
+  const settled = n=>{ const x=ROSTER.get(n); return !!(x && x.confirmed_at); };
+  if(settled(m.ppp_name) && [...out].every(settled)) return [];   // already judged
   return [...out];
+}
+// Whether a line is currently up, for the warning text: a dead twin is history,
+// a live one may be double billing, and the operator needs to tell them apart.
+function mateNote(n){
+  const mm=(SUBS||[]).find(x=>x.ppp_name===n);
+  return mm && !mm.online ? n+' (offline)' : n;
 }
 function subCard(m){
   const r=ROSTER.get(m.ppp_name), rec=subRecOf(r&&r.roster_name);
@@ -1459,7 +1469,7 @@ function subCard(m){
   // The label used to eat the pill and clip the one thing that matters — the
   // name of the other line. Label short, payload first-class, full text in title.
   const warn = mates.length
-    ? `<span class="gp dup" title="also on: ${esc(mates.join(', '))}">⚠ also: ${esc(mates.join(' · '))}</span>`
+    ? `<span class="gp dup" title="also on: ${esc(mates.join(', '))}">⚠ also: ${esc(mates.map(mateNote).join(' · '))}</span>`
     : '';
   const gaps = (rec||warn) ? `<div class="rgap">
       ${warn}
