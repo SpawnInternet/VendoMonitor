@@ -47,6 +47,7 @@
   .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
   .tab.active[data-tab="deleted"]{box-shadow:inset 0 3px 0 var(--red)}
   .wrap{padding:16px 18px 60px}
+  .banner.ok{background:#e9f7f1;border-color:#b6e3d3;color:#046b52}
   .banner.alert{background:#fdeaed;border-color:#f0b3bd;color:#a31c2e;font-weight:800}
   .banner{background:#fff7e0;border:1px solid #f3d98a;border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:#8a6500;font-weight:700}
   .banner.crit{background:#fdecef;border-color:#f3b4bd;color:#a31c2e}
@@ -651,6 +652,7 @@
       </select>
       <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Review all</a>
     </div>
+    <div id="banner-live"></div>
     <div id="banner-roster"></div>
     <div class="subtabs">
       <div class="subtab active" data-sv="active"  id="stab-active">🟢 Active</div>
@@ -1229,10 +1231,12 @@ function cardHtml(m){
 // system_heartbeat is written every cycle, so that's what we watch.
 const HB_PATH="system_heartbeat?service_name=eq.mikrotik_status_poller&select=status,last_beat,cycle_count,detail,hostname&limit=1";
 
+let HB=null;
 function renderHeartbeat(rows){
   const el=document.getElementById('pollerHb');
-  if(!el) return;
   const hb=Array.isArray(rows)?rows[0]:rows;
+  HB=hb||null;
+  if(!el) return;
   if(!hb){ el.className='pill hbpill bad'; el.textContent='⚠ poller unknown';
     el.title='No heartbeat row found for mikrotik_status_poller.'; return; }
   const age=(Date.now()-new Date(hb.last_beat).getTime())/1000;
@@ -1390,10 +1394,11 @@ let INVIEW='down';      // which slice of Inactive is showing
      cut   — cut off on purpose, expected to be dark
      other — no subscriber linked, or the customer moved to a VLAN connection
    Status is free text on subscribers, so match loosely rather than exactly. */
-const PPP_STALE_MS = 60*60*1000;   // an hour of silence from a ~12 min poller
+const PPP_STALE_MS = 45*60*1000;   // several missed sweeps, not one slow one
 function pppStale(m){
-  if(!m || !m.updated_at) return false;
-  const t=Date.parse(m.updated_at);
+  // Only an "online" row can be stale: offline rows carry no last_seen at all.
+  if(!m || !m.online) return false;
+  const t=Date.parse(m.last_seen || m.updated_at || '');
   return isFinite(t) && (Date.now()-t) > PPP_STALE_MS;
 }
 // "Online" must mean the poller saw it recently, not that it was up once.
@@ -1494,7 +1499,7 @@ function subCard(m){
     </div>` : '';
   const stale = pppStale(m);
   const state = stale
-    ? '⚠ not reporting · last polled '+ago(m.updated_at)
+    ? '⚠ not reporting · last seen '+ago(m.last_seen||m.updated_at)
     : m.online
       ? (isParked(m) ? 'Link still up' : 'Online')
       : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
@@ -2238,6 +2243,28 @@ function renderSubs(){
   const nIn=SUBS.filter(m=>{const r=rosterOf(m);
     return isLinked(r) && r.match_status!=='vendo' && r.match_status!=='not_sub';}).length;
   const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
+  // The poller's heartbeat states how many PPP sessions the router itself
+  // reported. If this page shows more, the extras are rows nobody has seen
+  // since — ghosts of deleted or renamed accounts. Silent drift until now.
+  const hbAge = HB && HB.last_beat ? (Date.now()-Date.parse(HB.last_beat))/1000 : null;
+  const routerOn = HB && /(\d+)\s+subs?\s*\((\d+)\s+on/i.test(String(HB.detail||''))
+                 ? Number(RegExp.$2) : null;
+  const shownOn = SUBS.filter(subOnline).length;
+  const ghosts  = SUBS.filter(m=>m.online && pppStale(m)).length;
+  const liveEl=document.getElementById('banner-live');
+  if(liveEl){
+    const bad = hbAge==null || hbAge>900 || (HB&&HB.status==='stopped');
+    const drift = (routerOn!=null && routerOn!==shownOn);
+    liveEl.innerHTML = bad
+      ? `<div class="banner alert">⚠️ Live data is not current — poller last reported ${
+           HB&&HB.last_beat?ago(HB.last_beat):'never'}. Online/offline below may be out of date.</div>`
+      : (ghosts||drift)
+        ? `<div class="banner alert">⚠️ ${ghosts||Math.abs(routerOn-shownOn)} line${
+             (ghosts||1)===1?'':'s'} marked online that the router has not reported in over 45 minutes${
+             routerOn!=null?` — router says ${routerOn} live, this page shows ${shownOn}`:''}. They sit in Inactive, not Active.</div>`
+        : `<div class="banner ok">✅ Live · poller reported ${ago(HB.last_beat)} ago${
+             routerOn!=null?` · router ${routerOn} sessions, page ${shownOn}`:''}</div>`;
+  }
   const rbEl=document.getElementById('banner-roster');
   if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}${nNsub?` · 🚫 ${nNsub} not-subscriber line${nNsub===1?'':'s'} excluded`:''}</div>`;
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
