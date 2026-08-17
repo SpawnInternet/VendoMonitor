@@ -169,6 +169,7 @@
   .subtab[data-sv="inactive"].active{border-bottom-color:var(--red,#DF1A35)}
   .subtab .cnt{display:inline-block;margin-left:6px;font-size:11px;font-weight:900;
                padding:1px 8px;border-radius:999px;background:#eef2f8;color:#7a8aa0}
+  .subtab .cnt.bad{background:#DF1A35;color:#fff}
   .subtab[data-sv="active"].active .cnt{background:#e6f4ee;color:#028867}
   .subtab[data-sv="inactive"].active .cnt{background:#fdeaed;color:#DF1A35}
   .subtab[data-sv="match"].active{border-bottom-color:var(--gold,#FFB725)}
@@ -323,6 +324,13 @@
   .rrow .rppp{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .rsub{font-size:12.5px;font-weight:700;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rrow .rsub.yes{color:#028867}.rrow .rsub.rev{color:#a86a00}.rrow .rsub.no{color:#DF1A35;font-style:italic}
+  /* Unlinked lines are the work queue — a thin red edge read the same as
+     "offline", so these get a wash, a dashed edge and a badge you cannot miss. */
+  .rrow.no{background:#fff5f7;border:1px dashed #f0b3bd;border-left:5px solid #DF1A35}
+  .rrow .nolink{display:inline-flex;align-items:center;gap:5px;margin-top:4px;
+                font-size:10.5px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;
+                padding:3px 9px;border-radius:999px;background:#DF1A35;color:#fff}
+  .rrow .nolink small{font-weight:800;letter-spacing:0;text-transform:none;opacity:.9}
   .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
   .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
             background:#fdeaed;color:#DF1A35}
@@ -1342,7 +1350,7 @@ function subCard(m){
   const cls = st==='confirmed'?'ok' : st==='review'?'rev' : 'no';
   const sub = (r&&r.roster_name)
     ? `<div class="rsub ${st==='confirmed'?'yes':'rev'}">${st==='confirmed'?'🔒':'?'} ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
-    : `<div class="rsub no">✖ not on the subscriber roster</div>`;
+    : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
   const gaps = rec ? `<div class="rgap">
       <span class="gp ${rec.lat?'on':''}">${rec.lat?'📍 GPS':'no GPS'}</span>
       <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
@@ -1922,7 +1930,15 @@ function renderSubs(){
     if(f==="noamount" &&  (rec&&rec.monthly_amount!=null)) return false;
     return true;
   });
+  // Unlinked lines lead each list: they are the ones still waiting to be filed.
+  const unlinked=m=>{const r=ROSTER.get(m.ppp_name); return !(r && r.roster_name);};
+  list.sort((a,b)=>{
+    const ua=unlinked(a), ub=unlinked(b);
+    if(ua!==ub) return ua?-1:1;
+    return (a.ppp_name||'').localeCompare(b.ppp_name||'');
+  });
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
+  const nUnOn=on.filter(unlinked).length, nUnOff=off.filter(unlinked).length;
   document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None inactive</div>';
   document.getElementById('grid-subs-on').innerHTML  = on.length ? on.map(subCard).join(''):'<div class="empty">None active</div>';
   // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
@@ -1952,8 +1968,9 @@ function renderSubs(){
   const ta=document.getElementById('stab-active'), ti=document.getElementById('stab-inactive');
   const tm=document.getElementById('stab-match'), tv=document.getElementById('stab-vendo');
   if(ta&&ti){
-    ta.innerHTML='🟢 Active<span class="cnt">'+on.length+'</span>';
-    ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>';
+    const un=n=>n?'<span class="cnt bad">'+n+' unlinked</span>':'';
+    ta.innerHTML='🟢 Active<span class="cnt">'+on.length+'</span>'+un(nUnOn);
+    ti.innerHTML='🔴 Inactive<span class="cnt">'+off.length+'</span>'+un(nUnOff);
     ta.classList.toggle('active', showOn);
     ti.classList.toggle('active', showOff);
   }
