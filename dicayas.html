@@ -285,6 +285,15 @@
                      padding:6px 13px;border-radius:999px;background:#C01176;color:#fff;white-space:nowrap}
   .liststrip .ls-alt:hover{background:#8d0d57}
   .liststrip .ls-alt:disabled{opacity:.55;cursor:progress}
+  .routebar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:0 0 12px;
+            padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#f7f9fc}
+  .routebar .rtk{font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;
+                 color:var(--dim);margin-right:2px}
+  .routebar .rtb{border:1px solid #dbe2ec;background:#fff;color:#42526b;cursor:pointer;
+                 font-family:inherit;font-size:11.5px;font-weight:800;padding:6px 10px;border-radius:999px}
+  .routebar .rtb:hover{border-color:#025AC6;color:#025AC6}
+  .routebar .rtb.on{background:#025AC6;border-color:#025AC6;color:#fff;cursor:default}
+  .routebar .rtb:disabled{opacity:1}
   .rsec{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
   .rhead{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
   .rnow{font-size:14px;font-weight:700;margin-bottom:9px;word-break:break-word}
@@ -1425,8 +1434,16 @@ function renderVendoSubs(){
     return ((r.name||'')+' '+(r.address||'')+' '+(r.area||'')).toLowerCase().includes(q);
   }).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const g=document.getElementById('grid-subs-vendo');
+  // Online state of a vendo sub = the line their machine runs on. No line yet
+  // means nothing to judge, so those sit in their own group at the end.
+  const st=rec=>{ const m=pppForSub(rec); return m ? (m.online?'on':'off') : 'none'; };
+  const grp=(label,arr)=>arr.length
+    ? `<div class="sec" style="grid-column:1/-1">${label} · ${arr.length}</div>`+arr.map(vendoSubCard).join('')
+    : '';
   if(g) g.innerHTML = list.length
-    ? list.map(vendoSubCard).join('')
+    ? grp('🔴 Inactive', list.filter(r=>st(r)==='off'))
+      + grp('🟢 Active',   list.filter(r=>st(r)==='on'))
+      + grp('⚫ No line yet', list.filter(r=>st(r)==='none'))
     : '<div class="empty">No vendo subscribers yet — a <b>vendo subscriber</b> is a customer who owns the machine, flagged with is_vendo_owner.<br>To hand one over: open 🕹️ Vendo PPPoE, find Spawn\'s line, and attach the customer as Owner. It moves here.</div>';
   return list.length;
 }
@@ -1491,7 +1508,19 @@ function renderVendoPpp(){
      Spawn vendo — no VLAN, straight on PPPoE. Excluded from subscriber matching and billing.
      Link each one to its row in the vendo list so harvests and this panel line up.
      ${nOwn?` 🎰 ${nOwn} more ${nOwn===1?'line is':'lines are'} customer-owned — those sit on the Vendo Subs tab.`:''}</div>`
-   + list.map(m=>{
+   + vpGroups(list, m=>vpCard(m));
+  return list.length;
+}
+// Active / inactive split, same shape on both vendo tabs — a machine that is
+// down is the thing you want to see, so offline leads.
+function vpGroups(list, card){
+  const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
+  const sec=(label,arr)=>arr.length
+    ? `<div class="sec" style="grid-column:1/-1">${label} · ${arr.length}</div>`+arr.map(card).join('')
+    : '';
+  return sec('🔴 Inactive',off)+sec('🟢 Active',on);
+}
+function vpCard(m){
       const rr=ROSTER.get(m.ppp_name||'')||{};
       // Linked by hand (vendo_id) wins; the name guess is only a suggestion.
       const linked=vendoById(rr.vendo_id);
@@ -1537,8 +1566,6 @@ function renderVendoPpp(){
           <button class="mw-btn" data-mwopen="${esc(m.match_key)}">Open full record ›</button>
         </div>
       </div>`;
-   }).join('');
-  return list.length;
 }
 
 /* Not-a-subscriber PPPoE accounts.
@@ -1608,6 +1635,66 @@ async function setPppMark(ppp, status){
 }
 // kept for older call sites
 function setPppVendo(ppp, isVendo){ return setPppMark(ppp, isVendo?'vendo':null); }
+
+/* Where does this PPPoE line belong? Every account is one of four things, and
+   until now three of them could only be set from a worklist. Showing the choice
+   in the popup means a line can be filed the moment it is opened — from Active
+   or Inactive, matched or not — so nothing sits unsorted waiting for a pass
+   through Match Names. */
+function routeOf(r){
+  if(!r) return 'sub';
+  if(r.match_status==='vendo')   return r.roster_name ? 'owner' : 'vendo';
+  if(r.match_status==='not_sub') return 'not_sub';
+  return 'sub';
+}
+function routeBar(m){
+  const r=ROSTER.get(m.ppp_name);
+  const cur=routeOf(r);
+  const b=(key,label,title)=>`<button class="rtb ${cur===key?'on':''}" data-rt="${key}"
+      data-rtppp="${esc(m.ppp_name)}" title="${esc(title)}"${cur===key?' disabled':''}>${label}</button>`;
+  return `<div class="routebar">
+    <span class="rtk">File as</span>
+    ${b('sub','👥 Subscriber','A paying internet customer')}
+    ${b('vendo','🕹️ Vendo PPPoE','A Spawn piso-wifi machine on this line')}
+    ${b('owner','🎰 Vendo Sub','A machine the customer bought — needs a linked subscriber')}
+    ${b('not_sub','🚫 Not a subscriber','Staff, office, test or free line')}
+  </div>`;
+}
+// Turn a matched line into a customer-owned vendo: the linked subscriber becomes
+// the owner and shows on 🎰 Vendo Subs. Needs a name — with none there is nobody
+// to hand the machine to, so it goes to Vendo PPPoE and gets an owner there.
+async function routeToVendoSub(ppp){
+  const r=ROSTER.get(ppp)||{};
+  const rec=r.roster_name?subRecOf(r.roster_name):null;
+  if(!rec){
+    toast('Link a subscriber first, or file it as 🕹️ Vendo PPPoE and attach the owner there');
+    return;
+  }
+  try{
+    if(rec.is_vendo_owner!==true) await vsOwnerPatch(rec.id,{is_vendo_owner:true});
+    await rosterUpsert(ppp,{roster_name:rec.name, area:rec.area||null, match_status:'vendo',
+                            score:1, confirmed_by:'vendo-owner', confirmed_at:null});
+    ROSTER.set(ppp,{...r, ppp_name:ppp, roster_name:rec.name, area:rec.area||null,
+                    match_status:'vendo', confirmed_by:'vendo-owner', confirmed_at:null});
+    MW_HIDE.delete(ppp);
+    toast('🎰 Filed under '+rec.name+' on Vendo Subs');
+    renderSubs();
+    if(window._curSubMk!=null) renderSubModal();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+document.addEventListener('click', async e=>{
+  const b=e.target.closest('[data-rt]'); if(!b) return;
+  const ppp=b.dataset.rtppp, to=b.dataset.rt;
+  const r=ROSTER.get(ppp)||{};
+  // Filing a confirmed customer somewhere else drops a link someone locked, so
+  // it asks first. Everything else moves on one tap.
+  if(to!=='sub' && to!=='owner' && r.roster_name && r.match_status!=='vendo'
+     && !confirm('This line is linked to “'+r.roster_name+'”.\n\nFile it elsewhere and drop that link?')) return;
+  if(to==='owner')        routeToVendoSub(ppp);
+  else if(to==='vendo')   setPppMark(ppp,'vendo');
+  else if(to==='not_sub') setPppMark(ppp,'not_sub');
+  else                    setPppMark(ppp,null);
+});
 
 /* ---- STANDALONE VENDO LINE -> ITS ROW IN `vendos` ----
    These machines have no VLAN, so nothing joins them to the vendo list
@@ -1938,6 +2025,7 @@ function renderSubModal(){
     <div class="mtab ${tab==='sub'?'active':''}" onclick="setSubTab('sub')">🏷️ Subscriber${r&&r.confirmed_at?' 🔒':''}</div>
   </div>`;
   html+=rosterStrip(m);
+  html+=routeBar(m);
 
   if(tab==='stats'){
     const viaTxt = m.online_via==='lease'?'DHCP lease'
