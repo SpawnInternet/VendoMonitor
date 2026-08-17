@@ -1439,6 +1439,33 @@ function isParked(m){
   const st=subStatusOf(m);
   return st==='cut' || st==='moved';
 }
+function downTable(list){
+  const cell=(m)=>{
+    const r=ROSTER.get(m.ppp_name||'');
+    const rec=(r&&r.roster_name)?subRecOf(r.roster_name):null;
+    const phone=rec&&rec.phone?esc(rec.phone):'';
+    const fb=rec&&rec.fb_name?esc(rec.fb_name):'';
+    const contact = phone ? `<span class="wnum">${phone}</span>`
+                  : fb ? `<span class="wdim">fb: ${fb}</span>`
+                  : '<span class="wzero">no contact</span>';
+    const down = m.offline_since ? ago(m.offline_since) : '—';
+    const longDown = m.offline_since && (Date.now()-Date.parse(m.offline_since)) > 3*864e5;
+    return `<tr data-openppp="${esc(m.match_key)}" style="cursor:pointer">
+      <td class="wnamecell"><div class="wname" title="${esc(m.ppp_name||'')}">${esc(rec&&rec.name||m.ppp_name||'')}</div>
+          <div class="warea">${esc(m.ppp_name||'')}</div></td>
+      <td>${rec&&rec.area?esc(rec.area):'<span class="wzero">—</span>'}</td>
+      <td class="wnamecell"><div class="wname" title="${esc(rec&&rec.address||'')}">${esc(rec&&rec.address||'')||'<span class="wzero">no address</span>'}</div></td>
+      <td>${contact}</td>
+      <td><span class="wst ${longDown?'waiting':''}">${esc(down)}</span></td>
+      <td class="wdim">${rec&&rec.due_day!=null?'due '+esc(rec.due_day):'—'}</td>
+      <td class="wnum">${rec&&rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'<span class="wzero">—</span>'}</td>
+    </tr>`;
+  };
+  return `<div class="wwrap"><div class="wscroll"><table class="wtbl"><thead><tr>
+    <th>Subscriber</th><th>Area</th><th>Address</th><th>Contact</th>
+    <th>Down for</th><th>Due</th><th class="ar">Monthly</th>
+  </tr></thead><tbody>`+list.map(cell).join('')+`</tbody></table></div></div>`;
+}
 function inBucket(m){
   const st=subStatusOf(m);
   if(st==='cut')   return 'cut';
@@ -2181,7 +2208,13 @@ function renderSubs(){
   if(itO){ itO.innerHTML='🚫 Not Sub / Transferred to VLAN<span class="cnt">'+nOther+'</span>'
              +(nUnOff?'<span class="cnt bad">'+nUnOff+' unlinked</span>':'');
            itO.classList.toggle('active', INVIEW==='other'); }
-  document.getElementById('grid-subs-off').innerHTML = offBucket.length?offBucket.map(subCard).join('')
+  const dispatch = INVIEW==='down';
+  if(dispatch) offBucket.sort((a,b)=>Date.parse(a.offline_since||0)-Date.parse(b.offline_since||0));
+  document.getElementById('grid-subs-off').innerHTML = offBucket.length
+    ? (dispatch
+        ? `<div class="banner alert">🔌 ${offBucket.length} paying customer${offBucket.length===1?'':'s'} with no connection — this is the job-order list. Longest outage first.</div>`
+          + downTable(offBucket)
+        : offBucket.map(subCard).join(''))
     : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
         : INVIEW==='cut'?'Nobody marked cut off. Open a line and set its connection to ✂️ Cut off.'
         : 'Nothing here — no unlinked or transferred lines are offline.'}</div>`;
@@ -2216,7 +2249,7 @@ function renderSubs(){
   const gVP=document.getElementById('grid-subs-vppp');
   const gNS=document.getElementById('grid-subs-nsub');
   if(gOn)  gOn.style.setProperty('display',  showOn?'grid':'none','important');
-  if(gOff) gOff.style.setProperty('display', showOff?'grid':'none','important');
+  if(gOff) gOff.style.setProperty('display', showOff?(INVIEW==='down'?'block':'grid'):'none','important');
   if(gM)   gM.style.setProperty('display',   isMatch?'block':'none','important');
   if(gV)   gV.style.setProperty('display',   isVendo?'grid':'none','important');
   if(gP)   gP.style.setProperty('display',   isPay?'block':'none','important');
