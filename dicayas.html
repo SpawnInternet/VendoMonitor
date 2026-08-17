@@ -325,7 +325,7 @@
   .rsave{width:100%;margin-top:11px;border:none;border-radius:9px;padding:11px;background:#025AC6;color:#fff;font-weight:800;font-size:13px;cursor:pointer}
   .rrow{display:flex;align-items:flex-start;gap:10px;background:var(--card,#fff);border-radius:11px;
         padding:11px 13px;box-shadow:0 1px 3px rgba(20,32,58,.07);border-left:4px solid #e3e8f0;
-        cursor:pointer;align-self:start}
+        cursor:pointer;align-self:stretch}
   .rrow .rdot{margin-top:5px}
   .rrow .chev{margin-top:1px}
   .rrow:hover{box-shadow:0 2px 8px rgba(20,32,58,.13)}
@@ -357,8 +357,8 @@
                 display:inline-block;padding:2px 8px;border-radius:999px;background:#fff4de;color:#8a6500}
   .rrow .dupclaim{margin-top:4px;font-size:10.5px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;
                   padding:3px 9px;border-radius:8px;background:#fdeaed;color:#a31c2e;border:1px solid #f5c2ca}
-  .rrow .dupclaim small{display:block;font-weight:700;letter-spacing:0;text-transform:none;
-                        color:#8b3a46;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rrow .dupclaim small{font-weight:700;letter-spacing:0;text-transform:none;color:#8b3a46}
+  .rrow .rmain{display:flex;flex-direction:column;align-items:flex-start}
   .rrow .rgap{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
   .rrow .gp{font-size:10px;font-weight:900;letter-spacing:.03em;padding:2px 7px;border-radius:999px;
             background:#fdeaed;color:#DF1A35}
@@ -1432,7 +1432,7 @@ function subCard(m){
          <div class="rsug">💡 suggested: ${esc(r.roster_name)}${rec&&rec.area?' · '+esc(rec.area):''}</div>`
       : `<div class="nolink">✖ not linked <small>· tap to file it</small></div>`;
   const warn = mates.length
-    ? `<div class="dupclaim">⚠ same subscriber as ${mates.length} other line${mates.length===1?'':'s'}<small>${esc(mates.join(' · '))}</small></div>`
+    ? `<div class="dupclaim">⚠ also on ${mates.length} other line${mates.length===1?'':'s'}: <small>${esc(mates.join(' · '))}</small></div>`
     : '';
   const unconf = '';
   const gaps = rec ? `<div class="rgap">
@@ -2056,10 +2056,12 @@ function renderSubs(){
   });
   // Unlinked lines lead each list: they are the ones still waiting to be filed.
   const unlinked=m=>!isLinked(ROSTER.get(m.ppp_name));
+  const byName=(a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||'', undefined,
+                        {sensitivity:'base', numeric:true});
   list.sort((a,b)=>{
     const ua=unlinked(a), ub=unlinked(b);
-    if(ua!==ub) return ua?-1:1;
-    return (a.ppp_name||'').localeCompare(b.ppp_name||'');
+    if(ua!==ub) return ua?-1:1;   // waiting work first, alphabetical inside each group
+    return byName(a,b);
   });
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
   const nUnOn=on.filter(unlinked).length, nUnOff=off.filter(unlinked).length;
