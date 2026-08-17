@@ -1377,6 +1377,29 @@ function vendoSubCard(rec){
   const bill  = rec.monthly_amount!=null ? '₱'+esc(rec.monthly_amount)+'/mo' : 'no amount';
   const due   = rec.due_day!=null ? 'due '+esc(rec.due_day) : '';
   const vlan  = rec.vlan!=null ? 'VLAN '+esc(rec.vlan) : 'no VLAN';
+  // The machines this customer owns: vendo PPPoE lines carrying their name.
+  const lines=ownedVendoPppList().filter(x=>{
+    const r=ROSTER.get(x.ppp_name||'');
+    return r && r.roster_name===rec.name;
+  });
+  const lineRows = lines.map(x=>{
+    const r=ROSTER.get(x.ppp_name)||{};
+    const v=vendoById(r.vendo_id)||vendoMatchFor(x.ppp_name);
+    return `<div class="linkrow">
+      <span class="k">${x.online?'🟢':'🔴'} ${esc(x.ppp_name)}</span>
+      <span class="v">${v?esc(vendoLabel(v))+(r.vendo_id!=null?' <span class="mw-tag">linked</span>':' <span class="mw-tag prob">name match</span>')
+                        :'<i style="color:var(--dim)">no vendo row</i>'}</span>
+      <button class="lnk unlink" data-vsunown="${esc(x.ppp_name)}">Remove</button>
+    </div>`;
+  }).join('');
+  const linkBlock = `<div class="linkrow">
+      <span class="k">🕹️ Vendo line</span>
+      <span class="v">${lines.length?esc(lines.length+' line'+(lines.length===1?'':'s')+' linked')
+                                    :'<i style="color:var(--dim)">no vendo PPPoE line linked yet</i>'}</span>
+      <button class="lnk link" data-vlfocus="${esc(rec.id)}">${lines.length?'Add':'Link'}</button>
+    </div>
+    <input class="mw-search" data-vlq="${esc(rec.id)}" placeholder="Search a Spawn-side vendo PPPoE line to hand over…">
+    <div class="mw-cands" data-vlcands="${esc(rec.id)}"></div>`;
   return `<div class="vsrow ${online===false?'off':''}" data-subid="${esc(rec.id)}">
     <div class="vsmain">
       <div class="vsname">${esc(rec.name)||'(no name)'}</div>
@@ -1385,9 +1408,12 @@ function vendoSubCard(rec){
         ${price?`<span class="vspill buy">${price}</span>`:''}
         <span class="vspill bill">${bill}${due?' · '+due:''}</span>
         <span class="vspill ${rec.vlan!=null?'':'warn'}">${vlan}</span>
+        ${lines.length?`<span class="vspill buy">🕹️ ${lines.length} vendo line${lines.length===1?'':'s'}</span>`:''}
         ${rec.pppoe_username?'':'<span class="vspill warn">no PPPoE</span>'}
         ${rec.phone?'':'<span class="vspill warn">no phone</span>'}
       </div>
+      ${lineRows}
+      ${linkBlock}
     </div>
     <span class="chev">›</span>
   </div>`;
@@ -1401,7 +1427,7 @@ function renderVendoSubs(){
   const g=document.getElementById('grid-subs-vendo');
   if(g) g.innerHTML = list.length
     ? list.map(vendoSubCard).join('')
-    : '<div class="empty">No vendo subscribers yet — a <b>vendo subscriber</b> is a person who owns a machine, flagged with is_vendo_owner.<br>Looking for a PPPoE line that <i>is</i> a machine? That is the 🕹️ Vendo PPPoE tab.</div>';
+    : '<div class="empty">No vendo subscribers yet — a <b>vendo subscriber</b> is a customer who owns the machine, flagged with is_vendo_owner.<br>To hand one over: open 🕹️ Vendo PPPoE, find Spawn\'s line, and attach the customer as Owner. It moves here.</div>';
   return list.length;
 }
 
@@ -1416,9 +1442,28 @@ function vendoPppList(){
   return SUBS.filter(m=>{
     const r=ROSTER.get(m.ppp_name||'');
     if(!r || r.match_status!=='vendo') return false;
+    // Spawn's own standalone machines only. Once a customer is attached as owner
+    // the unit is theirs, so it moves to the 🎰 Vendo Subs tab and leaves here.
+    if(r.roster_name) return false;
     if(q && !((m.ppp_name||'')+' '+(m.ip||'')).toLowerCase().includes(q)) return false;
     return true;
   }).sort((a,b)=>(a.ppp_name||'').localeCompare(b.ppp_name||''));
+}
+// Vendo lines already claimed by a customer — the Vendo Subs side of the split.
+function ownedVendoPppList(){
+  return SUBS.filter(m=>{
+    const r=ROSTER.get(m.ppp_name||'');
+    return !!(r && r.match_status==='vendo' && r.roster_name);
+  });
+}
+function vendoById(id){
+  if(id==null) return null;
+  return (VENDOS||[]).find(v=>String(v.id)===String(id))||null;
+}
+function vendoLabel(v){
+  if(!v) return '';
+  const nm=v.sheet_name||v.tg_name||v.excel_name||('vendo #'+v.id);
+  return nm + (v.vendo_code?' · '+v.vendo_code:'') + (v.area?' · '+v.area:'');
 }
 let _vbnIndex=null, _vbnLen=-1;
 function vendoMatchFor(name){
@@ -1441,31 +1486,38 @@ function renderVendoPpp(){
       piso-wifi machine, press <b>🕹️ It's a vendo</b> — it moves here and leaves the Match Names queue.</div>`;
     return 0;
   }
-  const nOwned=list.filter(m=>{const rr=ROSTER.get(m.ppp_name||'');return rr&&rr.roster_name;}).length;
-  el.innerHTML=`<div class="banner">🕹️ ${list.length} PPPoE line${list.length===1?'':'s'} running a vendo,
-     not a subscriber. These are excluded from subscriber matching and billing.
-     ${nOwned?`🎰 ${nOwned} owned by a customer — they show on the Vendo Subs tab.`
-             :'If a customer bought the unit, attach them as Owner and they appear on 🎰 Vendo Subs.'}</div>`
+  const nOwn=ownedVendoPppList().length;
+  el.innerHTML=`<div class="banner">🕹️ ${list.length} standalone PPPoE line${list.length===1?'':'s'} running a
+     Spawn vendo — no VLAN, straight on PPPoE. Excluded from subscriber matching and billing.
+     Link each one to its row in the vendo list so harvests and this panel line up.
+     ${nOwn?` 🎰 ${nOwn} more ${nOwn===1?'line is':'lines are'} customer-owned — those sit on the Vendo Subs tab.`:''}</div>`
    + list.map(m=>{
-      const v=vendoMatchFor(m.ppp_name);
-      // A vendo line can still belong to a customer who bought the unit. Keeping
-      // the roster_name on a 'vendo' row records that owner without putting the
-      // line back into billing — the owner shows on 🎰 Vendo Subs instead.
-      const rr=ROSTER.get(m.ppp_name||'');
-      const owner=rr&&rr.roster_name||null;
-      const orec=owner?subRecOf(owner):null;
-      const ownerRow = owner
+      const rr=ROSTER.get(m.ppp_name||'')||{};
+      // Linked by hand (vendo_id) wins; the name guess is only a suggestion.
+      const linked=vendoById(rr.vendo_id);
+      const guess=linked?null:vendoMatchFor(m.ppp_name);
+      const v=linked||guess;
+      const vendoRow = linked
         ? `<div class="linkrow">
-             <span class="k">👤 Owner</span>
-             <span class="v">${esc(owner)}${orec&&orec.area?' · '+esc(orec.area):''}${orec&&orec.is_vendo_owner?' · 🎰 on Vendo Subs':''}</span>
-             <button class="lnk unlink" data-vsunown="${esc(m.ppp_name)}">Remove</button>
+             <span class="k">🎰 Vendo record</span>
+             <span class="v">${esc(vendoLabel(linked))} <span class="mw-tag">linked</span></span>
+             <button class="lnk unlink" data-vdunlink="${esc(m.ppp_name)}">Unlink</button>
            </div>`
         : `<div class="linkrow">
+             <span class="k">🎰 Vendo record</span>
+             <span class="v">${guess?esc(vendoLabel(guess))+' <span class="mw-tag prob">name match — not linked</span>'
+                                    :'<i style="color:var(--dim)">not linked to a vendo row</i>'}</span>
+             ${guess?`<button class="lnk link" data-vdlink="${esc(m.ppp_name)}" data-vdid="${esc(guess.id)}">Link this</button>`
+                    :`<button class="lnk link" data-vdfocus="${esc(m.ppp_name)}">Link</button>`}
+           </div>
+           <input class="mw-search" data-vdq="${esc(m.ppp_name)}" placeholder="Search the vendo list — name, code, VLAN, area…">
+           <div class="mw-cands" data-vdcands="${esc(m.ppp_name)}"></div>`;
+      const ownerRow = `<div class="linkrow">
              <span class="k">👤 Owner</span>
              <span class="v"><i style="color:var(--dim)">Spawn machine — no subscriber owner</i></span>
              <button class="lnk link" data-vsfocus="${esc(m.ppp_name)}">Attach</button>
            </div>
-           <input class="mw-search" data-vsq="${esc(m.ppp_name)}" placeholder="Owned by a subscriber? Search their name…">
+           <input class="mw-search" data-vsq="${esc(m.ppp_name)}" placeholder="Bought by a customer? Search their name…">
            <div class="mw-cands" data-vscands="${esc(m.ppp_name)}"></div>`;
       return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
         <div class="candhead">
@@ -1476,12 +1528,7 @@ function renderVendoPpp(){
           <div class="rl"><span>📡 Router says · PPPoE</span><span class="rfix">fixed — change in MikroTik</span></div>
           <div class="rv">${esc(m.ppp_name)}</div>
         </div>
-        <div class="linkrow">
-          <span class="k">🎰 Vendo record</span>
-          <span class="v">${v?esc((v.sheet_name||v.tg_name||'')+' · '+(v.vendo_code||'')) 
-                            :'<i style="color:var(--dim)">no matching vendo row</i>'}</span>
-        </div>
-        ${v&&v.area?`<div class="linkrow"><span class="k">Area</span><span class="v">${esc(v.area)}</span></div>`:''}
+        ${vendoRow}
         ${v&&v.vlan?`<div class="linkrow"><span class="k">VLAN</span><span class="v">${esc(String(v.vlan))}</span></div>`:''}
         ${ownerRow}
         <div class="mw-acts">
@@ -1562,6 +1609,75 @@ async function setPppMark(ppp, status){
 // kept for older call sites
 function setPppVendo(ppp, isVendo){ return setPppMark(ppp, isVendo?'vendo':null); }
 
+/* ---- STANDALONE VENDO LINE -> ITS ROW IN `vendos` ----
+   These machines have no VLAN, so nothing joins them to the vendo list
+   automatically beyond a name guess. ppp_roster.vendo_id makes the link
+   explicit and survives a rename on either side. */
+function vendoRecCands(q){
+  const s=(q||'').toLowerCase().trim();
+  if(s.length<2) return [];
+  const taken=new Set();
+  ROSTER.forEach(v=>{ if(v && v.vendo_id!=null) taken.add(String(v.vendo_id)); });
+  return (VENDOS||[]).filter(v=>{
+    if(v.pending_delete_at) return false;
+    const hay=((v.sheet_name||'')+' '+(v.tg_name||'')+' '+(v.excel_name||'')+' '+
+               (v.vendo_code||'')+' '+(v.area||'')+' '+(v.vlan!=null?v.vlan:'')).toLowerCase();
+    return hay.includes(s);
+  }).slice(0,8).map(v=>({v, taken:taken.has(String(v.id))}));
+}
+function vdDrawCands(ppp, q){
+  const box=document.querySelector(`[data-vdcands="${CSS.escape(ppp)}"]`); if(!box) return;
+  if(!q || q.trim().length<2){ box.innerHTML=''; return; }
+  const list=vendoRecCands(q);
+  box.innerHTML = list.length
+    ? list.map(({v,taken})=>`<div class="mw-c" data-vdlink="${esc(ppp)}" data-vdid="${esc(v.id)}">
+        <span class="mw-c-name">${esc(v.sheet_name||v.tg_name||v.excel_name||('vendo #'+v.id))}
+          <span class="mw-c-sub">${esc(v.vendo_code||'no code')}${v.area?' · '+esc(v.area):''}${v.vlan!=null?' · VLAN '+esc(String(v.vlan)):' · no VLAN'}${taken?' · ⚠ already linked to another line':''}</span>
+        </span></div>`).join('')
+    : `<div class="mw-none">No vendo row matches that. Try the code, the area, or a shorter name.</div>`;
+}
+async function linkVendoRecord(ppp, vid){
+  const v=vendoById(vid);
+  if(!v){ toast('Vendo row not found'); return; }
+  let clash=null;
+  ROSTER.forEach((r,k)=>{ if(k!==ppp && r && String(r.vendo_id)===String(vid)) clash=k; });
+  if(clash && !confirm('“'+vendoLabel(v)+'” is already linked to the line “'+clash+'”.\n\nMove the link to “'+ppp+'”?')) return;
+  try{
+    if(clash){
+      await rosterUpsert(clash,{vendo_id:null});
+      const c=ROSTER.get(clash); if(c) ROSTER.set(clash,{...c, vendo_id:null});
+    }
+    await rosterUpsert(ppp,{vendo_id:v.id, match_status:'vendo'});
+    const cur=ROSTER.get(ppp)||{ppp_name:ppp, match_status:'vendo'};
+    ROSTER.set(ppp,{...cur, vendo_id:v.id, match_status:'vendo'});
+    toast('🎰 Linked to '+(v.sheet_name||v.tg_name||('vendo #'+v.id)));
+    renderSubs();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+async function unlinkVendoRecord(ppp){
+  try{
+    await rosterUpsert(ppp,{vendo_id:null});
+    const cur=ROSTER.get(ppp); if(cur) ROSTER.set(ppp,{...cur, vendo_id:null});
+    toast('Vendo link removed');
+    renderSubs();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+document.addEventListener('input', e=>{
+  const box=e.target.closest('[data-vdq]'); if(!box) return;
+  vdDrawCands(box.dataset.vdq, box.value);
+});
+document.addEventListener('click', e=>{
+  const f=e.target.closest('[data-vdfocus]');
+  const l=e.target.closest('[data-vdlink]');
+  const u=e.target.closest('[data-vdunlink]');
+  if(f){
+    const box=document.querySelector(`[data-vdq="${CSS.escape(f.dataset.vdfocus)}"]`);
+    if(box){ box.focus(); box.scrollIntoView({block:'center',behavior:'smooth'}); }
+  }
+  else if(l) linkVendoRecord(l.dataset.vdlink, l.dataset.vdid);
+  else if(u) unlinkVendoRecord(u.dataset.vdunlink);
+});
+
 /* ---- VENDO LINE OWNED BY A SUBSCRIBER ----
    Some vendos on a PPPoE line were bought outright by a customer. The line is
    still not billed as internet (it stays match_status='vendo', off the Active/
@@ -1635,6 +1751,41 @@ async function detachVendoOwner(ppp){
 document.addEventListener('input', e=>{
   const box=e.target.closest('[data-vsq]'); if(!box) return;
   vsDrawCands(box.dataset.vsq, box.value);
+});
+/* Same link, driven from the Vendo Subs side: pick one of Spawn's standalone
+   vendo lines and hand it to this customer. */
+function vlDrawCands(sid, q){
+  const box=document.querySelector(`[data-vlcands="${CSS.escape(String(sid))}"]`); if(!box) return;
+  const s=(q||'').toLowerCase().trim();
+  if(s.length<2){ box.innerHTML=''; return; }
+  const free=SUBS.filter(m=>{
+    const r=ROSTER.get(m.ppp_name||'');
+    if(!(r && r.match_status==='vendo' && !r.roster_name)) return false;
+    return (m.ppp_name||'').toLowerCase().includes(s);
+  }).slice(0,8);
+  box.innerHTML = free.length
+    ? free.map(m=>{
+        const r=ROSTER.get(m.ppp_name)||{};
+        const v=vendoById(r.vendo_id)||vendoMatchFor(m.ppp_name);
+        return `<div class="mw-c" data-vlown="${esc(m.ppp_name)}" data-vlsid="${esc(sid)}">
+          <span class="mw-c-name">${esc(m.ppp_name)}
+            <span class="mw-c-sub">${m.online?'🟢 online':'🔴 offline'}${v?' · '+esc(vendoLabel(v)):' · no vendo row'}</span>
+          </span></div>`;
+      }).join('')
+    : `<div class="mw-none">No unowned vendo line by that name. Mark the line 🕹️ It's a vendo first.</div>`;
+}
+document.addEventListener('input', e=>{
+  const box=e.target.closest('[data-vlq]'); if(!box) return;
+  vlDrawCands(box.dataset.vlq, box.value);
+});
+document.addEventListener('click', e=>{
+  const f=e.target.closest('[data-vlfocus]');
+  const p=e.target.closest('[data-vlown]');
+  if(f){
+    const box=document.querySelector(`[data-vlq="${CSS.escape(String(f.dataset.vlfocus))}"]`);
+    if(box){ box.focus(); box.scrollIntoView({block:'center',behavior:'smooth'}); }
+  }
+  else if(p) attachVendoOwner(p.dataset.vlown, p.dataset.vlsid);
 });
 document.addEventListener('click', e=>{
   const f=e.target.closest('[data-vsfocus]');
@@ -4434,7 +4585,7 @@ async function doCreateLink(){
 async function reloadVendos(){
   const fresh=[];
   for(let off=0; off<10000; off+=1000){
-    const page=await sb(`vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000&offset=${off}`);
+    const page=await sb(`vendos?select=id,vendo_code,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000&offset=${off}`);
     if(!page||!page.length) break;
     fresh.push(...page);
     if(page.length<1000) break;
@@ -4787,7 +4938,7 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 async function boot(){
   try{
     // PostgREST caps at 1000 rows/request — fetch page 1, then the rest in parallel
-    const SEL="vendos?select=id,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000";
+    const SEL="vendos?select=id,vendo_code,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000";
     const first=await sb(`${SEL}&offset=0`);
     VENDOS=first||[];
     if(first && first.length===1000){
@@ -4816,7 +4967,7 @@ async function boot(){
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
       sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
-      sb("ppp_roster?select=ppp_name,roster_name,match_status,confirmed_at&limit=2000").catch(()=>[]),
+      sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
       sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
       sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[])
     ]);
