@@ -1441,10 +1441,32 @@ function renderVendoPpp(){
       piso-wifi machine, press <b>🕹️ It's a vendo</b> — it moves here and leaves the Match Names queue.</div>`;
     return 0;
   }
+  const nOwned=list.filter(m=>{const rr=ROSTER.get(m.ppp_name||'');return rr&&rr.roster_name;}).length;
   el.innerHTML=`<div class="banner">🕹️ ${list.length} PPPoE line${list.length===1?'':'s'} running a vendo,
-     not a subscriber. These are excluded from subscriber matching and billing.</div>`
+     not a subscriber. These are excluded from subscriber matching and billing.
+     ${nOwned?`🎰 ${nOwned} owned by a customer — they show on the Vendo Subs tab.`
+             :'If a customer bought the unit, attach them as Owner and they appear on 🎰 Vendo Subs.'}</div>`
    + list.map(m=>{
       const v=vendoMatchFor(m.ppp_name);
+      // A vendo line can still belong to a customer who bought the unit. Keeping
+      // the roster_name on a 'vendo' row records that owner without putting the
+      // line back into billing — the owner shows on 🎰 Vendo Subs instead.
+      const rr=ROSTER.get(m.ppp_name||'');
+      const owner=rr&&rr.roster_name||null;
+      const orec=owner?subRecOf(owner):null;
+      const ownerRow = owner
+        ? `<div class="linkrow">
+             <span class="k">👤 Owner</span>
+             <span class="v">${esc(owner)}${orec&&orec.area?' · '+esc(orec.area):''}${orec&&orec.is_vendo_owner?' · 🎰 on Vendo Subs':''}</span>
+             <button class="lnk unlink" data-vsunown="${esc(m.ppp_name)}">Remove</button>
+           </div>`
+        : `<div class="linkrow">
+             <span class="k">👤 Owner</span>
+             <span class="v"><i style="color:var(--dim)">Spawn machine — no subscriber owner</i></span>
+             <button class="lnk link" data-vsfocus="${esc(m.ppp_name)}">Attach</button>
+           </div>
+           <input class="mw-search" data-vsq="${esc(m.ppp_name)}" placeholder="Owned by a subscriber? Search their name…">
+           <div class="mw-cands" data-vscands="${esc(m.ppp_name)}"></div>`;
       return `<div class="mw" data-mwrow="${esc(m.ppp_name)}">
         <div class="candhead">
           <span>VENDO PPPoE</span>
@@ -1461,6 +1483,7 @@ function renderVendoPpp(){
         </div>
         ${v&&v.area?`<div class="linkrow"><span class="k">Area</span><span class="v">${esc(v.area)}</span></div>`:''}
         ${v&&v.vlan?`<div class="linkrow"><span class="k">VLAN</span><span class="v">${esc(String(v.vlan))}</span></div>`:''}
+        ${ownerRow}
         <div class="mw-acts">
           <button class="mw-btn" data-vpppback="${esc(m.ppp_name)}">↩ Move back to subscribers</button>
           <button class="mw-btn" data-nsubmark="${esc(m.ppp_name)}" title="Not a machine — just a line that is not a paying customer">🚫 Not a subscriber</button>
@@ -1538,6 +1561,92 @@ async function setPppMark(ppp, status){
 }
 // kept for older call sites
 function setPppVendo(ppp, isVendo){ return setPppMark(ppp, isVendo?'vendo':null); }
+
+/* ---- VENDO LINE OWNED BY A SUBSCRIBER ----
+   Some vendos on a PPPoE line were bought outright by a customer. The line is
+   still not billed as internet (it stays match_status='vendo', off the Active/
+   Inactive lists and out of Match Names), but the owner is recorded on the row
+   and flagged is_vendo_owner so they appear on the 🎰 Vendo Subs tab — the same
+   place every other machine owner lives. confirmed_at stays NULL on purpose:
+   that is what keeps the roster trigger from writing subscribers.pppoe_username
+   and making a vendo line look like the customer's own internet service. */
+async function vsOwnerPatch(sid, body){
+  const r=await fetch(SB+"/rest/v1/subscribers?id=eq."+encodeURIComponent(sid),{
+    method:"PATCH", headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+    body:JSON.stringify({...body, last_updated_by:'dicayas-vendo-owner',
+                         last_updated_at:new Date().toISOString()})});
+  if(!r.ok) throw await sbFail(r);
+  const rec=SUBRECS.find(x=>String(x.id)===String(sid));
+  if(rec) Object.assign(rec, body);
+}
+function vsOwnerCands(q){
+  const s=(q||'').toLowerCase().trim();
+  if(s.length<2) return [];
+  return (SUBRECS||[]).filter(r=>r && r.name &&
+      ((r.name||'')+' '+(r.address||'')+' '+(r.area||'')).toLowerCase().includes(s))
+    .slice(0,6);
+}
+function vsDrawCands(ppp, q){
+  const box=document.querySelector(`[data-vscands="${CSS.escape(ppp)}"]`); if(!box) return;
+  const list=vsOwnerCands(q);
+  if(!q || q.trim().length<2){ box.innerHTML=''; return; }
+  box.innerHTML = list.length
+    ? list.map(r=>`<div class="mw-c" data-vsown="${esc(ppp)}" data-vsid="${esc(r.id)}">
+        <span class="mw-c-name">${esc(r.name)}
+          <span class="mw-c-sub">${esc(r.area||'no area')}${r.phone?' · '+esc(r.phone):''}${r.is_vendo_owner?' · 🎰 already a vendo sub':''}</span>
+        </span></div>`).join('')
+    : `<div class="mw-none">No subscriber by that name. Create them on the Subscriber tab first.</div>`;
+}
+async function attachVendoOwner(ppp, sid){
+  const rec=SUBRECS.find(x=>String(x.id)===String(sid));
+  if(!rec){ toast('Subscriber not found'); return; }
+  try{
+    if(rec.is_vendo_owner!==true) await vsOwnerPatch(rec.id,{is_vendo_owner:true});
+    await rosterUpsert(ppp,{roster_name:rec.name, area:rec.area||null, match_status:'vendo',
+                            score:1, confirmed_by:'vendo-owner', confirmed_at:null});
+    ROSTER.set(ppp,{ppp_name:ppp, roster_name:rec.name, area:rec.area||null,
+                    match_status:'vendo', confirmed_by:'vendo-owner', confirmed_at:null});
+    toast('🎰 '+rec.name+' now owns this vendo line');
+    renderSubs();
+    if(window._curSubMk!=null) renderSubModal();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+async function detachVendoOwner(ppp){
+  const r=ROSTER.get(ppp)||{};
+  const nm=r.roster_name||null;
+  try{
+    await rosterUpsert(ppp,{roster_name:null, area:null, match_status:'vendo',
+                            score:null, confirmed_by:null, confirmed_at:null});
+    ROSTER.set(ppp,{ppp_name:ppp, roster_name:null, area:null, match_status:'vendo'});
+    // Only offer to drop the Vendo Subs flag when no other vendo line is theirs —
+    // one person can own several machines, and the flag may predate this link.
+    const rec=nm?subRecOf(nm):null;
+    let others=0;
+    ROSTER.forEach(v=>{ if(v && v.match_status==='vendo' && v.roster_name===nm) others++; });
+    if(rec && rec.is_vendo_owner===true && !others &&
+       confirm('Owner removed from this line.\n\nAlso take “'+nm+'” off the 🎰 Vendo Subs tab?')){
+      await vsOwnerPatch(rec.id,{is_vendo_owner:false});
+    }
+    toast('Owner removed');
+    renderSubs();
+    if(window._curSubMk!=null) renderSubModal();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+document.addEventListener('input', e=>{
+  const box=e.target.closest('[data-vsq]'); if(!box) return;
+  vsDrawCands(box.dataset.vsq, box.value);
+});
+document.addEventListener('click', e=>{
+  const f=e.target.closest('[data-vsfocus]');
+  const p=e.target.closest('[data-vsown]');
+  const u=e.target.closest('[data-vsunown]');
+  if(f){
+    const box=document.querySelector(`[data-vsq="${CSS.escape(f.dataset.vsfocus)}"]`);
+    if(box){ box.focus(); box.scrollIntoView({block:'center',behavior:'smooth'}); }
+  }
+  else if(p) attachVendoOwner(p.dataset.vsown, p.dataset.vsid);
+  else if(u) detachVendoOwner(u.dataset.vsunown);
+});
 document.addEventListener('click', e=>{
   const a=e.target.closest('[data-vpppmark]');
   const b=e.target.closest('[data-vpppback]');
@@ -1644,7 +1753,9 @@ function renderSubs(){
   const nVppp=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='vendo';}).length;
   const nNsub=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='not_sub';}).length;
   const nBill=SUBS.length-nVppp-nNsub;
-  const nIn=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.roster_name;}).length;
+  // a vendo line may carry an owner name — that is ownership, not a billed match
+  const nIn=SUBS.filter(m=>{const r=rosterOf(m);
+    return r && r.roster_name && r.match_status!=='vendo' && r.match_status!=='not_sub';}).length;
   const nRev=SUBS.filter(m=>{const r=rosterOf(m);return r&&r.match_status==='probable'&&!r.confirmed_at;}).length;
   const rbEl=document.getElementById('banner-roster');
   if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}${nNsub?` · 🚫 ${nNsub} not-subscriber line${nNsub===1?'':'s'} excluded`:''}</div>`;
@@ -2672,7 +2783,9 @@ function rosterStrip(m){
   if(r && r.match_status==='vendo'){
     return `<div class="liststrip ls-vendo">
       <span class="ls-tag">\ud83d\udd79\ufe0f vendo line</span>
-      <span class="ls-who">a piso-wifi machine on this PPPoE line \u2014 not billed as a subscriber</span>
+      <span class="ls-who">${r.roster_name
+        ? '\ud83c\udfb0 owned by '+esc(r.roster_name)+' \u2014 machine, not billed internet'
+        : 'a piso-wifi machine on this PPPoE line \u2014 not billed as a subscriber'}</span>
       <button class="ls-alt" data-vpppback="${esc(m.ppp_name)}">\u21a9 Move back to subscribers</button>
     </div>`;
   }
