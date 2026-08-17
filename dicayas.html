@@ -1367,7 +1367,7 @@ function inBucket(m){
 document.addEventListener('click', e=>{
   const t=e.target.closest('[data-iv]'); if(!t) return;
   INVIEW = t.dataset.iv || 'down';
-  renderSubs();
+  safeRender('subscribers', renderSubs);
 });
 let SUBRECS=[];      // the subscribers table, for the in-popup picker
 let BASHANG=[];      // stg_bashang_subs — the BASHANG sheet as loaded, read-only
@@ -4280,7 +4280,7 @@ document.getElementById('subflt').onchange=renderSubs;
 document.addEventListener('click', e=>{
   const t=e.target.closest('.subtab'); if(!t) return;
   SUBVIEW = t.getAttribute('data-sv') || 'active';
-  renderSubs();
+  safeRender('subscribers', renderSubs);
 });
 document.getElementById('cmpPeriod').onchange=loadCompare;
 document.getElementById('cmpQ').oninput=()=>loadCompare();
@@ -5177,12 +5177,25 @@ async function boot(){
     (salesRows||[]).forEach(r=>{ SALES_MONTH[String(r.vendo)]=Number(r.total||0); });
 
     await loadSuppress();
-    render(); renderSubs();
+    // Rendering is isolated from loading, and each pane from the other: a single
+    // bad card used to abort boot and leave every tab empty with one red line.
+    safeRender('vendo panes', render);
+    safeRender('subscribers', renderSubs);
 
     // non-blocking: banner can fill in after the grid is on screen
     loadActiveHarvest().then(renderHarvestBanner).catch(()=>{});
   }catch(e){
     document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+esc(e.message)+'</div>');
+  }
+}
+function safeRender(what, fn){
+  try{ fn(); }
+  catch(e){
+    console.error('render failed:', what, e);
+    // Say which part broke and keep the rest of the page usable.
+    const box=document.getElementById('banner-subs');
+    if(box) box.innerHTML='<div class="banner">⚠ Could not draw the '+esc(what)+
+      ' section: '+esc(e.message)+'. The rest of the page still works — reload to try again.</div>';
   }
 }
 boot();
