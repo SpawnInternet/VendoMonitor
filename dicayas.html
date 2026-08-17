@@ -50,6 +50,15 @@
   .banner.ok{background:#e9f7f1;border-color:#b6e3d3;color:#046b52}
   .banner.alert{background:#fdeaed;border-color:#f0b3bd;color:#a31c2e;font-weight:800}
   .banner{background:#fff7e0;border:1px solid #f3d98a;border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;color:#8a6500;font-weight:700}
+  /* Header strip: the notices share one row and shrink to fit rather than
+     stacking four deep and pushing the grid off screen. */
+  .bstrip{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .bstrip>div{flex:1 1 300px;min-width:0}
+  .bstrip>div:empty{display:none}
+  .bstrip .banner{margin:0;padding:7px 11px;font-size:12px;line-height:1.35;height:100%}
+  #pane-subs .controls{margin-bottom:10px}
+  #pane-subs .subtabs{margin-top:0}
+  #grid-subs-on .openbar,#grid-subs-off .openbar{padding:7px 11px;font-size:12px}
   .banner.crit{background:#fdecef;border-color:#f3b4bd;color:#a31c2e}
   .controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
   input,select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);padding:9px 12px;border-radius:9px;font-size:14px;font-family:inherit;font-weight:600}
@@ -636,7 +645,11 @@
     <div class="grid" id="grid-off-nolease"></div>
   </div>
   <div id="pane-subs" class="pane" style="display:none">
-    <div id="banner-subs"></div>
+    <div class="bstrip">
+      <div id="banner-subs"></div>
+      <div id="banner-live"></div>
+      <div id="banner-roster"></div>
+    </div>
     <div class="controls">
       <input id="subq" placeholder="Search subscriber name / IP…">
       <select id="subflt">
@@ -652,8 +665,6 @@
       </select>
       <a class="revlink" href="ppp-review.html" target="_blank" rel="noopener">☑ Review all</a>
     </div>
-    <div id="banner-live"></div>
-    <div id="banner-roster"></div>
     <div class="subtabs">
       <div class="subtab active" data-sv="active"  id="stab-active">🟢 Active</div>
       <div class="subtab"        data-sv="inactive" id="stab-inactive">🔴 Inactive</div>
@@ -2167,8 +2178,8 @@ function renderSubs(){
          <small>the rest are hidden</small>
          <button class="openbtn" data-onlyopen="all">Show all</button></div>`
     : onOpen
-      ? `<div class="openbar" data-onlyopen="open">✖ ${onOpen} of ${on.length} online line${on.length===1?'':'s'} not linked
-           <small>red cards, mixed through the A–Z list</small>
+      ? `<div class="openbar" data-onlyopen="open">✖ ${onOpen} of ${on.length} not linked
+           <small>red cards, in A–Z order</small>
            <button class="openbtn" data-onlyopen="open">Show only these</button></div>`
       : `<div class="openbar ok">🔒 All ${on.length} online line${on.length===1?'':'s'} linked and confirmed</div>`;
   document.getElementById('grid-subs-on').innerHTML = on.length
@@ -2265,19 +2276,19 @@ function renderSubs(){
     const bad = hbAge==null || hbAge>900 || (HB&&HB.status==='stopped');
     const drift = (routerOn!=null && routerOn!==shownOn);
     liveEl.innerHTML = bad
-      ? `<div class="banner alert">⚠️ Live data is not current — poller last reported ${
-           HB&&HB.last_beat?ago(HB.last_beat):'never'}. Online/offline below may be out of date.</div>`
+      ? `<div class="banner alert" title="Online/offline below may be out of date.">⚠️ Data not current · poller ${
+           HB&&HB.last_beat?ago(HB.last_beat):'never'}</div>`
       : (ghosts||drift)
-        ? `<div class="banner alert">⚠️ ${ghosts||Math.abs(routerOn-shownOn)} line${
-             (ghosts||1)===1?'':'s'} marked online that the router has not reported in over 45 minutes${
-             routerOn!=null?` — router says ${routerOn} live, this page shows ${shownOn}`:''}. They sit in Inactive, not Active.</div>`
-        : `<div class="banner ok">✅ Live · poller reported ${ago(HB.last_beat)} ago${
-             routerOn!=null?` · router ${routerOn} sessions, page ${shownOn}`:''}</div>`;
+        ? `<div class="banner alert" title="Marked online but unreported for over 45 minutes — filed under Inactive.">⚠️ ${
+             ghosts||Math.abs(routerOn-shownOn)} stale online${
+             routerOn!=null?` · router ${routerOn} vs page ${shownOn}`:''}</div>`
+        : `<div class="banner ok" title="Poller heartbeat vs router session count">✅ Live · ${ago(HB.last_beat)}${
+             routerOn!=null?` · ${routerOn} sessions`:''}</div>`;
   }
   const rbEl=document.getElementById('banner-roster');
-  if(rbEl) rbEl.innerHTML=`<div class="banner">👥 ${nIn} of ${nBill} billable PPPoE accounts match your subscriber roster · ${nBill-nIn} not on it · ${nRev} need confirming.${nVppp?` · 🕹️ ${nVppp} vendo line${nVppp===1?'':'s'} excluded`:''}${nNsub?` · 🚫 ${nNsub} not-subscriber line${nNsub===1?'':'s'} excluded`:''}</div>`;
+  if(rbEl) rbEl.innerHTML=`<div class="banner" title="Billable = all PPPoE lines minus vendo and not-subscriber lines">👥 ${nIn}/${nBill} matched · ${nBill-nIn} not · ${nRev} to confirm${nVppp?` · 🕹️ ${nVppp}`:''}${nNsub?` · 🚫 ${nNsub}`:''}</div>`;
   document.getElementById('banner-subs').innerHTML = (big&&big[1]>=10)
-    ? `<div class="banner alert">⚠️ ${big[1]} subscribers share the exact same offline time (${big[0].replace('T',' ')}) — either a real area-wide outage, or the poller batch-set them. Worth a check.</div>` : '';
+    ? `<div class="banner alert" title="Either a real area-wide outage, or the poller batch-set them.">⚠️ ${big[1]} share one offline time · ${big[0].replace('T',' ')}</div>` : '';
 }
 function openSub(mk, tab){
   window._curMk=null;             // leaving vendo context
