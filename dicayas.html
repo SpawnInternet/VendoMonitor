@@ -165,6 +165,15 @@
           border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
   .subtab:hover{color:var(--navy)}
   .subtab.active{color:var(--navy)}
+  /* Second row, only under Inactive: why is this line down? */
+  .intabs{display:flex;gap:6px;margin:-6px 0 12px;flex-wrap:wrap}
+  .intab{padding:6px 13px;cursor:pointer;font-weight:800;font-size:12px;color:#7a8aa0;
+         border:1px solid #dbe2ec;background:#fff;border-radius:999px;white-space:nowrap}
+  .intab:hover{border-color:#DF1A35;color:#DF1A35}
+  .intab.active{background:#DF1A35;border-color:#DF1A35;color:#fff}
+  .intab .cnt{display:inline-block;margin-left:6px;font-size:11px;font-weight:900;
+              padding:0 7px;border-radius:999px;background:#eef2f8;color:#7a8aa0}
+  .intab.active .cnt{background:rgba(255,255,255,.28);color:#fff}
   .subtab[data-sv="active"].active{border-bottom-color:var(--green,#028867)}
   .subtab[data-sv="inactive"].active{border-bottom-color:var(--red,#DF1A35)}
   .subtab .cnt{display:inline-block;margin-left:6px;font-size:11px;font-weight:900;
@@ -616,6 +625,11 @@
       <div class="subtab"        data-sv="vppp"     id="stab-vppp">🕹️ Vendo PPPoE</div>
       <div class="subtab"        data-sv="nsub"     id="stab-nsub">🚫 Not Subscriber</div>
       <div class="subtab"        data-sv="pay"      id="stab-pay">💵 Match Payments</div>
+    </div>
+    <div class="intabs" id="intabs" style="display:none">
+      <div class="intab active" data-iv="down"  id="itab-down">🔌 No connection</div>
+      <div class="intab"        data-iv="cut"   id="itab-cut">✂️ Cut Off</div>
+      <div class="intab"        data-iv="other" id="itab-other">🚫 Not Sub / Transferred to VLAN</div>
     </div>
     <div class="grid" id="grid-subs-on"></div>
     <div class="grid" id="grid-subs-off" style="display:none !important"></div>
@@ -1335,6 +1349,26 @@ function applySearch(){
 // paying-subscriber roster at all: piso-wifi, spawn internal, test, or unbilled.
 let ROSTER=new Map();
 let SUBVIEW='active';   // which subscriber sub-tab is showing
+let INVIEW='down';      // which slice of Inactive is showing
+/* Why a line is offline, from the subscriber record behind it:
+     down  — a live customer with no connection: the real worklist
+     cut   — cut off on purpose, expected to be dark
+     other — no subscriber linked, or the customer moved to a VLAN connection
+   Status is free text on subscribers, so match loosely rather than exactly. */
+function inBucket(m){
+  const r=ROSTER.get(m.ppp_name||'');
+  const rec=(r&&r.roster_name)?subRecOf(r.roster_name):null;
+  if(!rec) return 'other';
+  const st=String(rec.status||'active').toLowerCase();
+  if(st.includes('cut')) return 'cut';
+  if(st.includes('transfer') || st.includes('vlan') || st.includes('duplicate')) return 'other';
+  return 'down';
+}
+document.addEventListener('click', e=>{
+  const t=e.target.closest('[data-iv]'); if(!t) return;
+  INVIEW = t.dataset.iv || 'down';
+  renderSubs();
+});
 let SUBRECS=[];      // the subscribers table, for the in-popup picker
 let BASHANG=[];      // stg_bashang_subs — the BASHANG sheet as loaded, read-only
 let CUR_PPP=null;    // ppp_name of the subscriber popup currently open
@@ -1668,6 +1702,41 @@ function routeBar(m){
     ${b('not_sub','🚫 Not a subscriber','Staff, office, test or free line')}
   </div>`;
 }
+/* Second question, only once a customer is attached: is this account live, cut
+   off, or gone to VLAN? Offline alone cannot tell them apart, and lumping them
+   together buried the lines that actually need a technician. */
+function stateBar(m){
+  const r=ROSTER.get(m.ppp_name);
+  const rec=(r&&r.roster_name)?subRecOf(r.roster_name):null;
+  if(!rec) return '';
+  const st=String(rec.status||'active').toLowerCase();
+  const cur = st.includes('cut') ? 'cutoff'
+            : (st.includes('transfer')||st.includes('vlan')) ? 'transferred_vlan' : 'active';
+  const b=(key,label,title)=>`<button class="rtb ${cur===key?'on':''}" data-ss="${key}"
+      data-ssid="${esc(rec.id)}" title="${esc(title)}"${cur===key?' disabled':''}>${label}</button>`;
+  return `<div class="routebar">
+    <span class="rtk">Connection</span>
+    ${b('active','🟢 Active','Billed and expected to be online')}
+    ${b('cutoff','✂️ Cut off','Disconnected on purpose — offline is normal')}
+    ${b('transferred_vlan','🔀 Moved to VLAN','Now on a VLAN connection, not this PPPoE line')}
+  </div>`;
+}
+async function setSubStatus(sid, status){
+  const rec=SUBRECS.find(x=>String(x.id)===String(sid));
+  if(!rec){ toast('Subscriber not found'); return; }
+  try{
+    await vsOwnerPatch(rec.id,{status});
+    toast(status==='cutoff'?'✂️ Marked cut off'
+        : status==='transferred_vlan'?'🔀 Marked moved to VLAN'
+        : '🟢 Marked active');
+    renderSubs();
+    if(window._curSubMk!=null) renderSubModal();
+  }catch(e){ toast('Failed: '+e.message); }
+}
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-ss]'); if(!b) return;
+  setSubStatus(b.dataset.ssid, b.dataset.ss);
+});
 // Turn a matched line into a customer-owned vendo: the linked subscriber becomes
 // the owner and shows on 🎰 Vendo Subs. Needs a name — with none there is nobody
 // to hand the machine to, so it goes to Vendo PPPoE and gets an owner there.
@@ -1939,7 +2008,27 @@ function renderSubs(){
   });
   const off=list.filter(m=>!m.online), on=list.filter(m=>m.online);
   const nUnOn=on.filter(unlinked).length, nUnOff=off.filter(unlinked).length;
-  document.getElementById('grid-subs-off').innerHTML = off.length?off.map(subCard).join(''):'<div class="empty">None inactive</div>';
+  // Offline is not one problem. A paying customer with no link needs a job
+  // order; a cut-off account is expected to be down; a line whose owner moved
+  // to VLAN is not this server's business at all. Split so the first group
+  // stays a real worklist instead of a pile everything ends up in.
+  const offBucket=off.filter(m=>inBucket(m)===INVIEW);
+  const nDown =off.filter(m=>inBucket(m)==='down').length;
+  const nCut  =off.filter(m=>inBucket(m)==='cut').length;
+  const nOther=off.filter(m=>inBucket(m)==='other').length;
+  const itD=document.getElementById('itab-down'), itC=document.getElementById('itab-cut'),
+        itO=document.getElementById('itab-other'), itW=document.getElementById('intabs');
+  if(itW) itW.style.display = showOff?'flex':'none';
+  if(itD){ itD.innerHTML='🔌 No connection<span class="cnt">'+nDown+'</span>';
+           itD.classList.toggle('active', INVIEW==='down'); }
+  if(itC){ itC.innerHTML='✂️ Cut Off<span class="cnt">'+nCut+'</span>';
+           itC.classList.toggle('active', INVIEW==='cut'); }
+  if(itO){ itO.innerHTML='🚫 Not Sub / Transferred to VLAN<span class="cnt">'+nOther+'</span>';
+           itO.classList.toggle('active', INVIEW==='other'); }
+  document.getElementById('grid-subs-off').innerHTML = offBucket.length?offBucket.map(subCard).join('')
+    : `<div class="empty">${INVIEW==='down'?'No offline subscriber lines — every active customer is up.'
+        : INVIEW==='cut'?'Nobody marked cut off. Open a line and set its connection to ✂️ Cut off.'
+        : 'Nothing here — no unlinked or transferred lines are offline.'}</div>`;
   document.getElementById('grid-subs-on').innerHTML  = on.length ? on.map(subCard).join(''):'<div class="empty">None active</div>';
   // one view at a time — ACTIVE = link up, INACTIVE = link down, MATCH = name worklist
   const isMatch = (SUBVIEW==='match');
@@ -2043,6 +2132,7 @@ function renderSubModal(){
   </div>`;
   html+=rosterStrip(m);
   html+=routeBar(m);
+  html+=stateBar(m);
 
   if(tab==='stats'){
     const viaTxt = m.online_via==='lease'?'DHCP lease'
