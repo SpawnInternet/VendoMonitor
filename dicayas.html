@@ -1390,6 +1390,14 @@ let INVIEW='down';      // which slice of Inactive is showing
      cut   — cut off on purpose, expected to be dark
      other — no subscriber linked, or the customer moved to a VLAN connection
    Status is free text on subscribers, so match loosely rather than exactly. */
+const PPP_STALE_MS = 60*60*1000;   // an hour of silence from a ~12 min poller
+function pppStale(m){
+  if(!m || !m.updated_at) return false;
+  const t=Date.parse(m.updated_at);
+  return isFinite(t) && (Date.now()-t) > PPP_STALE_MS;
+}
+// "Online" must mean the poller saw it recently, not that it was up once.
+function subOnline(m){ return !!m.online && !pppStale(m); }
 function isParked(m){
   const r=ROSTER.get(m.ppp_name||'');
   const rec=isLinked(r)?subRecOf(r.roster_name):null;
@@ -1484,11 +1492,14 @@ function subCard(m){
       <span class="gp ${rec.phone?'on':''}">${rec.phone?'📞 phone':'no phone'}</span>
       <span class="gp ${rec.monthly_amount!=null?'on':''}">${rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'no amount'}</span>`:''}
     </div>` : '';
-  const state = m.online
-    ? (isParked(m) ? 'Link still up' : 'Online')
-    : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
+  const stale = pppStale(m);
+  const state = stale
+    ? '⚠ not reporting · last polled '+ago(m.updated_at)
+    : m.online
+      ? (isParked(m) ? 'Link still up' : 'Online')
+      : 'Offline'+(m.offline_since?' '+ago(m.offline_since):'');
   return `<div class="rrow ${cls}" data-openppp="${esc(m.match_key)}">
-    <span class="rdot" style="background:${m.online?'#028867':'#DF1A35'}"></span>
+    <span class="rdot" style="background:${stale?'#7a8aa0':(m.online?'#028867':'#DF1A35')}"></span>
     <div class="rmain">
       <div class="rppp" title="${esc(m.ppp_name||'')}">${esc(m.ppp_name)||'(no name)'}</div>
       <div class="rmeta">${state}${m.ip?' · '+esc(m.ip):''}${rec&&rec.area?' · <b>'+esc(rec.area)+'</b>':''}</div>
@@ -2109,8 +2120,8 @@ function renderSubs(){
   // A cut-off or moved account belongs in its bucket whatever the link is doing.
   // Lines often stay up for a while after the account is cut, and leaving them
   // on Active made "Active" mean "the router says up" rather than "billed and live".
-  const off=list.filter(m=>!m.online || isParked(m));
-  const on =list.filter(m=> m.online && !isParked(m));
+  const off=list.filter(m=>!subOnline(m) || isParked(m));
+  const on =list.filter(m=> subOnline(m) && !isParked(m));
   const nUnOn=on.filter(unlinked).length, nUnOff=off.filter(unlinked).length;
   // Offline is not one problem. A paying customer with no link needs a job
   // order; a cut-off account is expected to be down; a line whose owner moved
