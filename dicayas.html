@@ -1697,9 +1697,9 @@ function vendoById(id){
 }
 function vendoLabel(v){
   if(!v) return '';
+  // Sheet name is the billed identity — show that, nothing else.
   const nm=v.sheet_name||v.tg_name||v.excel_name||('vendo #'+v.id);
-  const alt=(v.sheet_name && v.tg_name && v.tg_name!==v.sheet_name) ? ' (tg: '+v.tg_name+')' : '';
-  return nm + alt + (v.vendo_code?' · '+v.vendo_code:'') + (v.area?' · '+v.area:'');
+  return nm + (v.vendo_code?' · '+v.vendo_code:'') + (v.area?' · '+v.area:'');
 }
 let _vbnIndex=null, _vbnLen=-1;
 function vendoMatchFor(name){
@@ -1978,8 +1978,7 @@ function vdDrawCands(ppp, q){
   box.innerHTML = list.length
     ? list.map(({v,taken})=>`<div class="mw-c" data-vdlink="${esc(ppp)}" data-vdid="${esc(v.id)}">
         <span class="mw-c-name"><span class="vcode">${esc(v.vendo_code||'no code')}</span> ${esc(v.sheet_name||v.tg_name||v.excel_name||('vendo #'+v.id))}
-          <span class="mw-c-sub">${v.sheet_name&&v.tg_name&&v.tg_name!==v.sheet_name?'tg: '+esc(v.tg_name)+' · ':''}${
-            v.sheet_name?'sheet':(v.tg_name?'tg only':'excel only')} · ${v.area?esc(v.area):'no area'}${
+          <span class="mw-c-sub">${v.area?esc(v.area):'no area'}${
             v.vlan!=null?' · VLAN '+esc(String(v.vlan)):' · no VLAN'}${taken?' · ⚠ already linked to another line':''}</span>
         </span></div>`).join('')
     : `<div class="mw-none">No vendo row matches that. Try the code, the area, or a shorter name.</div>`;
