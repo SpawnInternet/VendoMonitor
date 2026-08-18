@@ -897,6 +897,10 @@ function buildNameIndex(){
 }
 function invalidateVendoCaches(){ buildNameIndex(); }
 let STATUS=[], SUBS=[];
+// Classified PPPoE outage rows from v_ppp_no_connection. The classification
+// lives in the database so vendo/internal/cutoff lines cannot be mistaken for
+// customer faults here.
+let NOCON=[];
 let SALES_MONTH={}; // vlan -> peso total this month (for classification)
 
 async function sb(path){
@@ -1359,10 +1363,15 @@ function render(){
   const flagged=LIVE.filter(m=>flagsOf(m).length>0).length;
   const last = STATUS.reduce((a,m)=>m.updated_at>a?m.updated_at:a,"");
   document.getElementById('lastUpd').textContent = "updated "+ago(last)+" ago";
+  // Real customer outages only. Vendo lines, internal accounts and 20k-throttled
+  // (non-payment) lines are classified out in the database, so this number is
+  // the one a lineman can actually be sent on.
+  const noConn = NOCON.filter(r=>r.line_type==='subscriber').length;
   document.getElementById('summary').innerHTML=`
     <div class="stat"><div class="n">${LIVE.length}</div><div class="l">Vendos</div></div>
     <div class="stat on"><div class="n">${LIVE.filter(m=>effOnline(m)).length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
+    <div class="stat off"><div class="n">${noConn}</div><div class="l">No Conn</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
     <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
@@ -5498,7 +5507,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs, nocon] = await Promise.all([
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
@@ -5509,9 +5518,11 @@ async function boot(){
       sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
       sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
       sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[]),
-      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000").catch(()=>[])
+      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000").catch(()=>[]),
+      sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,duration_is_floor,subscriber_name,area&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    NOCON=nocon||[];
     buildRoster(roster);
     SUBRECS=subrecs||[];
     BASHANG=bashang||[];
