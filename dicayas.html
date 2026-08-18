@@ -1474,16 +1474,33 @@ function downSince(m){
 }
 // {txt, atLeast} — atLeast means the real outage is this long or longer
 function downFor(m){
-  /* Best evidence first: last_online_at is stamped by the database the moment
-     the poller sees a line go online->offline, so it is an observation, not a
-     guess. Only fall back to weaker signals when we never saw the drop. */
+  /* Evidence, strongest first.
+
+     1. last_online_at — the DB stamps this the moment the poller sees a line go
+        online->offline. An observation, not a guess.
+     2. A non-batch offline_since — same thing, recorded by the poller.
+     3. The batch stamp. This is NOT noise: offline_since only moves on a state
+        change, so a line still carrying the batch timestamp has never come back
+        online since. That makes it a true lower bound — "down at least N days".
+     4. A hand-raised repair order (bulk sweeps already filtered out).
+
+     A cutoff line is deliberately disconnected for non-payment, so an outage
+     duration is the wrong question entirely — it gets its own label. */
+  const cut = m && (m.service_state === 'cutoff');
+
   if(m && m.last_online_at && !m.online)
-    return {txt:ago(m.last_online_at), atLeast:false, ts:m.last_online_at, observed:true};
+    return {txt:(cut?'cut · ':'')+ago(m.last_online_at), atLeast:false, ts:m.last_online_at, observed:true, cutoff:cut};
+
   const exact=downSince(m);
-  if(exact) return {txt:ago(exact), atLeast:false, ts:exact, observed:true};
+  if(exact) return {txt:(cut?'cut · ':'')+ago(exact), atLeast:false, ts:exact, observed:true, cutoff:cut};
+
+  if(m && m.offline_since && BATCH_TS && m.offline_since===BATCH_TS)
+    return {txt:(cut?'cut · ≥ ':'≥ ')+ago(m.offline_since), atLeast:true, ts:m.offline_since, observed:false, cutoff:cut};
+
   const floor=jobFloorFor(m);
-  if(floor) return {txt:'≥ '+ago(new Date(floor).toISOString()), atLeast:true, ts:new Date(floor).toISOString(), observed:false};
-  return {txt:m.offline_since?'⚠ unknown':'—', atLeast:false, ts:null, observed:false};
+  if(floor) return {txt:'≥ '+ago(new Date(floor).toISOString()), atLeast:true, ts:new Date(floor).toISOString(), observed:false, cutoff:cut};
+
+  return {txt:m.offline_since?'⚠ unknown':'—', atLeast:false, ts:null, observed:false, cutoff:cut};
 }
 function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
