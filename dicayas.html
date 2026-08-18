@@ -1589,6 +1589,26 @@ function downTable(list){
     <th>Down for</th><th>Due</th><th class="ar">Monthly</th>
   </tr></thead><tbody>`+list.map(cell).join('')+`</tbody></table></div></div>`;
 }
+/* An area with ZERO lines online on this server, but several down, is not an
+   outage — it is served by its own MikroTik and what remains here are
+   abandoned PPPoE secrets. ROXAS read 0 online / 5 down while two of those
+   customers paid four days ago. Recomputed each render, so the moment one
+   line there comes up on this server the rule stops firing. */
+function abandonedAreas(){
+  const tally=new Map();
+  (SUBS||[]).forEach(m=>{
+    const r=ROSTER.get(m&&m.ppp_name||''); if(!r||!r.roster_name) return;
+    const rec=subRecOf(r.roster_name); const a=rec&&rec.area; if(!a) return;
+    const t=tally.get(a)||{on:0,all:0};
+    if(subOnline(m)) t.on++;
+    t.all++; tally.set(a,t);
+  });
+  const out=new Set();
+  tally.forEach((t,a)=>{ if(t.on===0 && t.all>=3) out.add(a); });
+  return out;
+}
+let _ABANDONED=new Set();
+
 /* Secrets get re-created on the router — a dot instead of a space
    (Margelita Quinto / Margelita.Quinto), a trailing 1, a typo — and the dead
    one is left behind. The roster can then point at the corpse while the
@@ -1605,11 +1625,18 @@ function ownerHasLiveSecret(m){
   });
 }
 
+function areaOfLine(m){
+  const r=ROSTER.get(m&&m.ppp_name||''); if(!r||!r.roster_name) return null;
+  const rec=subRecOf(r.roster_name); return rec&&rec.area||null;
+}
+
 function inBucket(m){
   const st=subStatusOf(m);
   if(st==='cut')   return 'cut';
   // the same customer is online on another secret: this line is a leftover
   if(!m.online && ownerHasLiveSecret(m)) return 'other';
+  // the whole area lives on a different server: an abandoned secret, not a fault
+  if(!m.online && _ABANDONED.has(areaOfLine(m))) return 'other';
   if(st==='moved') return 'other';
   if(st===null)    return 'other';   // nobody billed behind it
   return 'down';
@@ -2339,6 +2366,7 @@ function renderSubs(){
   // order; a cut-off account is expected to be down; a line whose owner moved
   // to VLAN is not this server's business at all. Split so the first group
   // stays a real worklist instead of a pile everything ends up in.
+  _ABANDONED=abandonedAreas();   // recompute per render, never cached across loads
   const offBucket=off.filter(m=>inBucket(m)===INVIEW);
   const nDown =off.filter(m=>inBucket(m)==='down').length;
   const nCut  =off.filter(m=>inBucket(m)==='cut').length;
