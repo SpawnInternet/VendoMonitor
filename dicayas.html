@@ -1515,7 +1515,16 @@ function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
   if(!m || !m.online) return false;
   const t=Date.parse(m.last_seen || m.updated_at || '');
-  return isFinite(t) && (Date.now()-t) > PPP_STALE_MS;
+  if(!isFinite(t)) return false;
+  /* The poller rewrites ONLY rows whose state changed — its own heartbeat says
+     "wrote 169/533". So a customer online and unchanged for hours keeps an old
+     updated_at while being perfectly up. Measuring that against the wall clock
+     marked ~100 live customers as offline and inflated the No-connection list.
+     Compare against the newest write in the dataset instead, which is when the
+     poller last told us anything at all — the same rule notInSweep() uses. */
+  const sweep=lastSweepAt();
+  if(!sweep) return false;
+  return (sweep-t) > PPP_STALE_MS;
 }
 // "Online" must mean the poller saw it recently, not that it was up once.
 function subOnline(m){ return !!m.online && !pppStale(m); }
