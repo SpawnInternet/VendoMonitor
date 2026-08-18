@@ -851,6 +851,18 @@ let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
 let VOUCH={};
 // Connected customer devices per VLAN (from vendo_devices, pulled live by the poller)
 let DEVS={};
+/* vendo_devices is an APPEND table — 124k rows for this server alone, growing
+   ~12k/day. Fetching a bare limit=5000 returned an arbitrary 4% with no
+   ORDER BY, so which devices a vendo appeared to have was non-deterministic
+   and often weeks stale. Ask for a recent window instead: ~2k rows currently,
+   comfortably inside the limit, and actually current. */
+function devicesQuery(){
+  const since=new Date(Date.now()-6*3600*1000).toISOString();
+  return "vendo_devices?server_name=eq.Dicayas%20Server"
+       + "&select=vlan,mac,ip,hostname,lease_status,expires_after,updated_at"
+       + "&updated_at=gte."+encodeURIComponent(since)
+       + "&order=updated_at.desc&limit=5000";
+}
 function buildDevs(rows){
   DEVS={};
   (rows||[]).forEach(d=>{
@@ -5576,7 +5588,7 @@ async function boot(){
       sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
       sbRpc("sales_month_by_vendo").catch(()=>[]),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
+      sb(devicesQuery()).catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
       sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
@@ -5630,7 +5642,7 @@ async function refreshStatus(){
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
       sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
       sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb("vendo_devices?server_name=eq.Dicayas%20Server&select=vlan,mac,ip,hostname,lease_status,expires_after&limit=5000").catch(()=>[]),
+      sb(devicesQuery()).catch(()=>[]),
       sb(HB_PATH).catch(()=>null),
       sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>null),
       sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=2000").catch(()=>null)
