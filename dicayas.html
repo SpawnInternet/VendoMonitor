@@ -1589,11 +1589,27 @@ function downTable(list){
     <th>Down for</th><th>Due</th><th class="ar">Monthly</th>
   </tr></thead><tbody>`+list.map(cell).join('')+`</tbody></table></div></div>`;
 }
+/* Secrets get re-created on the router — a dot instead of a space
+   (Margelita Quinto / Margelita.Quinto), a trailing 1, a typo — and the dead
+   one is left behind. The roster can then point at the corpse while the
+   customer has service on the twin. A customer is down only when EVERY secret
+   tied to them is down. */
+function ownerHasLiveSecret(m){
+  const r=ROSTER.get(m&&m.ppp_name||'');
+  const owner=r&&r.roster_name; if(!owner) return false;
+  return (SUBS||[]).some(x=>{
+    if(!x || !subOnline(x)) return false;
+    if(String(x.ppp_name||'')===String(m.ppp_name||'')) return false;
+    const rx=ROSTER.get(x.ppp_name||'');
+    return rx && rx.roster_name===owner;
+  });
+}
+
 function inBucket(m){
   const st=subStatusOf(m);
   if(st==='cut')   return 'cut';
-  // gone from the router: not a job order, whatever the record says
-  if(!m.online && notInSweep(m)) return 'other';
+  // the same customer is online on another secret: this line is a leftover
+  if(!m.online && ownerHasLiveSecret(m)) return 'other';
   if(st==='moved') return 'other';
   if(st===null)    return 'other';   // nobody billed behind it
   return 'down';
