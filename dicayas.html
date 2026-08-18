@@ -1435,9 +1435,18 @@ function lastSweepAt(){
   return t;
 }
 function notInSweep(m){
-  const sweep=lastSweepAt(); if(!sweep) return false;
-  const u=Date.parse(m&&m.updated_at||'');
-  return isFinite(u) && (sweep-u) > PPP_STALE_MS;
+  /* Intent: "the router stopped reporting this line, so it no longer exists
+     there and nobody should be dispatched to it."
+
+     That cannot be read from updated_at. The poller writes only rows whose
+     state CHANGED, so a line that is steadily offline keeps an old timestamp
+     for weeks while still being reported every sweep. Treating that as "gone"
+     filed real outages under Other, where nobody looks at them.
+
+     Until the poller marks rows it no longer sees, the honest answer is that
+     we cannot tell — so keep the line in the worklist. Over-listing costs a
+     phone call; under-listing costs a customer nobody visits. */
+  return false;
 }
 /* One timestamp shared by a crowd of lines is a batch stamp, not an outage.
    Treat that value as unknown rather than presenting a confident duration. */
@@ -1514,17 +1523,18 @@ function downFor(m){
 function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
   if(!m || !m.online) return false;
-  const t=Date.parse(m.last_seen || m.updated_at || '');
-  if(!isFinite(t)) return false;
-  /* The poller rewrites ONLY rows whose state changed — its own heartbeat says
-     "wrote 169/533". So a customer online and unchanged for hours keeps an old
-     updated_at while being perfectly up. Measuring that against the wall clock
-     marked ~100 live customers as offline and inflated the No-connection list.
-     Compare against the newest write in the dataset instead, which is when the
-     poller last told us anything at all — the same rule notInSweep() uses. */
+  /* A row's OWN age proves nothing. The poller rewrites only rows whose state
+     changed ("wrote 169/533" in its heartbeat), so a customer online and
+     untroubled for hours keeps an hours-old updated_at while passing traffic
+     the whole time — Jake Villarino, Jean Caidet and ~100 others were being
+     called offline for exactly this reason.
+
+     Staleness is a property of the POLLER, not of a row. If it is still
+     writing, m.online is current and must be trusted as-is. If it stopped,
+     every online flag is suspect at once. */
   const sweep=lastSweepAt();
   if(!sweep) return false;
-  return (sweep-t) > PPP_STALE_MS;
+  return (Date.now()-sweep) > PPP_STALE_MS;
 }
 // "Online" must mean the poller saw it recently, not that it was up once.
 function subOnline(m){ return !!m.online && !pppStale(m); }
