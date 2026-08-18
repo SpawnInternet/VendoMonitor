@@ -1435,7 +1435,14 @@ function notInSweep(m){
 let JOBFLOOR=new Map();   // ppp/customer -> earliest open repair order
 function buildJobFloor(rows){
   JOBFLOOR=new Map();
+  /* A repair order only proves an outage if someone actually raised it for THAT
+     line. A sweep that stamped dozens of orders at one instant proves nothing
+     about any individual customer, so it cannot serve as a floor either. */
+  const jc=new Map();
+  (rows||[]).forEach(j=>{ const c=j.created_at; if(c) jc.set(c,(jc.get(c)||0)+1); });
+  const BULK=new Set(); jc.forEach((n,ts)=>{ if(n>=10) BULK.add(ts); });
   (rows||[]).forEach(j=>{
+    if(BULK.has(j.created_at)) return;
     const t=Date.parse(j.created_at||''); if(!isFinite(t)) return;
     const keys=[j.customer, (String(j.notes||'').match(/PPP:\s*([^|]+)/)||[])[1]];
     keys.forEach(k=>{
@@ -1467,11 +1474,16 @@ function downSince(m){
 }
 // {txt, atLeast} — atLeast means the real outage is this long or longer
 function downFor(m){
+  /* Best evidence first: last_online_at is stamped by the database the moment
+     the poller sees a line go online->offline, so it is an observation, not a
+     guess. Only fall back to weaker signals when we never saw the drop. */
+  if(m && m.last_online_at && !m.online)
+    return {txt:ago(m.last_online_at), atLeast:false, ts:m.last_online_at, observed:true};
   const exact=downSince(m);
-  if(exact) return {txt:ago(exact), atLeast:false, ts:exact};
+  if(exact) return {txt:ago(exact), atLeast:false, ts:exact, observed:true};
   const floor=jobFloorFor(m);
-  if(floor) return {txt:'≥ '+ago(new Date(floor).toISOString()), atLeast:true, ts:new Date(floor).toISOString()};
-  return {txt:m.offline_since?'⚠ unknown':'—', atLeast:false, ts:null};
+  if(floor) return {txt:'≥ '+ago(new Date(floor).toISOString()), atLeast:true, ts:new Date(floor).toISOString(), observed:false};
+  return {txt:m.offline_since?'⚠ unknown':'—', atLeast:false, ts:null, observed:false};
 }
 function pppStale(m){
   // Only an "online" row can be stale: offline rows carry no last_seen at all.
@@ -1520,8 +1532,9 @@ function downTable(list){
       <td class="wnamecell"><div class="wname" title="${esc(rec&&rec.address||'')}">${esc(rec&&rec.address||'')||'<span class="wzero">no address</span>'}</div></td>
       <td>${contact}</td>
       <td><span class="wst ${longDown?'waiting':''}" title="${
-        d.atLeast?'The poller batch-stamped this line, so the exact drop time is lost — but a repair order was already raised on '+new Date(d.ts).toISOString().slice(0,10)+', so it was down by then.'
-        : d.ts?'' : 'Batch-stamped by the poller and no repair order on file — the real outage time is not known.'}">${esc(down)}</span></td>
+        d.observed?'Observed: the poller saw this line go offline at '+new Date(d.ts).toISOString().replace('T',' ').slice(0,16)+' UTC.'
+        : d.atLeast?'Exact drop time unknown. A repair order was raised on '+new Date(d.ts).toISOString().slice(0,10)+', so it was already down by then.'
+        : 'The drop time was never observed — this line was already down when tracking started. It will show an exact duration the next time it changes state.'}">${esc(down)}</span></td>
       <td class="wdim">${rec&&rec.due_day!=null?'due '+esc(rec.due_day):'—'}</td>
       <td class="wnum">${rec&&rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'<span class="wzero">—</span>'}</td>
     </tr>`;
