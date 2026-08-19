@@ -611,7 +611,7 @@
     <button id="refreshCacheBtn" class="cachebtn" onclick="refreshDashboardCache()" title="Rebuild the dashboard cache so name/area/group changes show there now">🔄 Sync dashboard</button>
     <span class="pill" id="lastUpd">loading…</span>
     <span class="pill hbpill" id="pollerHb" title="Poller heartbeat">poller…</span>
-    <span class="pill" id="buildPill" title="Reload the page if this is older than a change you just asked for">build 2026-08-17 07:13 UTC</span>
+    <span class="pill" id="buildPill" title="Timestamp of the file this browser actually loaded. Reload if it is older than a change you just asked for.">build …</span>
   </div>
   <div class="summary" id="summary"></div>
   <div id="harvestBanner"></div>
@@ -5788,6 +5788,20 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
+    /* The build stamp was a HARDCODED string ("build 2026-08-17 07:13 UTC")
+       while its own tooltip told you to reload if it looked old. It could
+       never report a new deploy, so it quietly asserted a version that had
+       not been true for days. document.lastModified is the timestamp of the
+       file this browser actually loaded, so it cannot go stale by itself. */
+    try{
+      const _bp=document.getElementById('buildPill');
+      if(_bp){
+        const d=new Date(document.lastModified);
+        _bp.textContent = isFinite(d.getTime())
+          ? 'build '+d.toISOString().slice(0,16).replace('T',' ')+' UTC'
+          : 'build unknown';
+      }
+    }catch(_){}
     // Header text comes from SERVER too — copying this file for another router
     // must never leave the previous router's name on screen.
     document.title = "Spawn \u00b7 " + SERVER.name + " Monitor";
