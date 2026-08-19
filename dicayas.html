@@ -37,6 +37,9 @@
   .tabs{display:flex;gap:3px;padding:9px 18px 0;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto}
   .tab{padding:9px 15px;cursor:pointer;border-radius:9px 9px 0 0;color:var(--dim);white-space:nowrap;font-weight:800;font-size:13px;border:1px solid transparent;border-bottom:none}
   .tab.active{background:var(--deep);color:var(--navy);border-color:var(--border)}
+  .stat[data-go]{cursor:pointer;transition:transform .08s ease,box-shadow .08s ease}
+  .stat[data-go]:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  .stat[data-go]:active{transform:translateY(0)}
   .tab.active[data-tab="online"]{box-shadow:inset 0 3px 0 var(--green)}
   .tab.active[data-tab="offline"]{box-shadow:inset 0 3px 0 var(--red)}
   .tab.active[data-tab="nolease"]{box-shadow:inset 0 3px 0 #7a8aa0}
@@ -1535,16 +1538,18 @@ function render(){
   const ncTitle = noConn+' customer line(s) confirmed down'
     + (noConnFloor ? ' \u00b7 '+noConnFloor+' have an UNKNOWN duration (lower bound only) \u2014 do not rank these by days down' : '')
     + (noConnStale.length ? ' \u00b7 '+noConnStale.length+' more are unverified: status not refreshed by the poller, so "down" is unconfirmed' : '');
+  /* Tiles are clickable: each opens the tab that lists exactly what it counts.
+     data-go carries the target, handled by one delegated listener below. */
   document.getElementById('summary').innerHTML=`
-    <div class="stat"><div class="n">${LIVE.length}</div><div class="l">Vendos</div></div>
-    <div class="stat on"><div class="n">${LIVE.filter(m=>effOnline(m)).length}</div><div class="l">Online</div></div>
-    <div class="stat off"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
-    <div class="stat off" title="${esc(ncTitle)}"><div class="n">${noConn}${
+    <div class="stat" data-go="search" title="Open Search / Filter"><div class="n">${LIVE.length}</div><div class="l">Vendos</div></div>
+    <div class="stat on" data-go="online" title="Open the Online tab"><div class="n">${LIVE.filter(m=>effOnline(m)).length}</div><div class="l">Online</div></div>
+    <div class="stat off" data-go="offline" title="Open the Waiting tab"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
+    <div class="stat off" data-go="subs:active" title="${esc(ncTitle)}"><div class="n">${noConn}${
         noConnStale.length?`<span style="font-size:13px;color:#a37200"> +${noConnStale.length}?</span>`:''
       }</div><div class="l">No Conn${noConnFloor?` <span style="color:#a37200">\u00b7 ${noConnFloor} undated</span>`:''}</div></div>
-    <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
-    <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
-    <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
+    <div class="stat" data-go="nolease" title="Open the No Lease tab"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
+    <div class="stat" data-go="empty" title="Open the Empty Slots tab"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
+    <div class="stat subs" data-go="subs:active" title="Open the Subscribers tab"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
   // Perf: don't rebuild a grid nobody is looking at. applySearch() re-filters and
   // re-sorts all rows and rebuilds a 6th grid; skip it when its tab is hidden.
   const sg=document.getElementById('grid-search');
@@ -4867,15 +4872,38 @@ document.addEventListener('click', e=>{
   openSub(row.dataset.openppp);
 });
 
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+/* Extracted from the tab click handler so the summary tiles can drive it too.
+   One code path, so a tile and its tab can never diverge. */
+function openTab(name){
+  const t=document.querySelector('.tab[data-tab="'+name+'"]');
+  if(!t) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
   document.querySelectorAll('.pane').forEach(p=>p.style.display='none');
-  document.getElementById('pane-'+t.dataset.tab).style.display='block';
-  if(t.dataset.tab==='compare') loadCompare();
-  if(t.dataset.tab==='subs') renderSubs();
-  if(t.dataset.tab==='inactive') loadSuppress();
-  if(t.dataset.tab==='deleted'){ renderDeleted(); renderArchive(); }
+  const pane=document.getElementById('pane-'+name);
+  if(pane) pane.style.display='block';
+  if(name==='compare') loadCompare();
+  if(name==='subs') renderSubs();
+  if(name==='inactive') loadSuppress();
+  if(name==='deleted'){ renderDeleted(); renderArchive(); }
+  if(pane) pane.scrollIntoView({behavior:'smooth', block:'start'});
+}
+/* Open Subscribers on a specific inner view (Active, Vendo PPPoE, ...). */
+function openSubView(sv){
+  openTab('subs');
+  SUBVIEW = sv || 'active';
+  document.querySelectorAll('.subtab').forEach(x=>
+    x.classList.toggle('active', x.getAttribute('data-sv')===SUBVIEW));
+  safeRender('subscribers', renderSubs);
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>openTab(t.dataset.tab));
+/* Delegated: the summary is rebuilt on every refresh tick, so per-element
+   handlers attached at render time would be discarded each pass. */
+document.addEventListener('click', e=>{
+  const tile=e.target.closest('.stat[data-go]'); if(!tile) return;
+  const go=tile.getAttribute('data-go')||'';
+  if(go.indexOf('subs:')===0) openSubView(go.slice(5));
+  else openTab(go);
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
