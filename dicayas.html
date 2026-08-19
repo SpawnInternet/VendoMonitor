@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spawn · Dicayas Server Monitor</title>
+<title>Spawn · Server Monitor</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
   :root{
@@ -607,7 +607,7 @@
 <header>
   <div class="htop">
     <img src="spawn-globe.png" alt="SPAWN" onerror="this.style.display='none'">
-    <h1>Spawn · <span class="sub">Dicayas Server</span> Monitor</h1>
+    <h1>Spawn · <span class="sub" id="server-label">Dicayas Server</span> Monitor</h1>
     <button id="refreshCacheBtn" class="cachebtn" onclick="refreshDashboardCache()" title="Rebuild the dashboard cache so name/area/group changes show there now">🔄 Sync dashboard</button>
     <span class="pill" id="lastUpd">loading…</span>
     <span class="pill hbpill" id="pollerHb" title="Poller heartbeat">poller…</span>
@@ -843,6 +843,28 @@
 </div></div>
 
 <script>
+/* ============================ SERVER PROFILE ============================
+   This page is the BLUEPRINT for per-router monitors. Everything that ties it
+   to one physical MikroTik lives in this one object. To stand up the Dapitan
+   monitor: copy this file, edit ONLY this block, done. Nothing below hardcodes
+   a server name.
+     name  - exact `server_name` value written by the poller. Must match the DB
+             byte-for-byte or every query silently returns zero rows.
+     label - short human name for headings and messages.
+     areas - areas physically served by THIS router. VLAN numbers repeat across
+             areas, so a machine elsewhere sharing a VLAN must not show here.
+             Only consulted when a vendo row has a NULL server_name.
+     offAreas - areas known to be on OTHER routers; used to grey out subscribers
+             this page can never see. Should not overlap `areas`.
+   ======================================================================== */
+const SERVER = {
+  name:     "Dicayas Server",
+  label:    "Dicayas",
+  areas:    ["dipolog", "mix areas"],
+  offAreas: ["ROXAS", "DAPITAN", "SINDANGAN"]
+};
+const SERVER_Q = encodeURIComponent(SERVER.name);   // for use inside REST query strings
+
 const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
 const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
@@ -858,7 +880,7 @@ let DEVS={};
    comfortably inside the limit, and actually current. */
 function devicesQuery(){
   const since=new Date(Date.now()-6*3600*1000).toISOString();
-  return "vendo_devices?server_name=eq.Dicayas%20Server"
+  return "vendo_devices?server_name=eq."+SERVER_Q
        + "&select=vlan,mac,ip,hostname,lease_status,expires_after,updated_at"
        + "&updated_at=gte."+encodeURIComponent(since)
        + "&order=updated_at.desc&limit=5000";
@@ -979,6 +1001,38 @@ async function sbAll(path, pageSize){
     if(offset>600000) return out; // hard stop, never spin forever
   }
 }
+/* A failed read must never render as an empty-but-healthy page. That exact
+   pattern — `.catch(()=>[])` — is what let the PPPoE freeze hide for two
+   months: the job floor looked clean because the data never arrived.
+   soft() keeps the page usable when a non-critical read dies, but records the
+   failure so renderDegraded() can say so out loud. Critical reads (vendos,
+   mikrotik_status) still throw: without those the page is meaningless. */
+let DEGRADED = new Map();
+function soft(promise, what, fallback){
+  return promise.catch(err => {
+    DEGRADED.set(what, (err && err.message) ? err.message : String(err));
+    console.error("[degraded] " + what, err);
+    return (fallback === undefined) ? [] : fallback;
+  });
+}
+function renderDegraded(){
+  let el = document.getElementById('degraded-banner');
+  if(!DEGRADED.size){ if(el) el.remove(); return; }
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'degraded-banner';
+    el.style.cssText = "position:sticky;top:0;z-index:9999;background:#DF1A35;color:#fff;"
+      + "padding:9px 14px;font-size:13px;font-weight:600;line-height:1.45;"
+      + "box-shadow:0 2px 8px rgba(0,0,0,.28)";
+    document.body.insertBefore(el, document.body.firstChild);
+  }
+  const items = [...DEGRADED.entries()].map(([k,v]) => esc(k) + " (" + esc(v) + ")");
+  el.innerHTML = "\u26A0 Showing INCOMPLETE data \u2014 " + items.length
+    + " source(s) failed to load: " + items.join(", ")
+    + "<br><span style=\"font-weight:400;opacity:.92\">Counts below are lower than reality. "
+    + "Do not raise job orders from this view until it clears.</span>";
+}
+
 async function sbRpc(fn, args){
   const r=await fetch(SB+"/rest/v1/rpc/"+fn,{
     method:"POST",
@@ -1134,10 +1188,10 @@ function nameMatchScore(rcToks, name, rawComment){
 
 // Areas physically served by the Dicayas Server. VLAN numbers repeat across areas,
 // so a machine in another area that shares a VLAN number must NOT appear on this card.
-const DICAYAS_AREAS=new Set(['dipolog','mix areas']);
+const DICAYAS_AREAS=new Set(SERVER.areas);
 function inServerArea(v){
   // server_name wins when present; otherwise fall back to area (most rows have null server_name)
-  if(v.server_name) return v.server_name==='Dicayas Server';
+  if(v.server_name) return v.server_name===SERVER.name;
   const a=(v.area||'').toLowerCase().trim();
   return DICAYAS_AREAS.has(a);
 }
@@ -2867,7 +2921,7 @@ function drawRosterList(q){
     el.innerHTML = hits.map(x=>{
         const off=subOffServer(x);
         return `<div class="ritem${off?' off-server':''}" data-pickname="${esc(x.name)}" data-pickarea="${esc(x.area||'')}">
-         ${esc(x.name)}<small>${esc(x.area||'—')}${off?' · ⚠ not on Dicayas — likely another server':''}</small></div>`;
+         ${esc(x.name)}<small>${esc(x.area||'—')}${off?' · ⚠ not on '+SERVER.label+' — likely another server':''}</small></div>`;
       }).join('');
     return;
   }
@@ -3144,17 +3198,17 @@ function renderModal(m, cands){
           html+=`<div class="candbox" style="text-align:left;padding:10px 12px;margin:6px 0">
             <b>${esc(v.sheet_name||v.tg_name)}</b> <span style="font-size:10px;color:#1c6b54">· ${sc} word match</span><br>
             <span style="font-size:11px;color:var(--dim)">${esc(v.area||'—')} · ${where}</span>
-            <button class="btn gold" style="float:right;padding:5px 12px;font-size:12px" onclick='attachOrphan(${v.id}, ${attrJS(String(m.vlan))}, ${attrJS(m.server_name||"Dicayas Server")})'>🔗 ${v.vlan==null?'Attach':'Move'} to VLAN ${esc(m.vlan)}</button>
+            <button class="btn gold" style="float:right;padding:5px 12px;font-size:12px" onclick='attachOrphan(${v.id}, ${attrJS(String(m.vlan))}, ${attrJS(m.server_name||SERVER.name)})'>🔗 ${v.vlan==null?'Attach':'Move'} to VLAN ${esc(m.vlan)}</button>
             <div style="clear:both"></div>
           </div>`;
         });
-        html+=`<div style="margin-top:8px;text-align:center"><button class="lnk link" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||"Dicayas Server")})'>None of these — create a new record</button></div>
+        html+=`<div style="margin-top:8px;text-align:center"><button class="lnk link" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||SERVER.name)})'>None of these — create a new record</button></div>
         </div>`;
       } else {
         html+=`<div style="padding:18px 0;text-align:center">
           <p style="color:var(--dim);font-size:13px;margin-bottom:6px">No vendo record linked to VLAN ${esc(m.vlan)} yet.</p>
           <p style="font-size:12px;color:var(--navy);margin-bottom:12px">Router says: <b>${esc(suggest||'—')}</b></p>
-          <button class="btn gold" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||"Dicayas Server")})'>➕ Create &amp; link record</button>
+          <button class="btn gold" onclick='createLink(${attrJS(String(m.vlan))}, ${attrJS(suggest)}, ${attrJS(m.server_name||SERVER.name)})'>➕ Create &amp; link record</button>
         </div>`;
       }
     }
@@ -3801,7 +3855,7 @@ async function bhCreateFromRoster(ppp, rosterName){
     monthly_amount: bhNum(b.amount_raw),
     plan_type: 'monthly',
     status: 'active',
-    server_name: 'Dicayas Server',   // created from the Dicayas monitor — the
+    server_name: SERVER.name,        // created from this server's monitor — the
                                      // PPPoE account is on this router by definition
 
     notes: 'created on confirm from BASHANG row "'+b.raw_name+'" for PPPoE account: '+ppp
@@ -4089,10 +4143,10 @@ function mwTakenNames(){
    They are flagged and pushed down rather than hidden: server_name is only
    filled for the 140 the router proves, so a hard filter would also hide the
    ~96 Dipolog subscribers who genuinely belong here but aren't linked yet. */
-const OFF_SERVER_AREAS = new Set(['ROXAS','DAPITAN','SINDANGAN']);
+const OFF_SERVER_AREAS = new Set(SERVER.offAreas);
 function subOffServer(rec){
   if(!rec) return false;
-  if(rec.server_name && rec.server_name!=='Dicayas Server') return true;
+  if(rec.server_name && rec.server_name!==SERVER.name) return true;
   return OFF_SERVER_AREAS.has(String(rec.area||'').toUpperCase());
 }
 
@@ -4135,8 +4189,14 @@ async function payTabOpen(){
   const el=document.getElementById('grid-subs-pay');
   if(el) el.innerHTML='<div class="banner">Loading payment queue…</div>';
   try{
-    const r=await fetch(SB+'/rest/v1/subscriber_match_queue?select=*&order=suggested_score.desc.nullslast,total_amount.desc&limit=2000',{headers:H});
-    PAYQ=await r.json();
+    /* Was a raw fetch() with NO r.ok check and limit=2000. Two faults in three
+       lines: on a 401 the body is an error OBJECT, so `Array.isArray` failed
+       and PAYQ silently became [] — an empty queue reads as "all matched, work
+       finished". And limit=2000 is a no-op against the 1,000 cap; the queue is
+       already at ~750 rows, so it was one growth spurt away from dropping
+       payments off the end with no error. sbAll() pages and throws. */
+    PAYQ=await sbAll('subscriber_match_queue?select=*'
+                     +'&order=suggested_score.desc.nullslast,total_amount.desc');
     if(!Array.isArray(PAYQ)) PAYQ=[];
     PAY_LOADED=true;
     renderPayMatch(); renderSubs();
@@ -4272,7 +4332,7 @@ function renderMatch(){
 
   if(!queue.length){
     el.innerHTML=`<div class="banner">✅ Nothing left in the queue${q?' for that search':''}.
-      Every PPPoE account on Dicayas is either linked to a subscriber or confirmed as not billable.</div>`;
+      Every PPPoE account on ${SERVER.label} is either linked to a subscriber or confirmed as not billable.</div>`;
     return;
   }
   el.innerHTML =
@@ -5153,7 +5213,7 @@ function prettyConfirm(opts){
 
 let _linkCtx=null; // {vlan, server, pickedTg, existing:[]}
 function createLink(vlan, suggestName, server){
-  _linkCtx={vlan:String(vlan), server:server||'Dicayas Server', pickedTg:null, existing:[]};
+  _linkCtx={vlan:String(vlan), server:server||SERVER.name, pickedTg:null, existing:[]};
   const body=`
     <div class="row"><span class="k">VLAN</span><span class="v gold">${esc(vlan)}</span></div>
     <div class="row"><span class="k">Server</span><span class="v">${esc(server||'-')}</span></div>
@@ -5500,7 +5560,7 @@ document.getElementById('pickUseCustom').onclick=()=>{
 };
 async function setServer(vid){
   const val=await prettyPrompt({title:'Set server',message:'Enter server name:',
-    value:'Dicayas Server', placeholder:'e.g. Dicayas Server', okText:'Set'});
+    value:SERVER.name, placeholder:'e.g. '+SERVER.name, okText:'Set'});
   if(!val) return;
   const ok=await askPassword(`Set server to "${val}"?`);
   if(!ok) return;
@@ -5635,13 +5695,21 @@ document.querySelectorAll('.subtab').forEach(st=>st.onclick=()=>{
 
 async function boot(){
   try{
+    // Header text comes from SERVER too — copying this file for another router
+    // must never leave the previous router's name on screen.
+    document.title = "Spawn \u00b7 " + SERVER.name + " Monitor";
+    const _lbl = document.getElementById('server-label');
+    if(_lbl) _lbl.textContent = SERVER.name;
     // PostgREST caps at 1000 rows/request — fetch page 1, then the rest in parallel
     const SEL="vendos?select=id,vendo_code,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000";
     const first=await sb(`${SEL}&offset=0`);
     VENDOS=first||[];
     if(first && first.length===1000){
       const rest=await Promise.all(
-        [1,2,3,4,5,6,7,8,9].map(i=>sb(`${SEL}&offset=${i*1000}`).catch(()=>[]))
+        /* Must NOT swallow: a dropped page silently shortens VENDOS, the
+           dataset every card and every VLAN match is built from. A partial
+           vendo list is indistinguishable from vendos having been deleted. */
+        [1,2,3,4,5,6,7,8,9].map(i=>sb(`${SEL}&offset=${i*1000}`))
       );
       for(const page of rest){
         if(page && page.length) VENDOS=VENDOS.concat(page);
@@ -5658,22 +5726,30 @@ async function boot(){
     buildNameIndex();
     // these four are independent of each other — fire together
     const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs, nocon] = await Promise.all([
-      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
-      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
-      sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label").catch(()=>[]),
-      sbRpc("sales_month_by_vendo").catch(()=>[]),
-      sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb(devicesQuery()).catch(()=>[]),
-      sb(HB_PATH).catch(()=>null),
-      sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
-      sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
-      sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[]),
+      /* CRITICAL (no soft()): without live router state the page has nothing
+         true to say, so these two must fail loudly and abort the load. */
+      sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
+      sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.ppp&select=*&order=ppp_name&limit=1000"),
+      /* NON-CRITICAL: page still works without them, but a silent [] used to
+         look identical to "nothing wrong". soft() records the failure and
+         renderDegraded() puts a red bar on screen. */
+      soft(sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label"), "harvest groups"),
+      soft(sbRpc("sales_month_by_vendo"), "monthly sales"),
+      soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
+      soft(sb(devicesQuery()), "connected devices"),
+      soft(sb(HB_PATH), "poller heartbeat", null),
+      soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster"),
+      soft(sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=1000"), "subscribers"),
+      soft(sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=1000"), "BASHANG staging"),
       /* Was `.catch(()=>[])`. On a 401 that rendered an EMPTY job floor that
-         looked identical to a healthy one — the only failure in this file that
-         lied instead of erroring. Record the reason so the UI can say so. */
-      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000")
-        .catch(e=>{ JOBS_ERR=(e&&e.message)||"unavailable"; return []; }),
-      sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,duration_is_floor,subscriber_name,area&limit=2000").catch(()=>[])
+         looked identical to a healthy one. Keeps its own JOBS_ERR banner AND
+         now reports through soft() so the top-level bar agrees with it. */
+      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=1000")
+        .catch(e=>{ JOBS_ERR=(e&&e.message)||"unavailable";
+                    DEGRADED.set("job orders", JOBS_ERR); return []; }),
+      /* The outage list Spawn Jobs will be built on. If this dies the floor
+         must say so, never render a reassuring zero. */
+      soft(sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,duration_is_floor,subscriber_name,area&limit=1000"), "PPPoE outage view")
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     NOCON=nocon||[];
@@ -5692,6 +5768,7 @@ async function boot(){
     // bad card used to abort boot and leave every tab empty with one red line.
     safeRender('vendo panes', render);
     safeRender('subscribers', renderSubs);
+    renderDegraded();
 
     // non-blocking: banner can fill in after the grid is on screen
     loadActiveHarvest().then(renderHarvestBanner).catch(()=>{});
@@ -5716,15 +5793,18 @@ boot();
 async function refreshStatus(){
   if(document.hidden) return;              // don't poll a backgrounded tab
   if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
+  /* Cleared each tick: a recovered source must be able to clear the red bar,
+     otherwise one transient 401 would brand the page degraded until reload. */
+  DEGRADED.clear();
   try{
     const [status, subs, vouchers, devices, hb, roster, subrecs] = await Promise.all([
-      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.vendo&select=*&limit=2000"),
-      sb("mikrotik_status?server_name=eq.Dicayas%20Server&kind=eq.ppp&select=*&order=ppp_name&limit=2000"),
-      sb("hotspot_vouchers?server_name=eq.Dicayas%20Server&select=vlan,username,voucher_code&limit=2000").catch(()=>[]),
-      sb(devicesQuery()).catch(()=>[]),
-      sb(HB_PATH).catch(()=>null),
-      sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>null),
-      sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=2000").catch(()=>null)
+      sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
+      sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.ppp&select=*&order=ppp_name&limit=1000"),
+      soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
+      soft(sb(devicesQuery()), "connected devices"),
+      soft(sb(HB_PATH), "poller heartbeat", null),
+      soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster", null),
+      soft(sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=1000"), "subscribers", null)
     ]);
     STATUS=status||[]; SUBS=subs||[];
     // roster and subscriber state drive which bucket a line lands in, so they
@@ -5742,8 +5822,14 @@ async function refreshStatus(){
     buildVouch(vouchers);
     buildDevs(devices);
     await loadSuppress();
-    render(); renderSubs();
-  }catch(e){ /* transient — next tick retries */ }
+    render(); renderSubs(); renderDegraded();
+  }catch(e){
+    /* The two mikrotik_status reads are critical and unguarded, so landing here
+       means live router state is gone. Previously silent — the grid just froze
+       at its last good values with no indication it had stopped updating. */
+    DEGRADED.set("live router status", (e&&e.message)||"unavailable");
+    try{ renderDegraded(); }catch(_){}
+  }
 }
 setInterval(refreshStatus, 30000);
 // full reload every 15 min picks up new vendos / group changes
