@@ -1500,12 +1500,30 @@ function render(){
   // Real customer outages only. Vendo lines, internal accounts and 20k-throttled
   // (non-payment) lines are classified out in the database, so this number is
   // the one a lineman can actually be sent on.
-  const noConn = NOCON.filter(r=>r.line_type==='subscriber').length;
+  /* A row is only a dispatchable outage if its status is FRESH. `is_stale`
+     means the poller has not refreshed that line recently, so "down" is an
+     assumption, not an observation — sending a lineman on it is a guess.
+     The two are counted apart so the headline can never quietly absorb rows
+     the router has stopped confirming. */
+  const noConnRows  = NOCON.filter(r=>r.line_type==='subscriber');
+  const noConnLive  = noConnRows.filter(r=>!r.is_stale);
+  const noConnStale = noConnRows.filter(r=>r.is_stale);
+  const noConn      = noConnLive.length;
+  /* Duration is a separate question from existence. `duration_is_floor` (or a
+     NULL days_down) means we know it IS down but not for HOW LONG — the
+     timestamp came from a bulk backfill, not an observed transition. Those
+     must not be ranked by age when prioritising dispatch. */
+  const noConnFloor = noConnLive.filter(r=>r.duration_is_floor || r.days_down==null).length;
+  const ncTitle = noConn+' customer line(s) confirmed down'
+    + (noConnFloor ? ' \u00b7 '+noConnFloor+' have an UNKNOWN duration (lower bound only) \u2014 do not rank these by days down' : '')
+    + (noConnStale.length ? ' \u00b7 '+noConnStale.length+' more are unverified: status not refreshed by the poller, so "down" is unconfirmed' : '');
   document.getElementById('summary').innerHTML=`
     <div class="stat"><div class="n">${LIVE.length}</div><div class="l">Vendos</div></div>
     <div class="stat on"><div class="n">${LIVE.filter(m=>effOnline(m)).length}</div><div class="l">Online</div></div>
     <div class="stat off"><div class="n">${waiting.length}</div><div class="l">Waiting</div></div>
-    <div class="stat off"><div class="n">${noConn}</div><div class="l">No Conn</div></div>
+    <div class="stat off" title="${esc(ncTitle)}"><div class="n">${noConn}${
+        noConnStale.length?`<span style="font-size:13px;color:#a37200"> +${noConnStale.length}?</span>`:''
+      }</div><div class="l">No Conn${noConnFloor?` <span style="color:#a37200">\u00b7 ${noConnFloor} undated</span>`:''}</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${nolease.length}</div><div class="l">No lease</div></div>
     <div class="stat"><div class="n" style="color:#7a8aa0">${empties.length}</div><div class="l">Empty</div></div>
     <div class="stat subs"><div class="n">${SUBS.length}</div><div class="l">Subs</div></div>`;
@@ -3743,7 +3761,7 @@ async function createSubscriberFor(ppp){
 
   const pwd=await askPasswordValue('Enter password to create this subscriber.');
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
 
   const body={
     name,
@@ -3869,7 +3887,7 @@ async function bhCreateFromRoster(ppp, rosterName){
     +(shown? shown.replace(/\n/g,'   ') : '(sheet has no details beyond the name)')
     +'\nEnter password to create. Everything stays editable, nothing is locked.');
   if(pwd===null) return false;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return false; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return false; }
 
   try{
     const r=await fetch(SB+"/rest/v1/subscribers",{
@@ -3955,7 +3973,7 @@ async function changeSubField(subId, field){
   if(val===null) return;
   const pwd=await askPasswordValue(`Enter password to change ${cfg.label.toLowerCase()}.`);
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
 
   let body={};
   const t=val.trim();
@@ -4273,7 +4291,15 @@ function renderPayMatch(){
 async function pmRpc(fn,body){
   const r=await fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',
     headers:{...H,'Content-Type':'application/json'},body:JSON.stringify(body)});
-  return r.json();
+  /* Was `return r.json()` with no status check. On a 401 PostgREST returns
+     {message,...} — so `res.ok` is undefined, the caller's `res.ok===false`
+     guard passed, and the UI reported success ("Linked undefined payment(s)")
+     while the database was untouched. This is the payment-matching path, so a
+     false success here silently detaches money from a subscriber. */
+  if(!r.ok) throw await sbFail(r, fn);
+  const j=await r.json().catch(()=>null);
+  if(j && j.ok===false) throw new Error(j.error || (fn+' rejected the request'));
+  return j;
 }
 document.addEventListener('click', async e=>{
   const f=e.target.closest('[data-pmf]');
@@ -4296,8 +4322,12 @@ document.addEventListener('click', async e=>{
       out.className='pm-res';
       out.textContent='Linked '+res.linked+' payment(s)'+(res.amount_set?' · monthly '+pmPeso(res.amount)+' ('+res.amount_share+'%)':'');
     }else if(act==='skip'){
+      /* Local state is only updated AFTER the RPC is known to have
+         succeeded — pmRpc now throws, so a failure lands in the catch below
+         instead of leaving the row looking skipped when it was not. */
       await pmRpc('spawn_sub_match_skip',{p_queue_id:id,p_by:'dicayas'});
       row.resolved_by='skipped:dicayas'; row.resolved_at=new Date().toISOString();
+      out.className='pm-res'; out.textContent='Skipped';
     }else if(act==='unlock'){
       const res=await pmRpc('spawn_sub_match_unlock',{p_queue_id:id});
       row.resolved_subscriber_id=null; row.resolved_by=null; row.resolved_at=null;
@@ -4567,7 +4597,7 @@ async function subPhotoGps(subId){
       if(again.err){ toast(again.err); return; }
       const pwd=await askPasswordValue('Enter password to save the GPS.');
       if(pwd===null) return;
-      if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+      if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
 
       const body={lat:again.lat, lng:again.lng, gps_updated_at:new Date().toISOString(),
                   gps_source:g.how};
@@ -4764,7 +4794,7 @@ document.addEventListener('click', async e=>{
       if(one.dataset.bhover){
         const pwd=await askPasswordValue('This replaces a value already on the record. Enter password.');
         if(pwd===null) return;
-        if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+        if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
       }
       const f=one.dataset.bhpull;
       const v=(f==='due_day'||f==='monthly_amount')?Number(one.dataset.bhval):one.dataset.bhval;
@@ -4850,7 +4880,40 @@ document.getElementById('cmpQ').oninput=()=>loadCompare();
 
 // ---- PULLOUT / SUPPRESS ----
 let SUPPRESS=[];
-const NET_PWD="101510";
+/* ── AUTH ────────────────────────────────────────────────────────────────
+   WAS: a hardcoded NET_PWD constant — the plaintext password sat in this
+   PUBLIC repo and was compared in the browser. Anyone could read it from the file or print it
+   from the console, and every "protected" write went to PostgREST with the
+   anon key anyway, so skipping the prompt entirely worked just as well.
+
+   NOW: the same credential check the dashboard uses — spawn-admin-login,
+   which verifies against office_accounts server-side and is rate-limited per
+   IP via admin_login_attempts. The token lands in the shared `spawn_admin_auth`
+   key, so signing in on either page unlocks the other, and it also satisfies
+   gwToken() for the money-table reads.
+
+   SCOPE — READ THIS BEFORE TRUSTING IT: this is AUTHENTICATION, not
+   AUTHORISATION. It proves who is at the keyboard and removes the secret from
+   the repo. It does NOT stop a direct PostgREST call with the anon key, because
+   the writes below still use the anon key. Closing that needs the writes routed
+   through spawn-gw-admin, or the anon grants removed at the database. Until
+   then, treat subscribers/vendos/harvest_group_items as anon-writable.
+   ──────────────────────────────────────────────────────────────────────── */
+const ADMIN_LOGIN_URL = SB + "/functions/v1/spawn-admin-login";
+async function adminVerify(pwd, username){
+  try{
+    const r = await fetch(ADMIN_LOGIN_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username: username || 'admin', password: pwd })
+    });
+    const d = await r.json().catch(()=>({}));
+    if(r.ok && d && d.ok && d.token){
+      localStorage.setItem("spawn_admin_auth", JSON.stringify({ok:true, token:d.token, ts:Date.now()}));
+      return true;
+    }
+  }catch(e){ console.error('admin login failed', e); }
+  return false;
+}
 let GROUPS=[];          // active harvest groups
 let HARVEST_INFO={};    // vendo_id -> {harvests, coins, group_run_id, group_label, collector}
 let ACTIVE_HARVEST={ groupIds:new Set(), collectors:[], groups:[] };
@@ -4874,7 +4937,7 @@ async function setSubPlan(subId, plan){
   if(!rec){ toast('Subscriber record not loaded'); return; }
   const pwd=await askPasswordValue(`Set ${rec.name}'s plan to ${plan} (from the router)?`);
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
   try{
     const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
       method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
@@ -4907,7 +4970,7 @@ async function pickSubArea(area){
   if(!rec) return;
   const pwd=await askPasswordValue(`Enter password to move ${rec.name} to ${area}.`);
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
   try{
     const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+encodeURIComponent(subId),{
       method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
@@ -4916,10 +4979,20 @@ async function pickSubArea(area){
     rec.area=area;
     // keep the roster copy honest
     if(rec.name){
-      await fetch(SB+'/rest/v1/ppp_roster?roster_name=eq.'+encodeURIComponent(rec.name),{
+      /* Was `.catch(()=>{})`. subscribers.area would move while ppp_roster.area
+         silently stayed behind, and nothing on screen said so — the two then
+         disagree about which server a line belongs to, which is exactly what
+         the outage classification reads. Half-applied is worse than failed, so
+         say it out loud and do NOT update the local copy on failure. */
+      const rr=await fetch(SB+'/rest/v1/ppp_roster?roster_name=eq.'+encodeURIComponent(rec.name),{
         method:'PATCH', headers:{...H,'Content-Type':'application/json','Prefer':'return=minimal'},
-        body:JSON.stringify({area, updated_at:new Date().toISOString()})}).catch(()=>{});
-      ROSTER.forEach((v,k)=>{ if(v.roster_name===rec.name) ROSTER.set(k,{...v, area}); });
+        body:JSON.stringify({area, updated_at:new Date().toISOString()})});
+      if(rr.ok){
+        ROSTER.forEach((v,k)=>{ if(v.roster_name===rec.name) ROSTER.set(k,{...v, area}); });
+      }else{
+        toast('\u26A0 Subscriber area saved, but the PPPoE roster copy did NOT update \u2014 they now disagree');
+        console.error('ppp_roster area PATCH failed', rr.status);
+      }
     }
     toast('Area changed to '+area);
     renderSubModal(); renderSubs();
@@ -4934,7 +5007,7 @@ async function changeAddress(vid){
   if(newAddr===null) return; // cancelled
   const pwd=await askPasswordValue('Enter password to change address.');
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
   try{ await sbPatch(vid,{address:newAddr.trim()||null}); }catch(e){ toast("Failed: "+e.message); return; }
   refreshVendoLocal(vid,{address:newAddr.trim()||null});
   toast("Address updated");
@@ -5002,7 +5075,7 @@ function askPassword(message){
   });
 }
 function pwCancel(){ document.getElementById('pwOv').classList.remove('show'); if(window._pwValMode){window._pwValMode=false; if(_pwValResolve){_pwValResolve(null);_pwValResolve=null;} return;} if(_pwResolve){_pwResolve(false);_pwResolve=null;} }
-function pwSubmit(){
+async function pwSubmit(){
   const val=document.getElementById('pwInput').value;
   document.getElementById('pwOv').classList.remove('show');
   if(window._pwValMode){
@@ -5010,7 +5083,9 @@ function pwSubmit(){
     if(_pwValResolve){ _pwValResolve(val||null); _pwValResolve=null; }
     return;
   }
-  const ok = val===NET_PWD;
+  /* Verified by spawn-admin-login, not by string compare in the browser.
+     Slower by one round trip; that round trip is the entire point. */
+  const ok = val ? await adminVerify(val) : false;
   if(_pwResolve){ _pwResolve(ok); _pwResolve=null; }
   if(!val) return;
   if(!ok) setTimeout(()=>toast('Wrong password'),100);
@@ -5144,7 +5219,7 @@ async function markNoTg(vid){
   if(!ok) return;
   const pwd=await askPasswordValue('Enter password to mark No TG.');
   if(pwd===null) return;
-  if(pwd!==NET_PWD){ toast('Wrong password'); return; }
+  if(!await adminVerify(pwd)){ toast('Wrong password'); return; }
   try{ await sbPatch(vid,{no_tg:true, tg_name:null}); }
   catch(e){ toast('Failed: '+e.message); return; }
   window._curTab='names';
@@ -5749,7 +5824,7 @@ async function boot(){
                     DEGRADED.set("job orders", JOBS_ERR); return []; }),
       /* The outage list Spawn Jobs will be built on. If this dies the floor
          must say so, never render a reassuring zero. */
-      soft(sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,duration_is_floor,subscriber_name,area&limit=1000"), "PPPoE outage view")
+      soft(sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,days_down_floor,duration_is_floor,is_stale,status_age_hours,subscriber_name,area&limit=1000"), "PPPoE outage view")
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     NOCON=nocon||[];
