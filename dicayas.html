@@ -915,10 +915,69 @@ let STATUS=[], SUBS=[];
 let NOCON=[];
 let SALES_MONTH={}; // vlan -> peso total this month (for classification)
 
+/* ── Money tables are anon-denied by design (Aug 2026 hardening) ──────────────
+   harvests / transactions / job_orders / collector_packs have no anon SELECT
+   grant, so reading them with the anon key returns 42501 → HTTP 401. They are
+   NOT re-granted; they are read through spawn-gw-admin on the service key,
+   the same gateway dashboard.html already uses.
+
+   The admin token is never stored in this file. It is minted by
+   spawn-admin-login and shared through the `spawn_admin_auth` localStorage
+   key, same origin as the dashboard — so signing in there unlocks this page
+   too. Without a token these reads fail loudly rather than silently, which is
+   the whole point: a blank job floor must never look like a healthy one.
+
+   NOTE: this is a DIFFERENT gateway from `spawn-gw`, which the collector PWA
+   (harvest_v3.html) uses. Nothing here touches that path. */
+const GW_ADMIN_URL = SB + "/functions/v1/spawn-gw-admin";
+const GW_TABLES = new Set(["harvests","transactions","job_orders","collector_packs"]);
+function gwToken(){
+  try{
+    const s=JSON.parse(localStorage.getItem("spawn_admin_auth")||"null");
+    if(s && s.ok && s.token && (Date.now()-s.ts) < 24*60*60*1000) return s.token;
+  }catch(e){}
+  return null;
+}
+function gwNeedsLogin(table){
+  return new Error(table+": sign in on the dashboard first (admin access required)");
+}
+async function sbGw(table, query){
+  const tok=gwToken();
+  if(!tok) throw gwNeedsLogin(table);
+  const r=await fetch(GW_ADMIN_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-gw-token":tok},
+    body:JSON.stringify({kind:"rest", table, method:"GET", query:query||""})
+  });
+  if(!r.ok) throw new Error(table+" → "+r.status+(r.status===401?" (token expired — sign in again)":""));
+  return r.json();
+}
 async function sb(path){
+  const i=path.indexOf("?");
+  const table=(i<0?path:path.slice(0,i));
+  if(GW_TABLES.has(table)) return sbGw(table, i<0?"":path.slice(i+1));
   const r=await fetch(SB+"/rest/v1/"+path,{headers:H});
   if(!r.ok) throw new Error(path+" → "+r.status);
   return r.json();
+}
+/* PostgREST caps every response at 1,000 rows no matter what `limit=` says, and
+   that cap applies to the service key too. Any read that can legitimately exceed
+   1,000 rows MUST page, or it silently returns a wrong-but-plausible number —
+   strictly worse than an error. Pages in parallel batches to stay responsive. */
+async function sbAll(path, pageSize){
+  const step=pageSize||1000;
+  const sep=path.indexOf("?")<0?"?":"&";
+  const out=[]; let offset=0;
+  for(;;){
+    const batch=[];
+    for(let k=0;k<6;k++) batch.push(sb(path+sep+"limit="+step+"&offset="+(offset+k*step)));
+    const pages=await Promise.all(batch);
+    let short=false;
+    for(const p of pages){ const a=Array.isArray(p)?p:[]; out.push(...a); if(a.length<step) short=true; }
+    if(short) return out;
+    offset+=6*step;
+    if(offset>600000) return out; // hard stop, never spin forever
+  }
 }
 async function sbRpc(fn, args){
   const r=await fetch(SB+"/rest/v1/rpc/"+fn,{
@@ -1274,6 +1333,15 @@ function renderHeartbeat(rows){
   const hb=Array.isArray(rows)?rows[0]:rows;
   HB=hb||null;
   if(!el) return;
+  /* job_orders unreadable → the job floor is blank for lack of data, not for
+     lack of outages. Say so on the status bar; a silently empty floor is how
+     a real outage gets dispatched as "nothing to do". */
+  if(JOBS_ERR){
+    el.className='pill hbpill bad';
+    el.textContent='⚠ job orders unavailable';
+    el.title='job_orders could not be read, so the job floor is EMPTY FOR LACK OF DATA, not because there are no outages. '+JOBS_ERR;
+    return;
+  }
   if(!hb){ el.className='pill hbpill bad'; el.textContent='⚠ poller unknown';
     el.title='No heartbeat row found for mikrotik_status_poller.'; return; }
   const age=(Date.now()-new Date(hb.last_beat).getTime())/1000;
@@ -1463,6 +1531,10 @@ function notInSweep(m){
 /* One timestamp shared by a crowd of lines is a batch stamp, not an outage.
    Treat that value as unknown rather than presenting a confident duration. */
 let JOBFLOOR=new Map();   // ppp/customer -> earliest open repair order
+/* Non-null when the job_orders read failed. jobFloorFor() must not treat an
+   empty JOBFLOOR as "no outages on record" when the truth is "we could not
+   ask" — those are opposite conclusions and only one is safe to act on. */
+let JOBS_ERR=null;
 function buildJobFloor(rows){
   JOBFLOOR=new Map();
   /* A repair order only proves an outage if someone actually raised it for THAT
@@ -3503,7 +3575,10 @@ async function loadCompare(){
   const iso=start.toISOString();
   let txByVlan={};
   try{
-    const rows=await sb(`transactions?select=vendo,amount,created_at&created_at=gte.${iso}&limit=200000`);
+    /* `limit=200000` was a no-op: PostgREST hard-caps at 1,000 rows, so a full
+       month (~57k rows) silently arrived as 1,000 and every sales figure below
+       was ~98% short while looking perfectly normal. Page it properly instead. */
+    const rows=await sbAll(`transactions?select=vendo,amount,created_at&created_at=gte.${iso}`);
     rows.forEach(r=>{ const k=String(r.vendo); txByVlan[k]=(txByVlan[k]||0)+Number(r.amount||0); });
   }catch(e){ body.innerHTML='<div class="empty">Could not load transactions: '+esc(e.message)+'</div>'; return; }
   renderCompare(txByVlan);
@@ -5593,7 +5668,11 @@ async function boot(){
       sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=2000").catch(()=>[]),
       sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=2000").catch(()=>[]),
       sb("stg_bashang_subs?select=id,raw_name,raw_contact,raw_address,acct_no,due_raw,amount_raw,last_paid&limit=2000").catch(()=>[]),
-      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000").catch(()=>[]),
+      /* Was `.catch(()=>[])`. On a 401 that rendered an EMPTY job floor that
+         looked identical to a healthy one — the only failure in this file that
+         lied instead of erroring. Record the reason so the UI can say so. */
+      sb("job_orders?select=customer,notes,created_at,status,type&type=eq.subscriber_repair&order=created_at&limit=2000")
+        .catch(e=>{ JOBS_ERR=(e&&e.message)||"unavailable"; return []; }),
       sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,duration_is_floor,subscriber_name,area&limit=2000").catch(()=>[])
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
