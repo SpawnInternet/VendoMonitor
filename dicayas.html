@@ -935,6 +935,10 @@ let STATUS=[], SUBS=[];
 // lives in the database so vendo/internal/cutoff lines cannot be mistaken for
 // customer faults here.
 let NOCON=[];
+/* Classified vendo outage rows from v_vendo_no_connection — the same rows the
+   auto job-order cron reads, so the count on screen and the work dispatched
+   come from one definition. */
+let VNOCON=[];
 let SALES_MONTH={}; // vlan -> peso total this month (for classification)
 
 /* ── Money tables are anon-denied by design (Aug 2026 hardening) ──────────────
@@ -1487,8 +1491,22 @@ function render(){
 
   const nlCust=nolease.filter(m=>(m.user_count||0)>0).length;
   const nlTraf=nolease.filter(m=>(m.traffic_delta||0)>0).length;
+  /* Dispatch view, straight from the same source the cron uses. A vendo only
+     counts as a job when it is dead AND its status is fresh AND it has a vendo
+     record in an area this router serves — matching on VLAN alone would attach
+     a Dapitan record to a Dicayas VLAN and send someone to the wrong town. */
+  const vDead    = VNOCON.filter(r=>r.state==='dead' && !r.is_stale);
+  const vDead12  = vDead.filter(r=>Number(r.down_hours)>=12);
+  const vNoRec   = vDead12.filter(r=>!r.vendo_id).length;
+  const vUndated = vDead12.filter(r=>r.duration_is_floor).length;
+  const vStatic  = VNOCON.filter(r=>r.state==='static_ip').length;
   document.getElementById('banner-offline').innerHTML =
-    `<div class="banner">🔴 ${waiting.length} waiting — lease dropped · ${waiting.filter(m=>!effOnline(m)).length} are down and likely need a visit · ${waiting.filter(m=>effOnline(m)).length} still online on a static IP.</div>`;
+    `<div class="banner">🔴 ${waiting.length} waiting — lease dropped · ${waiting.filter(m=>!effOnline(m)).length} are down and likely need a visit · ${waiting.filter(m=>effOnline(m)).length} still online on a static IP.</div>`
+    + `<div class="banner">🔧 ${vDead12.length} vendo(s) dead 12h+ — auto job-order candidates`
+    + (vUndated?` · <b>${vUndated}</b> undated (duration is a floor, don't rank by it)`:'')
+    + (vNoRec?` · <b>${vNoRec}</b> have no vendo record in this server's areas, so no order is raised`:'')
+    + (vStatic?` · ${vStatic} offline-by-lease but still passing traffic — working, not dispatched`:'')
+    + `. A cluster dropping together is suppressed as one event, not ${vDead12.length} faults.</div>`;
   const nlBan=document.getElementById('banner-nolease');
   if(nlBan) nlBan.innerHTML =
     `<div class="banner">⚫ ${nolease.length} with no DHCP lease · ${nlCust} still have customers connected · ${nlTraf} still passing traffic — those are working on a static IP, not dead.</div>`;
@@ -5800,7 +5818,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs, nocon] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs, nocon, vnocon] = await Promise.all([
       /* CRITICAL (no soft()): without live router state the page has nothing
          true to say, so these two must fail loudly and abort the load. */
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
@@ -5824,10 +5842,20 @@ async function boot(){
                     DEGRADED.set("job orders", JOBS_ERR); return []; }),
       /* The outage list Spawn Jobs will be built on. If this dies the floor
          must say so, never render a reassuring zero. */
-      soft(sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,days_down_floor,duration_is_floor,is_stale,status_age_hours,subscriber_name,area&limit=1000"), "PPPoE outage view")
+      soft(sb("v_ppp_no_connection?select=ppp_name,line_type,days_down,days_down_floor,duration_is_floor,is_stale,status_age_hours,subscriber_name,area&limit=1000"), "PPPoE outage view"),
+      /* Vendo counterpart. Classification lives in v_vendo_no_connection so the
+         page and the auto-dispatcher (spawn_auto_vendo_job_orders) can never
+         disagree about what "dead" means — if they did, a lineman would be sent
+         to a machine this screen calls fine. `state` is authoritative:
+           dead      = offline, no users, no traffic  -> dispatchable
+           static_ip = offline by lease but still working -> NEVER dispatch */
+      soft(sb("v_vendo_no_connection?server_name=eq."+SERVER_Q
+              +"&select=vlan,state,vendo_id,vendo_name,area,down_hours,duration_is_floor,is_stale"
+              +"&limit=1000"), "vendo outage view")
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
     NOCON=nocon||[];
+    VNOCON=vnocon||[];
     buildRoster(roster);
     SUBRECS=subrecs||[];
     BASHANG=bashang||[];
