@@ -1254,19 +1254,28 @@ async function loadVendoWaiting(server){
     //   hrs_down          - the confirmed-downtime clock the dispatcher uses
     // When they disagree wildly the machine is flapping, not solidly dark.
     const row=(v)=>{
-      const m=v.mins_since_online;
-      const h = m==null ? '—' : (m<60 ? Math.round(m)+'m'
-                : (m<1440 ? Math.round(m/60)+'h' : Math.round(m/1440)+'d'));
-      const hot = m!=null && m>=720;
+      // down_hours is real elapsed time from offline_since. The old display
+      // used the observation clock, which was seeded and read "24h" for
+      // machines that had been dark for nine days.
+      const hrs=v.down_hours;
+      const h = hrs==null ? '—'
+              : hrs<1    ? Math.round(hrs*60)+'m'
+              : hrs<48   ? Math.round(hrs)+'h'
+              :            Math.round(hrs/24)+'d';
+      const hot = hrs!=null && hrs>=12 && !v.is_flapping;
       const tags=[];
       if(v.unlinked)tags.push('<span class="wtag un">not linked</span>');
       if(v.has_ticket)tags.push('<span class="wtag tk">ticket</span>');
-      if(v.lease_status)tags.push(`<span class="wtag">${esc(v.lease_status)}</span>`);
-      return `<div class="wrow ${hot?'hot':''}"
-        title="VLAN ${esc(v.vlan)} — confirmed down ${v.hrs_down}h — router says: ${esc(v.router_comment||'(no comment)')}">
+      // On a flapping machine the clock restarts at every bounce, so the
+      // figure is "since last drop", not total downtime. Say so.
+      if(v.is_flapping)tags.push('<span class="wtag ex">flapping</span>');
+      const tip = v.is_flapping
+        ? `VLAN ${esc(v.vlan)} — keeps bouncing; ${h} is since the last drop, not total`
+        : `VLAN ${esc(v.vlan)} — down ${h}${v.duration_is_floor?' (at least)':''} — router says: ${esc(v.router_comment||'(no comment)')}`;
+      return `<div class="wrow ${hot?'hot':''}" title="${tip}">
         <span class="wn">${esc(v.name)}</span>
         ${tags.join('')}
-        <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}</span>
+        <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}${v.is_flapping?'*':''}</span>
       </div>`;
     };
 
