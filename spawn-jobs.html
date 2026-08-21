@@ -1236,23 +1236,27 @@ async function loadVendoWaiting(server){
       body:JSON.stringify({p_server:server})
     });
     if(!r.ok)throw new Error(await r.text());
-    const rows=await r.json();
+    const d=await r.json();
+    const rows=(d&&d.waiting)||[];
+    const skipped=(d&&d.excluded)||0;
     if(cnt)cnt.textContent=rows.length?`${rows.length} waiting`:'all up';
-    if(!rows.length){list.innerHTML='<div class="dc-empty">Every vendo on this router is up</div>';return;}
+    if(!rows.length){
+      list.innerHTML=`<div class="dc-empty">Every vendo on this router is up${skipped?`<br><span style="font-size:11px">${skipped} migrated/pulled-out not shown</span>`:''}</div>`;
+      return;
+    }
     list.innerHTML=rows.map(v=>{
       const h=v.hrs_down==null?'—':(v.hrs_down<1?Math.round(v.hrs_down*60)+'m':Math.round(v.hrs_down)+'h');
-      const hot=v.hrs_down>=12&&!v.excluded_reason;
+      const hot=v.hrs_down>=12;
       const tags=[];
       if(v.unlinked)tags.push('<span class="wtag un">not linked</span>');
       if(v.has_ticket)tags.push('<span class="wtag tk">ticket</span>');
-      else if(v.excluded_reason)tags.push(`<span class="wtag ex">${esc(v.excluded_reason)}</span>`);
-      return `<div class="wrow ${hot?'hot':''} ${v.excluded_reason?'excl':''}"
+      return `<div class="wrow ${hot?'hot':''}"
         title="VLAN ${esc(v.vlan)} — router says: ${esc(v.router_comment||'(no comment)')}">
         <span class="wn">${esc(v.name)}</span>
         ${tags.join('')}
         <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}</span>
       </div>`;
-    }).join('');
+    }).join('') + (skipped?`<div style="padding:8px 16px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">${skipped} migrated / pulled out — not shown</div>`:'');
   }catch(e){
     console.error('vendo waiting',e);
     if(list)list.innerHTML='<div class="dc-empty">Could not read the router</div>';
