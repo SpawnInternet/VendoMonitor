@@ -1197,6 +1197,12 @@ function srvBadge(st){
 
 /* ============ DASHBOARD ============ */
 function jobName(j){return j.customer||j.fb_name||j.pppoe_username||'Unknown';}
+// Start of today in the viewer's own timezone.
+function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d;}
+function isToday(j){
+  if(!j.created_at)return false;
+  return new Date(j.created_at) >= startOfToday();
+}
 function ago(iso){
   if(!iso)return '';
   const h=(Date.now()-new Date(iso).getTime())/36e5;
@@ -1323,6 +1329,9 @@ async function renderDash(){
 
   const mk=live.filter(j=>j.source==='mikrotik');
   const fb=live.filter(j=>j.source==='facebook');
+  // The Facebook card shows TODAY only — the backlog lives on the board.
+  const fbToday=fb.filter(j=>STAGE[j.status||'open']!=='done'&&isToday(j));
+  const fbOlder=fb.filter(j=>STAGE[j.status||'open']!=='done'&&!isToday(j)).length;
   const manual=live.filter(j=>j.source!=='mikrotik'&&j.source!=='facebook');
   const openOnly=j=>STAGE[j.status||'open']!=='done';
 
@@ -1353,8 +1362,9 @@ async function renderDash(){
 
   <div class="dcard">
     <div class="dcard-head"><h3>&#128172; Facebook Source</h3>
-      <span class="dc-r">${fb.filter(openOnly).length} open</span></div>
-    <div class="dcard-body">${jobRows(fb.filter(openOnly).slice(0,40),'No customer reports waiting')}</div>
+      <span class="dc-r">${fbToday.length} today${fbOlder?` &middot; ${fbOlder} older`:''}</span></div>
+    <div class="dcard-body">${jobRows(fbToday.slice(0,40),'No Facebook messages today')}
+      ${fbOlder?`<div style="padding:8px 16px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">${fbOlder} older still open &mdash; see the Job Order Board</div>`:''}</div>
   </div>
 
   <div class="dcard">
