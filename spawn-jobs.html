@@ -1236,9 +1236,21 @@ async function loadVendoWaiting(server){
       body:JSON.stringify({p_server:server})
     });
     if(!r.ok)throw new Error(await r.text());
-    const d=await r.json();
-    const rows=(d&&d.waiting)||[];
-    const skipped=(d&&d.excluded)||0;
+    let d=await r.json();
+    // PostgREST may hand back the scalar, or a single-row wrapper — accept both,
+    // and accept the older bare-array shape too rather than silently rendering
+    // "all up" when the payload is simply unrecognised.
+    if(Array.isArray(d)&&d.length===1&&d[0]&&typeof d[0]==='object'&&!('vlan'in d[0]))
+      d=d[0].spawn_vendo_waiting||d[0];
+    let rows,skipped=0;
+    if(Array.isArray(d)){rows=d;}
+    else if(d&&Array.isArray(d.waiting)){rows=d.waiting;skipped=d.excluded||0;}
+    else{
+      console.error('vendo waiting: unexpected payload',d);
+      if(cnt)cnt.textContent='error';
+      list.innerHTML='<div class="dc-empty">Unexpected response &mdash; reload the page (Ctrl+Shift+R)</div>';
+      return;
+    }
     if(cnt)cnt.textContent=rows.length?`${rows.length} waiting`:'all up';
     if(!rows.length){
       list.innerHTML=`<div class="dc-empty">Every vendo on this router is up${skipped?`<br><span style="font-size:11px">${skipped} migrated/pulled-out not shown</span>`:''}</div>`;
