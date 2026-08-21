@@ -235,6 +235,17 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
 /* chat + reply panel */
 .modal.wide{max-width:920px;}
+.modal.wide.nochat{max-width:560px;}
+.m-split.nochat{grid-template-columns:1fr;}
+.m-split.nochat .chat-panel{display:none;}
+.m-split.nochat .info-side{width:auto;}
+/* paste-to-create */
+.pz{width:100%;min-height:190px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-family:inherit;font-size:13px;line-height:1.55;outline:none;resize:vertical;}
+.pz:focus{border-color:var(--blue);}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.pgrid label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px;}
+.pgrid .full{grid-column:1/-1;}
+.phint{font-size:11px;color:var(--muted);line-height:1.6;background:#f6f9fd;border-left:3px solid var(--blue);padding:9px 12px;border-radius:0 8px 8px 0;margin-bottom:12px;}
 .m-split{display:grid;grid-template-columns:1fr 320px;overflow:hidden;flex:1;min-height:0;}
 .chat-panel{display:flex;flex-direction:column;border-right:1px solid var(--border);min-height:0;background:#eef2f7;}
 .chat-head{padding:10px 16px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
@@ -353,6 +364,7 @@ textarea.field{resize:vertical;min-height:64px;}
   <div class="topbar-right">
     <div class="hb-pill" id="hbPill" title="MikroTik poller status"><span class="hb-dot" id="hbDot"></span><span id="hbText">Poller…</span></div>
     <div class="search-wrap"><span class="si">&#128269;</span><input id="search" placeholder="Search name, issue, contact..." oninput="render()"></div>
+    <button class="btn btn-primary" onclick="openPaste()">&#43; New Job Order</button>
     <button class="btn btn-ghost" onclick="loadJobs()">&#8635; Refresh</button>
     <button class="btn btn-ghost" onclick="openMap()">&#128205; Lineman Map &#8599;</button>
     <button class="btn btn-ghost" onclick="showConfig()">&#9881;</button>
@@ -383,6 +395,50 @@ textarea.field{resize:vertical;min-height:64px;}
 <div class="filters" id="filters"></div>
 
 <div class="board" id="board"></div>
+</div>
+
+<!-- Paste-to-create modal (SPAWN NOTES GC) -->
+<div class="overlay" id="pasteOverlay" onclick="if(event.target===this)closePaste()">
+  <div class="modal" style="max-width:620px">
+    <div class="m-head">
+      <div class="m-icon">&#128203;</div>
+      <div><h2>New Job Order</h2><div class="m-sub">Paste a message from SPAWN NOTES &mdash; the fields fill themselves</div></div>
+      <button class="m-close" onclick="closePaste()">&times;</button>
+    </div>
+    <div style="padding:18px 22px;overflow-y:auto;flex:1">
+      <div class="phint">Copy the whole block from the group chat and paste it below. It reads lines like <b>Name:</b>, <b>Address:</b>, <b>Landmark:</b>, <b>Contact number:</b> automatically. Check the fields before saving.</div>
+      <textarea class="pz" id="pzText" oninput="parsePaste()" placeholder="&quot;Pataod private wifi&quot;&#10;&#10;Name: Mary Cris Nomo Bayobay&#10;Address: Galokso Purok 1&#10;Landmark: Tapad sa tindahan ug balay nga color blue dos andana&#10;Contact number: 09xxxxxxxxx"></textarea>
+      <div class="pgrid">
+        <div class="full"><label>Customer name *</label><input class="field" id="pzName" placeholder="Required"></div>
+        <div><label>Type</label>
+          <select class="field" id="pzType">
+            <option value="subscriber_installation">Subscriber Install</option>
+            <option value="vendo_installation">Vendo Install</option>
+            <option value="subscriber_repair">Subscriber Repair</option>
+            <option value="vendo_repair">Vendo Repair</option>
+            <option value="vendo_pullout">Vendo Pull Out</option>
+            <option value="complaint">Complaint</option>
+            <option value="unrecognized">Unsorted</option>
+          </select></div>
+        <div><label>Area</label>
+          <select class="field" id="pzArea">
+            <option value="">— none —</option>
+            <option>DIPOLOG</option><option>DAPITAN</option><option>POLANCO</option>
+            <option>SINDANGAN</option><option>ROXAS</option><option>SINAMAN</option>
+            <option>MINAOG</option><option>MIX AREAS</option>
+          </select></div>
+        <div><label>Contact</label><input class="field" id="pzContact" placeholder="09xx..."></div>
+        <div><label>Priority</label>
+          <select class="field" id="pzPrio"><option value="normal">Normal</option><option value="high">High</option></select></div>
+        <div class="full"><label>Address / landmark</label><input class="field" id="pzAddr"></div>
+        <div class="full"><label>Issue / request</label><input class="field" id="pzIssue" placeholder="e.g. New install request from GC"></div>
+      </div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-outline" style="flex:1" onclick="closePaste()">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" id="pzSave" onclick="savePaste()">Create job order</button>
+    </div>
+  </div>
 </div>
 
 <!-- Network detail modal -->
@@ -882,19 +938,27 @@ async function openDetail(id){
 
   const stage=STAGE[j.status||'open']||'received';
   document.getElementById('dStages').innerHTML=COLS.map(c=>`<div class="stage ${stage===c.key?'on s-'+c.key:''}" onclick="setStage('${c.key}')">${c.title}</div>`).join('');
+  // Conversation history is a Facebook-only thing — hide the whole panel otherwise
+  const hasChat=(src==='facebook');
+  document.querySelector('#detail .modal').classList.toggle('nochat',!hasChat);
+  document.querySelector('#detail .m-split').classList.toggle('nochat',!hasChat);
   // chat header
   const srcIcon=src==='mikrotik'?'&#128225;':(src==='office'?'&#127970;':'&#128172;');
   document.getElementById('chatAva').innerHTML=srcIcon;
   document.getElementById('chatName').textContent=displayName;
   document.getElementById('chatSub').textContent=`${esc(src)} · ${j.area||'—'} · ${j.contact||'no contact'}`;
   // load conversation
-  document.getElementById('chatArea').innerHTML='<div class="chat-empty"><div class="ei">&#8987;</div>Loading...</div>';
-  let conv=[];
-  if(j.sender_id&&src!=='mikrotik'){
-    try{const rows=await sbGet(`fb_conversations?sender_id=eq.${j.sender_id}&select=messages`);if(rows&&rows[0])conv=rows[0].messages||[];}catch(e){console.error(e);}
+  if(hasChat){
+    document.getElementById('chatArea').innerHTML='<div class="chat-empty"><div class="ei">&#8987;</div>Loading...</div>';
+    let conv=[];
+    if(j.sender_id){
+      try{const rows=await sbGet(`fb_conversations?sender_id=eq.${j.sender_id}&select=messages`);if(rows&&rows[0])conv=rows[0].messages||[];}catch(e){console.error(e);}
+    }
+    document.getElementById('chatArea').innerHTML=renderConv(conv,j);
+    setTimeout(()=>{const ca=document.getElementById('chatArea');if(ca)ca.scrollTop=ca.scrollHeight;},50);
+  }else{
+    document.getElementById('chatArea').innerHTML='';
   }
-  document.getElementById('chatArea').innerHTML=renderConv(conv,j);
-  setTimeout(()=>{const ca=document.getElementById('chatArea');if(ca)ca.scrollTop=ca.scrollHeight;},50);
   // reply only for facebook jobs with a sender_id
   document.getElementById('replyBar').style.display=(src==='facebook'&&j.sender_id)?'flex':'none';
   document.getElementById('replyInput').value='';
@@ -1141,6 +1205,36 @@ function jobRows(list,emptyMsg){
   }).join('');
 }
 
+/* MikroTik tickets split per server, then Vendo vs PPPoE subscriber */
+function isVendoTicket(j){
+  const t=(j.type||'').toLowerCase();
+  if(t.startsWith('vendo'))return true;
+  if(t.startsWith('subscriber'))return false;
+  return !j.pppoe_username && !!j.vlan;   // fallback
+}
+function srvBoxes(mkJobs){
+  // group by server, always render Dicayas even when empty so the shape is stable
+  const servers=[...new Set(mkJobs.map(j=>j.server_name||'Dicayas Server'))];
+  if(!servers.includes('Dicayas Server'))servers.unshift('Dicayas Server');
+  return servers.map(sv=>{
+    const mine=mkJobs.filter(j=>(j.server_name||'Dicayas Server')===sv);
+    const vendo=mine.filter(isVendoTicket);
+    const ppp=mine.filter(j=>!isVendoTicket(j));
+    return `
+  <div class="dcard">
+    <div class="dcard-head"><h3>&#127970; ${esc(sv)} &mdash; Vendo</h3>
+      <span class="dc-r">${vendo.length} open</span></div>
+    <div class="dcard-body">${jobRows(vendo.slice(0,40),'No vendo flagged by this router')}</div>
+  </div>
+
+  <div class="dcard">
+    <div class="dcard-head"><h3>&#128246; ${esc(sv)} &mdash; PPPoE Subscriber</h3>
+      <span class="dc-r">${ppp.length} open</span></div>
+    <div class="dcard-body">${jobRows(ppp.slice(0,40),'No subscriber line down')}</div>
+  </div>`;
+  }).join('');
+}
+
 async function renderDash(){
   const el=document.getElementById('dashContent');
   if(!allJobs.length){el.innerHTML='<div class="dc-empty span2">Loading job orders&hellip;</div>';return;}
@@ -1176,11 +1270,7 @@ async function renderDash(){
     <div id="dashServers"><div class="dc-empty">Checking pollers&hellip;</div></div>
   </div>
 
-  <div class="dcard">
-    <div class="dcard-head"><h3>&#128225; MikroTik &mdash; Auto Detected</h3>
-      <span class="dc-r">${mk.filter(openOnly).length} open</span></div>
-    <div class="dcard-body">${jobRows(mk.filter(openOnly).slice(0,40),'Nothing flagged by the routers')}</div>
-  </div>
+  ${srvBoxes(mk.filter(openOnly))}
 
   <div class="dcard">
     <div class="dcard-head"><h3>&#128172; Facebook Source</h3>
@@ -1259,6 +1349,105 @@ function closeServer(){
   _netServer='all';
   document.getElementById('srvDrill').style.display='none';
   document.getElementById('srvTiles').style.display='';
+}
+
+/* ============ PASTE-TO-CREATE (SPAWN NOTES GC) ============ */
+const PZ_AREAS=['DIPOLOG','DAPITAN','POLANCO','SINDANGAN','ROXAS','SINAMAN','MINAOG'];
+
+function openPaste(){
+  ['pzText','pzName','pzContact','pzAddr','pzIssue'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('pzType').value='subscriber_installation';
+  document.getElementById('pzArea').value='';
+  document.getElementById('pzPrio').value='normal';
+  document.getElementById('pasteOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('pzText').focus(),60);
+}
+function closePaste(){document.getElementById('pasteOverlay').classList.remove('show');}
+
+function pzField(text,labels){
+  for(const L of labels){
+    const re=new RegExp('^\\s*'+L+'\\s*[:\\-]\\s*(.+)$','im');
+    const m=text.match(re);
+    if(m&&m[1].trim())return m[1].trim();
+  }
+  return '';
+}
+
+function parsePaste(){
+  const t=document.getElementById('pzText').value;
+  if(!t.trim())return;
+  const set=(id,v)=>{const el=document.getElementById(id);if(v&&!el.value)el.value=v;};
+
+  set('pzName',  pzField(t,['name','pangalan','customer','subscriber']));
+  const addr=pzField(t,['address','adress','addres','location','lugar']);
+  const land=pzField(t,['landmark','land mark','landmarks']);
+  set('pzAddr',[addr,land].filter(Boolean).join(' — '));
+
+  // contact: labelled first, else any PH mobile in the text
+  let c=pzField(t,['contact number','contact no','contact','number','cp number','cp no','cp','phone','mobile']);
+  if(!c){const m=t.match(/(?:\+?63|0)9\d{2}[\s-]?\d{3}[\s-]?\d{4}/);if(m)c=m[0];}
+  set('pzContact',(c||'').replace(/[\s-]/g,''));
+
+  // area from any mention in the text
+  const up=t.toUpperCase();
+  const hit=PZ_AREAS.find(a=>up.includes(a));
+  if(hit&&!document.getElementById('pzArea').value)document.getElementById('pzArea').value=hit;
+
+  // issue: quoted headline (e.g. "Pataod private wifi") or first non-labelled line
+  let issue='';
+  const q=t.match(/[""\"']([^""\"'\n]{4,90})[""\"']/);
+  if(q)issue=q[1].trim();
+  if(!issue){
+    const first=t.split(/\n/).map(x=>x.trim()).find(x=>x&&!/^[a-z ]{2,20}\s*[:\-]/i.test(x));
+    if(first)issue=first.slice(0,120);
+  }
+  set('pzIssue',issue);
+
+  // type guess
+  const lo=t.toLowerCase();
+  const ty=document.getElementById('pzType');
+  if(/pull ?out|pullout|kuhaon|hakupon/.test(lo))ty.value='vendo_pullout';
+  else if(/walay net|no internet|wala.*signal|sira|guba|repair|dili maka.?connect|offline/.test(lo))
+    ty.value=/vendo|piso/.test(lo)?'vendo_repair':'subscriber_repair';
+  else if(/vendo|piso ?wifi/.test(lo))ty.value='vendo_installation';
+}
+
+async function savePaste(){
+  const btn=document.getElementById('pzSave');
+  const name=document.getElementById('pzName').value.trim();
+  if(!name){toast('Customer name is required');document.getElementById('pzName').focus();return;}
+  btn.disabled=true;btn.textContent='Creating…';
+  try{
+    const r=await fetch(`${supaUrl}/rest/v1/rpc/spawn_create_job_order`,{
+      method:'POST',
+      headers:{apikey:supaKey,Authorization:`Bearer ${supaKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_customer:name,
+        p_type:document.getElementById('pzType').value,
+        p_issue:document.getElementById('pzIssue').value.trim()||null,
+        p_area:document.getElementById('pzArea').value||null,
+        p_address:document.getElementById('pzAddr').value.trim()||null,
+        p_contact:document.getElementById('pzContact').value.trim()||null,
+        p_source:'gc',
+        p_priority:document.getElementById('pzPrio').value,
+        p_raw:document.getElementById('pzText').value.trim()||null
+      })
+    });
+    const txt=await r.text();
+    if(!r.ok){
+      let msg=txt;
+      try{msg=JSON.parse(txt).message||txt;}catch(e){}
+      throw new Error(msg);
+    }
+    toast('Job order created — '+name);
+    closePaste();
+    loadJobs();
+  }catch(e){
+    toast(String(e.message||e).slice(0,140));
+    console.error(e);
+  }finally{
+    btn.disabled=false;btn.textContent='Create job order';
+  }
 }
 
 /* ============ DISPATCH BOARD ============ */
