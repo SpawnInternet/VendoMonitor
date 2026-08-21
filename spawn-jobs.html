@@ -52,7 +52,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .wrow .wh{font-size:11px;font-weight:800;white-space:nowrap;}
 .wtag{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:7px;background:#f1f5f9;color:var(--muted);white-space:nowrap;}
 .wtag.tk{background:#eff6ff;color:var(--blue);}
-.wtag.ex{background:#fffbeb;color:#a16207;}
+.wtag.ex{background:#fef2f2;color:var(--red);}
 .wtag.un{background:#fef2f2;color:var(--red);}
 .wgrp{padding:7px 16px 5px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#fafbfd;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
 .wgrp:first-child{border-top:none;}
@@ -1266,16 +1266,17 @@ async function loadVendoWaiting(server){
       const tags=[];
       if(v.unlinked)tags.push('<span class="wtag un">not linked</span>');
       if(v.has_ticket)tags.push('<span class="wtag tk">ticket</span>');
-      // On a flapping machine the clock restarts at every bounce, so the
-      // figure is "since last drop", not total downtime. Say so.
-      if(v.is_flapping)tags.push('<span class="wtag ex">flapping</span>');
+      // Show the router's own lease status, the same word dicayas.html uses.
+      if(v.lease_status)tags.push(`<span class="wtag ex">${esc(v.lease_status)}</span>`);
+      // Flapping is kept in the tooltip: on those the clock restarts at every
+      // bounce, so the figure is "since last drop", not total downtime.
       const tip = v.is_flapping
         ? `VLAN ${esc(v.vlan)} — keeps bouncing; ${h} is since the last drop, not total`
         : `VLAN ${esc(v.vlan)} — down ${h}${v.duration_is_floor?' (at least)':''} — router says: ${esc(v.router_comment||'(no comment)')}`;
       return `<div class="wrow ${hot?'hot':''}" title="${tip}">
         <span class="wn">${esc(v.name)}</span>
         ${tags.join('')}
-        <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}${v.is_flapping?'*':''}</span>
+        <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}</span>
       </div>`;
     };
 
