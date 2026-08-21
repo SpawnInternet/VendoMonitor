@@ -1246,37 +1246,31 @@ async function loadVendoWaiting(server){
       list.innerHTML='<div class="dc-empty">Unexpected response &mdash; reload the page (Ctrl+Shift+R)</div>';
       return;
     }
-    const down=d.down||[], idle=d.idle||[], skipped=d.excluded||0;
-    if(cnt)cnt.textContent = down.length ? `${down.length} down`
-                           : (idle.length ? `${idle.length} idle` : 'all up');
+    const down=d.down||[], skipped=d.excluded||0;
+    if(cnt)cnt.textContent = down.length ? `${down.length} down` : 'all up';
 
-    // A machine with no lease, no users and no traffic is a fault.
-    // A machine holding a lease with nobody connected is just idle —
-    // normal at night, worth a look once it has been idle for hours.
-    const row=(v,isIdle)=>{
-      const hrs = isIdle ? v.idle_hours : v.hrs_down;
-      const h = hrs==null ? '—' : (hrs<1 ? Math.round(hrs*60)+'m' : Math.round(hrs)+'h');
-      const hot = isIdle ? (hrs>=12) : (hrs>=12);
+    // Every row here has no connection. Two numbers matter:
+    //   mins_since_online - how long since the poller last saw it up
+    //   hrs_down          - the confirmed-downtime clock the dispatcher uses
+    // When they disagree wildly the machine is flapping, not solidly dark.
+    const row=(v)=>{
+      const m=v.mins_since_online;
+      const h = m==null ? '—' : (m<60 ? Math.round(m)+'m'
+                : (m<1440 ? Math.round(m/60)+'h' : Math.round(m/1440)+'d'));
+      const hot = m!=null && m>=720;
       const tags=[];
       if(v.unlinked)tags.push('<span class="wtag un">not linked</span>');
       if(v.has_ticket)tags.push('<span class="wtag tk">ticket</span>');
+      if(v.lease_status)tags.push(`<span class="wtag">${esc(v.lease_status)}</span>`);
       return `<div class="wrow ${hot?'hot':''}"
-        title="VLAN ${esc(v.vlan)} — router says: ${esc(v.router_comment||'(no comment)')}">
+        title="VLAN ${esc(v.vlan)} — confirmed down ${v.hrs_down}h — router says: ${esc(v.router_comment||'(no comment)')}">
         <span class="wn">${esc(v.name)}</span>
         ${tags.join('')}
         <span class="wh" style="color:${hot?'var(--red)':'var(--muted)'}">${h}</span>
       </div>`;
     };
 
-    let html='';
-    if(down.length){
-      html+=`<div class="wgrp">No connection<span class="wg-n">${down.length}</span></div>`;
-      html+=down.map(v=>row(v,false)).join('');
-    }
-    if(idle.length){
-      html+=`<div class="wgrp">Idle &mdash; nobody connected<span class="wg-n">${idle.length}</span></div>`;
-      html+=idle.map(v=>row(v,true)).join('');
-    }
+    let html = down.length ? down.map(row).join('') : '';
     if(!html)html='<div class="dc-empty">Every vendo on this router is up</div>';
     if(skipped)html+=`<div style="padding:8px 16px;font-size:10px;color:var(--muted);border-top:1px solid var(--border)">${skipped} migrated / pulled out — not shown</div>`;
     list.innerHTML=html;
@@ -1297,7 +1291,7 @@ function srvBoxes(mkJobs){
     const ppp=mine.filter(j=>!isVendoTicket(j));
     return `
   <div class="dcard">
-    <div class="dcard-head"><h3>&#127970; ${esc(sv)} &mdash; Vendo Status</h3>
+    <div class="dcard-head"><h3>&#127970; ${esc(sv)} &mdash; Vendo No Connection</h3>
       <span class="dc-r" id="wcount-${esc(sv).replace(/\W/g,'')}">&hellip;</span></div>
     <div class="dcard-body" id="wlist-${esc(sv).replace(/\W/g,'')}"><div class="dc-empty">Checking router&hellip;</div></div>
   </div>
