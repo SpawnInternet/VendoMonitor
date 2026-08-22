@@ -2099,30 +2099,43 @@ function renderNoConn(){
   const live =rows.filter(r=>!r.is_stale);
   const undated=live.filter(r=>r.duration_is_floor || r.days_down==null);
   const dated  =live.filter(r=>!(r.duration_is_floor || r.days_down==null));
-  const dur=r=>{
+  /* A floor is not a measurement. Prefixing it with \u2265 puts that in the
+     number itself, so the row no longer needs a "do not rank by age" tag
+     bolted on beside a figure that reads exactly like a measured one. */
+  const dur=(r,floor)=>{
     const d=(r.days_down!=null)?r.days_down:r.days_down_floor;
     if(d==null) return '\u2014';
-    return Number(d)>=1 ? Number(d).toFixed(1)+'d' : Math.round(Number(d)*24)+'h';
+    const t=Number(d)>=1 ? Number(d).toFixed(1)+'d' : Math.round(Number(d)*24)+'h';
+    return floor ? '\u2265'+t : t;
   };
-  const row=(r,note)=>`<div style="display:flex;gap:10px;align-items:baseline;padding:8px 11px;border-bottom:1px solid #eceff3">
-      <b style="flex:1">${esc(r.subscriber_name||r.ppp_name)}</b>
-      <span style="color:var(--dim);font-size:12px">${esc(r.area||'\u2014')}</span>
-      <span style="font-size:12px;color:var(--dim)">${esc(r.ppp_name)}</span>
-      <span style="font-weight:700;min-width:52px;text-align:right">${dur(r)}</span>
-      ${note?`<span style="font-size:11px;color:#a37200">${note}</span>`:''}
+  /* Two lines, not five items fighting over one. minmax(0,1fr) is load-bearing:
+     a bare 1fr column has min-width:auto, so a long name pushes the duration
+     off the right edge instead of ellipsing. */
+  const row=(r,floor,muted)=>`<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 13px;border-bottom:1px solid #eceff3">
+      <div style="min-width:0">
+        <div style="font-size:14px;font-weight:${muted?'500':'700'};color:${muted?'var(--dim)':'var(--txt)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.subscriber_name||r.ppp_name)}</div>
+        <div style="font-size:12px;color:var(--dim);margin-top:2px">
+          <span style="background:var(--panel2);border-radius:4px;padding:1px 6px">${esc(r.area||'\u2014')}</span>
+          <span style="font-family:ui-monospace,Menlo,monospace">${esc(r.ppp_name)}</span>
+        </div>
+      </div>
+      <div style="font-size:15px;font-weight:700;white-space:nowrap;color:${muted?'var(--dim)':'var(--offred)'}">${dur(r,floor)}</div>
     </div>`;
-  const sec=(label,arr,note)=>arr.length
-    ? `<div class="sec">${label} \u00b7 ${arr.length}</div>`+arr.slice()
+  const sec=(label,arr,hint,floor,muted)=>arr.length
+    ? `<div class="sec">${label} \u00b7 ${arr.length}${hint?` <span style="text-transform:none;letter-spacing:0;font-weight:400;color:var(--dim)">\u00b7 ${hint}</span>`:''}</div>`
+      +`<div style="background:${muted?'var(--panel2)':'var(--panel)'};border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px">`
+      +arr.slice()
         .sort((a,b)=>Number(b.days_down_floor||0)-Number(a.days_down_floor||0))
-        .map(r=>row(r,note)).join('')
+        .map(r=>row(r,floor,muted)).join('')
+      +`</div>`
     : '';
   el.innerHTML=
     `<div class="banner">\uD83D\uDD0C ${live.length} customer line${live.length===1?'':'s'} down, longest first.
       Auto job orders are raised at 12h+, but a cluster that dropped together is filed as
       ONE event \u2014 a brownout is not ${live.length} broken installs.</div>`
-    + sec('\uD83D\uDD34 Down \u2014 duration measured', dated, '')
-    + sec('\uD83D\uDFE0 Down \u2014 duration unknown (lower bound)', undated, 'do not rank by age')
-    + sec('\u26AA Unverified \u2014 poller has not refreshed', stale, 'not dispatchable');
+    + sec('\uD83D\uDD34 Measured', dated, 'seen alive, then seen down \u00b7 ranked by age', false, false)
+    + sec('\uD83D\uDFE0 Never seen online', undated, 'since monitoring began \u00b7 not ranked', true, true)
+    + sec('\u26AA Unverified', stale, 'poller has not refreshed \u00b7 not dispatchable', true, true);
   return live.length;
 }
 function vpGroups(list, card){
