@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPAWN Internet — MikroTik Status Poller  (v16)
+SPAWN Internet — MikroTik Status Poller  (v17)
 =========================================================
 Runs every POLL_SECONDS on the 24/7 office server.
 - Connects to the office MikroTik router (API port 8728)
@@ -41,6 +41,11 @@ mikrotik_status.service_state is GENERATED ALWAYS from those plus `online`
 and must NEVER be written from here.
 
 --------------------------------------------------------------------
+PATCH 2026-08-22 (v17): suppression no longer blocks writes. It was
+filtering rows out of the upsert batch, which froze every suppressed
+row permanently. Hiding belongs at read time, and the views already
+do it. See the comment at the filter site.
+
 PATCH 2026-08-19 (v16): MAKE FAILED WRITES VISIBLE.  <-- the important one
 
 For roughly two months every ppp row silently stopped updating, and nothing
@@ -745,9 +750,19 @@ def main():
             sup_vlans, sup_ppps = get_suppress_set()
             prev_state = fetch_previous_state()
             rows, device_rows, stats = poll_mikrotik(prev_state)
-            rows = [r for r in rows
-                    if not (r.get("kind") == "vendo" and str(r.get("vlan")) in sup_vlans)
-                    and not (r.get("kind") == "ppp" and r.get("ppp_name") in sup_ppps)]
+            # v17: suppression is a DISPLAY preference, not a write filter.
+            # Dropping suppressed rows HERE froze them at whatever they last
+            # said. vlan 143 was suppressed on 17 Aug while it happened to be
+            # bound, and the row claimed online=true for five days after the
+            # machine went off; four ppp rows did the same. The views already
+            # exclude suppressed vlans and ppp_names at read time, so hiding
+            # is handled -- what this filter added was a table full of false
+            # statements waiting for the first caller that reads it directly
+            # instead of through a view.
+            #
+            # Device detail below is STILL filtered: that is high-volume
+            # per-MAC lease data, not a statement about router state, and
+            # there is no reason to carry it for machines nobody looks at.
 
             # -- DELTA WRITE: only send rows that actually changed --
             to_write, status_sig = changed_rows(rows, status_sig, "match_key",
