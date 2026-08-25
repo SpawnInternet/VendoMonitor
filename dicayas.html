@@ -615,6 +615,12 @@ body.rail-on #railNav{display:block}
   .restore-card .rbtn{margin-top:8px;display:inline-block;font-size:12px;font-weight:800;color:var(--green);border:1px solid var(--green);border-radius:7px;padding:3px 10px}
   .pullbtn{width:100%;margin-top:12px;padding:11px;background:#fdecef;color:#a31c2e;border:1px solid #f0a8b4;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
   .pullbtn:hover{background:#fbdce1}
+  /* Deliberately NOT red. Pulling out and moving to SpawnFi both stop the
+     poller, but one is a machine coming off the network and the other is a
+     machine that is still earning somewhere else. Same shape, different
+     colour, so the destructive one keeps its warning to itself. */
+  .sfbtn{width:100%;margin-top:12px;padding:11px;background:#eef4ff;color:#1c47a0;border:1px solid #b9cdf3;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit}
+  .sfbtn:hover{background:#dfe9fd}
 
   /* ══════════════════════════════════════════════════════════════
      VISUAL REFRESH — appended overrides only.
@@ -3439,6 +3445,7 @@ function renderModal(m, cands){
         (list.length>60?`<div class="devmore">…and ${list.length-60} more</div>`:'')+
         `</div>`;
     })()}
+    <button class="sfbtn" onclick='toSpawnFi(${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>\uD83D\uDCF6 Transfer to SpawnFi (VLAN ${esc(m.vlan)})</button>
     <button class="pullbtn" onclick='pullOut("vendo",${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
   } else {
     // NAMES & GROUP tab
@@ -6077,6 +6084,42 @@ async function pullOut(kind, key, label){
   toast(`"${label}" marked inactive.`);
 }
 
+/* Every SpawnFi move so far was typed by hand into the free-text reason box:
+   "To Spawn Fi", "Transferred to SPAWNFI", "TRANSFERRED TO SPAWN CLOUD SYSTEM",
+   "Centralized" -- one destination, four spellings, and they only grouped
+   together because mikrotik_suppress_classify() happens to regex the word.
+   This button writes the row with reason_code set EXPLICITLY (the trigger
+   respects an explicit code), so the SpawnFi list is a list and not a
+   pattern-match. It suppresses like a pull-out because the machine really has
+   left this router -- and Restore in the Inactive tab undoes it either way. */
+async function toSpawnFi(vlan, label){
+  const dup = SUPPRESS.find(s => String(s.vlan)===String(vlan));
+  if(dup){ toast(`"${label}" is already inactive.`); return; }
+  const ok = await askPassword(`Transfer "${label}" (VLAN ${vlan}) to SpawnFi? The poller will stop watching it on this router.`);
+  if(!ok) return;
+  const extra = await prettyPrompt({title:'Transfer to SpawnFi',
+    message:'Note (optional) \u2014 customer, address, who moved it:',
+    placeholder:'Optional note', okText:'Transfer'});
+  if(extra===null) return;            // Cancel resolves null; empty string is a real answer
+  const note=(extra||'').trim();
+  const row={vlan:String(vlan), ppp_name:null,
+    reason:'To SpawnFi'+(note?' \u2014 '+note:''),
+    reason_code:'TRANSFERRED',
+    suppressed_by:'dicayas-page', suppressed_at:new Date().toISOString()};
+  try{
+    const r=await fetch(SB+"/rest/v1/mikrotik_suppress",{
+      method:"POST",
+      headers:{...H,"Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify(row)
+    });
+    if(!r.ok) throw await sbFail(r);
+  }catch(e){ toast("Failed: "+e.message); return; }
+  closeM();
+  await loadSuppress();
+  render();
+  toast(`"${label}" transferred to SpawnFi.`);
+}
+
 async function restore(kind, key, label){
   const ok=await askPassword(`Restore "${label}" to ACTIVE? The poller will include it again.`);
   if(!ok) return;
@@ -6103,7 +6146,7 @@ async function loadSuppress(){
   catch(e){ SUPP_BOARD=null; }
   renderInactive();
 }
-const SUPP_LABEL={ALL:'All',TRANSFERRED:'Transferred',PULLED_OUT:'Pulled out',
+const SUPP_LABEL={ALL:'All',TRANSFERRED:'To SpawnFi',PULLED_OUT:'Pulled out',
   VACANT:'Vacant',CUT_OFF:'Cut off',RELOCATING:'Relocating',
   SWITCHED_OFF:'Switched off',OTHER:'Other',UNSPECIFIED:'No reason'};
 function suppTab(code){ SUPP_TAB=code; renderInactive(); }
