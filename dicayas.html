@@ -1523,7 +1523,7 @@ function cardHtml(m){
   const note=m.lease_note;
   const noLease=!m.lease_status; // VLAN exists but machine never got a lease
   const clean=isCleanLink(m);
-  return `<div class="card ${on?'onl':'offl'}${clean?' clean':''}" onclick='openM(${JSON.stringify(m.match_key)})'>
+  return `<div class="card ${on?'onl':'offl'}${clean?' clean':''}" onclick='openM(${attrJS(m.match_key)})'>
     ${clean?'<span class="cleanbadge" title="Cleanly linked — one record, real name">✓ linked</span>':''}
     <span class="vlan">${esc(m.vlan)}</span>
     <div class="vn">${esc(nameOf(m))}</div>
@@ -1608,7 +1608,7 @@ function waitTable(list){
     const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
     const nm = cleanComment(m)||nameOf(m);
     const uc = Number(m.user_count||0);
-    return `<tr onclick='openM(${JSON.stringify(m.match_key)})'>
+    return `<tr onclick='openM(${attrJS(m.match_key)})'>
       <td><span class="wip">${esc(m.ip)||'—'}</span></td>
       <td><span class="wvlan">${esc(m.vlan)}</span></td>
       <td class="wnamecell"><div class="wname" title="${esc(nm)}">${esc(nm)}</div><div class="warea">${esc(areaOf(m))}</div></td>
@@ -1650,7 +1650,7 @@ function onlineTable(list){
     const sp=Number(m.rx_bps||0)+Number(m.tx_bps||0);
     const nm=cleanComment(m)||nameOf(m);
     const uc=Number(m.user_count||0);
-    return `<tr onclick='openM(${JSON.stringify(m.match_key)})'>
+    return `<tr onclick='openM(${attrJS(m.match_key)})'>
       <td><span class="wvlan">${esc(m.vlan)}</span></td>
       <td class="wnamecell"><div class="wname" title="${esc(nm)}">${esc(nm)}</div></td>
       <td><span class="wst ${on?'bound':'waiting'}">${on?'ONLINE':'OFFLINE'}</span></td>
@@ -3065,7 +3065,7 @@ function renderSubModal(){
         </div>
       </div>`;
     } else if(r&&r.roster_name){
-      const btn=(f)=>rec?`<button class="lnk link" onclick='changeSubField(${JSON.stringify(String(rec.id))},${JSON.stringify(f)})'>Edit</button>`:'';
+      const btn=(f)=>rec?`<button class="lnk link" onclick='changeSubField(${attrJS(String(rec.id))},${attrJS(f)})'>Edit</button>`:'';
       const none='<i style="color:var(--dim)">(none)</i>';
       const line=(k,v,b)=>`<div class="linkrow"><span class="k">${k}</span><span class="v">${v}</span>${b||''}</div>`;
       const val=v=>(v==null||v==='')?none:esc(v);
@@ -3082,7 +3082,7 @@ function renderSubModal(){
                      +`<button class="lnk link" onclick="showSubSearch()">Change</button><button class="lnk unlink" data-ra="no">Unlink</button>`)}
         ${rec?`
           ${line('Area',    val(rec.area),
-              `<button class="lnk link" onclick='changeSubArea(${JSON.stringify(String(rec.id))})'>Change</button>`)}
+              `<button class="lnk link" onclick='changeSubArea(${attrJS(String(rec.id))})'>Change</button>`)}
           ${line('Address', val(rec.address)+bhNote(bplan,'address'), btn('address'))}
           ${line('Phone',   val(rec.phone)+bhNote(bplan,'phone'),     btn('phone'))}
           ${line('FB name', val(rec.fb_name)+bhNote(bplan,'fb_name'), btn('fb_name'))}
@@ -3094,7 +3094,7 @@ function renderSubModal(){
                 : same ? ' <span class="vlanok">✓ matches router</span>'
                        : ` <span class="vlanmismatch" title="The PPPoE profile on the MikroTik">router says ${esc(prof)}</span>`;
               const setBtn = (prof && !same)
-                ? `<button class="lnk link" onclick='setSubPlan(${JSON.stringify(String(rec.id))},${attrJS(prof)})'>Set ${esc(prof)}</button>` : '';
+                ? `<button class="lnk link" onclick='setSubPlan(${attrJS(String(rec.id))},${attrJS(prof)})'>Set ${esc(prof)}</button>` : '';
               return line('Plan', val(rec.plan_type)+badge, setBtn+btn('plan_type'));
             })()}
           ${line('Monthly', (rec.monthly_amount==null?none:'₱'+esc(rec.monthly_amount))+bhNote(bplan,'monthly_amount'), btn('monthly_amount'))}
@@ -3103,7 +3103,7 @@ function renderSubModal(){
           ${line('GPS', rec.lat
               ? `<a class="maplink" href="https://www.google.com/maps?q=${rec.lat},${rec.lng}" target="_blank" rel="noopener">${rec.lat}, ${rec.lng} ↗</a>`
               : none,
-              `<button class="lnk link" onclick='subPhotoGps(${JSON.stringify(String(rec.id))})' title="Read GPS out of a stamped photo">📷 Photo</button>`+btn('gps'))}
+              `<button class="lnk link" onclick='subPhotoGps(${attrJS(String(rec.id))})' title="Read GPS out of a stamped photo">📷 Photo</button>`+btn('gps'))}
           ${rec.gps_place?line('Landmark', val(rec.gps_place)):''}
         `:(()=>{
             // No subscriber record behind this link yet. Show what BASHANG holds
@@ -3378,7 +3378,7 @@ function isRetired(v){ return v && (v.status==='merged' || v.status==='pulled_ou
 function dupeBadge(name, field, area){
   const info=nameDupeInfo(name, field, area);
   if(!info) return '';
-  const onclick=`onclick='showDupes(${JSON.stringify(name)},"${field}",${JSON.stringify(area||'')})'`;
+  const onclick=`onclick='showDupes(${attrJS(name)},"${field}",${attrJS(area||'')})'`;
   if(info.surviving<=1){
     return ` <span class="dupename resolved" ${onclick} title="Resolved — ${info.pending} scheduled for deletion">✓ clean${info.pending?' ('+info.pending+'🕗)':''}</span>`;
   }
@@ -3589,7 +3589,7 @@ function renderModal(m, cands){
         <div class="linkrow">
           <span class="k">VLAN</span>
           <span class="v">${esc(d.vlan)||'<i style="color:var(--dim)">(none)</i>'}${String(d.vlan)!==String(m.vlan)?` <span class="vlanmismatch" title="Record VLAN differs from server VLAN ${esc(m.vlan)}">≠ server ${esc(m.vlan)}</span>`:' <span class="vlanok">✓ matches server</span>'}</span>
-          ${String(d.vlan)!==String(m.vlan)?`<button class="lnk link" onclick='setVlanToServer(${vid},${JSON.stringify(String(m.vlan))})'>Set ${esc(m.vlan)}</button>`:''}
+          ${String(d.vlan)!==String(m.vlan)?`<button class="lnk link" onclick='setVlanToServer(${vid},${attrJS(String(m.vlan))})'>Set ${esc(m.vlan)}</button>`:''}
         </div>
         <div class="lockrow ${d.name_confirmed?'locked':''}">
           <span class="lockstate">${d.name_confirmed?'🔒 Locked — finalized & verified':'🔓 Not locked — green marker appears once locked'}</span>
@@ -3981,7 +3981,7 @@ function renderCompare(txByVlan){
       let flag='';
       if(r.online && r.sales===0) flag='<span class="mismatch">online · ₱0</span>';
       else if(!r.online && r.sales>0) flag='<span class="mismatch">offline · has ₱</span>';
-      return `<tr onclick='openM(${JSON.stringify(r.m.match_key)})' style="cursor:pointer">
+      return `<tr onclick='openM(${attrJS(r.m.match_key)})' style="cursor:pointer">
         <td>${esc(r.name)}</td><td class="gold">${esc(r.vlan)}</td>
         <td>${r.online?'<span class="badge-on">●</span>':'<span class="badge-off">●</span>'}</td>
         <td>${fmtBytes(r.data)}</td><td>₱${r.sales.toLocaleString()}</td><td>${flag}</td></tr>`;
@@ -6205,7 +6205,7 @@ function suppChips(){
     const n=c==='ALL'?items.length:counts[c];
     const on=SUPP_TAB===c?' on':'';
     const warn=(c==='UNSPECIFIED')?' warn':'';
-    return `<span class="supp-chip${on}${warn}" onclick="suppTab(${JSON.stringify(c)})">${esc(SUPP_LABEL[c])} ${n}</span>`;
+    return `<span class="supp-chip${on}${warn}" onclick="suppTab(${attrJS(c)})">${esc(SUPP_LABEL[c])} ${n}</span>`;
   }).join('')+'</div>';
 }
 /* A machine harvested AFTER it was suppressed is a contradiction worth seeing:
@@ -6223,7 +6223,7 @@ function suppCard(it){
     ${(!it.online_while_suppressed&&it.router_comment_changed)?`<div class="supp-alert">\u26A0 Router comment changed since suppression \u2014 likely a different machine on this VLAN: <b>${esc(it.router_comment_now||'?')}</b></div>`:''}
     ${it.earning_after_suppress?'<div class="supp-warn">Harvested after it was suppressed</div>':''}
     <div class="supp-meta"><span>suppressed ${it.suppressed_at?ago(it.suppressed_at)+' ago':'?'}${it.owner_name?' · owner '+esc(it.owner_name):''}</span>
-      <button type="button" class="supp-restore" onclick='restore(${JSON.stringify(kind)},${JSON.stringify(String(key))},${JSON.stringify(name)})'>\u21A9 Restore</button></div>
+      <button type="button" class="supp-restore" onclick='restore(${attrJS(kind)},${attrJS(String(key))},${attrJS(name)})'>\u21A9 Restore</button></div>
   </div>`;
 }
 function renderInactive(){
@@ -6246,13 +6246,13 @@ function renderInactive(){
   }
   const vName=v=>{ const c=(VLAN_CANDIDATES[v.vlan]||[])[0]; return c&&(c.sheet_name||c.tg_name)||("VLAN "+v.vlan); };
   document.getElementById('grid-inact-vendo').innerHTML = vendos.length? vendos.map(s=>`
-    <div class="restore-card" onclick='restore("vendo",${JSON.stringify(String(s.vlan))},${JSON.stringify(vName(s))})'>
+    <div class="restore-card" onclick='restore("vendo",${attrJS(String(s.vlan))},${attrJS(vName(s))})'>
       <div class="rn">${esc(vName(s))} <span class="gold">· VLAN ${esc(s.vlan)}</span></div>
       <div class="rmeta">${s.reason?esc(s.reason)+' · ':''}${s.suppressed_at?ago(s.suppressed_at)+' ago':''}</div>
       <span class="rbtn">↩ Restore to active</span>
     </div>`).join('') : '<div class="empty">No inactive vendos</div>';
   document.getElementById('grid-inact-ppp').innerHTML = ppps.length? ppps.map(s=>`
-    <div class="restore-card" onclick='restore("ppp",${JSON.stringify(s.ppp_name)},${JSON.stringify(s.ppp_name)})'>
+    <div class="restore-card" onclick='restore("ppp",${attrJS(s.ppp_name)},${attrJS(s.ppp_name)})'>
       <div class="rn">${esc(s.ppp_name)}</div>
       <div class="rmeta">${s.reason?esc(s.reason)+' · ':''}${s.suppressed_at?ago(s.suppressed_at)+' ago':''}</div>
       <span class="rbtn">↩ Restore to active</span>
