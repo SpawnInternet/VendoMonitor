@@ -162,6 +162,30 @@
   .tile.live{border-left:3px solid var(--green)}
   .tile.live .tv{color:var(--green)}
   .tile.warn{border-left:3px solid var(--red)}
+/* One brand colour per tile ROLE, so a field is findable by colour instead of
+   by reading its label. The same colour means the same thing everywhere:
+   cyan = live down, green = live up / healthy, blue = total down,
+   purple = total up, magenta = identity, gold = hardware id.
+   .warn still wins over any of these -- a fault must out-rank decoration. */
+.tile.t-cyan   {border-left:3px solid var(--cyan);   background:#f2fbfc}
+.tile.t-green  {border-left:3px solid var(--green);  background:#f1faf6}
+.tile.t-blue   {border-left:3px solid var(--blue);   background:#f2f6fd}
+.tile.t-purple {border-left:3px solid var(--purple); background:#f5f3fb}
+.tile.t-magenta{border-left:3px solid var(--magenta);background:#fdf4f9}
+.tile.t-gold   {border-left:3px solid var(--gold);   background:#fffaf0}
+.tile.t-navy   {border-left:3px solid var(--navy)}
+.tile.t-cyan    .tv{color:var(--cyan)}
+.tile.t-green   .tv{color:var(--green)}
+.tile.t-blue    .tv{color:var(--blue)}
+.tile.t-purple  .tv{color:var(--purple)}
+.tile.t-magenta .tv{color:var(--magenta)}
+.tile.t-gold    .tv{color:#8a6200}
+.tile.warn      .tv{color:var(--red)}
+/* the router comment is ground truth for machine identity, so it gets the
+   identity colour rather than sharing blue with everything else */
+.routerbar{border-color:var(--magenta)!important;border-left-color:var(--magenta)!important;
+  background:linear-gradient(90deg,rgba(192,17,118,.07),rgba(255,183,37,.05))!important}
+.routerbar .rl{color:var(--magenta)}
   .tile.warn .tv{color:var(--red)}
   .tile.acc{border-left:3px solid var(--blue)}
   .routerbar{background:linear-gradient(90deg,rgba(2,90,198,.07),rgba(2,136,103,.05));border:1px solid var(--blue);border-left:4px solid var(--blue);border-radius:8px;padding:5px 10px;margin-bottom:6px}
@@ -2823,17 +2847,17 @@ function renderSubModal(){
     ${m.router_comment?`<div class="routerbar"><div class="rl"><span>📡 Router says</span></div><div class="rv">${esc(m.router_comment)}</div></div>`:''}
     <div class="sec">Traffic</div>
     <div class="tiles">
-      <div class="tile ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
-      <div class="tile ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
-      <div class="tile ${rx===0?'warn':''}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
-      <div class="tile"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
+      <div class="tile t-cyan ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
+      <div class="tile t-green ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
+      <div class="tile ${rx===0?'warn':'t-blue'}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
+      <div class="tile t-purple"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
     </div>
     <div class="sec">Network</div>
     <div class="tiles">
-      <div class="tile acc"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
-      <div class="tile acc"><div class="tl">PPP name</div><div class="tv mono">${esc(m.ppp_name)||'—'}</div></div>
-      <div class="tile ${m.lease_status?'':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
-      <div class="tile"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
+      <div class="tile t-magenta"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
+      <div class="tile t-gold"><div class="tl">PPP name</div><div class="tv mono">${esc(m.ppp_name)||'—'}</div></div>
+      <div class="tile ${m.lease_status?'t-green':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
+      <div class="tile t-navy"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
     </div>
     <button class="pullbtn" onclick='pullOut("ppp",${attrJS(m.ppp_name)},${attrJS(m.ppp_name)})'>🚫 Pull out / mark INACTIVE (poller will skip this subscriber)</button>`;
   } else {
@@ -3255,17 +3279,17 @@ function renderModal(m, cands){
     ${m.lease_note?`<div class="notebar">📝 ${esc(m.lease_note)}</div>`:''}
     <div class="sec">Traffic</div>
     <div class="tiles">
-      <div class="tile ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
-      <div class="tile ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
-      <div class="tile ${rx===0?'warn':''}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
-      <div class="tile"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
+      <div class="tile t-cyan ${Number(m.rx_bps||0)>0?'live':''}"><div class="tl">Live down</div><div class="tv">${fmtBps(m.rx_bps)}</div></div>
+      <div class="tile t-green ${Number(m.tx_bps||0)>0?'live':''}"><div class="tl">Live up</div><div class="tv">${fmtBps(m.tx_bps)}</div></div>
+      <div class="tile ${rx===0?'warn':'t-blue'}"><div class="tl">Total down</div><div class="tv">${fmtBytes(rx)}</div></div>
+      <div class="tile t-purple"><div class="tl">Total up</div><div class="tv">${fmtBytes(tx)}</div></div>
     </div>
     <div class="sec">Network</div>
     <div class="tiles">
-      <div class="tile acc"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
-      <div class="tile acc"><div class="tl">MAC</div><div class="tv mono">${esc(m.mac)||'—'}</div></div>
-      <div class="tile ${m.lease_status?'':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
-      <div class="tile"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
+      <div class="tile t-magenta"><div class="tl">IP</div><div class="tv mono">${esc(m.ip)||'—'}</div></div>
+      <div class="tile t-gold"><div class="tl">MAC</div><div class="tv mono">${esc(m.mac)||'—'}</div></div>
+      <div class="tile ${m.lease_status?'t-green':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
+      <div class="tile t-navy"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
     </div>
     ${(()=>{
       const list=DEVS[String(m.vlan)]||[];
