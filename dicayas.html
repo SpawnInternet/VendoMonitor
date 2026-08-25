@@ -216,9 +216,12 @@ body.rail-on #railNav{display:block}
 .vt:hover{border-color:var(--blue);color:var(--blue)}
 .vt.on{background:var(--navy);border-color:var(--navy);color:#fff}
 .vtnote{margin-left:auto;font-size:11px;color:var(--dim);font-weight:700}
-/* .wtbl hides its 5th column for the Waiting pane. The Online table shares
-   the class for styling but needs all seven columns, so it opts back in. */
-.wtbl.otbl th:nth-child(5),.wtbl.otbl td:nth-child(5){display:table-cell}
+/* Dropping the 5th column on a narrow screen is OPT-IN via .c5hide, not a
+   default that every .wtbl has to remember to opt back out of. It used to be
+   the default with .otbl opting back in, which silently ate "Down for" from
+   the offline-subscriber table -- the one column that table exists for --
+   because that table is also a bare .wtbl. Any new .wtbl now keeps all its
+   columns unless it asks not to. */
 /* .wnum sets colour at (0,1,0); so does .wlive. Same weight means source order
    decides, which is too fragile to rely on -- qualify it so intent wins. */
 .wtbl td.wnum.wlive{color:var(--green);font-weight:900}
@@ -558,7 +561,7 @@ body.rail-on #railNav{display:block}
   }
   @media(max-width:640px){
     .wtbl{font-size:12.5px}
-    .wtbl th:nth-child(5),.wtbl td:nth-child(5){display:none}
+    .wtbl.c5hide th:nth-child(5),.wtbl.c5hide td:nth-child(5){display:none}
   }
   .devgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:3px}
   @media(max-width:820px){.devgrid{grid-template-columns:repeat(2,1fr)}}
@@ -1018,6 +1021,11 @@ body.rail-on #railNav{display:block}
      offAreas - areas known to be on OTHER routers; used to grey out subscribers
              this page can never see. Should not overlap `areas`.
    ======================================================================== */
+/* Content revision. BUMP THIS whenever this file changes -- it is the half of
+   the build pill that reports what is in the file, as opposed to when it was
+   served. Format: YYYY-MM-DD plus a short tag for the change. */
+const REV = "2026-08-25-c5hide-scroll";
+
 const SERVER = {
   name:     "Dicayas Server",
   label:    "Dicayas",
@@ -1597,7 +1605,7 @@ function sortVendos(arr){
 
 // Waiting tab as a compact table: address, VLAN, router name, status.
 function waitTable(list){
-  return `<div class="wwrap"><table class="wtbl"><thead><tr>
+  return `<div class="wwrap"><table class="wtbl c5hide"><thead><tr>
     <th>Address</th><th>VLAN</th><th>Name in router</th><th>Status</th>
     <th class="ar">Users</th><th class="ar">Data</th><th>Offline for</th><th>Field note</th>
   </tr></thead><tbody>`+
@@ -1640,7 +1648,7 @@ function areaChip(a){
   return `<span class="achip ${AREA_COLOR[k]||'ac-navy'}">${esc(a||'—')}</span>`;
 }
 function onlineTable(list){
-  return `<div class="wwrap"><table class="wtbl otbl"><thead><tr>
+  return `<div class="wwrap"><table class="wtbl"><thead><tr>
     <th>VLAN</th><th>Name in router</th><th>Status</th>
     <th class="ar">Users</th><th class="ar">Live</th><th class="ar">Data</th><th>Area</th>
   </tr></thead><tbody>`+
@@ -5248,9 +5256,27 @@ function measureChrome(){
 }
 measureChrome();
 addEventListener('resize', measureChrome);
+/* Every 30s tick rebuilds the panes with innerHTML. The window is the only
+   scroller here (.wwrap clips, it does not scroll), and replacing the content
+   destroys the browser's own scroll anchor -- so when the rebuilt document is
+   momentarily shorter, scrollY gets clamped and you are thrown up the page
+   mid-read of a 244-row table. Capture before, restore after. Only touched
+   when it actually moved, so a user scroll during the render is not fought. */
+function withScroll(fn){
+  const y = window.scrollY;
+  try{ fn(); }
+  finally{
+    if(window.scrollY !== y) window.scrollTo(0, y);
+  }
+}
 if(window.ResizeObserver){
   const ro=new ResizeObserver(measureChrome);
   const h=document.querySelector('header'); if(h) ro.observe(h);
+  /* The strip's own height changes without a window resize -- the tabs switch
+     from flex:1 to natural width at 859px, and a font that loads late reflows
+     the labels. Observing only the header left --tabs-h stale, which lands the
+     column headers a few px under or over the strip. */
+  const t=document.querySelector('.tabs'); if(t) ro.observe(t);
 }
 buildRail();
 try{ if(localStorage.getItem('spawn_rail')==='1') setRail(true); }catch(e){}
@@ -6279,9 +6305,16 @@ async function boot(){
       const _bp=document.getElementById('buildPill');
       if(_bp){
         const d=new Date(document.lastModified);
-        _bp.textContent = isFinite(d.getTime())
+        /* lastModified is a property of the RESPONSE, not of the contents. It
+           says when the server published these bytes, which a Pages redeploy
+           refreshes even for files it did not touch -- so on its own it cannot
+           tell you whether a fix you just asked for is actually in here. REV is
+           bumped by hand with each change, so the two together answer both
+           questions: served when, containing what. If REV looks old, the file
+           IS old no matter how fresh the timestamp is. */
+        _bp.textContent = (isFinite(d.getTime())
           ? 'build '+d.toISOString().slice(0,16).replace('T',' ')+' UTC'
-          : 'build unknown';
+          : 'build unknown') + ' \u00b7 rev ' + REV;
       }
     }catch(_){}
     // Header text comes from SERVER too — copying this file for another router
@@ -6421,7 +6454,7 @@ async function refreshStatus(){
     buildVouch(vouchers);
     buildDevs(devices);
     await loadSuppress();
-    render(); renderSubs(); renderDegraded();
+    withScroll(()=>{ render(); renderSubs(); renderDegraded(); });
   }catch(e){
     /* The two mikrotik_status reads are critical and unguarded, so landing here
        means live router state is gone. Previously silent — the grid just froze
