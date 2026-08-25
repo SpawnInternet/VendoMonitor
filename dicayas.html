@@ -110,7 +110,22 @@
   .row:last-child{border:none}
   .row .k{color:var(--dim);font-weight:600}
   .row .v{text-align:right;word-break:break-word;font-weight:700;color:var(--navy)}
-  .sec{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);margin:9px 0 3px;font-weight:900}
+  .supp-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}
+.supp-chip{background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:5px 13px;font-size:13px;color:var(--dim);cursor:pointer;user-select:none}
+.supp-chip:hover{border-color:var(--blue)}
+.supp-chip.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.supp-chip.warn:not(.on){background:#fff6e0;border-color:#f0d089;color:var(--amber);font-weight:600}
+.supp-list{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.supp-row{padding:12px 15px;border-bottom:1px solid #eceff3}
+.supp-row:last-child{border-bottom:none}
+.supp-hd{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.supp-hd b{font-size:15px;color:var(--txt)}
+.supp-where{font-size:12px;color:var(--dim);white-space:nowrap}
+.supp-note{font-size:13px;color:#55627a;margin-top:4px;font-style:italic}
+.supp-warn{background:#fff6e0;border-radius:6px;padding:5px 9px;margin-top:7px;font-size:12px;color:var(--amber);font-weight:600}
+.supp-meta{font-size:12px;color:var(--dim);margin-top:7px}
+.supp-restore{color:var(--blue);font-weight:700;cursor:pointer}
+.sec{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);margin:9px 0 3px;font-weight:900}
   .btn{border:none;border-radius:9px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;transition:.12s}
   .btn.gold{background:var(--gold);color:var(--navy)} .btn.gold:hover{filter:brightness(1.05)}
   .btn.ghost{background:#eef1f5;color:var(--navy)} .btn.ghost:hover{background:#e3e8ee}
@@ -5854,15 +5869,65 @@ async function restore(kind, key, label){
   toast(`"${label}" restored.`);
 }
 
+let SUPP_BOARD=null, SUPP_TAB='ALL';
 async function loadSuppress(){
   SUPPRESS = await sb("mikrotik_suppress?select=*&order=suppressed_at.desc") || [];
+  /* spawn_suppressed_board() joins each suppress row to its vendo and
+     subscriber, so the cards can show the linked name, area and owner the
+     raw suppress row does not carry. It returns NO money -- harvests are
+     gateway-gated and this call is anon. */
+  try{ SUPP_BOARD = await sbRpc('spawn_suppressed_board', {}); }
+  catch(e){ SUPP_BOARD=null; }
   renderInactive();
+}
+const SUPP_LABEL={ALL:'All',TRANSFERRED:'Transferred',PULLED_OUT:'Pulled out',
+  VACANT:'Vacant',CUT_OFF:'Cut off',RELOCATING:'Relocating',
+  SWITCHED_OFF:'Switched off',OTHER:'Other',UNSPECIFIED:'No reason'};
+function suppTab(code){ SUPP_TAB=code; renderInactive(); }
+function suppChips(){
+  const items=(SUPP_BOARD&&SUPP_BOARD.items)||[];
+  if(!items.length) return '';
+  const counts={}; items.forEach(i=>{counts[i.reason_code]=(counts[i.reason_code]||0)+1;});
+  const codes=['ALL'].concat(Object.keys(SUPP_LABEL).filter(c=>c!=='ALL'&&counts[c]));
+  return '<div class="supp-chips">'+codes.map(c=>{
+    const n=c==='ALL'?items.length:counts[c];
+    const on=SUPP_TAB===c?' on':'';
+    const warn=(c==='UNSPECIFIED')?' warn':'';
+    return `<span class="supp-chip${on}${warn}" onclick="suppTab(${JSON.stringify(c)})">${esc(SUPP_LABEL[c])} ${n}</span>`;
+  }).join('')+'</div>';
+}
+/* A machine harvested AFTER it was suppressed is a contradiction worth seeing:
+   either it was never really pulled out, or coins are being collected from
+   something the office has written off. Seven of 27 are in this state. */
+function suppCard(it){
+  const name=it.sheet_name||it.tg_name||it.subscriber_name||(it.vlan?('VLAN '+it.vlan):it.ppp_name);
+  const where=it.vlan?`VLAN ${esc(it.vlan)}${it.area?' · '+esc(it.area):''}`:'PPPoE line';
+  const kind=it.vlan?'vendo':'ppp';
+  const key=it.vlan||it.ppp_name;
+  return `<div class="supp-row">
+    <div class="supp-hd"><b>${esc(name)}</b><span class="supp-where">${where}</span></div>
+    <div class="supp-note">${it.reason?esc(it.reason):'<i>no reason written</i>'}</div>
+    ${it.earning_after_suppress?'<div class="supp-warn">\u26A0 Harvested AFTER it was suppressed \u2014 still earning</div>':''}
+    <div class="supp-meta">suppressed ${it.suppressed_at?ago(it.suppressed_at)+' ago':'?'}${it.owner_name?' · owner '+esc(it.owner_name):''}
+      · <span class="supp-restore" onclick='restore(${JSON.stringify(kind)},${JSON.stringify(String(key))},${JSON.stringify(name)})'>\u21A9 Restore</span></div>
+  </div>`;
 }
 function renderInactive(){
   const vendos=SUPPRESS.filter(s=>s.vlan);
   const ppps=SUPPRESS.filter(s=>s.ppp_name);
   document.getElementById('inact-v-ct').textContent=vendos.length;
   document.getElementById('inact-p-ct').textContent=ppps.length;
+  if(SUPP_BOARD&&SUPP_BOARD.items&&SUPP_BOARD.items.length){
+    const all=SUPP_BOARD.items;
+    const shown=SUPP_TAB==='ALL'?all:all.filter(i=>i.reason_code===SUPP_TAB);
+    const host=document.getElementById('grid-inact-vendo');
+    host.classList.remove('grid');
+    host.innerHTML=suppChips()+(shown.length?
+      '<div class="supp-list">'+shown.map(suppCard).join('')+'</div>'
+      :'<div class="empty">Nothing in this category.</div>');
+    document.getElementById('grid-inact-ppp').style.display='none';
+    return;
+  }
   const vName=v=>{ const c=(VLAN_CANDIDATES[v.vlan]||[])[0]; return c&&(c.sheet_name||c.tg_name)||("VLAN "+v.vlan); };
   document.getElementById('grid-inact-vendo').innerHTML = vendos.length? vendos.map(s=>`
     <div class="restore-card" onclick='restore("vendo",${JSON.stringify(String(s.vlan))},${JSON.stringify(vName(s))})'>
