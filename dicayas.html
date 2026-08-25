@@ -114,6 +114,8 @@
 .supp-chip{background:var(--panel2);border:1px solid var(--border);border-radius:999px;padding:5px 13px;font-size:13px;color:var(--dim);cursor:pointer;user-select:none}
 .supp-chip:hover{border-color:var(--blue)}
 .supp-chip.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:600}
+.supp-chip.alert:not(.on){background:#fdeaec;border-color:#f3c2c8;color:var(--offred);font-weight:700}
+.supp-chip.alert.on{background:var(--offred);border-color:var(--offred);color:#fff}
 .supp-chip.warn:not(.on){background:#fff6e0;border-color:#f0d089;color:var(--amber);font-weight:600}
 .supp-list{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .supp-row{padding:12px 15px;border-bottom:1px solid #eceff3}
@@ -122,6 +124,8 @@
 .supp-hd b{font-size:15px;color:var(--txt)}
 .supp-where{font-size:12px;color:var(--dim);white-space:nowrap}
 .supp-note{font-size:13px;color:#55627a;margin-top:4px;font-style:italic}
+.supp-alert{background:#fdeaec;border:1px solid #f3c2c8;border-radius:6px;padding:6px 9px;margin-top:7px;font-size:12px;color:var(--offred);font-weight:600;line-height:1.45}
+.supp-alert b{font-weight:700}
 .supp-warn{background:#fff6e0;border-radius:6px;padding:5px 9px;margin-top:7px;font-size:12px;color:var(--amber);font-weight:600}
 .supp-meta{font-size:12px;color:var(--dim);margin-top:7px}
 .supp-restore{color:var(--blue);font-weight:700;cursor:pointer}
@@ -5889,7 +5893,14 @@ function suppChips(){
   if(!items.length) return '';
   const counts={}; items.forEach(i=>{counts[i.reason_code]=(counts[i.reason_code]||0)+1;});
   const codes=['ALL'].concat(Object.keys(SUPP_LABEL).filter(c=>c!=='ALL'&&counts[c]));
-  return '<div class="supp-chips">'+codes.map(c=>{
+  /* A suppressed VLAN that is online, or whose router comment has changed, is
+     almost always a RECYCLED vlan -- a new machine installed where an old one
+     was pulled out. The stale suppress row then hides a live earning vendo.
+     This chip is first and red because it is the only one that means
+     something is currently wrong. */
+  const alerts=items.filter(i=>i.online_while_suppressed||i.router_comment_changed).length;
+  const alertChip=alerts?`<span class="supp-chip alert${SUPP_TAB==='ALERT'?' on':''}" onclick="suppTab('ALERT')">\u26A0 Needs review ${alerts}</span>`:'';
+  return '<div class="supp-chips">'+alertChip+codes.map(c=>{
     const n=c==='ALL'?items.length:counts[c];
     const on=SUPP_TAB===c?' on':'';
     const warn=(c==='UNSPECIFIED')?' warn':'';
@@ -5907,7 +5918,9 @@ function suppCard(it){
   return `<div class="supp-row">
     <div class="supp-hd"><b>${esc(name)}</b><span class="supp-where">${where}</span></div>
     <div class="supp-note">${it.reason?esc(it.reason):'<i>no reason written</i>'}</div>
-    ${it.earning_after_suppress?'<div class="supp-warn">\u26A0 Harvested AFTER it was suppressed \u2014 still earning</div>':''}
+    ${it.online_while_suppressed?`<div class="supp-alert">\u26A0 ONLINE right now while suppressed \u2014 router says: <b>${esc(it.router_comment_now||'?')}</b></div>`:''}
+    ${(!it.online_while_suppressed&&it.router_comment_changed)?`<div class="supp-alert">\u26A0 Router comment changed since suppression \u2014 likely a different machine on this VLAN: <b>${esc(it.router_comment_now||'?')}</b></div>`:''}
+    ${it.earning_after_suppress?'<div class="supp-warn">Harvested after it was suppressed</div>':''}
     <div class="supp-meta">suppressed ${it.suppressed_at?ago(it.suppressed_at)+' ago':'?'}${it.owner_name?' · owner '+esc(it.owner_name):''}
       · <span class="supp-restore" onclick='restore(${JSON.stringify(kind)},${JSON.stringify(String(key))},${JSON.stringify(name)})'>\u21A9 Restore</span></div>
   </div>`;
@@ -5919,7 +5932,9 @@ function renderInactive(){
   document.getElementById('inact-p-ct').textContent=ppps.length;
   if(SUPP_BOARD&&SUPP_BOARD.items&&SUPP_BOARD.items.length){
     const all=SUPP_BOARD.items;
-    const shown=SUPP_TAB==='ALL'?all:all.filter(i=>i.reason_code===SUPP_TAB);
+    const shown=SUPP_TAB==='ALL'?all
+      :SUPP_TAB==='ALERT'?all.filter(i=>i.online_while_suppressed||i.router_comment_changed)
+      :all.filter(i=>i.reason_code===SUPP_TAB);
     const host=document.getElementById('grid-inact-vendo');
     host.classList.remove('grid');
     host.innerHTML=suppChips()+(shown.length?
