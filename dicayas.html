@@ -162,6 +162,28 @@
   .tile.live{border-left:3px solid var(--green)}
   .tile.live .tv{color:var(--green)}
   .tile.warn{border-left:3px solid var(--red)}
+/* WinBox-style nav rail. Purely additive: it is BUILT FROM the existing
+   .tab elements and calls the same openTab(), so it cannot drift out of sync
+   with the tab strip and removing it changes nothing. The tab strip stays put
+   as the fallback -- below 1100px the rail hides entirely, because a fixed
+   168px column on a phone through remote desktop costs more than it gives. */
+#railNav{position:fixed;left:0;top:0;bottom:0;width:168px;overflow-y:auto;z-index:40;
+  background:var(--panel2);border-right:1px solid var(--border);padding:44px 0 14px;display:none}
+body.rail-on #railNav{display:block}
+#railNav .rhd{padding:4px 14px 9px;font-size:10px;font-weight:800;letter-spacing:.06em;
+  color:var(--dim);text-transform:uppercase}
+#railNav .ri{display:flex;align-items:center;gap:9px;padding:8px 14px;font-size:13px;
+  font-weight:700;color:var(--txt);cursor:pointer;border-left:4px solid transparent;user-select:none}
+#railNav .ri:hover{background:var(--panel)}
+#railNav .ri.on{background:var(--panel);border-left-color:currentColor;font-weight:800}
+#railNav .ric{width:16px;text-align:center;flex:0 0 16px}
+#railNav .rft{margin:12px 14px 0;padding-top:10px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--dim);font-weight:700;line-height:1.6}
+#railBtn{position:fixed;left:8px;top:8px;z-index:41;background:var(--navy);color:#fff;
+  border:none;border-radius:8px;width:30px;height:30px;font-size:15px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(33,48,64,.25)}
+@media(min-width:1100px){ body.rail-on{padding-left:168px} }
+@media(max-width:1099px){ body.rail-on #railNav{display:none} body.rail-on{padding-left:0} }
 .vtoggle{display:flex;align-items:center;gap:6px;margin:0 0 9px}
 .vt{border:1px solid var(--border);background:var(--panel);border-radius:7px;padding:4px 12px;
   font-size:12px;font-weight:800;color:var(--dim);cursor:pointer;user-select:none}
@@ -683,6 +705,8 @@
   <div id="harvestBanner"></div>
 </header>
 
+<button id="railBtn" title="Toggle side menu">☰</button>
+<nav id="railNav"></nav>
 <div class="tabs">
   <div class="tab active" data-tab="online">🟢 Online</div>
   <div class="tab" data-tab="offline">🔴 Waiting</div>
@@ -5072,6 +5096,7 @@ function openTab(name){
   if(!t) return;
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
+  if(typeof syncRail==='function') syncRail(name);
   document.querySelectorAll('.pane').forEach(p=>p.style.display='none');
   const pane=document.getElementById('pane-'+name);
   if(pane) pane.style.display='block';
@@ -5090,6 +5115,52 @@ function openSubView(sv){
   safeRender('subscribers', renderSubs);
 }
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>openTab(t.dataset.tab));
+
+/* ---- side rail ------------------------------------------------------
+   Built from the .tab elements themselves rather than a second hardcoded
+   list, so adding a tab adds a rail entry for free and the two can never
+   disagree. Colour per destination follows the brand palette: green for
+   healthy, red for faults, purple for people, gold for money. */
+const RAIL_COLOR={online:'var(--green)',offline:'var(--red)',nolease:'var(--dim)',
+  subs:'var(--purple)',search:'var(--cyan)',compare:'var(--magenta)',
+  inactive:'var(--red)',empty:'var(--dim)',deleted:'var(--dim)'};
+function buildRail(){
+  const nav=document.getElementById('railNav'); if(!nav) return;
+  const seen=new Set(); let html='<div class="rhd">Dicayas Server</div>';
+  document.querySelectorAll('.tab').forEach(t=>{
+    const k=t.dataset.tab;
+    if(!k||seen.has(k)) return;            // 'deleted' appears twice in the strip
+    seen.add(k);
+    const raw=t.textContent.trim();
+    const m=raw.match(/^(\S+)\s+(.*)$/);
+    const icon=m?m[1]:'\u25AA', label=m?m[2]:raw;
+    html+=`<div class="ri" data-go="${k}" style="color:${RAIL_COLOR[k]||'var(--txt)'}">`
+        + `<span class="ric">${icon}</span>`
+        + `<span style="color:var(--txt)">${label}</span></div>`;
+  });
+  html+='<div class="rft" id="railFoot"></div>';
+  nav.innerHTML=html;
+  nav.querySelectorAll('.ri').forEach(r=>r.onclick=()=>openTab(r.dataset.go));
+  syncRail(document.querySelector('.tab.active')?.dataset.tab);
+}
+function syncRail(name){
+  document.querySelectorAll('#railNav .ri').forEach(r=>
+    r.classList.toggle('on', r.dataset.go===name));
+  const f=document.getElementById('railFoot');
+  if(f&&HB){
+    const ok=String(HB.status||'')==='running';
+    f.innerHTML=`<span style="color:${ok?'var(--green)':'var(--red)'}">\u25CF poller ${ok?'ok':'down'}</span>`
+      +`<br><span>${HB.last_beat?ago(HB.last_beat)+' ago':''}</span>`;
+  }
+}
+function setRail(on){
+  document.body.classList.toggle('rail-on', !!on);
+  try{ localStorage.setItem('spawn_rail', on?'1':'0'); }catch(e){}
+}
+document.getElementById('railBtn').onclick=()=>
+  setRail(!document.body.classList.contains('rail-on'));
+buildRail();
+try{ if(localStorage.getItem('spawn_rail')==='1') setRail(true); }catch(e){}
 /* Delegated: the summary is rebuilt on every refresh tick, so per-element
    handlers attached at render time would be discarded each pass. */
 document.addEventListener('click', e=>{
