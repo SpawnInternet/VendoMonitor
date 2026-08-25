@@ -162,6 +162,24 @@
   .tile.live{border-left:3px solid var(--green)}
   .tile.live .tv{color:var(--green)}
   .tile.warn{border-left:3px solid var(--red)}
+.vtoggle{display:flex;align-items:center;gap:6px;margin:0 0 9px}
+.vt{border:1px solid var(--border);background:var(--panel);border-radius:7px;padding:4px 12px;
+  font-size:12px;font-weight:800;color:var(--dim);cursor:pointer;user-select:none}
+.vt:hover{border-color:var(--blue);color:var(--blue)}
+.vt.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.vtnote{margin-left:auto;font-size:11px;color:var(--dim);font-weight:700}
+.wnum.wlive{color:var(--green);font-weight:900}
+/* eight areas is past what anyone reads as text -- colour turns a cluster of
+   outages in one town into a visible block */
+.achip{border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800;white-space:nowrap}
+.ac-blue{background:#f2f6fd;color:var(--blue)}
+.ac-green{background:#f1faf6;color:var(--green)}
+.ac-purple{background:#f5f3fb;color:var(--purple)}
+.ac-magenta{background:#fdf4f9;color:var(--magenta)}
+.ac-cyan{background:#f2fbfc;color:var(--cyan)}
+.ac-gold{background:#fffaf0;color:#8a6200}
+.ac-teal{background:#eefaf7;color:#0a7a63}
+.ac-navy{background:var(--panel2);color:var(--navy)}
 /* One brand colour per tile ROLE, so a field is findable by colour instead of
    by reading its label. The same colour means the same thing everywhere:
    cyan = live down, green = live up / healthy, blue = total down,
@@ -690,7 +708,7 @@
       <button id="sortDir" class="sortbtn">⬆ Ascending</button>
     </div>
     <div id="banner-online"></div>
-    <div class="grid" id="grid-online"></div>
+    <div id="grid-online"></div>
   </div>
   <div id="pane-offline" class="pane" style="display:none">
     <div id="banner-offline"></div>
@@ -1510,6 +1528,60 @@ function waitTable(list){
   }).join('')+`</tbody></table></div></div>`;
 }
 
+/* Online as a dense table, beside the cards rather than instead of them.
+   Reuses the .wtbl classes the Waiting tab already ships, so it inherits
+   styling that is known to work rather than introducing a second table idiom.
+
+   Cards show ~9 machines on a laptop; this shows ~22. On 288 vendos that is
+   the difference between scanning an area and scrolling through it.
+
+   Area gets a colour because eight areas is more than anyone can hold by
+   reading labels -- a cluster of outages in one town becomes a block of one
+   colour. Live speed is emphasised only when traffic is actually moving, so
+   busy machines find the eye without a dedicated column. */
+const AREA_COLOR={DIPOLOG:'ac-blue',DAPITAN:'ac-green',SINDANGAN:'ac-purple',
+  POLANCO:'ac-magenta',MINAOG:'ac-cyan',ROXAS:'ac-gold',SINAMAN:'ac-teal',
+  'MIX AREAS':'ac-navy'};
+function areaChip(a){
+  const k=String(a||'').toUpperCase().trim();
+  return `<span class="achip ${AREA_COLOR[k]||'ac-navy'}">${esc(a||'—')}</span>`;
+}
+function onlineTable(list){
+  return `<div class="wwrap"><div class="wscroll"><table class="wtbl"><thead><tr>
+    <th>VLAN</th><th>Name in router</th><th>Status</th>
+    <th class="ar">Users</th><th class="ar">Live</th><th class="ar">Data</th><th>Area</th>
+  </tr></thead><tbody>`+
+  list.map(m=>{
+    const on=effOnline(m);
+    const rx=Number(m.rx_bytes||0), tx=Number(m.tx_bytes||0);
+    const sp=Number(m.rx_bps||0)+Number(m.tx_bps||0);
+    const nm=cleanComment(m)||nameOf(m);
+    const uc=Number(m.user_count||0);
+    return `<tr onclick='openM(${JSON.stringify(m.match_key)})'>
+      <td><span class="wvlan">${esc(m.vlan)}</span></td>
+      <td class="wnamecell"><div class="wname" title="${esc(nm)}">${esc(nm)}</div></td>
+      <td><span class="wst ${on?'bound':'waiting'}">${on?'ONLINE':'OFFLINE'}</span></td>
+      <td class="wnum${uc?'':' wzero'}">${uc}</td>
+      <td class="wnum${sp>0?' wlive':' wzero'}">${sp>0?fmtBps(sp):'—'}</td>
+      <td class="wnum wdim">${fmtBytes(rx+tx)}</td>
+      <td>${areaChip(areaOf(m))}</td>
+    </tr>`;
+  }).join('')+`</tbody></table></div></div>`;
+}
+let ONLINE_VIEW=(function(){ try{ return localStorage.getItem('spawn_online_view')||'cards'; }catch(e){ return 'cards'; } })();
+function setOnlineView(v){
+  ONLINE_VIEW=v;
+  try{ localStorage.setItem('spawn_online_view',v); }catch(e){}
+  render();
+}
+function onlineViewToggle(n){
+  return `<div class="vtoggle">
+    <span class="vt${ONLINE_VIEW==='cards'?' on':''}" onclick="setOnlineView('cards')">\u25A6 Cards</span>
+    <span class="vt${ONLINE_VIEW==='table'?' on':''}" onclick="setOnlineView('table')">\u2261 Table</span>
+    <span class="vtnote">${n} online</span>
+  </div>`;
+}
+
 function render(){
   _pcCache=new Map();
   // Pulled-out machines live on the Inactive tab only — they must not appear
@@ -1532,7 +1604,12 @@ function render(){
     on=on.filter(m=>(m.vlan+" "+nameOf(m)+" "+areaOf(m)).toLowerCase().includes(q));
   }
 
-  document.getElementById('grid-online').innerHTML = on.length?sortVendos(on).map(cardHtml).join(''):'<div class="empty">No online vendos</div>';
+  const onSorted=sortVendos(on);
+  document.getElementById('grid-online').innerHTML = on.length
+    ? onlineViewToggle(on.length)+(ONLINE_VIEW==='table'
+        ? onlineTable(onSorted)
+        : `<div class="grid">`+onSorted.map(cardHtml).join('')+`</div>`)
+    : '<div class="empty">No online vendos</div>';
   // down machines first, still-online ones at the bottom (sort is stable)
   const waitSorted = sortVendos(waiting).sort((a,b)=>(effOnline(a)?1:0)-(effOnline(b)?1:0));
   document.getElementById('grid-off-waiting').innerHTML = waiting.length?waitTable(waitSorted):'<div class="empty">None waiting</div>';
