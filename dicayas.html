@@ -190,7 +190,25 @@ body.rail-on #railNav{display:block}
 .vt:hover{border-color:var(--blue);color:var(--blue)}
 .vt.on{background:var(--navy);border-color:var(--navy);color:#fff}
 .vtnote{margin-left:auto;font-size:11px;color:var(--dim);font-weight:700}
-.wnum.wlive{color:var(--green);font-weight:900}
+/* .wtbl hides its 5th column for the Waiting pane. The Online table shares
+   the class for styling but needs all seven columns, so it opts back in. */
+.wtbl.otbl th:nth-child(5),.wtbl.otbl td:nth-child(5){display:table-cell}
+/* .wnum sets colour at (0,1,0); so does .wlive. Same weight means source order
+   decides, which is too fragile to rely on -- qualify it so intent wins. */
+.wtbl td.wnum.wlive{color:var(--green);font-weight:900}
+/* a fault should tint the whole tile, not just its edge */
+.tile.warn{background:#fdeaec}
+/* Below 1100px the rail hides itself, but the button stayed clickable and set
+   body.rail-on with nothing to show -- a dead control between 1000 and 1099px.
+   Hide the button wherever the rail cannot open. */
+@media(max-width:1099px){ #railBtn{display:none} }
+/* The header is sticky; the tab strip was not, so scrolling 244 rows pushed the
+   tabs behind the header and the only way back to another tab was scrolling to
+   the top. Same for the column labels on a 200-row table. Both now pin under
+   the header, whose height changes when the harvest banner appears -- so it is
+   measured rather than guessed. */
+.tabs{position:sticky;top:var(--hdr-h,0px);z-index:9}
+.wtbl thead th{position:sticky;top:calc(var(--hdr-h,0px) + var(--tabs-h,0px));z-index:8}
 /* eight areas is past what anyone reads as text -- colour turns a cluster of
    outages in one town into a visible block */
 .achip{border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800;white-space:nowrap}
@@ -225,7 +243,7 @@ body.rail-on #railNav{display:block}
    identity colour rather than sharing blue with everything else */
 .routerbar{border-color:var(--magenta)!important;border-left-color:var(--magenta)!important;
   background:linear-gradient(90deg,rgba(192,17,118,.07),rgba(255,183,37,.05))!important}
-.routerbar .rl{color:var(--magenta)}
+.routerbar .rl,.routerbar .rl span{color:var(--magenta)!important}
   .tile.warn .tv{color:var(--red)}
   .tile.acc{border-left:3px solid var(--blue)}
   .routerbar{background:linear-gradient(90deg,rgba(2,90,198,.07),rgba(2,136,103,.05));border:1px solid var(--blue);border-left:4px solid var(--blue);border-radius:8px;padding:5px 10px;margin-bottom:6px}
@@ -1571,7 +1589,7 @@ function areaChip(a){
   return `<span class="achip ${AREA_COLOR[k]||'ac-navy'}">${esc(a||'—')}</span>`;
 }
 function onlineTable(list){
-  return `<div class="wwrap"><div class="wscroll"><table class="wtbl"><thead><tr>
+  return `<div class="wwrap"><div class="wscroll"><table class="wtbl otbl"><thead><tr>
     <th>VLAN</th><th>Name in router</th><th>Status</th>
     <th class="ar">Users</th><th class="ar">Live</th><th class="ar">Data</th><th>Area</th>
   </tr></thead><tbody>`+
@@ -5159,6 +5177,20 @@ function setRail(on){
 }
 document.getElementById('railBtn').onclick=()=>
   setRail(!document.body.classList.contains('rail-on'));
+/* The sticky offsets depend on the header height, and that changes: the harvest
+   banner comes and goes, and the title wraps to two lines on a narrow window.
+   Measured live rather than hardcoded, so the tabs never overlap or float. */
+function measureChrome(){
+  const h=document.querySelector('header'), t=document.querySelector('.tabs');
+  if(h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight+'px');
+  if(t) document.documentElement.style.setProperty('--tabs-h', t.offsetHeight+'px');
+}
+measureChrome();
+addEventListener('resize', measureChrome);
+if(window.ResizeObserver){
+  const ro=new ResizeObserver(measureChrome);
+  const h=document.querySelector('header'); if(h) ro.observe(h);
+}
 buildRail();
 try{ if(localStorage.getItem('spawn_rail')==='1') setRail(true); }catch(e){}
 /* Delegated: the summary is rebuilt on every refresh tick, so per-element
