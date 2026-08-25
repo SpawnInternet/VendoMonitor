@@ -261,8 +261,15 @@ body.rail-on #railNav{display:block}
      .wtbl's min-width:700px then forces horizontal scrolling with the names
      clipped and half the page empty. Block layout lets it span the full width. */
   #grid-off-waiting{display:block}
-  .wwrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(33,48,64,.06)}
-  .wscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* The .wscroll wrapper is GONE from the markup. It existed only to scroll a
+     700px table sideways, but overflow-x:auto made it a scroll container, and
+     sticky measures its offset against the nearest scroll container -- so the
+     column header was shoved 283px DOWN inside it instead of pinning to the
+     window. .wwrap had the same problem via overflow:hidden; overflow:clip
+     clips the rounded corners identically without creating a scrollport.
+     With neither wrapper scrolling, the window is the scroller and the sticky
+     offset means what it says -- at every width. */
+  .wwrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow:clip;box-shadow:0 1px 3px rgba(33,48,64,.06)}
   .wtbl{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;min-width:700px}
   .wtbl th{text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);font-weight:900;padding:9px 12px;background:var(--panel2);border-bottom:1px solid var(--border);white-space:nowrap}
   .wtbl th.ar{text-align:right}
@@ -515,8 +522,16 @@ body.rail-on #railNav{display:block}
   .sechd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 9px;font-size:13.5px;font-weight:900;color:var(--navy)}
   .sechd .sdot{width:9px;height:9px;border-radius:50%;background:var(--red);flex:none;box-shadow:0 0 0 3px rgba(223,26,53,.14)}
   .sechd .shint{font-size:12px;font-weight:700;color:var(--dim)}
+  /* No sideways scroller means a fixed min-width would be CLIPPED, not
+     scrolled to. Let the table shrink and the labels wrap instead. */
+  @media(max-width:819px){
+    .wtbl{min-width:0}
+    .wtbl th{white-space:normal}
+    .wtbl th,.wtbl td{padding:8px 7px}
+    .wtbl .wnamecell{min-width:0}
+  }
   @media(max-width:640px){
-    .wtbl{min-width:600px;font-size:12.5px}
+    .wtbl{font-size:12.5px}
     .wtbl th:nth-child(5),.wtbl td:nth-child(5){display:none}
   }
   .devgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:3px}
@@ -1546,7 +1561,7 @@ function sortVendos(arr){
 
 // Waiting tab as a compact table: address, VLAN, router name, status.
 function waitTable(list){
-  return `<div class="wwrap"><div class="wscroll"><table class="wtbl"><thead><tr>
+  return `<div class="wwrap"><table class="wtbl"><thead><tr>
     <th>Address</th><th>VLAN</th><th>Name in router</th><th>Status</th>
     <th class="ar">Users</th><th class="ar">Data</th><th>Offline for</th><th>Field note</th>
   </tr></thead><tbody>`+
@@ -1567,7 +1582,7 @@ function waitTable(list){
       <td class="wdim">${m.offline_since?ago(m.offline_since):'—'}</td>
       <td>${m.lease_note?`<span class="wnote" title="${esc(m.lease_note)}">📝 ${esc(m.lease_note)}</span>`:'<span class="wzero">—</span>'}</td>
     </tr>`;
-  }).join('')+`</tbody></table></div></div>`;
+  }).join('')+`</tbody></table></div>`;
 }
 
 /* Online as a dense table, beside the cards rather than instead of them.
@@ -1589,7 +1604,7 @@ function areaChip(a){
   return `<span class="achip ${AREA_COLOR[k]||'ac-navy'}">${esc(a||'—')}</span>`;
 }
 function onlineTable(list){
-  return `<div class="wwrap"><div class="wscroll"><table class="wtbl otbl"><thead><tr>
+  return `<div class="wwrap"><table class="wtbl otbl"><thead><tr>
     <th>VLAN</th><th>Name in router</th><th>Status</th>
     <th class="ar">Users</th><th class="ar">Live</th><th class="ar">Data</th><th>Area</th>
   </tr></thead><tbody>`+
@@ -1608,7 +1623,7 @@ function onlineTable(list){
       <td class="wnum wdim">${fmtBytes(rx+tx)}</td>
       <td>${areaChip(areaOf(m))}</td>
     </tr>`;
-  }).join('')+`</tbody></table></div></div>`;
+  }).join('')+`</tbody></table></div>`;
 }
 let ONLINE_VIEW=(function(){ try{ return localStorage.getItem('spawn_online_view')||'cards'; }catch(e){ return 'cards'; } })();
 function setOnlineView(v){
@@ -1929,10 +1944,10 @@ function downTable(list){
       <td class="wnum">${rec&&rec.monthly_amount!=null?'₱'+esc(rec.monthly_amount):'<span class="wzero">—</span>'}</td>
     </tr>`;
   };
-  return `<div class="wwrap"><div class="wscroll"><table class="wtbl"><thead><tr>
+  return `<div class="wwrap"><table class="wtbl"><thead><tr>
     <th>Subscriber</th><th>Area</th><th>Address</th><th>Contact</th>
     <th>Down for</th><th>Due</th><th class="ar">Monthly</th>
-  </tr></thead><tbody>`+list.map(cell).join('')+`</tbody></table></div></div>`;
+  </tr></thead><tbody>`+list.map(cell).join('')+`</tbody></table></div>`;
 }
 /* An area with ZERO lines online on this server, but several down, is not an
    outage — it is served by its own MikroTik and what remains here are
