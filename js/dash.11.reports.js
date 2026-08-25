@@ -123,6 +123,8 @@ function rpShellHtml(){
   + '#panel-reports .rp-grid.hdr{font-size:10px;font-weight:700;color:#025AC6;text-transform:uppercase;letter-spacing:.04em;padding:0 2px 4px}'
   + '#panel-reports .rp-x{border:none;background:#fff0f2;color:#DF1A35;border-radius:6px;height:30px;cursor:pointer;font-size:14px;font-weight:700;line-height:1}'
   + '#panel-reports .rp-x:hover{background:#DF1A35;color:#fff}'
+  + '#panel-reports .rp-e{border:none;background:#f0f4ff;color:#025AC6;border-radius:6px;height:30px;padding:0 8px;cursor:pointer;font-size:12px;font-weight:700;line-height:1;margin-right:3px}'
+  + '#panel-reports .rp-e:hover{background:#025AC6;color:#fff}'
   + '#panel-reports .rp-btn{padding:8px 14px;border-radius:8px;border:1px solid #dbeafe;background:#fff;color:#374151;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}'
   + '#panel-reports .rp-btn:hover{border-color:#025AC6;color:#025AC6}'
   + '#panel-reports .rp-btn.pri{background:#025AC6;color:#fff;border-color:#025AC6}'
@@ -758,7 +760,9 @@ function rpDrawSaved(){
       +   '<div style="font-size:9.5px;color:#8b93ad">'+rpEsc(r.category)+'</div></td>'
       + '<td style="color:'+(r.co?'#6b7394':'#DF1A35')+'">'+rpEsc(r.co||'no name')+'</td>'
       + '<td class="rp-num" style="font-weight:700">'+rpPeso(r.amount)+'</td>'
-      + '<td><button class="rp-x" title="Void this entry (admin password)" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
+      + '<td style="white-space:nowrap">'
+      +   '<button class="rp-e" title="Edit this entry (admin password)" onclick="rpEditSaved('+r.id+')">\u270e</button>'
+      +   '<button class="rp-x" title="Void this entry (admin password)" onclick="rpDelSaved('+r.id+')">\u00d7</button></td>'
       + '</tr>';
   }).join('');
 }
@@ -842,6 +846,123 @@ window.rpDelSaved = async function(id){
   } catch(e){
     ans.close();
     if(window.toast) toast('\u274c Void failed: ' + e.message);
+  }
+};
+
+// ── edit a saved expense ─────────────────────────────────
+// Same password gate as Void, and for the same reason: these rows are money
+// that has already been counted. The date is editable because a wrong date
+// silently moves an amount into another day's total, which is the hardest
+// kind of error to find later.
+function rpEditModal(row){
+  return new Promise(function(resolve){
+    const old = document.getElementById('rp-edit-ov'); if(old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'rp-edit-ov';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:100040;display:flex;align-items:center;justify-content:center;padding:20px';
+    const F = 'width:100%;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit';
+    const L = 'display:block;font-size:10px;font-weight:700;color:#6b7394;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;margin-top:12px';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:18px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;max-height:92vh;display:flex;flex-direction:column">'
+      + '<div style="background:linear-gradient(135deg,#025AC6,#012f6b);padding:16px 22px;color:#fff;font-size:16px;font-weight:800">\u270e Edit expense entry</div>'
+      + '<div style="padding:8px 22px 19px;overflow-y:auto">'
+      +   '<div style="background:#f6f9ff;border:1px solid #dbeafe;border-radius:9px;padding:10px 13px;margin-top:11px">'
+      +     '<div style="font-size:10px;color:#6b7394;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Currently on record</div>'
+      +     '<div style="font-size:12.5px;color:#1a1d2e;margin-top:3px">' + rpEsc(row.expense_date || rpDate)
+      +       ' \u00b7 ' + rpEsc(row.description || '\u2014') + ' \u00b7 <b>' + rpPeso(row.amount) + '</b></div>'
+      +   '</div>'
+      +   '<label style="' + L + '">Date</label>'
+      +   '<input id="rp-ed-date" type="date" style="' + F + '">'
+      +   '<label style="' + L + '">Particulars / description</label>'
+      +   '<input id="rp-ed-desc" placeholder="What it was for" style="' + F + '">'
+      +   '<label style="' + L + '">Name (c/o \u2014 released to)</label>'
+      +   '<input id="rp-ed-co" placeholder="Optional" style="' + F + '">'
+      +   '<label style="' + L + '">Expense type</label>'
+      +   '<input id="rp-ed-cat" placeholder="e.g. Salaries & Wages" style="' + F + '">'
+      +   '<label style="' + L + '">Amount</label>'
+      +   '<input id="rp-ed-amt" type="number" step="0.01" min="0" style="' + F + '">'
+      +   '<div style="border-top:1px solid #eef2f9;margin-top:16px;padding-top:13px">'
+      +     '<label style="' + L + ';margin-top:0">Admin password</label>'
+      +     '<input id="rp-ed-pw" type="password" inputmode="numeric" placeholder="Required to save changes" style="' + F + '">'
+      +   '</div>'
+      +   '<div id="rp-ed-err" style="color:#DF1A35;font-size:12px;font-weight:700;margin-top:8px;display:none"></div>'
+      +   '<div style="display:flex;gap:8px;margin-top:18px">'
+      +     '<button id="rp-ed-cancel" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e5e7eb;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'
+      +     '<button id="rp-ed-ok" style="flex:2;padding:11px;background:#025AC6;color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">\u2714 Save changes</button>'
+      +   '</div>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+
+    const d = document.getElementById('rp-ed-date');
+    const de= document.getElementById('rp-ed-desc');
+    const co= document.getElementById('rp-ed-co');
+    const ca= document.getElementById('rp-ed-cat');
+    const am= document.getElementById('rp-ed-amt');
+    const pw= document.getElementById('rp-ed-pw');
+    d.value  = row.expense_date || rpDate || '';
+    de.value = row.description || '';
+    co.value = row.co || '';
+    ca.value = row.category || '';
+    am.value = (row.amount == null ? '' : String(row.amount));
+
+    function err(msg){
+      const e = document.getElementById('rp-ed-err');
+      if(e){ e.textContent = '\u274c ' + msg; e.style.display = 'block'; }
+      const b = document.getElementById('rp-ed-ok');
+      if(b){ b.disabled = false; b.textContent = '\u2714 Save changes'; }
+    }
+    function done(v){ ov.remove(); resolve(v); }
+    function submit(){
+      const amt = parseFloat(am.value);
+      if(!d.value){ err('Date is required.'); d.focus(); return; }
+      if(!(amt > 0)){ err('Amount must be greater than zero.'); am.focus(); return; }
+      if(!pw.value){ pw.focus(); return; }
+      resolve({
+        date: d.value, description: de.value, co: co.value,
+        category: ca.value, amount: amt, pw: pw.value,
+        close: function(){ ov.remove(); },
+        fail: function(m){ if(m === 'bad_password'){ err('Wrong password.'); pw.value=''; pw.focus(); } else err(m); }
+      });
+      const b = document.getElementById('rp-ed-ok');
+      if(b){ b.disabled = true; b.textContent = 'Saving\u2026'; }
+    }
+    document.getElementById('rp-ed-cancel').onclick = function(){ done(null); };
+    document.getElementById('rp-ed-ok').onclick = submit;
+    [d, de, co, ca, am, pw].forEach(function(el){
+      el.onkeydown = function(e){
+        if(e.key === 'Enter'){ e.preventDefault(); if(el === pw) submit(); else pw.focus(); }
+        if(e.key === 'Escape'){ e.preventDefault(); done(null); }
+      };
+    });
+    ov.addEventListener('click', function(e){ if(e.target === ov) done(null); });
+    setTimeout(function(){ de.focus(); de.select(); }, 60);
+  });
+}
+
+window.rpEditSaved = async function(id){
+  const row = rpDayRows.find(function(x){ return x.id === id; }) || {};
+  const ans = await rpEditModal(row);
+  if(!ans) return;
+  try {
+    const res = await rpRpc('spawn_expense_edit', {
+      p_id: id, p_pw: ans.pw, p_date: ans.date, p_description: ans.description,
+      p_co: ans.co, p_category: ans.category, p_amount: ans.amount, p_by: 'dashboard'
+    });
+    if(!res || res.ok !== true){
+      ans.fail((res && res.error) || 'edit failed');
+      return;
+    }
+    ans.close();
+    // Moving the date takes the entry out of the day you are looking at, so say
+    // where it went rather than letting it vanish from the list unexplained.
+    if(window.toast){
+      toast(res.date_changed
+        ? '\u2714 Saved \u2014 moved to ' + res.expense_date
+        : '\u2714 Saved \u2014 ' + rpPeso(res.amount));
+    }
+    rpRenderExpense();
+  } catch(e){
+    ans.fail(e.message);
   }
 };
 
