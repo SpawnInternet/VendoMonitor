@@ -1024,7 +1024,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-08-25-c5hide-scroll";
+const REV = "2026-08-25-gw-dicayas";
 
 const SERVER = {
   name:     "Dicayas Server",
@@ -1035,8 +1035,49 @@ const SERVER = {
 const SERVER_Q = encodeURIComponent(SERVER.name);   // for use inside REST query strings
 
 const SB="https://cviraqfhphhsonjmrtvu.supabase.co";
-const KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o";
+/* SECURITY: no anon key in this file. Every /rest/v1 call this page makes is
+   intercepted below and re-posted to the spawn-gw-dicayas edge function, which
+   holds the service key server side and enforces a per-table method allow-list.
+   The literal 'gw' is a marker for the interceptor, not a credential.
+
+   NOTE: spawn-gw-DICAYAS is its own function. harvest_v3.html talks to
+   spawn-gw and ops/lineman talk to spawn-gw-field; neither is touched here, so
+   neither can change behaviour because of this page.
+
+   The four money tables (harvests, transactions, job_orders, collector_packs)
+   are NOT routed here. They keep going to spawn-gw-admin behind the admin
+   login via GW_TABLES/sbGw further down, and spawn-gw-dicayas refuses them. */
+const KEY="gw";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
+(function installDicayasGateway(){
+  const GW    = SB + '/functions/v1/spawn-gw-dicayas';
+  const TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';
+  const _f    = window.fetch.bind(window);
+  const RPC_RE  = /\/rest\/v1\/rpc\/([a-z_0-9]+)$/;
+  const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  const post = (payload) => _f(GW, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-gw-token':TOKEN },
+    body: JSON.stringify(payload)
+  });
+  window.fetch = function(input, init){
+    try{
+      const url  = (typeof input === 'string') ? input : (input && input.url) || '';
+      const o    = init || {};
+      const h    = o.headers || {};
+      if (url.indexOf(SB) === 0 && (h.apikey === 'gw' || h['x-spawn-gw'] === '1')) {
+        const method = (o.method || 'GET').toUpperCase();
+        const body   = o.body ? JSON.parse(o.body) : undefined;
+        const rpcm = url.match(RPC_RE);
+        if (rpcm) return post({ kind:'rpc', fn: rpcm[1], body });
+        const m = url.match(REST_RE);
+        if (m) return post({ kind:'rest', table:m[1], method, query:m[3] || '', body,
+                             prefer: h['Prefer'] || h['prefer'] || '' });
+      }
+    }catch(e){ console.warn('[GW-DICAYAS] passthrough:', e && e.message); }
+    return _f(input, init);
+  };
+})();
 let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
 // Freewifi voucher code per VLAN (from hotspot_vouchers, pulled live by the poller)
 let VOUCH={};
