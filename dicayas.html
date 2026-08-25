@@ -34,21 +34,38 @@
   .stat .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
   .stat.on .n{color:var(--grn)} .stat.off .n{color:var(--offred)}
   .stat.warn .n{color:#c98a00} .stat.subs .n{color:#1f7d8f}
-  .tabs{display:flex;gap:3px;padding:9px 18px 0;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto}
-  .tab{padding:9px 15px;cursor:pointer;border-radius:9px 9px 0 0;color:var(--dim);white-space:nowrap;font-weight:800;font-size:13px;border:1px solid transparent;border-bottom:none}
-  .tab.active{background:var(--deep);color:var(--navy);border-color:var(--border)}
+  /* WAS: pill tabs at 13px with padding:9px 15px, laid out at their natural
+     width inside overflow-x:auto. Ten of them did not fit, so "Inactive",
+     "Empty Slots" and everything past it lived off the right edge behind a
+     scrollbar -- findable only if you knew to drag. Same fix the dashboard
+     already uses: icon over a small uppercase label, flex:1 so every tab
+     shares the width and all ten are on screen at once. */
+  .tabs{display:flex;gap:0;padding:0;background:#fff;border-bottom:1.5px solid var(--border);align-items:stretch;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+       padding:6px 3px;cursor:pointer;background:transparent;border:none;border-bottom:3px solid transparent;
+       transition:background .12s;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+  .tab .ti{font-size:16px;line-height:1.1}
+  .tab .tl{font-size:8.5px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.03em;text-align:center;line-height:1.2;white-space:nowrap}
+  .tab.active{background:var(--deep)}
+  .tab.active .tl{color:var(--navy)}
+  .tab:hover:not(.active){background:#f5f8ff}
+  /* Under 860px ten tabs stop fitting honestly -- let them keep their real
+     width and scroll rather than squeezing the labels into nonsense. */
+  @media(max-width:859px){ .tab{flex:0 0 auto;padding:6px 11px} }
   .stat[data-go]{cursor:pointer;transition:transform .08s ease,box-shadow .08s ease}
   .stat[data-go]:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.12)}
   .stat[data-go]:active{transform:translateY(0)}
-  .tab.active[data-tab="online"]{box-shadow:inset 0 3px 0 var(--green)}
-  .tab.active[data-tab="offline"]{box-shadow:inset 0 3px 0 var(--red)}
-  .tab.active[data-tab="nolease"]{box-shadow:inset 0 3px 0 #7a8aa0}
-  .tab.active[data-tab="subs"]{box-shadow:inset 0 3px 0 var(--cyan)}
-  .tab.active[data-tab="search"]{box-shadow:inset 0 3px 0 var(--purple)}
-  .tab.active[data-tab="compare"]{box-shadow:inset 0 3px 0 var(--gold)}
-  .tab.active[data-tab="inactive"]{box-shadow:inset 0 3px 0 var(--magenta)}
-  .tab.active[data-tab="empty"]{box-shadow:inset 0 3px 0 #7a8aa0}
-  .tab.active[data-tab="deleted"]{box-shadow:inset 0 3px 0 var(--red)}
+  .tab.active[data-tab="online"]{border-bottom-color:var(--green)}
+  .tab.active[data-tab="offline"]{border-bottom-color:var(--red)}
+  .tab.active[data-tab="nolease"]{border-bottom-color:#7a8aa0}
+  .tab.active[data-tab="subs"]{border-bottom-color:var(--cyan)}
+  .tab.active[data-tab="search"]{border-bottom-color:var(--purple)}
+  .tab.active[data-tab="compare"]{border-bottom-color:var(--gold)}
+  .tab.active[data-tab="inactive"]{border-bottom-color:var(--magenta)}
+  .tab.active[data-tab="empty"]{border-bottom-color:#7a8aa0}
+  .tab.active[data-tab="deleted"]{border-bottom-color:var(--red)}
+  .tab.active[data-tab="spawnfi"]{border-bottom-color:var(--blue)}
   .wrap{padding:16px 18px 60px}
   .banner.ok{background:#e9f7f1;border-color:#b6e3d3;color:#046b52}
   .banner.info{background:#eaf2fe;border-color:#bcd6f7;color:#08488f}
@@ -128,7 +145,16 @@
 .supp-alert b{font-weight:700}
 .supp-warn{background:#fff6e0;border-radius:6px;padding:5px 9px;margin-top:7px;font-size:12px;color:var(--amber);font-weight:600}
 .supp-meta{font-size:12px;color:var(--dim);margin-top:7px}
-.supp-restore{color:var(--blue);font-weight:700;cursor:pointer}
+/* WAS a bare <span>: a ~55px line of text with no padding. On a phone a tap
+   that misses by a few pixels selects the words instead of firing the handler,
+   which is why Restore felt dead. Now a real button with a 34px target. */
+.supp-restore{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:6px 14px;margin-left:4px;
+  background:#eef4ff;color:var(--blue);border:1px solid #b9cdf3;border-radius:8px;
+  font-weight:800;font-size:13px;font-family:inherit;cursor:pointer;
+  -webkit-user-select:none;user-select:none;touch-action:manipulation}
+.supp-restore:hover{background:#dfe9fd}
+.supp-restore:active{background:#cfdefb}
+.supp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .sec{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--blue);margin:9px 0 3px;font-weight:900}
   .btn{border:none;border-radius:9px;padding:9px 16px;font-weight:800;font-size:13px;cursor:pointer;transition:.12s}
   .btn.gold{background:var(--gold);color:var(--navy)} .btn.gold:hover{filter:brightness(1.05)}
@@ -746,17 +772,21 @@ body.rail-on #railNav{display:block}
 
 <button id="railBtn" title="Toggle side menu">☰</button>
 <nav id="railNav"></nav>
+<!-- "Trash" and "Deleted History" were two tabs pointing at the SAME
+     data-tab="deleted" pane -- one of them was always a no-op. Merged, and the
+     freed slot went to SpawnFi. Icon and label are separate spans now so the
+     rail can read them without parsing text. -->
 <div class="tabs">
-  <div class="tab active" data-tab="online">🟢 Online</div>
-  <div class="tab" data-tab="offline">🔴 Waiting</div>
-  <div class="tab" data-tab="nolease">⚫ No Lease</div>
-  <div class="tab" data-tab="subs">👤 Subscribers</div>
-  <div class="tab" data-tab="search">🔍 Search / Filter</div>
-  <div class="tab" data-tab="deleted">🗑 Trash</div>
-  <div class="tab" data-tab="compare">📊 vs Transactions</div>
-  <div class="tab" data-tab="inactive">🚫 Inactive</div>
-  <div class="tab" data-tab="empty">⚫ Empty Slots</div>
-  <div class="tab" data-tab="deleted">🗑 Deleted History</div>
+  <div class="tab active" data-tab="online"><span class="ti">🟢</span><span class="tl">Online</span></div>
+  <div class="tab" data-tab="offline"><span class="ti">🔴</span><span class="tl">Waiting</span></div>
+  <div class="tab" data-tab="nolease"><span class="ti">⚫</span><span class="tl">No Lease</span></div>
+  <div class="tab" data-tab="subs"><span class="ti">👤</span><span class="tl">Subscribers</span></div>
+  <div class="tab" data-tab="search"><span class="ti">🔍</span><span class="tl">Search</span></div>
+  <div class="tab" data-tab="compare"><span class="ti">📊</span><span class="tl">Transactions</span></div>
+  <div class="tab" data-tab="spawnfi"><span class="ti">📶</span><span class="tl">SpawnFi</span></div>
+  <div class="tab" data-tab="inactive"><span class="ti">🚫</span><span class="tl">Inactive</span></div>
+  <div class="tab" data-tab="empty"><span class="ti">⚫</span><span class="tl">Empty Slots</span></div>
+  <div class="tab" data-tab="deleted"><span class="ti">🗑</span><span class="tl">Trash</span></div>
 </div>
 
 <div class="wrap">
@@ -5138,11 +5168,16 @@ function openTab(name){
   t.classList.add('active');
   if(typeof syncRail==='function') syncRail(name);
   document.querySelectorAll('.pane').forEach(p=>p.style.display='none');
-  const pane=document.getElementById('pane-'+name);
+  /* SpawnFi has no pane of its own -- it IS the Inactive list filtered to the
+     machines that moved to SpawnFi. Sharing the pane means one renderer, one
+     Restore path, and no second copy to keep in step. The tab stays lit so it
+     never looks like the click landed on Inactive by mistake. */
+  const pane=document.getElementById(name==='spawnfi'?'pane-inactive':'pane-'+name);
   if(pane) pane.style.display='block';
   if(name==='compare') loadCompare();
   if(name==='subs') renderSubs();
-  if(name==='inactive') loadSuppress();
+  if(name==='spawnfi'){ SUPP_TAB='TRANSFERRED'; loadSuppress(); }
+  if(name==='inactive'){ SUPP_TAB='ALL'; loadSuppress(); }
   if(name==='deleted'){ renderDeleted(); renderArchive(); }
   if(pane) pane.scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -5163,7 +5198,8 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>openTab(t.dataset.tab
    healthy, red for faults, purple for people, gold for money. */
 const RAIL_COLOR={online:'var(--green)',offline:'var(--red)',nolease:'var(--dim)',
   subs:'var(--purple)',search:'var(--cyan)',compare:'var(--magenta)',
-  inactive:'var(--red)',empty:'var(--dim)',deleted:'var(--dim)'};
+  inactive:'var(--red)',empty:'var(--dim)',deleted:'var(--dim)',
+  spawnfi:'var(--blue)'};
 function buildRail(){
   const nav=document.getElementById('railNav'); if(!nav) return;
   const seen=new Set(); let html='<div class="rhd">Dicayas Server</div>';
@@ -5171,9 +5207,12 @@ function buildRail(){
     const k=t.dataset.tab;
     if(!k||seen.has(k)) return;            // 'deleted' appears twice in the strip
     seen.add(k);
+    /* Icon and label are their own spans now. The old regex split textContent
+       on the first space, which silently broke on any two-word label. */
     const raw=t.textContent.trim();
     const m=raw.match(/^(\S+)\s+(.*)$/);
-    const icon=m?m[1]:'\u25AA', label=m?m[2]:raw;
+    const icon=t.querySelector('.ti')?.textContent.trim() || (m?m[1]:'\u25AA');
+    const label=t.querySelector('.tl')?.textContent.trim() || (m?m[2]:raw);
     html+=`<div class="ri" data-go="${k}" style="color:${RAIL_COLOR[k]||'var(--txt)'}">`
         + `<span class="ric">${icon}</span>`
         + `<span style="color:var(--txt)">${label}</span></div>`;
@@ -6183,8 +6222,8 @@ function suppCard(it){
     ${it.online_while_suppressed?`<div class="supp-alert">\u26A0 ONLINE right now while suppressed \u2014 router says: <b>${esc(it.router_comment_now||'?')}</b></div>`:''}
     ${(!it.online_while_suppressed&&it.router_comment_changed)?`<div class="supp-alert">\u26A0 Router comment changed since suppression \u2014 likely a different machine on this VLAN: <b>${esc(it.router_comment_now||'?')}</b></div>`:''}
     ${it.earning_after_suppress?'<div class="supp-warn">Harvested after it was suppressed</div>':''}
-    <div class="supp-meta">suppressed ${it.suppressed_at?ago(it.suppressed_at)+' ago':'?'}${it.owner_name?' · owner '+esc(it.owner_name):''}
-      · <span class="supp-restore" onclick='restore(${JSON.stringify(kind)},${JSON.stringify(String(key))},${JSON.stringify(name)})'>\u21A9 Restore</span></div>
+    <div class="supp-meta"><span>suppressed ${it.suppressed_at?ago(it.suppressed_at)+' ago':'?'}${it.owner_name?' · owner '+esc(it.owner_name):''}</span>
+      <button type="button" class="supp-restore" onclick='restore(${JSON.stringify(kind)},${JSON.stringify(String(key))},${JSON.stringify(name)})'>\u21A9 Restore</button></div>
   </div>`;
 }
 function renderInactive(){
