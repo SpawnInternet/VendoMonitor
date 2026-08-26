@@ -3687,12 +3687,14 @@ function kvPane(p, btn){
   if(p==='fobs')     fobsLoad();
 }
 
-/* ── GENERATE QR: self-serve batch of vendo key fobs ───────────────────────
-   Random 5-letter codes (no I/O), 3 per vendo (duplicate/pungpung/board),
-   registered in vendo_key_qr via the anon path, then a print page opens in a
-   new tab. Uses bwip-js (loaded from CDN on demand) for the Data Matrix. */
-const GQ_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, no O
-let _gqQrLoading = null;
+/* ── GENERATE FOBS: self-serve batch of vendo key fobs ─────────────────────
+   Random 4-letter codes (no I/O/Q), 3 per vendo in a fixed Pung → Board → Dup
+   order, registered in vendo_key_qr via the anon path, then a print page opens
+   in a new tab. Letters only — no QR image. The code is printed large so it
+   can be read off the plastic and typed into Spawn Keys → Bind, with the key
+   type on a colored chip directly below it. */
+const GQ_ALPHA = 'ABCDEFGHJKLMNPRSTUVWXYZ'; // no I, no O, no Q — typed by hand
+const GQ_BAD   = ['SEX','ASS','FUC','CUM','PIS','TIT','GAY','FAG','JIZ','POO','PEE'];
 
 function gqLoad(){
   // show current counts
@@ -3708,39 +3710,12 @@ function gqLoad(){
     .catch(e=>{ console.warn('[KEYS] QR fob counters did not refresh:', e.message); });
 }
 
-function gqLoadQr(){
-  if(window.QRCode && window.QRCode.toDataURL) return Promise.resolve();
-  if(_gqQrLoading) return _gqQrLoading;
-  // Self-hosted copy first (works with no external internet), CDN last resort.
-  const SRCS = [
-    'js/qrcode.min.js',
-    '/VendoMonitor/js/qrcode.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.3/qrcode.min.js'
-  ];
-  function tryOne(i){
-    if(i >= SRCS.length) return Promise.reject(new Error('QR library not found (js/qrcode.min.js missing)'));
-    return new Promise((res,rej)=>{
-      const s=document.createElement('script');
-      s.src=SRCS[i];
-      s.onload=()=>{ (window.QRCode && window.QRCode.toDataURL) ? res() : rej(new Error('bad build')); };
-      s.onerror=()=>rej(new Error('load fail'));
-      document.head.appendChild(s);
-    }).catch(()=>tryOne(i+1));
-  }
-  _gqQrLoading = tryOne(0).catch(e=>{ _gqQrLoading=null; throw e; });
-  return _gqQrLoading;
-}
-
 function gqRandCode(used){
   let c;
-  do { c=''; for(let i=0;i<5;i++) c+=GQ_ALPHA[Math.floor(Math.random()*GQ_ALPHA.length)]; }
-  while(used.has(c));
+  do {
+    c=''; for(let i=0;i<4;i++) c+=GQ_ALPHA[Math.floor(Math.random()*GQ_ALPHA.length)];
+  } while(used.has(c) || GQ_BAD.some(b=>c.indexOf(b)>=0));
   used.add(c); return c;
-}
-
-// QR -> PNG data URL (proven scannable, generated fully client-side)
-function gqQrPng(text){
-  return QRCode.toDataURL(text, {margin:2, scale:8, errorCorrectionLevel:'M'});
 }
 
 async function gqGenerate(){
@@ -3748,28 +3723,24 @@ async function gqGenerate(){
   const status=document.getElementById('gq-status');
   const n=parseInt(document.getElementById('gq-count').value,10)||50;
   btn.disabled=true; btn.style.opacity='.6';
-  status.textContent='Loading QR library…';
   try{
-    await gqLoadQr();
-
     // pull existing codes so new ones never collide
     status.textContent='Checking existing codes…';
     const ex=await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code', {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}}).then(r=>r.json());
     const used=new Set((Array.isArray(ex)?ex:[]).map(r=>r.qr_code));
 
-    // build codes: n vendos x 3 types
-    const TYPES=[['duplicate','Dup','#C01176'],['pungpung','Pung','#311A8E'],['board','Board','#028867']];
+    // build codes: n vendos x 3 types, always in the same Pung → Board → Dup
+    // order so each run of three fobs on the sheet is one vendo's set
+    const TYPES=[['pungpung','Pungpung','#311A8E'],['board','Board','#028867'],['duplicate','Duplicate','#C01176']];
     const rows=[]; const fobs=[];
     status.textContent='Generating '+(n*3)+' codes…';
     for(let i=0;i<n;i++){
       for(const [ktype,label,color] of TYPES){
         const code=gqRandCode(used);
         rows.push({qr_code:code, key_type:ktype});
-        const url=await gqQrPng(code);
         fobs.push(
-          '<div class="fob"><img src="'+url+'">'
-          +'<div class="meta"><span class="code">'+code+'</span>'
-          +'<span class="lbl" style="background:'+color+'">'+label+'</span></div>'
+          '<div class="fob"><div class="code">'+code+'</div>'
+          +'<div class="tag" style="background:'+color+'">'+label+'</div>'
           +'<div class="free"></div></div>'
         );
       }
@@ -3806,15 +3777,13 @@ function gqPrintPage(fobs, n){
     +'.sheet{background:#fff;border-radius:13px;padding:15px;box-shadow:0 4px 18px rgba(2,90,198,.1)}'
     +'.grid{display:flex;flex-wrap:wrap;gap:4mm}'
     +'.fob{width:19mm;height:37mm;border:0.25mm dashed #b9c4dc;display:flex;flex-direction:column;align-items:center;padding:0.5mm;box-sizing:border-box;background:#fff}'
-    +'.fob img{width:18mm;height:18mm;image-rendering:pixelated;display:block;margin-top:0.4mm}'
-    +'.meta{display:flex;align-items:center;gap:1.2mm;margin-top:0.8mm;line-height:1}'
-    +'.code{font-size:7pt;font-weight:800;color:#000;letter-spacing:1px}'
-    +'.lbl{font-size:5pt;font-weight:800;color:#fff;padding:0.3mm 1mm;border-radius:1mm;line-height:1}'
+    +'.code{font-size:15pt;font-weight:800;color:#000;letter-spacing:1.4px;margin-top:3mm;line-height:1}'
+    +'.tag{font-size:5.5pt;font-weight:800;color:#fff;padding:0.4mm 1.4mm;border-radius:1mm;line-height:1;margin-top:1.6mm;letter-spacing:.3px}'
     +'.free{flex:1}'
     +'@media print{body{background:#fff;padding:0}h1,.sub{display:none}.sheet{box-shadow:none;padding:0}}'
     +'</style></head><body>'
     +'<h1>🔑 Spawn Vendo Key Fobs — blank, bind later</h1>'
-    +'<div class="sub">'+n+' vendos × 3 = '+(n*3)+' fobs. Free space to write the vendo name. Print at 100% / Actual size. Cut on the dashed line.</div>'
+    +'<div class="sub">'+n+' vendos × 3 = '+(n*3)+' fobs, in Pungpung → Board → Duplicate order. Write the vendo name in the free space. Print at 100% / Actual size. Cut on the dashed line.</div>'
     +'<div class="sheet"><div class="grid">'+fobs.join('')+'</div></div>'
     +'<script>setTimeout(function(){window.print();},600);<\/script>'
     +'</body></html>';
