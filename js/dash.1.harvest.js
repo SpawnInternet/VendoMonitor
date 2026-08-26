@@ -3762,17 +3762,18 @@ async function gwLoad(){
     let html='';
     for(let i=0;i<n;i++){
       const trio=GW_TYPES.map(([k,l,c])=>[per[k][i].qr_code,k,l,c]);
-      html+='<div style="display:flex;gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid #f0f2f7;">'
-        +'<div style="width:26px;font-size:11px;font-weight:800;color:#8a93a8;flex-shrink:0;">'+(i+1)+'</div>'
-        +'<div style="display:flex;gap:6px;flex:1;flex-wrap:wrap;">'
+      const codes=trio.map(t=>t[0]);
+      html+='<div id="gwrow-'+i+'" style="display:flex;gap:7px;align-items:center;padding:8px 2px;border-bottom:1px solid #f0f2f7;">'
+        +'<div style="width:22px;font-size:11px;font-weight:800;color:#8a93a8;flex-shrink:0;">'+(i+1)+'</div>'
+        +'<div onclick="gwPick([\''+codes.join("','")+'\'],'+i+')" style="display:flex;gap:6px;flex:1;flex-wrap:wrap;cursor:pointer;">'
         + trio.map(([code,k,l,c])=>gwChip(code,k,l,c,false)).join('')
         +'</div>'
-        +'<button onclick="gwMarkSet([\''+trio.map(t=>t[0]).join("','")+'\'])" '
+        +'<button onclick="gwMarkSet([\''+codes.join("','")+'\'])" '
         +'style="flex-shrink:0;padding:8px 9px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✓ set</button>'
         +'</div>';
     }
     list.innerHTML=html;
-    st.textContent=n+' set'+(n===1?'':'s')+' ready to write. Tap a code once you have penned it on a fob.';
+    st.textContent=n+' set'+(n===1?'':'s')+' available. Tap a row to bind it, or ✓ set to just mark it written.';
   }catch(e){
     if(list) list.innerHTML='<div style="padding:18px;text-align:center;color:#b91c1c;">Could not load codes: '+(e.message||e)+'</div>';
   }
@@ -3782,9 +3783,12 @@ async function gwStamp(codes, undo){
   const body = undo ? {issued_at:null, issued_by:null}
                     : {issued_at:new Date().toISOString(), issued_by:(window.ME&&ME.name)||'dashboard'};
   const qs = 'qr_code=in.('+codes.map(c=>'"'+c+'"').join(',')+')';
+  // NOTE: direct PostgREST, NOT _HDR. The admin gateway keeps a table allowlist
+  // and vendo_key_qr is not on it ("table not allowed"). The anon RLS policy
+  // permits UPDATE on unbound rows, which is exactly what this is.
   const r = await fetch(_SB+'/rest/v1/vendo_key_qr?'+qs, {
     method:'PATCH',
-    headers:Object.assign({'Prefer':'return=minimal'},_HDR),
+    headers:Object.assign({'Prefer':'return=minimal'},_VS_HDR),
     body:JSON.stringify(body)
   });
   if(!r.ok){ const t=await r.text(); throw new Error(t.slice(0,140)); }
@@ -3840,6 +3844,124 @@ function gqAgo(t){
   if(sec<3600) return Math.floor(sec/60)+'m ago';
   if(sec<86400) return Math.floor(sec/3600)+'h ago';
   return Math.floor(sec/86400)+'d ago';
+}
+
+/* ── BIND PANEL (right column) ────────────────────────────────────────────
+   Pick a set on the left, find the vendo, submit. Each code is bound via
+   spawn_qr_bind (SECURITY DEFINER, same RPC Spawn Keys uses) so the key_type
+   already stored on the row decides which key it is. On success the codes are
+   also stamped issued_at, so a bound set can never resurface as available. */
+let _gwSel = null;   // {codes:[], row:n}
+let _gwVendo = null; // {id, name, area}
+let _gwSearchT = null;
+
+function gwVName(v){ return v.sheet_name || v.tg_name || v.owner_name || ('Vendo '+v.id); }
+
+function gwPick(codes, row){
+  _gwSel = {codes:codes, row:row};
+  const el=document.getElementById('gw-sel');
+  const LB={pungpung:['Pungpung','#311A8E'],board:['Board','#028867'],duplicate:['Duplicate','#C01176']};
+  const order=['pungpung','board','duplicate'];
+  if(el){
+    el.style.border='1.5px solid #025AC6';
+    el.style.color='#111';
+    el.innerHTML = codes.map((c,i)=>{
+      const [lab,col]=LB[order[i]];
+      return '<div style="display:flex;align-items:center;gap:7px;padding:3px 0;">'
+        +'<span style="font-size:16px;font-weight:800;letter-spacing:1.3px;min-width:60px;text-align:left;">'+c+'</span>'
+        +'<span style="font-size:9.5px;font-weight:800;color:#fff;background:'+col+';padding:2px 6px;border-radius:4px;">'+lab+'</span>'
+        +'</div>';
+    }).join('');
+  }
+  // highlight the chosen row
+  for(let i=0;i<200;i++){ const r=document.getElementById('gwrow-'+i); if(!r) break; r.style.background=''; }
+  const r=document.getElementById('gwrow-'+row); if(r) r.style.background='#EEF4FF';
+  gwBindBtn();
+}
+
+function gwVendoSearch(){
+  clearTimeout(_gwSearchT);
+  _gwSearchT = setTimeout(()=>{
+    const q=(document.getElementById('gw-vsearch')||{}).value||'';
+    const box=document.getElementById('gw-vresults');
+    if(!box) return;
+    if(q.trim().length<2){ box.innerHTML=''; return; }
+    const enc='*'+encodeURIComponent(q.trim())+'*';
+    // direct PostgREST: the gateway 401s on read-only vendo lookups
+    fetch(_SB+'/rest/v1/vendos?select=id,sheet_name,tg_name,owner_name,area&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+')&limit=12',{headers:_VS_HDR})
+      .then(r=>r.json())
+      .then(rows=>{
+        const arr=Array.isArray(rows)?rows:[];
+        if(!arr.length){ box.innerHTML='<div style="padding:8px;font-size:12px;color:#8a93a8;">No vendo found.</div>'; return; }
+        box.innerHTML=arr.map(v=>
+          '<div onclick="gwSetVendo('+v.id+',\''+String(gwVName(v)).replace(/'/g,"\\'")+'\',\''+String(v.area||'').replace(/'/g,"\\'")+'\')" '
+          +'style="padding:8px 9px;border-bottom:1px solid #eef1f6;cursor:pointer;font-size:12.5px;">'
+          +'<b>'+gwVName(v)+'</b>'+(v.area?' <span style="color:#8a93a8;font-size:11px;">· '+v.area+'</span>':'')
+          +'</div>').join('');
+      })
+      .catch(e=>{ box.innerHTML='<div style="padding:8px;font-size:12px;color:#b91c1c;">Search failed: '+e.message+'</div>'; });
+  }, 280);
+}
+
+function gwSetVendo(id, name, area){
+  _gwVendo={id:id, name:name, area:area};
+  const p=document.getElementById('gw-vpick');
+  if(p){
+    p.style.display='';
+    p.innerHTML='<b style="color:#028867;">✓ '+name+'</b>'+(area?' <span style="color:#8a93a8;">· '+area+'</span>':'')
+      +'<div style="font-size:11px;color:#8a93a8;margin-top:2px;">vendo id '+id+'</div>';
+  }
+  const box=document.getElementById('gw-vresults'); if(box) box.innerHTML='';
+  const s=document.getElementById('gw-vsearch'); if(s) s.value=name;
+  gwBindBtn();
+}
+
+function gwBindBtn(){
+  const b=document.getElementById('gw-bind-btn'); if(!b) return;
+  const ready = !!(_gwSel && _gwVendo);
+  b.disabled = !ready;
+  b.style.background = ready ? 'linear-gradient(135deg,#028867,#025AC6)' : '#c9d2e3';
+  b.style.cursor     = ready ? 'pointer' : 'not-allowed';
+  b.textContent = ready ? ('Bind 3 fobs → '+_gwVendo.name) : 'Bind 3 fobs';
+}
+
+async function gwBind(){
+  if(!_gwSel || !_gwVendo) return;
+  const b=document.getElementById('gw-bind-btn'), st=document.getElementById('gw-bind-status');
+  b.disabled=true; b.style.opacity='.6';
+  st.textContent='Binding…';
+  const done=[], failed=[];
+  try{
+    for(const code of _gwSel.codes){
+      const r=await fetch(_SB+'/rest/v1/rpc/spawn_qr_bind',{
+        method:'POST', headers:_VS_HDR,
+        body:JSON.stringify({p_qr:code, p_vendo_id:_gwVendo.id, p_account:(window.ME&&ME.name)||'dashboard', p_force:false})
+      });
+      let j=null; try{ j=await r.json(); }catch(_){}
+      if(r.ok && j && (j.ok || j.already_bound)) done.push(code);
+      else failed.push(code+' ('+((j&&j.error)||('HTTP '+r.status))+')');
+    }
+    // read back: only trust what the DB actually says is bound
+    const q='qr_code=in.('+_gwSel.codes.map(c=>'"'+c+'"').join(',')+')';
+    const rows=await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code,vendo_id&'+q,{headers:_VS_HDR}).then(r=>r.json());
+    const bound=(Array.isArray(rows)?rows:[]).filter(x=>x.vendo_id!=null).map(x=>x.qr_code);
+    if(bound.length) await gwStamp(bound, false);   // taken: out of the pool for good
+
+    st.innerHTML = failed.length
+      ? '<span style="color:#b91c1c;">⚠ Bound '+bound.length+' of 3. Failed: '+failed.join(', ')+'</span>'
+      : '<span style="color:#028867;">✅ '+bound.length+' fobs bound to '+_gwVendo.name+' — '+bound.join(' · ')+'</span>';
+
+    _gwSel=null; _gwVendo=null;
+    const sel=document.getElementById('gw-sel');
+    if(sel){ sel.innerHTML='No set selected yet'; sel.style.border='1.5px dashed #cdd8f0'; sel.style.color='#8a93a8'; }
+    const p=document.getElementById('gw-vpick'); if(p) p.style.display='none';
+    const s=document.getElementById('gw-vsearch'); if(s) s.value='';
+    gwLoad(); gqLoad();
+  }catch(e){
+    st.innerHTML='<span style="color:#b91c1c;">❌ '+(e.message||e)+'</span>';
+  }finally{
+    b.style.opacity='1'; gwBindBtn();
+  }
 }
 
 function gqRandCode(used){
