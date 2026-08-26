@@ -1763,23 +1763,51 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
         <!-- ── MODE: WRITE BY HAND ── -->
         <div id="gq-mode-write" style="display:none;">
           <div style="background:#FFF8E8;border:1px solid #f0dfae;border-radius:9px;padding:10px 12px;font-size:12px;color:#6b5423;line-height:1.55;margin-bottom:14px;">
-            No printer needed. Each row below is one vendo's set of three. Write the
-            codes on the blank fobs with a pen, then tap each one you used — it turns
-            green and leaves the available pool, so you can never write the same code
-            twice. Bind them in <b>Spawn Keys</b> whenever you get to it.
+            No printer needed. Each row is one vendo's set of three. Write the codes on
+            blank fobs with a pen, then either tap <b>✓ set</b> to just mark them used,
+            or tap the row to load it into the binding panel and link it to a vendo
+            right here. Bound codes leave the pool automatically.
           </div>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-            <label style="font-size:12px;font-weight:700;color:#374151;">Show</label>
-            <select id="gw-count" onchange="gwLoad()" style="padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
-              <option value="10">10 sets</option>
-              <option value="25" selected>25 sets</option>
-              <option value="50">50 sets</option>
-            </select>
-            <button onclick="gwLoad()" style="padding:8px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>
-            <button onclick="gwShowWritten()" style="padding:8px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#C77700;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Written list</button>
+
+          <div id="gw-cols" style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+
+            <!-- LEFT: available letters -->
+            <div style="flex:1 1 340px;min-width:300px;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+                <label style="font-size:12px;font-weight:700;color:#374151;">Show</label>
+                <select id="gw-count" onchange="gwLoad()" style="padding:7px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
+                  <option value="10">10 sets</option>
+                  <option value="25" selected>25 sets</option>
+                  <option value="50">50 sets</option>
+                </select>
+                <button onclick="gwLoad()" style="padding:7px 11px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>
+                <button onclick="gwShowWritten()" style="padding:7px 11px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#C77700;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Written</button>
+              </div>
+              <div id="gw-status" style="font-size:12px;color:#6b7280;margin-bottom:8px;min-height:16px;"></div>
+              <div id="gw-list" style="max-height:520px;overflow-y:auto;overflow-x:hidden;border:1px solid #eef1f6;border-radius:10px;padding:4px 8px;-webkit-overflow-scrolling:touch;"></div>
+            </div>
+
+            <!-- RIGHT: bind to a vendo -->
+            <div style="flex:1 1 300px;min-width:280px;background:#f7f9fc;border:1px solid #e5e7eb;border-radius:11px;padding:14px;">
+              <div style="font-size:13px;font-weight:800;color:#025AC6;margin-bottom:3px;">🔗 Bind a set to a vendo</div>
+              <div style="font-size:11px;color:#8a93a8;margin-bottom:12px;">Tap a row on the left, find the vendo, then bind all three at once.</div>
+
+              <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:5px;">Selected codes</div>
+              <div id="gw-sel" style="background:#fff;border:1.5px dashed #cdd8f0;border-radius:9px;padding:11px;text-align:center;font-size:12px;color:#8a93a8;margin-bottom:13px;">No set selected yet</div>
+
+              <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:5px;">Find vendo</div>
+              <input id="gw-vsearch" type="text" placeholder="Name, owner or TG name…" oninput="gwVendoSearch()"
+                     style="width:100%;padding:9px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;">
+              <div id="gw-vresults" style="max-height:190px;overflow-y:auto;margin-top:7px;"></div>
+
+              <div id="gw-vpick" style="display:none;background:#fff;border:1.5px solid #028867;border-radius:9px;padding:10px;margin-top:11px;font-size:12px;"></div>
+
+              <button id="gw-bind-btn" onclick="gwBind()" disabled
+                      style="width:100%;padding:12px;margin-top:13px;border:0;border-radius:10px;background:#c9d2e3;color:#fff;font-size:13.5px;font-weight:800;cursor:not-allowed;font-family:inherit;">Bind 3 fobs</button>
+              <div id="gw-bind-status" style="font-size:12px;color:#6b7280;text-align:center;margin-top:9px;min-height:16px;line-height:1.5;"></div>
+            </div>
+
           </div>
-          <div id="gw-status" style="font-size:12px;color:#6b7280;margin-bottom:10px;min-height:16px;"></div>
-          <div id="gw-list"></div>
         </div>
       </div>
     </div>
@@ -3742,7 +3770,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     if (typeof window.ensureHarvest === 'function') return window.ensureHarvest();
     if (window.__hvLoaded) return; window.__hvLoaded = 1;   // fallback: core failed to load
     var s = document.createElement("script");
-    s.src = "js/dash.1.harvest.js?v=hand-08260500"; s.async = false;
+    s.src = "js/dash.1.harvest.js?v=bind-08260545"; s.async = false;
     document.head.appendChild(s);
   };
   if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}
