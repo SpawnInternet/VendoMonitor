@@ -5958,8 +5958,12 @@ function ktCodeMsg(text, good){
 }
 
 function ktCodeInput(el){
-  // 4- and 5-letter fobs both exist; core works out when the code is complete
-  window.spawnFobAuto(el, ktCodeAdd);
+  // 4- and 5-letter fobs both exist; core works out when the code is complete.
+  // Fallback covers a stale cached dash.0.core.js: still normalise + fire at 5.
+  if(window.spawnFobAuto) return window.spawnFobAuto(el, ktCodeAdd);
+  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el.value = v;
+  if(v.length === 5) ktCodeAdd();
 }
 
 function ktCodeAdd(){
@@ -6312,7 +6316,10 @@ function _fbBigKt(kt){
    thing that binds; this only saves the trip to the Bind button. */
 let _fbAutoBusy = false;
 function fbCodeInput(el){
-  window.spawnFobAuto(el, ()=>fbCodeReady(el));
+  if(window.spawnFobAuto) return window.spawnFobAuto(el, ()=>fbCodeReady(el));
+  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el.value = v;
+  if(v.length === 5) fbCodeReady(el);
 }
 
 function fbCodeReady(el){
