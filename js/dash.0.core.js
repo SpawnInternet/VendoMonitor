@@ -278,7 +278,7 @@ window.ensureHarvest = function(){
   if (window.__harvestPromise) return window.__harvestPromise;
   window.__harvestPromise = new Promise(function(resolve, reject){
     var s = document.createElement('script');
-    s.src = 'js/dash.1.harvest.js?v=cols-08260610';
+    s.src = 'js/dash.1.harvest.js?v=type-08260655';
     s.async = false;
     s.onload = function(){ resolve(true); };
     s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
