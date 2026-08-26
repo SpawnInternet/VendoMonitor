@@ -3697,17 +3697,149 @@ const GQ_ALPHA = 'ABCDEFGHJKLMNPRSTUVWXYZ'; // no I, no O, no Q — typed by han
 const GQ_BAD   = ['SEX','ASS','FUC','CUM','PIS','TIT','GAY','FAG','JIZ','POO','PEE'];
 
 function gqLoad(){
-  // show current counts
-  fetch(_SB+'/rest/v1/vendo_key_qr?select=id,vendo_id', {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}})
+  // counters: available (blank + unwritten), written-not-bound, total
+  fetch(_SB+'/rest/v1/vendo_key_qr?select=id,vendo_id,issued_at', {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}})
     .then(r=>r.json())
     .then(rows=>{
       const arr = Array.isArray(rows)?rows:[];
-      const total = arr.length;
-      const unbound = arr.filter(x=>x.vendo_id==null).length;
-      const t=document.getElementById('gq-total'); if(t) t.textContent=total;
-      const u=document.getElementById('gq-unbound'); if(u) u.textContent=unbound;
+      const avail   = arr.filter(x=>x.vendo_id==null && !x.issued_at).length;
+      const written = arr.filter(x=>x.vendo_id==null &&  x.issued_at).length;
+      const t=document.getElementById('gq-total');   if(t) t.textContent=arr.length;
+      const u=document.getElementById('gq-unbound'); if(u) u.textContent=avail;
+      const w=document.getElementById('gq-written'); if(w) w.textContent=written;
     })
-    .catch(e=>{ console.warn('[KEYS] QR fob counters did not refresh:', e.message); });
+    .catch(e=>{ console.warn('[KEYS] fob counters did not refresh:', e.message); });
+}
+
+/* ── Mode switch: print sheet vs write by hand ─────────────────────────── */
+function gqMode(m){
+  const on  = {border:'1.5px solid #025AC6', background:'#025AC6', color:'#fff'};
+  const off = {border:'1.5px solid #e5e7eb', background:'#fff',    color:'#374151'};
+  const tp=document.getElementById('gq-tab-print'), tw=document.getElementById('gq-tab-write');
+  const pp=document.getElementById('gq-mode-print'), pw=document.getElementById('gq-mode-write');
+  if(!tp||!tw||!pp||!pw) return;
+  Object.assign(tp.style, m==='print'?on:off);
+  Object.assign(tw.style, m==='write'?on:off);
+  pp.style.display = m==='print' ? '' : 'none';
+  pw.style.display = m==='write' ? '' : 'none';
+  if(m==='write') gwLoad();
+}
+
+/* ── WRITE BY HAND ────────────────────────────────────────────────────────
+   Shows codes that are registered but not yet written on a fob, grouped into
+   sets of three (one vendo). Tapping a code stamps issued_at so it leaves the
+   available pool immediately — that is what stops the same code being written
+   onto two different fobs. Binding still happens later in Spawn Keys. */
+const GW_TYPES = [['pungpung','Pungpung','#311A8E'],['board','Board','#028867'],['duplicate','Duplicate','#C01176']];
+
+function gwChip(code, ktype, label, color, issued){
+  const dim = issued ? 'opacity:.45;text-decoration:line-through;' : '';
+  const bg  = issued ? '#f1f5f9' : '#fff';
+  // codes are strictly [A-Z]{4,5}, so single-quoted args need no escaping
+  return '<button onclick="gwToggle(\''+code+'\','+(issued?'true':'false')+')" '
+    +'style="flex:1;min-width:104px;padding:9px 6px;border-radius:9px;border:1.5px solid '+(issued?'#e5e7eb':color)+';background:'+bg+';cursor:pointer;font-family:inherit;'+dim+'">'
+    +'<div style="font-size:17px;font-weight:800;letter-spacing:1.6px;color:#111;line-height:1;">'+code+'</div>'
+    +'<div style="font-size:9.5px;font-weight:800;color:'+color+';margin-top:4px;letter-spacing:.3px;">'+label+'</div>'
+    +'</button>';
+}
+
+async function gwLoad(){
+  const list=document.getElementById('gw-list'), st=document.getElementById('gw-status');
+  const sets=parseInt((document.getElementById('gw-count')||{}).value,10)||25;
+  if(list) list.innerHTML='<div style="padding:18px;text-align:center;color:#6b7280;">Loading…</div>';
+  try{
+    // pull available codes per key type, oldest first so batches get used in order
+    const per={};
+    for(const [ktype] of GW_TYPES){
+      const url=_SB+'/rest/v1/vendo_key_qr?select=qr_code,key_type,issued_at'
+        +'&vendo_id=is.null&issued_at=is.null&key_type=eq.'+ktype
+        +'&order=created_at.asc,qr_code.asc&limit='+sets;
+      per[ktype]=await fetch(url,{headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}}).then(r=>r.json());
+      if(!Array.isArray(per[ktype])) per[ktype]=[];
+    }
+    const n=Math.min(sets, per.pungpung.length, per.board.length, per.duplicate.length);
+    if(!n){ list.innerHTML='<div style="padding:18px;text-align:center;color:#6b7280;">No complete sets available. Generate a batch from the Print sheet tab.</div>'; st.textContent=''; return; }
+    let html='';
+    for(let i=0;i<n;i++){
+      const trio=GW_TYPES.map(([k,l,c])=>[per[k][i].qr_code,k,l,c]);
+      html+='<div style="display:flex;gap:7px;align-items:center;padding:8px 0;border-bottom:1px solid #f0f2f7;">'
+        +'<div style="width:26px;font-size:11px;font-weight:800;color:#8a93a8;flex-shrink:0;">'+(i+1)+'</div>'
+        +'<div style="display:flex;gap:6px;flex:1;flex-wrap:wrap;">'
+        + trio.map(([code,k,l,c])=>gwChip(code,k,l,c,false)).join('')
+        +'</div>'
+        +'<button onclick="gwMarkSet([\''+trio.map(t=>t[0]).join("','")+'\'])" '
+        +'style="flex-shrink:0;padding:8px 9px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">✓ set</button>'
+        +'</div>';
+    }
+    list.innerHTML=html;
+    st.textContent=n+' set'+(n===1?'':'s')+' ready to write. Tap a code once you have penned it on a fob.';
+  }catch(e){
+    if(list) list.innerHTML='<div style="padding:18px;text-align:center;color:#b91c1c;">Could not load codes: '+(e.message||e)+'</div>';
+  }
+}
+
+async function gwStamp(codes, undo){
+  const body = undo ? {issued_at:null, issued_by:null}
+                    : {issued_at:new Date().toISOString(), issued_by:(window.ME&&ME.name)||'dashboard'};
+  const qs = 'qr_code=in.('+codes.map(c=>'"'+c+'"').join(',')+')';
+  const r = await fetch(_SB+'/rest/v1/vendo_key_qr?'+qs, {
+    method:'PATCH',
+    headers:Object.assign({'Prefer':'return=minimal'},_HDR),
+    body:JSON.stringify(body)
+  });
+  if(!r.ok){ const t=await r.text(); throw new Error(t.slice(0,140)); }
+}
+
+async function gwToggle(code, issued){
+  const st=document.getElementById('gw-status');
+  try{
+    await gwStamp([code], issued);
+    if(st) st.textContent = issued ? ('↩ '+code+' put back in the pool.') : ('✓ '+code+' marked as written.');
+    gwLoad(); gqLoad();
+  }catch(e){ if(st) st.textContent='❌ '+(e.message||e); }
+}
+
+async function gwMarkSet(codes){
+  const st=document.getElementById('gw-status');
+  try{
+    await gwStamp(codes, false);
+    if(st) st.textContent='✓ Set marked as written: '+codes.join(' · ');
+    gwLoad(); gqLoad();
+  }catch(e){ if(st) st.textContent='❌ '+(e.message||e); }
+}
+
+async function gwShowWritten(){
+  const list=document.getElementById('gw-list'), st=document.getElementById('gw-status');
+  if(list) list.innerHTML='<div style="padding:18px;text-align:center;color:#6b7280;">Loading…</div>';
+  try{
+    const rows=await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code,key_type,issued_at,issued_by'
+      +'&vendo_id=is.null&issued_at=not.is.null&order=issued_at.desc&limit=300',
+      {headers:{apikey:_ANON,Authorization:'Bearer '+_ANON}}).then(r=>r.json());
+    const arr=Array.isArray(rows)?rows:[];
+    if(!arr.length){ list.innerHTML='<div style="padding:18px;text-align:center;color:#6b7280;">Nothing written yet.</div>'; st.textContent=''; return; }
+    const LB={pungpung:['Pungpung','#311A8E'],board:['Board','#028867'],duplicate:['Duplicate','#C01176']};
+    list.innerHTML = arr.map(r=>{
+      const [lab,col]=LB[r.key_type]||['?','#6b7280'];
+      return '<div style="display:flex;gap:9px;align-items:center;padding:8px 2px;border-bottom:1px solid #f0f2f7;">'
+        +'<div style="font-size:16px;font-weight:800;letter-spacing:1.4px;min-width:66px;">'+r.qr_code+'</div>'
+        +'<div style="font-size:9.5px;font-weight:800;color:#fff;background:'+col+';padding:2px 6px;border-radius:4px;">'+lab+'</div>'
+        +'<div style="flex:1;font-size:11px;color:#8a93a8;">'+gqAgo(r.issued_at)+(r.issued_by?' · '+r.issued_by:'')+'</div>'
+        +'<button onclick="gwToggle(\''+r.qr_code+'\',true)" style="padding:6px 9px;border-radius:7px;border:1.5px solid #e5e7eb;background:#fff;color:#b91c1c;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">↩ undo</button>'
+        +'</div>';
+    }).join('');
+    st.textContent=arr.length+' written, waiting to be bound in Spawn Keys.';
+  }catch(e){
+    if(list) list.innerHTML='<div style="padding:18px;text-align:center;color:#b91c1c;">Could not load: '+(e.message||e)+'</div>';
+  }
+}
+
+function gqAgo(t){
+  if(!t) return '';
+  const sec=(Date.now()-new Date(t))/1000;
+  if(sec<60) return 'just now';
+  if(sec<3600) return Math.floor(sec/60)+'m ago';
+  if(sec<86400) return Math.floor(sec/3600)+'h ago';
+  return Math.floor(sec/86400)+'d ago';
 }
 
 function gqRandCode(used){
