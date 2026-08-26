@@ -186,6 +186,7 @@
   };
 
   window.skQbType = function(el){
+    if(window.spawnFobAuto){ window.spawnFobAuto(el, skQbGo); return; }
     var v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
     el.value = v;
     if(v.length === 5) skQbGo();
@@ -203,7 +204,7 @@
     if(_qbBusy) return;
     var el = document.getElementById('sk-qb-code');
     var code = ((el||{}).value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').trim();
-    if(code.length !== 5){ _qbMsg = 'Fob codes are 5 letters.'; qbRefresh(); if(el) el.focus(); return; }
+    if(code.length < 4 || code.length > 5){ _qbMsg = 'Fob codes are 4 or 5 letters.'; qbRefresh(); if(el) el.focus(); return; }
     if(_qbMode === 'borrow' && !_qbWho){
       _qbMsg = 'Type who is borrowing first.';
       qbRefresh();
@@ -328,7 +329,7 @@
       +      (_qbBusy ? 'Saving&hellip;' : (isRet ? '&#9989; Confirm Return' : '&#10003; Confirm Borrow'))
       +    '</button>'
       +  '</div>'
-      +  '<div style="flex:none;font-size:11px;color:#6b7280;padding-bottom:11px;">or it fires by itself on the 5th letter</div>'
+      +  '<div style="flex:none;font-size:11px;color:#6b7280;padding-bottom:11px;">or it fires by itself once the code is complete</div>'
       + '</div>';
 
     if(_qbMsg){
