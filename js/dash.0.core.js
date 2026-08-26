@@ -66,6 +66,8 @@ window.markAdminPwWrong = function(){
   const GW_URL    = SB + '/functions/v1/spawn-gw-admin';
 
   window.__SPAWN_SB = SB;
+  window.__SPAWN_BUILD = 'fob45-08260800';
+  console.log('%c[SPAWN] build '+window.__SPAWN_BUILD, 'color:#025AC6;font-weight:700');
   window.__ADMIN_GW_TOKEN = null;   // set after successful login
 
   /* ── Shared fob-code length resolver ────────────────────────────────────
