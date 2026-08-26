@@ -3709,6 +3709,9 @@ function gqLoad(){
       const w=document.getElementById('gq-written'); if(w) w.textContent=written;
     })
     .catch(e=>{ console.warn('[KEYS] fob counters did not refresh:', e.message); });
+  // Write-by-hand is the default view, so populate it when the pane opens
+  const pw=document.getElementById('gq-mode-write');
+  if(pw && pw.style.display !== 'none' && !(document.getElementById('gw-list')||{}).innerHTML) gwLoad();
 }
 
 /* ── Mode switch: print sheet vs write by hand ─────────────────────────── */
@@ -3857,6 +3860,18 @@ let _gwSearchT = null;
 
 function gwVName(v){ return v.sheet_name || v.tg_name || v.owner_name || ('Vendo '+v.id); }
 
+function gwClearPick(){
+  _gwSel=null; _gwVendo=null;
+  const sel=document.getElementById('gw-sel');
+  if(sel){ sel.innerHTML='Tap a row on the left'; sel.style.border='1.5px dashed #cdd8f0'; sel.style.color='#8a93a8'; }
+  const p=document.getElementById('gw-vpick'); if(p) p.style.display='none';
+  const s=document.getElementById('gw-vsearch'); if(s) s.value='';
+  const r=document.getElementById('gw-vresults'); if(r) r.innerHTML='';
+  const st=document.getElementById('gw-bind-status'); if(st) st.textContent='';
+  for(let i=0;i<200;i++){ const row=document.getElementById('gwrow-'+i); if(!row) break; row.style.background=''; }
+  gwBindBtn();
+}
+
 function gwPick(codes, row){
   _gwSel = {codes:codes, row:row};
   const el=document.getElementById('gw-sel');
@@ -3953,9 +3968,10 @@ async function gwBind(){
 
     _gwSel=null; _gwVendo=null;
     const sel=document.getElementById('gw-sel');
-    if(sel){ sel.innerHTML='No set selected yet'; sel.style.border='1.5px dashed #cdd8f0'; sel.style.color='#8a93a8'; }
+    if(sel){ sel.innerHTML='Tap a row on the left'; sel.style.border='1.5px dashed #cdd8f0'; sel.style.color='#8a93a8'; }
     const p=document.getElementById('gw-vpick'); if(p) p.style.display='none';
     const s=document.getElementById('gw-vsearch'); if(s) s.value='';
+    const vr=document.getElementById('gw-vresults'); if(vr) vr.innerHTML='';
     gwLoad(); gqLoad();
   }catch(e){
     st.innerHTML='<span style="color:#b91c1c;">❌ '+(e.message||e)+'</span>';
