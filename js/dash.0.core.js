@@ -68,6 +68,51 @@ window.markAdminPwWrong = function(){
   window.__SPAWN_SB = SB;
   window.__ADMIN_GW_TOKEN = null;   // set after successful login
 
+  /* ── Shared fob-code length resolver ────────────────────────────────────
+     Fobs used to be 5 letters; new ones are 4. Every code box in the app
+     (Quick Borrow, Pungpung Transfer, Fobs bind) therefore has to accept
+     both and work out when the code is complete.
+
+     At 5 characters it is unambiguous — fire.
+     At 4 we ask the DB: does this exact 4-letter code exist, and is there
+     any 5-letter code starting with these same 4? If it exists and nothing
+     longer shadows it, fire. If both exist we wait for the 5th keystroke
+     rather than guess, because guessing wrong binds the wrong fob.       */
+  const _FOB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
+  const _fobCache = new Map();
+  window.spawnFobCheck = async function(code){
+    code = String(code||'').toUpperCase();
+    if(_fobCache.has(code)) return _fobCache.get(code);
+    const res = await fetch(SB+'/rest/v1/vendo_key_qr?select=qr_code&qr_code=like.'+encodeURIComponent(code)+'*&limit=20',
+      {headers:{apikey:_FOB_ANON, Authorization:'Bearer '+_FOB_ANON}})
+      .then(r=>r.json())
+      .then(rows=>{
+        const arr = Array.isArray(rows)?rows.map(x=>x.qr_code):[];
+        return { exact: arr.indexOf(code)>=0, longer: arr.some(c=>c.length>code.length) };
+      })
+      .catch(()=>({exact:false, longer:false}));
+    _fobCache.set(code,res);
+    setTimeout(()=>_fobCache.delete(code), 60000);
+    return res;
+  };
+
+  /* Wire an input so it auto-fires at 4 or 5 letters. Returns nothing;
+     `go` is called once the code looks complete.                         */
+  window.spawnFobAuto = function(el, go, state){
+    const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+    el.value = v;
+    state = state || el;
+    clearTimeout(state.__fobT);
+    if(v.length === 5){ go(); return; }
+    if(v.length === 4){
+      state.__fobT = setTimeout(async ()=>{
+        const r = await window.spawnFobCheck(v);
+        // only fire if the box still holds the same 4 letters
+        if(el.value === v && r.exact && !r.longer) go();
+      }, 300);
+    }
+  };
+
   // ── Transparent fetch interceptor: reroute REST + rpc + storage via admin gateway ──
   (function installAdminGatewayInterceptor(){
     const _origFetch = window.fetch.bind(window);
@@ -278,7 +323,7 @@ window.ensureHarvest = function(){
   if (window.__harvestPromise) return window.__harvestPromise;
   window.__harvestPromise = new Promise(function(resolve, reject){
     var s = document.createElement('script');
-    s.src = 'js/dash.1.harvest.js?v=stmp-08260720';
+    s.src = 'js/dash.1.harvest.js?v=fob45-08260800';
     s.async = false;
     s.onload = function(){ resolve(true); };
     s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
