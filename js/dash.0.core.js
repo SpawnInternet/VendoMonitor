@@ -66,7 +66,7 @@ window.markAdminPwWrong = function(){
   const GW_URL    = SB + '/functions/v1/spawn-gw-admin';
 
   window.__SPAWN_SB = SB;
-  window.__SPAWN_BUILD = 'fob45-08260830';
+  window.__SPAWN_BUILD = 'fob45-08260845';
   console.log('%c[SPAWN] build '+window.__SPAWN_BUILD, 'color:#025AC6;font-weight:700');
   window.__ADMIN_GW_TOKEN = null;   // set after successful login
 
@@ -325,7 +325,7 @@ window.ensureHarvest = function(){
   if (window.__harvestPromise) return window.__harvestPromise;
   window.__harvestPromise = new Promise(function(resolve, reject){
     var s = document.createElement('script');
-    s.src = 'js/dash.1.harvest.js?v=fob45-08260830';
+    s.src = 'js/dash.1.harvest.js?v=fob45-08260845';
     s.async = false;
     s.onload = function(){ resolve(true); };
     s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
