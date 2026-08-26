@@ -3994,24 +3994,34 @@ async function gwSetVendo(id){
 }
 
 function gwBindBtn(){
-  const b=document.getElementById('gw-bind-btn'); if(!b) return;
   const n=GW_SLOTS.filter(([k])=>_gwCode[k]).length;
   const ready = n>0 && !!_gwVendo;
-  b.disabled=!ready;
-  b.style.background = ready ? 'linear-gradient(135deg,#028867,#025AC6)' : '#c9d2e3';
-  b.style.cursor     = ready ? 'pointer' : 'not-allowed';
-  b.textContent = !n ? 'Bind fobs'
+  const label = !n ? 'Bind fobs'
     : ready ? ('Bind '+n+' fob'+(n===1?'':'s')+' → '+_gwVendo.name)
             : ('Bind '+n+' fob'+(n===1?'':'s')+' — pick a vendo');
+  ['gw-bind-btn','gw-bind-btn2'].forEach(id=>{
+    const b=document.getElementById(id); if(!b) return;
+    b.disabled=!ready;
+    b.style.background = ready ? 'linear-gradient(135deg,#028867,#025AC6)' : '#c9d2e3';
+    b.style.cursor     = ready ? 'pointer' : 'not-allowed';
+    b.textContent = label;
+  });
 }
 
 async function gwBind(){
   const picked=GW_SLOTS.filter(([k])=>_gwCode[k]).map(([k])=>_gwCode[k].code);
   if(!picked.length || !_gwVendo) return;
-  const b=document.getElementById('gw-bind-btn'), st=document.getElementById('gw-bind-status');
-  b.disabled=true; b.style.opacity='.6'; st.textContent='Binding…';
+  const st=document.getElementById('gw-bind-status');
+  ['gw-bind-btn','gw-bind-btn2'].forEach(id=>{ const b=document.getElementById(id); if(b){b.disabled=true;b.style.opacity='.6';} });
+  if(st) st.textContent='Binding…';
   const failed=[];
   try{
+    // Stamp issued_at FIRST. The anon UPDATE policy is USING (vendo_id IS NULL),
+    // so once a row is bound it can no longer be stamped from the browser. These
+    // codes are penned on real fobs either way, so "written" is true regardless
+    // of whether the bind that follows succeeds.
+    try{ await gwStamp(picked,false); }catch(e){ console.warn('[FOB] issued_at stamp failed:', e.message); }
+
     for(const code of picked){
       const r=await fetch(_SB+'/rest/v1/rpc/spawn_qr_bind',{
         method:'POST', headers:_VS_HDR,
@@ -4024,20 +4034,17 @@ async function gwBind(){
     const q='qr_code=in.('+picked.map(c=>'"'+c+'"').join(',')+')';
     const rows=await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code,vendo_id&'+q,{headers:_VS_HDR}).then(r=>r.json());
     const bound=(Array.isArray(rows)?rows:[]).filter(x=>String(x.vendo_id)===String(_gwVendo.id)).map(x=>x.qr_code);
-    if(bound.length) await gwStamp(bound,false);
     const name=_gwVendo.name;
-    st.innerHTML = failed.length
-      ? '<span style="color:#b91c1c;">⚠ Bound '+bound.length+' of '+picked.length+'. Failed: '+failed.join(', ')+'</span>'
-      : '<span style="color:#028867;font-weight:700;">✅ '+bound.length+' bound to '+name+' — '+bound.join(' · ')+'</span>';
     gwClearPick();
     if(st) st.innerHTML = failed.length
       ? '<span style="color:#b91c1c;">⚠ Bound '+bound.length+' of '+picked.length+'. Failed: '+failed.join(', ')+'</span>'
       : '<span style="color:#028867;font-weight:700;">✅ '+bound.length+' bound to '+name+' — '+bound.join(' · ')+'</span>';
     gwLoad(); gqLoad();
   }catch(e){
-    st.innerHTML='<span style="color:#b91c1c;">❌ '+(e.message||e)+'</span>';
+    if(st) st.innerHTML='<span style="color:#b91c1c;">❌ '+(e.message||e)+'</span>';
   }finally{
-    b.style.opacity='1'; gwBindBtn();
+    ['gw-bind-btn','gw-bind-btn2'].forEach(id=>{ const b=document.getElementById(id); if(b) b.style.opacity='1'; });
+    gwBindBtn();
   }
 }
 
