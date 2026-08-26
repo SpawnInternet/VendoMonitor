@@ -1721,31 +1721,66 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div id="kv-pane-genqr" style="flex:1;min-height:0;display:none;">
     <div style="max-width:560px;margin:0 auto;padding:8px 4px;">
       <div style="background:#EEF1FA;border:1px solid #cdd8f0;border-radius:11px;padding:12px 14px;font-size:12.5px;color:#3b4a66;line-height:1.55;margin-bottom:16px;">
-        🏷️ <b>Generate a fresh batch of vendo key fobs.</b> Each vendo needs three,
-        printed in order — Pungpung · Board · Duplicate. Codes are random <b>4 letters</b>
-        (no I, O or Q), unique, and registered instantly — then a print-ready page opens
-        in a new tab. Letters only, no QR: read the code off the fob and type it in
-        <b>Spawn Keys → Bind</b>. The key type is on the chip below the code.
+        🏷️ <b>Vendo key fobs.</b> Each vendo needs three, in order — Pungpung · Board ·
+        Duplicate. Codes are random <b>4 letters</b> (no I, O or Q) and unique.
+        <b>Print sheet</b> generates a fresh batch and opens a print page.
+        <b>Write by hand</b> shows codes already registered so you can pen them onto
+        blank fobs — no printer needed. Bind either kind in <b>Spawn Keys → Bind</b>.
       </div>
       <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px;">
         <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:120px;background:#f7f9fc;border-radius:9px;padding:11px 13px;">
+          <div style="flex:1;min-width:110px;background:#f7f9fc;border-radius:9px;padding:11px 13px;">
+            <div style="font-size:11px;color:#8a93a8;font-weight:700;">Available</div>
+            <div id="gq-unbound" style="font-size:22px;font-weight:800;color:#028867;">—</div>
+          </div>
+          <div style="flex:1;min-width:110px;background:#f7f9fc;border-radius:9px;padding:11px 13px;">
+            <div style="font-size:11px;color:#8a93a8;font-weight:700;">Written, not bound</div>
+            <div id="gq-written" style="font-size:22px;font-weight:800;color:#C77700;">—</div>
+          </div>
+          <div style="flex:1;min-width:110px;background:#f7f9fc;border-radius:9px;padding:11px 13px;">
             <div style="font-size:11px;color:#8a93a8;font-weight:700;">Total codes</div>
             <div id="gq-total" style="font-size:22px;font-weight:800;color:#025AC6;">—</div>
           </div>
-          <div style="flex:1;min-width:120px;background:#f7f9fc;border-radius:9px;padding:11px 13px;">
-            <div style="font-size:11px;color:#8a93a8;font-weight:700;">Still unbound</div>
-            <div id="gq-unbound" style="font-size:22px;font-weight:800;color:#028867;">—</div>
-          </div>
         </div>
-        <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">How many vendos?</label>
-        <select id="gq-count" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;font-family:inherit;margin-bottom:14px;">
-          <option value="25">25 vendos — 75 fobs</option>
-          <option value="50" selected>50 vendos — 150 fobs</option>
-          <option value="100">100 vendos — 300 fobs</option>
-        </select>
-        <button id="gq-btn" onclick="gqGenerate()" style="width:100%;padding:13px;border:0;border-radius:11px;background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🖨️ Generate &amp; open print page</button>
-        <div id="gq-status" style="font-size:12px;color:#6b7280;text-align:center;margin-top:10px;min-height:16px;"></div>
+
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <button id="gq-tab-print" onclick="gqMode('print')" style="flex:1;padding:9px;border-radius:9px;border:1.5px solid #025AC6;background:#025AC6;color:#fff;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">🖨️ Print sheet</button>
+          <button id="gq-tab-write" onclick="gqMode('write')" style="flex:1;padding:9px;border-radius:9px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;">✍️ Write by hand</button>
+        </div>
+
+        <!-- ── MODE: PRINT ── -->
+        <div id="gq-mode-print">
+          <label style="font-size:12px;font-weight:700;color:#374151;display:block;margin-bottom:6px;">How many vendos?</label>
+          <select id="gq-count" style="width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;font-family:inherit;margin-bottom:14px;">
+            <option value="25">25 vendos — 75 fobs</option>
+            <option value="50" selected>50 vendos — 150 fobs</option>
+            <option value="100">100 vendos — 300 fobs</option>
+          </select>
+          <button id="gq-btn" onclick="gqGenerate()" style="width:100%;padding:13px;border:0;border-radius:11px;background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🖨️ Generate &amp; open print page</button>
+          <div id="gq-status" style="font-size:12px;color:#6b7280;text-align:center;margin-top:10px;min-height:16px;"></div>
+        </div>
+
+        <!-- ── MODE: WRITE BY HAND ── -->
+        <div id="gq-mode-write" style="display:none;">
+          <div style="background:#FFF8E8;border:1px solid #f0dfae;border-radius:9px;padding:10px 12px;font-size:12px;color:#6b5423;line-height:1.55;margin-bottom:14px;">
+            No printer needed. Each row below is one vendo's set of three. Write the
+            codes on the blank fobs with a pen, then tap each one you used — it turns
+            green and leaves the available pool, so you can never write the same code
+            twice. Bind them in <b>Spawn Keys</b> whenever you get to it.
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+            <label style="font-size:12px;font-weight:700;color:#374151;">Show</label>
+            <select id="gw-count" onchange="gwLoad()" style="padding:8px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit;">
+              <option value="10">10 sets</option>
+              <option value="25" selected>25 sets</option>
+              <option value="50">50 sets</option>
+            </select>
+            <button onclick="gwLoad()" style="padding:8px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#374151;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↻ Refresh</button>
+            <button onclick="gwShowWritten()" style="padding:8px 12px;border-radius:8px;border:1.5px solid #e5e7eb;background:#fff;color:#C77700;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Written list</button>
+          </div>
+          <div id="gw-status" style="font-size:12px;color:#6b7280;margin-bottom:10px;min-height:16px;"></div>
+          <div id="gw-list"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -3707,7 +3742,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     if (typeof window.ensureHarvest === 'function') return window.ensureHarvest();
     if (window.__hvLoaded) return; window.__hvLoaded = 1;   // fallback: core failed to load
     var s = document.createElement("script");
-    s.src = "js/dash.1.harvest.js?v=ltr4-08260415"; s.async = false;
+    s.src = "js/dash.1.harvest.js?v=hand-08260500"; s.async = false;
     document.head.appendChild(s);
   };
   if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}
