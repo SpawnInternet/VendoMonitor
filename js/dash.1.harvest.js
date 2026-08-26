@@ -3777,7 +3777,7 @@ function gqPrintPage(fobs, n){
     +'.sheet{background:#fff;border-radius:13px;padding:15px;box-shadow:0 4px 18px rgba(2,90,198,.1)}'
     +'.grid{display:flex;flex-wrap:wrap;gap:4mm}'
     +'.fob{width:19mm;height:37mm;border:0.25mm dashed #b9c4dc;display:flex;flex-direction:column;align-items:center;padding:0.5mm;box-sizing:border-box;background:#fff}'
-    +'.code{font-size:15pt;font-weight:800;color:#000;letter-spacing:1.4px;margin-top:3mm;line-height:1}'
+    +'.code{font-size:14pt;font-weight:800;color:#000;letter-spacing:1.4px;margin-top:3mm;line-height:1}'
     +'.tag{font-size:5.5pt;font-weight:800;color:#fff;padding:0.4mm 1.4mm;border-radius:1mm;line-height:1;margin-top:1.6mm;letter-spacing:.3px}'
     +'.free{flex:1}'
     +'@media print{body{background:#fff;padding:0}h1,.sub{display:none}.sheet{box-shadow:none;padding:0}}'
