@@ -5958,16 +5958,15 @@ function ktCodeMsg(text, good){
 }
 
 function ktCodeInput(el){
-  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
-  el.value = v;
-  if(v.length === 5) ktCodeAdd();
+  // 4- and 5-letter fobs both exist; core works out when the code is complete
+  window.spawnFobAuto(el, ktCodeAdd);
 }
 
 function ktCodeAdd(){
   if(_ktCodeBusy) return;
   const el = document.getElementById('kt-code');
   const code = ((el||{}).value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').trim();
-  if(code.length !== 5){ ktCodeMsg('Fob codes are 5 letters.', false); if(el) el.focus(); return; }
+  if(code.length < 4 || code.length > 5){ ktCodeMsg('Fob codes are 4 or 5 letters.', false); if(el) el.focus(); return; }
 
   _ktCodeBusy = true;
   const btn = document.getElementById('kt-code-btn');
@@ -6167,8 +6166,8 @@ function fobsRender(){
     +           '<div id="fb-vendo-picked" style="font-size:12px;color:#028867;font-weight:700;margin-top:5px;"></div>'
     +         '</div>'
     +         '<div style="margin-bottom:14px;">'
-    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">2 · FOB CODE <span style="font-weight:600;color:#9ca3af;">— confirms on the 5th letter</span></div>'
-    +           '<input id="fb-code" maxlength="5" placeholder="e.g. MJWDL" oninput="fbCodeInput(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fbBind();}" style="width:100%;padding:11px 12px;border:2px solid #FFB725;border-radius:9px;font:800 19px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center;text-transform:uppercase;color:#311A8E;box-sizing:border-box;outline:none;" />'
+    +           '<div style="font-size:11px;font-weight:800;color:#6b7280;margin-bottom:5px;">2 · FOB CODE <span style="font-weight:600;color:#9ca3af;">— confirms by itself</span></div>'
+    +           '<input id="fb-code" maxlength="5" placeholder="e.g. AXWJ" oninput="fbCodeInput(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();fbBind();}" style="width:100%;padding:11px 12px;border:2px solid #FFB725;border-radius:9px;font:800 19px/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;text-align:center;text-transform:uppercase;color:#311A8E;box-sizing:border-box;outline:none;" />'
     +         '</div>'
     +         '<button onclick="fbBind()" style="width:100%;padding:12px;background:#028867;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">🔗 Bind</button>'
     +         '<div id="fb-bind-msg" style="margin-top:10px;font-size:13px;"></div>'
@@ -6313,9 +6312,10 @@ function _fbBigKt(kt){
    thing that binds; this only saves the trip to the Bind button. */
 let _fbAutoBusy = false;
 function fbCodeInput(el){
-  const v = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
-  el.value = v;
-  if(v.length !== 5) return;
+  window.spawnFobAuto(el, ()=>fbCodeReady(el));
+}
+
+function fbCodeReady(el){
   if(_fbAutoBusy) return;                                   // fbBind is async
   if(document.getElementById('fb-bind-modal')) return;       // already asking
   if(!_fbVendo){                                             // no vendo yet
