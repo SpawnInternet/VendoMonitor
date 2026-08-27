@@ -257,10 +257,15 @@
           let rows=await pull('transactions', filter, n=>
             say(`${ym}: ${n.toLocaleString()} / ${expected.toLocaleString()}  `+
                 `(${done.toLocaleString()} of ${grand.toLocaleString()} total)`, pct()));
-          if(rows.length!==expected)
-            throw new Error(`got ${rows.length} of ${expected} rows`);
+          /* Only MISSING rows are a failure. The current month grows while the
+             export runs - vendos keep earning - so rows > expected is normal
+             and means we captured everything plus a few new ones. */
+          if(rows.length < expected)
+            throw new Error(`got ${rows.length} of ${expected} rows — data missing`);
+          const extra = rows.length - expected;
 
-          say(`${ym}: compressing ${rows.length.toLocaleString()} rows…`, pct());
+          const rows_n=rows.length;
+          say(`${ym}: compressing ${rows_n.toLocaleString()} rows…`, pct());
           let csv=toCsv(rows);
           rows=null;                                  /* free the row objects */
           const zip=new JSZip();
@@ -268,9 +273,10 @@
           csv=null;                                   /* free the CSV string  */
           const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
           saveBlob(`spawn_transactions_${ym}.zip`, blob);
-          report.push(`${ym}: ${expected.toLocaleString()} rows, `+
-                      `${(blob.size/1048576).toFixed(1)} MB`);
-          done+=expected;
+          report.push(`${ym}: ${rows_n.toLocaleString()} rows`+
+                      (extra?` (+${extra} added during export)`:'')+
+                      `, ${(blob.size/1048576).toFixed(1)} MB`);
+          done+=rows_n;
           await new Promise(r=>setTimeout(r,600));    /* let the GC catch up  */
         }catch(e){
           failed.push(`${ym}: ${e.message}`);
