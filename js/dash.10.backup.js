@@ -35,8 +35,14 @@
     'harvest_reconciliations','collectors','collector_expenses','technicians',
     'key_logs','key_items','key_changes','key_transfers','key_custodians',
     'vendo_installs','routes','route_items','job_orders',
-    'summary_by_vendo','summary_by_area','summary_totals'
+    'summary_by_vendo','summary_by_area','summary_totals',
+    /* money + subscriber records - previously omitted */
+    'office_harvest_records','subscriber_payments','expenses','cash_receipts',
+    'subscribers','ppp_roster','vendo_key_qr'
   ];
+
+  /* tables with no id column - ordering by id 400s. Small enough for one page. */
+  const NO_ID = new Set(['summary_by_area','summary_by_vendo']);
 
   const stamp = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const nowPH = () => new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',hour12:true});
@@ -83,8 +89,15 @@
   async function pull(table, filter, onProgress){
     const rows=[];
     for(let off=0; off<500000; off+=1000){
-      const q=`select=*&order=id.asc&limit=1000&offset=${off}${filter?'&'+filter:''}`;
-      const r=await fetch(`${SB}/rest/v1/${table}?${q}`,{headers:HDRS});
+      const ord = NO_ID.has(table) ? '' : '&order=id.asc';
+      const q=`select=*${ord}&limit=1000&offset=${off}${filter?'&'+filter:''}`;
+      let r=await fetch(`${SB}/rest/v1/${table}?${q}`,{headers:HDRS});
+      if(r.status===400 && ord){
+        /* no id column - retry unordered rather than losing the table */
+        NO_ID.add(table);
+        const q2=`select=*&limit=1000&offset=${off}${filter?'&'+filter:''}`;
+        r=await fetch(`${SB}/rest/v1/${table}?${q2}`,{headers:HDRS});
+      }
       if(!r.ok){
         const t=await r.text().catch(()=> '');
         throw new Error(`${table}: HTTP ${r.status} ${t.slice(0,120)}`);
@@ -109,12 +122,12 @@
       if(typeof JSZip==='undefined') throw new Error('JSZip not loaded — hard-refresh the page');
       const zip=new JSZip();
       const manifest=[`Spawn Internetan — core data export`,`Taken: ${nowPH()}`,``];
-      let done=0, grand=0;
+      let done=0, grand=0; const failed=[];
       for(const t of CORE){
         say(`Reading ${t}…`, (done/CORE.length)*95);
         let rows=[];
         try{ rows=await pull(t); }
-        catch(e){ manifest.push(`${t}: SKIPPED (${e.message})`); done++; continue; }
+        catch(e){ manifest.push(`${t}: *** FAILED *** (${e.message})`); failed.push(t); done++; continue; }
         zip.file(`${t}.csv`, toCsv(rows));
         manifest.push(`${t}: ${rows.length} rows`);
         grand+=rows.length; done++;
@@ -125,17 +138,28 @@
         '  office_accounts, keeper_secrets — credentials, deliberately omitted.',
         '  Any table outside the admin gateway allow-list.',
         '', 'This is an operational export, not a database backup.');
+      if(failed.length) manifest.splice(2,0,
+        `*** INCOMPLETE - ${failed.length} table(s) failed: ${failed.join(', ')} ***`, '');
       zip.file('MANIFEST.txt', manifest.join('\n'));
       say('Compressing…', 97);
       const blob=await zip.generateAsync({type:'blob', compression:'DEFLATE'});
       const a=document.createElement('a');
       a.href=URL.createObjectURL(blob);
-      a.download=`spawn_core_backup_${stamp()}.zip`;
+      a.download = failed.length
+        ? `spawn_core_INCOMPLETE_${stamp()}.zip`
+        : `spawn_core_backup_${stamp()}.zip`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(()=>URL.revokeObjectURL(a.href),8000);
 
-      localStorage.setItem('last_backup', nowPH());
       const lbt=document.getElementById('last-backup-time');
+      if(failed.length){
+        /* a partial export must never look like a good one */
+        if(lbt) lbt.textContent=`⚠ Last attempt: ${nowPH()} — INCOMPLETE, ${failed.length} table(s) failed`;
+        say(`❌ INCOMPLETE — failed: ${failed.join(', ')}`, 100);
+        if(btn){ btn.textContent='❌ Incomplete'; }
+        throw new Error('incomplete: '+failed.join(', '));
+      }
+      localStorage.setItem('last_backup', nowPH());
       if(lbt) lbt.textContent=`Last backup: ${nowPH()} — core export, ${grand.toLocaleString()} rows`;
       say(`✅ Done — ${grand.toLocaleString()} rows across ${CORE.length} tables`, 100);
       if(btn){ btn.textContent='✅ Downloaded'; }
@@ -206,15 +230,40 @@
     }
   };
 
-  /* ── full backup = core + rendered dashboard + manifest ────────────────── */
+  /* ── schema + functions (what pg_dump would give you) ──────────────────── */
+  window.backupSchema = async function(pwd){
+    const p = pwd || prompt('Admin password (schema export):');
+    if(!p) return null;
+    const r = await fetch(`${SB}/rest/v1/rpc/spawn_export_schema`,
+      {method:'POST', headers:HDRS, body:JSON.stringify({p_pwd:p})});
+    if(!r.ok) throw new Error('schema: HTTP '+r.status);
+    const sql = await r.json();
+    if(sql === '-- DENIED') throw new Error('Wrong password');
+    /* the function stamps this last - its absence means a truncated response */
+    if(!sql || !sql.includes('-- END OF EXPORT'))
+      throw new Error('schema truncated — not saved');
+    save(`spawn_schema_${stamp()}.sql`, sql, 'text/plain');
+    return sql;
+  };
+
+  /* ── full backup = core + schema + rendered dashboard + manifest ────────── */
   window.fullBackup = async function(){
     say('Starting…', 2);
-    await window.backupCore();
+    let coreOk=true;
+    try{ await window.backupCore(); }
+    catch(e){ coreOk=false; }
     try{
       const html=document.documentElement.outerHTML;
       save(`dashboard_snapshot_${stamp()}.html`, html, 'text/html');
     }catch(_){}
-    say('✅ Core export + dashboard snapshot downloaded. Transactions: use the month buttons.', 100);
+    let schemaOk=false;
+    try{ schemaOk = !!(await window.backupSchema()); }
+    catch(e){ say('⚠ schema export failed: '+e.message, 100); }
+    if(!coreOk){
+      say('❌ Backup INCOMPLETE — core data failed. Do not rely on these files.', 100);
+      hide(9000); return;
+    }
+    say(`✅ Core${schemaOk?' + schema':''} + dashboard snapshot downloaded. Transactions: month buttons.`, 100);
     hide(6000);
   };
 
