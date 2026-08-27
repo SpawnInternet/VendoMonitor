@@ -232,23 +232,47 @@
 
   /* ── schema + functions (what pg_dump would give you) ──────────────────── */
   window.backupSchema = async function(pwd){
-    const p = pwd || prompt('Admin password (schema export):');
-    if(!p) return null;
-    const r = await fetch(`${SB}/rest/v1/rpc/spawn_export_schema`,
-      {method:'POST', headers:HDRS, body:JSON.stringify({p_pwd:p})});
-    if(!r.ok) throw new Error('schema: HTTP '+r.status);
-    const sql = await r.json();
-    if(sql === '-- DENIED') throw new Error('Wrong password');
-    /* the function stamps this last - its absence means a truncated response */
-    if(!sql || !sql.includes('-- END OF EXPORT'))
-      throw new Error('schema truncated — not saved');
-    save(`spawn_schema_${stamp()}.sql`, sql, 'text/plain');
-    return sql;
+    const btn=document.getElementById('backup-schema-btn');
+    const msg=document.getElementById('backup-schema-msg');
+    const fld=document.getElementById('backup-schema-pwd');
+    const note=(t,bad)=>{ if(msg){ msg.textContent=t; msg.style.color = bad?'#dc2626':'#7c3aed'; } };
+    /* argument > password field > prompt. Never depends on prompt() alone -
+       Chrome suppresses it once the user ticks "don't allow prompts". */
+    const p = pwd || (fld && fld.value) || prompt('Admin password (schema export):');
+    if(!p){ note('Password required.', true); return null; }
+    const old = btn ? btn.textContent : '';
+    if(btn){ btn.disabled=true; btn.textContent='Exporting…'; }
+    try{
+      const r = await fetch(`${SB}/rest/v1/rpc/spawn_export_schema`,
+        {method:'POST', headers:HDRS, body:JSON.stringify({p_pwd:p})});
+      if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,120));
+      const sql = await r.json();
+      if(sql === '-- DENIED') throw new Error('Wrong password');
+      /* the function stamps this last - its absence means a truncated response */
+      if(!sql || !sql.includes('-- END OF EXPORT'))
+        throw new Error('truncated response — not saved');
+      save(`spawn_schema_${stamp()}.sql`, sql, 'text/plain');
+      const fns=(sql.match(/CREATE OR REPLACE FUNCTION/g)||[]).length;
+      note(`✅ ${Math.round(sql.length/1024)} KB · ${fns} functions — commit as schema/current.sql`);
+      if(fld) fld.value='';
+      if(btn) btn.textContent='✅ Downloaded';
+      return sql;
+    }catch(e){
+      note('❌ '+e.message, true);
+      if(btn) btn.textContent='❌ Failed';
+      throw e;
+    }finally{
+      setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=old||'⬇ Schema (.sql)'; } },4000);
+    }
   };
 
   /* ── full backup = core + schema + rendered dashboard + manifest ────────── */
   window.fullBackup = async function(){
     say('Starting…', 2);
+    /* collect the password up front - asking after two downloads is how the
+       schema step got silently skipped */
+    const fld=document.getElementById('backup-schema-pwd');
+    let pwd=(fld && fld.value) || prompt('Admin password (for schema export):') || '';
     let coreOk=true;
     try{ await window.backupCore(); }
     catch(e){ coreOk=false; }
@@ -257,8 +281,9 @@
       save(`dashboard_snapshot_${stamp()}.html`, html, 'text/html');
     }catch(_){}
     let schemaOk=false;
-    try{ schemaOk = !!(await window.backupSchema()); }
+    try{ schemaOk = pwd ? !!(await window.backupSchema(pwd)) : false; }
     catch(e){ say('⚠ schema export failed: '+e.message, 100); }
+    if(!pwd) say('⚠ schema skipped — no password given', 100);
     if(!coreOk){
       say('❌ Backup INCOMPLETE — core data failed. Do not rely on these files.', 100);
       hide(9000); return;
