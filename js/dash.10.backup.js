@@ -38,11 +38,16 @@
     'summary_by_vendo','summary_by_area','summary_totals',
     /* money + subscriber records - previously omitted */
     'office_harvest_records','subscriber_payments','expenses','cash_receipts',
-    'subscribers','ppp_roster','vendo_key_qr'
+    'subscribers','ppp_roster','vendo_key_qr',
+    /* cloud_transactions is Spawn Cloud income — money, and it was missing.
+       tg_vendo_names is the Telegram-to-vendo name map, painful to rebuild.
+       hotspot_vouchers is deliberately NOT here: the admin gateway's ALLOW map
+       has no entry for it, so it would 403. Add it there first. */
+    'cloud_transactions','tg_vendo_names'
   ];
 
   /* tables with no id column - ordering by id 400s. Small enough for one page. */
-  const NO_ID = new Set(['summary_by_area','summary_by_vendo']);
+  const NO_ID = new Set(['summary_by_area','summary_by_vendo','tg_vendo_names']);
 
   const stamp = () => new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
   const nowPH = () => new Date().toLocaleString('en-PH',{timeZone:'Asia/Manila',hour12:true});
