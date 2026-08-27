@@ -66,6 +66,14 @@
     setTimeout(()=>URL.revokeObjectURL(url), 8000);
   }
 
+  function saveBlob(name, blob){
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 15000);
+  }
+
   const cell = v => {
     if(v==null) return '';
     const s = (typeof v==='object') ? JSON.stringify(v) : String(v);
@@ -203,6 +211,97 @@
   };
 
   /* build the month buttons from what is actually in the table */
+  /* ── all transactions, one click ──────────────────────────────────────────
+     Deliberately NOT one 200 MB file: JS strings are 2 bytes/char, so the
+     whole table as a single CSV is ~400 MB of heap before zipping starts and
+     the tab dies partway. Instead we walk month by month, write each out, and
+     drop the reference so the GC can reclaim it before the next one. */
+  window.backupAllTxn = async function(){
+    const btn=document.getElementById('backup-alltxn-btn');
+    const old=btn?btn.textContent:'';
+    if(btn){ btn.disabled=true; }
+    const t0=Date.now();
+    try{
+      say('Finding months…', 1);
+      const months=[]; const now=new Date();
+      for(let i=0;i<36;i++){
+        const d=new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth()-i, 1));
+        months.push(d.toISOString().slice(0,7));
+      }
+      const found=[];
+      for(const ym of months){
+        const [y,m]=ym.split('-').map(Number);
+        const to=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+        const n=await countOf('transactions', `date=gte.${ym}-01&date=lt.${to}`);
+        if(n) found.push([ym,n]);
+      }
+      if(!found.length){ say('No transactions found.',100); hide(4000); return; }
+      found.sort((a,b)=>a[0]<b[0]?-1:1);
+
+      const grand=found.reduce((s,[,n])=>s+n,0);
+      if(!confirm(`Download ${grand.toLocaleString()} transactions across `+
+                  `${found.length} months?\n\nOne ZIP per month, about `+
+                  `${Math.round(grand*150/1024/1024/10)} MB total.\n`+
+                  `Takes several minutes — keep this tab open.`)){
+        say('Cancelled.',100); hide(2500); return;
+      }
+
+      let done=0; const failed=[]; const report=[];
+      for(const [ym,expected] of found){
+        const [y,m]=ym.split('-').map(Number);
+        const to=new Date(Date.UTC(y,m,1)).toISOString().slice(0,10);
+        const filter=`date=gte.${ym}-01&date=lt.${to}`;
+        const pct=()=>Math.round(done/grand*95);
+        try{
+          if(btn) btn.textContent=`⏳ ${ym}`;
+          let rows=await pull('transactions', filter, n=>
+            say(`${ym}: ${n.toLocaleString()} / ${expected.toLocaleString()}  `+
+                `(${done.toLocaleString()} of ${grand.toLocaleString()} total)`, pct()));
+          if(rows.length!==expected)
+            throw new Error(`got ${rows.length} of ${expected} rows`);
+
+          say(`${ym}: compressing ${rows.length.toLocaleString()} rows…`, pct());
+          let csv=toCsv(rows);
+          rows=null;                                  /* free the row objects */
+          const zip=new JSZip();
+          zip.file(`spawn_transactions_${ym}.csv`, csv);
+          csv=null;                                   /* free the CSV string  */
+          const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE'});
+          saveBlob(`spawn_transactions_${ym}.zip`, blob);
+          report.push(`${ym}: ${expected.toLocaleString()} rows, `+
+                      `${(blob.size/1048576).toFixed(1)} MB`);
+          done+=expected;
+          await new Promise(r=>setTimeout(r,600));    /* let the GC catch up  */
+        }catch(e){
+          failed.push(`${ym}: ${e.message}`);
+          say(`⚠ ${ym} failed — continuing`, pct());
+        }
+      }
+
+      const mins=((Date.now()-t0)/60000).toFixed(1);
+      if(failed.length){
+        save(`spawn_transactions_INCOMPLETE_${stamp()}.txt`,
+             'FAILED MONTHS — these were NOT downloaded:\n'+failed.join('\n')+
+             '\n\nSucceeded:\n'+report.join('\n'),'text/plain');
+        say(`❌ ${failed.length} month(s) failed — see the .txt file`, 100);
+        if(btn) btn.textContent='❌ Incomplete';
+      }else{
+        save(`spawn_transactions_MANIFEST_${stamp()}.txt`,
+             `All transactions exported ${nowPH()}\n`+
+             `${grand.toLocaleString()} rows across ${found.length} months, ${mins} min\n\n`+
+             report.join('\n'),'text/plain');
+        say(`✅ ${grand.toLocaleString()} rows across ${found.length} months (${mins} min)`,100);
+        if(btn) btn.textContent='✅ Done';
+      }
+      hide(9000);
+    }catch(e){
+      say('❌ '+e.message,100);
+      if(btn) btn.textContent='❌ Failed';
+    }finally{
+      setTimeout(()=>{ if(btn){ btn.disabled=false; btn.textContent=old||'⬇ All Transactions'; } },6000);
+    }
+  };
+
   window.backupRenderMonths = async function(){
     const host=document.getElementById('backup-months'); if(!host) return;
     host.innerHTML='<span style="font-size:11px;color:var(--mu)">Reading months…</span>';
