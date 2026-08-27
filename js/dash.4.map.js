@@ -3966,8 +3966,12 @@ async function loadSystemStatus() {
     const storColor = usedPct >= 90 ? "var(--red)" : usedPct >= 75 ? "var(--amber)" : "var(--ok)";
     const barColor  = usedPct >= 90 ? "#dc2626"    : usedPct >= 75 ? "#d97706"    : "#16a34a";
 
+    // Show GB rather than a four-digit MB number - easier to read against the
+    // 8 GB limit at a glance.
+    const dbGB = realDbMB > 0 ? (realDbMB / 1024).toFixed(2) + ' GB' : realDbSize;
+
     document.getElementById("sys-storage").innerHTML =
-      `<span style="font-size:14px;color:${storColor};font-weight:700">${realDbSize} / 8 GB</span>
+      `<span style="font-size:14px;color:${storColor};font-weight:700">${dbGB} / 8 GB</span>
        <div style="background:#f0f4ff;border-radius:4px;height:6px;margin:4px 0;overflow:hidden;">
          <div style="background:${barColor};height:6px;width:${Math.min(usedPct,100)}%;border-radius:4px;transition:width .5s;"></div>
        </div>
@@ -3985,7 +3989,7 @@ async function loadSystemStatus() {
         storAlert.style.borderColor = "#dc2626";
         document.getElementById("storage-alert-icon").textContent = "🔴";
         document.getElementById("storage-alert-msg").innerHTML =
-          `<b>CRITICAL: Storage at ${usedPct}% (${realDbSize} / 8 GB)!</b><br>
+          `<b>CRITICAL: Storage at ${usedPct}% (${dbGB} / 8 GB)!</b><br>
            Approaching limit. Do a Full Backup NOW and consider archiving old data.`;
         document.getElementById("storage-alert-msg").style.color = "#dc2626";
         warnings.push(`🔴 CRITICAL: Supabase storage at ${usedPct}% — ${realDbSize} of 8 GB used!`);
@@ -3995,7 +3999,7 @@ async function loadSystemStatus() {
         storAlert.style.borderColor = "#d97706";
         document.getElementById("storage-alert-icon").textContent = "🟡";
         document.getElementById("storage-alert-msg").innerHTML =
-          `<b>Warning: Storage at ${usedPct}% (${realDbSize} / 8 GB)</b><br>
+          `<b>Warning: Storage at ${usedPct}% (${dbGB} / 8 GB)</b><br>
            Getting full. Consider doing a backup and archiving old data soon.`;
         document.getElementById("storage-alert-msg").style.color = "#92400e";
         warnings.push(`⚠️ Storage at ${usedPct}% — ${realDbSize} of 8 GB used`);
@@ -4005,7 +4009,7 @@ async function loadSystemStatus() {
         storAlert.style.borderColor = "#0284c7";
         document.getElementById("storage-alert-icon").textContent = "🔵";
         document.getElementById("storage-alert-msg").innerHTML =
-          `Storage at ${usedPct}% (${realDbSize} / 8 GB) — healthy, keep monitoring.`;
+          `Storage at ${usedPct}% (${dbGB} / 8 GB) — healthy, keep monitoring.`;
         document.getElementById("storage-alert-msg").style.color = "#0369a1";
       } else {
         storAlert.style.display = "none";
