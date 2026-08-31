@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Spawn · Server Monitor</title>
+<title>DICAYAS · Spawn Monitor</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
-  :root{
+  :root{--srv:#025AC6;--srv-glow:rgba(2,90,198,.35);
     --navy:#213040; --brand-navy:#16202c; --deep:#f1f4f8;
     --gold:#FFB725; --green:#028867; --blue:#025AC6; --purple:#311A8E;
     --magenta:#C01176; --red:#DF1A35; --cyan:#2BA3B8;
@@ -22,7 +22,21 @@
   .htop{display:flex;align-items:center;gap:11px}
   .htop img{width:34px;height:34px;object-fit:contain}
   h1{font-size:16px;font-weight:900;letter-spacing:.2px;color:var(--navy)}
-  h1 .sub{font-weight:800;color:var(--blue)}
+  /* Dicayas and Dapitan are the same page with a different filter, so at a
+     glance they are indistinguishable and it is genuinely possible to edit
+     the wrong town's machine. The server name is therefore a large colour
+     -coded badge, not a word in a sentence. Colours are the area palette:
+     Dipolog #025AC6 (Dicayas), Dapitan #028867. */
+  h1 .sub{
+    display:inline-block;font-weight:900;font-size:22px;line-height:1;
+    letter-spacing:-.2px;color:#fff;background:var(--srv);
+    padding:6px 13px 7px;border-radius:9px;vertical-align:middle;
+    box-shadow:0 1px 0 rgba(0,0,0,.18) inset, 0 2px 6px var(--srv-glow);
+    text-transform:uppercase;
+  }
+  /* Full-width strip under the header so the colour is visible even when
+     the window is scrolled or too narrow to show the badge. */
+  .srvbar{height:5px;background:var(--srv)}
   .pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 11px;font-size:12px;color:var(--dim);font-weight:700;margin-left:auto}
   .hbpill{margin-left:8px;cursor:default}
   .hbpill.ok{background:#e9f7f1;border-color:#9dd8c3;color:#046b52}
@@ -760,6 +774,7 @@ body.rail-on #railNav{display:block}
 </head>
 <body>
 <div class="rainbow-strip"></div>
+<div class="srvbar"></div>
 <header>
   <div class="htop">
     <img src="spawn-globe.png" alt="SPAWN" onerror="this.style.display='none'">
@@ -1024,7 +1039,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-08-25-gw-dicayas";
+const REV = "2026-08-31-srvbadge";
 
 const SERVER = {
   name:     "Dicayas Server",
@@ -1402,12 +1417,12 @@ function nameMatchScore(rcToks, name, rawComment){
 
 // Areas physically served by the Dicayas Server. VLAN numbers repeat across areas,
 // so a machine in another area that shares a VLAN number must NOT appear on this card.
-const DICAYAS_AREAS=new Set(SERVER.areas);
+const SERVER_AREAS=new Set(SERVER.areas);
 function inServerArea(v){
   // server_name wins when present; otherwise fall back to area (most rows have null server_name)
   if(v.server_name) return v.server_name===SERVER.name;
   const a=(v.area||'').toLowerCase().trim();
-  return DICAYAS_AREAS.has(a);
+  return SERVER_AREAS.has(a);
 }
 
 function popupCandidates(m){
@@ -5520,7 +5535,12 @@ async function loadActiveHarvest(){
       const items=await sb(`harvest_group_items?select=vendo_id,group_run_id&vendo_id=in.(${vids.join(',')})`);
       (items||[]).forEach(i=>{ if(i.group_run_id) gids.add(i.group_run_id); });
     }
-    const groups=GROUPS.filter(g=>gids.has(g.id));
+    /* Only warn about harvests on THIS server's areas. The group list is
+       network-wide, so an unfiltered banner showed a Dipolog harvest on the
+       Dapitan page -- telling you not to move machines that have nothing to
+       do with this router. A warning that is wrong is a warning people learn
+       to ignore, which costs us the real ones. */
+    const groups=GROUPS.filter(g=>gids.has(g.id) && SERVER_AREAS.has(String(g.area||'').toLowerCase().trim()));
     ACTIVE_HARVEST={ groupIds:gids, collectors:[...collectors], groups };
   }catch(e){ ACTIVE_HARVEST={groupIds:new Set(),collectors:[],groups:[]}; }
 }
