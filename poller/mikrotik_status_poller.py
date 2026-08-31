@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPAWN Internet — MikroTik Status Poller  (v17)
+SPAWN Internet — MikroTik Status Poller  (v18)
 =========================================================
 Runs every POLL_SECONDS on the 24/7 office server.
 - Connects to the office MikroTik router (API port 8728)
@@ -94,6 +94,7 @@ import sys
 import time
 import socket
 import json
+import re
 import traceback
 from datetime import datetime, timezone
 
@@ -133,7 +134,10 @@ def _cfg_int(name, default):
         return default
 
 
-MIKROTIK_HOST     = _cfg("MIKROTIK_HOST", "192.168.40.1")
+# v18: NO DEFAULT. This used to fall back to the Dicayas router. On a
+# second poller box a missing/typo'd MIKROTIK_HOST would silently poll
+# Dicayas instead and write the result under the wrong server name.
+MIKROTIK_HOST     = _cfg("MIKROTIK_HOST")
 MIKROTIK_USER     = _cfg("MIKROTIK_USER")
 MIKROTIK_PASS     = _cfg("MIKROTIK_PASS")
 MIKROTIK_PORT     = _cfg_int("MIKROTIK_PORT", 8728)
@@ -142,7 +146,12 @@ PLAINTEXT_LOGIN   = (os.environ.get("MIKROTIK_PLAINTEXT_LOGIN", "true").lower()
 
 # Name of THIS server. A poller on another MikroTik must use a different
 # SERVER_NAME (e.g. "Sindangan Server") or the two will overwrite each other.
-SERVER_NAME       = _cfg("SERVER_NAME", "Dicayas Server")
+# v18: NO DEFAULT -- this is the single most dangerous value in the file.
+# It used to default to "Dicayas Server". A Dapitan box whose .env forgot
+# this line would have written 400+ Dapitan rows tagged as Dicayas and
+# fought the real Dicayas poller for every one of them. A hard stop with
+# a clear message is always better than silent cross-server corruption.
+SERVER_NAME       = _cfg("SERVER_NAME")
 
 SUPABASE_URL      = _cfg("SUPABASE_URL", "https://cviraqfhphhsonjmrtvu.supabase.co")
 # The anon key. RLS IS now enabled (Aug 2026) and this key is genuinely
@@ -151,7 +160,14 @@ SUPABASE_URL      = _cfg("SUPABASE_URL", "https://cviraqfhphhsonjmrtvu.supabase.
 SUPABASE_KEY      = _cfg("SUPABASE_KEY")
 
 POLL_SECONDS      = _cfg_int("POLL_SECONDS", 30)
-SERVICE_NAME      = "mikrotik_status_poller"     # heartbeat row id
+# v18: system_heartbeat is keyed on service_name ALONE. A second poller
+# using the same literal would overwrite the first one's heartbeat every
+# cycle and both dashboards would read a liveness signal from the wrong
+# box. Derive it from SERVER_NAME so each server owns its own row.
+_SVC_SLUG         = re.sub(r"[^a-z0-9]+", "_",
+                           SERVER_NAME.lower().replace("server", "")).strip("_")
+SERVICE_NAME      = _cfg("SERVICE_NAME",
+                         f"mikrotik_status_poller_{_SVC_SLUG}")
 HOSTNAME          = socket.gethostname()
 # Set by the launcher so the heartbeat says which build is live.
 BUILD             = os.environ.get("SPAWN_POLLER_VERSION", "local")
@@ -734,9 +750,9 @@ def match_vouchers_to_vendos():
 #  Main loop
 # ====================================================================
 def main():
-    print(f"[{datetime.now()}] SPAWN MikroTik poller v16 ({BUILD}) on {HOSTNAME}")
+    print(f"[{datetime.now()}] SPAWN MikroTik poller v18 ({BUILD}) on {HOSTNAME}")
     print(f"  Router: {MIKROTIK_HOST}:{MIKROTIK_PORT}  Poll: {POLL_SECONDS}s")
-    write_heartbeat("starting", f"Poller v16 build {BUILD} started", 0)
+    write_heartbeat("starting", f"Poller v18 build {BUILD} started", 0)
     cycle = 0
     status_sig = {}     # match_key -> signature tuple
     device_sig = {}     # server|vlan|mac -> signature tuple
@@ -767,7 +783,12 @@ def main():
             # -- DELTA WRITE: only send rows that actually changed --
             to_write, status_sig = changed_rows(rows, status_sig, "match_key",
                                                 force_all=full)
-            _, status_failed = sb_upsert("mikrotik_status", to_write, "match_key")
+            # v18: match_key is the bare VLAN number and VLANs REPEAT across
+            # servers. Conflicting on match_key alone lets a second poller
+            # overwrite this server's rows. Composite index
+            # uniq_mstatus_server_key backs this target.
+            _, status_failed = sb_upsert("mikrotik_status", to_write,
+                                         "server_name,match_key")
 
             # -- Per-device detail (isolated + non-fatal) --
             d_count = 0
