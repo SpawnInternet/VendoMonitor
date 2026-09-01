@@ -1039,7 +1039,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-09-01-dapitan-v3-perf";
+const REV = "2026-09-01-dapitan-v4-tick";
 
 const SERVER = {
   name:     "Dapitan Server",
@@ -6540,37 +6540,89 @@ boot();
 
 // Only mikrotik_status is genuinely live. Vendos/groups/sales change rarely,
 // so the 90s tick refreshes just the machine state instead of the whole dataset.
+/* ---- tick cadence ------------------------------------------------------
+   Every 30s this used to pull EIGHT payloads, and the last two of those
+   (loadSuppress) ran AFTER the Promise.all resolved, so each tick paid a
+   full extra gateway round-trip in series for no reason.
+
+   Only mikrotik_status actually moves at that speed — the pollers beat every
+   30-60s, so the router tables are correctly tuned. subscribers (485 rows),
+   ppp_roster (208) and hotspot_vouchers (234) are billing records, human-
+   confirmed roster entries and vouchers. Polling those at router cadence was
+   re-downloading data that changes a few times a day.
+
+   FAST lane (30s): router status + heartbeat. 3 calls, all parallel.
+   SLOW lane (5min): subscribers, roster, vouchers, suppress. Folded into the
+   same Promise.all when its turn comes up, so it never serialises.
+   boot() still runs every 15 min as the catch-all for new vendos.        */
+const SLOW_EVERY = 10;          // 10 x 30s = 5 minutes
+let TICK_N = 0;
+let LAST_PAINT = "";
+
 async function refreshStatus(){
   if(document.hidden) return;              // don't poll a backgrounded tab
   if(document.querySelector('.ov.show')) return;      // don't yank a dialog out from under a tap
-  /* Cleared each tick: a recovered source must be able to clear the red bar,
-     otherwise one transient 401 would brand the page degraded until reload. */
-  DEGRADED.clear();
+
+  const slow = (TICK_N++ % SLOW_EVERY) === 0;   // first tick is always full
+
+  /* Only forget the verdicts we are about to re-test this tick. The old code
+     cleared the whole map, which was fine when every source was refetched
+     every time — now it is not. Blanket-clearing would erase a real
+     subscribers failure on the next fast tick and never re-detect it, so the
+     red bar would silently heal itself while the source was still broken. */
+  DEGRADED.delete("live router status");
+  DEGRADED.delete("poller heartbeat");
+  if(slow){ ["vouchers","PPPoE roster","subscribers"].forEach(k=>DEGRADED.delete(k)); }
+
   try{
-    const [status, subs, vouchers, hb, roster, subrecs] = await Promise.all([
+    const jobs = [
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.ppp&select=*&order=ppp_name&limit=1000"),
-      soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
-      soft(sb(HB_PATH), "poller heartbeat", null),
-      soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster", null),
-      soft(sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=1000"), "subscribers", null)
-    ]);
-    STATUS=status||[]; SUBS=subs||[];
-    // roster and subscriber state drive which bucket a line lands in, so they
-    // ride the same tick — otherwise the job-order queue shows stale reasons
-    if(Array.isArray(roster) && roster.length) buildRoster(roster);
-    if(Array.isArray(subrecs) && subrecs.length){
-      // merge, so fields the light select omits are not wiped off the records
-      const by=new Map(subrecs.map(r=>[String(r.id),r]));
-      SUBRECS=(SUBRECS||[]).map(old=>{ const fresh=by.get(String(old.id));
-                                       if(fresh) by.delete(String(old.id));
-                                       return fresh?{...old,...fresh}:old; })
-                           .concat([...by.values()]);
+      soft(sb(HB_PATH), "poller heartbeat", null)
+    ];
+    if(slow){
+      jobs.push(
+        soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
+        soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster", null),
+        soft(sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=1000"), "subscribers", null),
+        soft(sb("mikrotik_suppress?select=*&order=suppressed_at.desc"), "suppress list", null),
+        sbRpc('spawn_suppressed_board', {}).catch(()=>null)
+      );
     }
+    const [status, subs, hb, vouchers, roster, subrecs, suppress, board] = await Promise.all(jobs);
+
+    STATUS=status||[]; SUBS=subs||[];
     renderHeartbeat(hb);
-    buildVouch(vouchers);
-    await loadSuppress();
-    withScroll(()=>{ render(); renderSubs(); renderDegraded(); });
+
+    if(slow){
+      // roster and subscriber state drive which bucket a line lands in
+      if(Array.isArray(roster) && roster.length) buildRoster(roster);
+      if(Array.isArray(subrecs) && subrecs.length){
+        // merge, so fields the light select omits are not wiped off the records
+        const by=new Map(subrecs.map(r=>[String(r.id),r]));
+        SUBRECS=(SUBRECS||[]).map(old=>{ const fresh=by.get(String(old.id));
+                                         if(fresh) by.delete(String(old.id));
+                                         return fresh?{...old,...fresh}:old; })
+                             .concat([...by.values()]);
+      }
+      buildVouch(vouchers);
+      if(Array.isArray(suppress)) SUPPRESS = suppress;
+      SUPP_BOARD = board;
+      renderInactive();
+    }
+
+    /* The grid was rebuilt every 30s whether or not anything had moved, which
+       is the idle stutter: a full re-render landing under the cursor while
+       nothing on screen had changed. Router state is usually identical between
+       ticks, so hash it and skip. Cheap to compute vs the render it avoids. */
+    const paintKey = STATUS.length+"|"+SUBS.length+"|"+
+      STATUS.map(r=>r.vlan+":"+(r.online?1:0)+":"+(r.user_count||0)+":"+(r.lease_status||"")).join(",");
+    if(paintKey !== LAST_PAINT || slow){
+      LAST_PAINT = paintKey;
+      withScroll(()=>{ render(); renderSubs(); renderDegraded(); });
+    }else{
+      renderDegraded();      // cheap, and must still reflect a source going bad
+    }
   }catch(e){
     /* The two mikrotik_status reads are critical and unguarded, so landing here
        means live router state is gone. Previously silent — the grid just froze
