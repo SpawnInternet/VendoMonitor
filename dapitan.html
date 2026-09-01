@@ -1039,7 +1039,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-08-31-dapitan-v2";
+const REV = "2026-09-01-dapitan-v3-perf";
 
 const SERVER = {
   name:     "Dapitan Server",
@@ -1113,31 +1113,71 @@ let VENDOS=[], BYVLAN={}, DUPVLAN=new Set(), VLAN_CANDIDATES={};
 let VOUCH={};
 // Connected customer devices per VLAN (from vendo_devices, pulled live by the poller)
 let DEVS={};
-/* vendo_devices is an APPEND table — 124k rows for this server alone, growing
-   ~12k/day. Fetching a bare limit=5000 returned an arbitrary 4% with no
-   ORDER BY, so which devices a vendo appeared to have was non-deterministic
-   and often weeks stale. Ask for a recent window instead: ~2k rows currently,
-   comfortably inside the limit, and actually current. */
-function devicesQuery(){
+/* vendo_devices is an APPEND table — 90k rows and growing ~12k/day.
+   HISTORY: this used to be fetched WHOLE-SERVER on boot AND again on every 90s
+   tick: 5,843 rows in the 6h window against a limit=5000, so it was silently
+   truncated (the same wrong-but-plausible failure the limit=1000 note below
+   warns about) AND it re-downloaded ~600 KB every 90 seconds. All of it fed
+   exactly ONE consumer: the "Connected devices" grid inside a single vendo's
+   popup. >99% of every fetch was thrown away unrendered.
+   NOW: fetched per-VLAN, on popup open, cached for 60s. Boot and the tick no
+   longer touch this table at all. Rows are capped at 300 per vendo, well above
+   any real machine, so this one cannot silently truncate the way the old one
+   did — a vendo at the cap is a signal, not a rounding error. */
+const DEV_TTL_MS = 60*1000;
+let DEV_FETCHED = {};   // vlan -> timestamp of last successful fetch
+function devicesQueryFor(vlan){
   const since=new Date(Date.now()-6*3600*1000).toISOString();
   return "vendo_devices?server_name=eq."+SERVER_Q
+       + "&vlan=eq."+encodeURIComponent(String(vlan))
        + "&select=vlan,mac,ip,hostname,lease_status,expires_after,updated_at"
        + "&updated_at=gte."+encodeURIComponent(since)
-       + "&order=updated_at.desc&limit=5000";
+       + "&order=updated_at.desc&limit=300";
 }
-function buildDevs(rows){
-  DEVS={};
-  (rows||[]).forEach(d=>{
-    const key=String(d.vlan);
-    if(!key) return;
-    (DEVS[key]=DEVS[key]||[]).push(d);
-  });
+function sortDevs(list){
   // bound devices first, then by IP
-  Object.values(DEVS).forEach(list=>list.sort((a,b)=>{
+  return (list||[]).sort((a,b)=>{
     const ab=(a.lease_status==='bound')?0:1, bb=(b.lease_status==='bound')?0:1;
     if(ab!==bb) return ab-bb;
     return String(a.ip||'').localeCompare(String(b.ip||''),undefined,{numeric:true});
-  }));
+  });
+}
+/* Fills #devbox for the open popup. Never throws into the caller: a dead
+   device read must degrade to a visible message in that one box, not take
+   down the whole modal render. */
+async function ensureDevs(m){
+  if(!m || m.vlan==null) return;
+  const key=String(m.vlan);
+  const box=()=>document.getElementById('devbox');
+  const fresh = DEV_FETCHED[key] && (Date.now()-DEV_FETCHED[key] < DEV_TTL_MS);
+  if(DEVS[key] && fresh){ paintDevs(key); return; }
+  try{
+    const rows=await sb(devicesQueryFor(key));
+    DEVS[key]=sortDevs(rows||[]);
+    DEV_FETCHED[key]=Date.now();
+  }catch(e){
+    const b=box();
+    if(b && window._curMk===m.match_key) b.innerHTML='<div class="raw">Could not load devices: '+esc(e.message)+'</div>';
+    return;
+  }
+  // popup may have been closed or navigated away while the fetch was in flight
+  if(window._curMk!==m.match_key) return;
+  paintDevs(key);
+}
+function paintDevs(key){
+  const b=document.getElementById('devbox'); if(!b) return;
+  const list=DEVS[key]||[];
+  if(!list.length){ b.innerHTML='<div class="raw">No devices seen on this vendo.</div>'; return; }
+  const bound=list.filter(d=>d.lease_status==='bound').length;
+  b.innerHTML=`<div class="sec" style="margin-top:0">Connected devices (${bound} bound / ${list.length} seen)</div>`
+    +`<div class="devgrid">`
+    + list.slice(0,60).map(d=>`<div class="dev ${d.lease_status==='bound'?'':'idle'}">
+        <div class="dn">${d.lease_status==='bound'?'🟢':'⚪'} ${esc(d.hostname)||'(no name)'}</div>
+        <div class="dline"><span class="dip">${esc(d.ip)||'—'}</span>${d.expires_after?`<span class="dexp">⏳ ${esc(d.expires_after)}</span>`:''}</div>
+        <div class="dmac">${esc(d.mac)||''}</div>
+      </div>`).join('')
+    + (list.length>60?`<div class="devmore">…and ${list.length-60} more</div>`:'')
+    + `</div>`;
 }
 function buildVouch(rows){
   VOUCH={};
@@ -3540,20 +3580,10 @@ function renderModal(m, cands){
       <div class="tile ${m.lease_status?'t-green':'warn'}"><div class="tl">Lease</div><div class="tv">${esc(m.lease_status)||'⚫ none'}</div></div>
       <div class="tile t-navy"><div class="tl">Updated</div><div class="tv">${ago(m.updated_at)}</div></div>
     </div>
-    ${(()=>{
-      const list=DEVS[String(m.vlan)]||[];
-      if(!list.length) return `<div class="sec">Connected devices</div><div class="raw">No devices seen on this vendo.</div>`;
-      const bound=list.filter(d=>d.lease_status==='bound').length;
-      return `<div class="sec">Connected devices (${bound} bound / ${list.length} seen) · refreshes every 30s</div>`+
-        `<div class="devgrid">`+
-        list.slice(0,60).map(d=>`<div class="dev ${d.lease_status==='bound'?'':'idle'}">
-          <div class="dn">${d.lease_status==='bound'?'🟢':'⚪'} ${esc(d.hostname)||'(no name)'}</div>
-          <div class="dline"><span class="dip">${esc(d.ip)||'—'}</span>${d.expires_after?`<span class="dexp">⏳ ${esc(d.expires_after)}</span>`:''}</div>
-          <div class="dmac">${esc(d.mac)||''}</div>
-        </div>`).join('')+
-        (list.length>60?`<div class="devmore">…and ${list.length-60} more</div>`:'')+
-        `</div>`;
-    })()}
+    <div class="sec">Connected devices</div>
+    <div id="devbox">${DEVS[String(m.vlan)]
+        ? '' /* cached: paintDevs() fills this in on the next line of openM */
+        : '<div class="raw">Loading devices…</div>'}</div>
     <button class="sfbtn" onclick='toSpawnFi(${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>\uD83D\uDCF6 Transfer to SpawnFi (VLAN ${esc(m.vlan)})</button>
     <button class="pullbtn" onclick='pullOut("vendo",${attrJS(String(m.vlan))},${attrJS(nameOf(m))})'>🚫 Pull out / mark INACTIVE (skip VLAN ${esc(m.vlan)})</button>`;
   } else {
@@ -3687,6 +3717,9 @@ function renderModal(m, cands){
     });
   }
   document.getElementById('mBody').innerHTML=html;
+  /* #devbox only exists on the stats tab. Fire-and-forget: the modal is
+     already rendered and usable, devices fill in a beat later. */
+  if(document.getElementById('devbox')) ensureDevs(m);
 }
 function setModalTab(t){
   window._curTab=t;
@@ -6408,18 +6441,21 @@ async function boot(){
     if(_lbl) _lbl.textContent = SERVER.name;
     // PostgREST caps at 1000 rows/request — fetch page 1, then the rest in parallel
     const SEL="vendos?select=id,vendo_code,vlan,tg_name,sheet_name,owner_name,excel_name,area,server_name,status,last_harvest_date,pending_delete_at,address,name_confirmed,no_tg&order=id&limit=1000";
-    const first=await sb(`${SEL}&offset=0`);
-    VENDOS=first||[];
-    if(first && first.length===1000){
-      const rest=await Promise.all(
-        /* Must NOT swallow: a dropped page silently shortens VENDOS, the
-           dataset every card and every VLAN match is built from. A partial
-           vendo list is indistinguishable from vendos having been deleted. */
-        [1,2,3,4,5,6,7,8,9].map(i=>sb(`${SEL}&offset=${i*1000}`))
-      );
-      for(const page of rest){
-        if(page && page.length) VENDOS=VENDOS.concat(page);
-      }
+    /* Was a fixed fan-out of 9 extra requests whenever page 1 came back full.
+       There are ~1,400 vendos, so 8 of those 9 round-trips returned [] — pure
+       latency at boot, every boot, through the gateway. Walk instead: stop the
+       moment a page comes back short. 1,400 rows = 2 requests, and it still
+       grows correctly past 10,000 where the old fixed list silently capped.
+       Must NOT swallow errors: a dropped page silently shortens VENDOS, the
+       dataset every card and every VLAN match is built from. A partial vendo
+       list is indistinguishable from vendos having been deleted. */
+    VENDOS=[];
+    for(let off=0; ; off+=1000){
+      const page=await sb(`${SEL}&offset=${off}`);
+      const rows=page||[];
+      VENDOS=VENDOS.concat(rows);
+      if(rows.length<1000) break;
+      if(off>=200000) break;            // hard stop, never spin forever
     }
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
@@ -6431,7 +6467,7 @@ async function boot(){
     Object.entries(VLAN_CANDIDATES).forEach(([k,arr])=>{ if(arr.length>1) DUPVLAN.add(k); });
     buildNameIndex();
     // these four are independent of each other — fire together
-    const [status, subs, groups, salesRows, vouchers, devices, hb, roster, subrecs, bashang, jobs, nocon, vnocon] = await Promise.all([
+    const [status, subs, groups, salesRows, vouchers, hb, roster, subrecs, bashang, jobs, nocon, vnocon] = await Promise.all([
       /* CRITICAL (no soft()): without live router state the page has nothing
          true to say, so these two must fail loudly and abort the load. */
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
@@ -6442,7 +6478,6 @@ async function boot(){
       soft(sb("harvest_groups?select=id,area,group_label,collector,status,barangays&status=eq.active&order=area,group_label"), "harvest groups"),
       soft(sbRpc("sales_month_by_vendo"), "monthly sales"),
       soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
-      soft(sb(devicesQuery()), "connected devices"),
       soft(sb(HB_PATH), "poller heartbeat", null),
       soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster"),
       soft(sb("subscribers?select=id,name,area,server_name,phone,fb_name,address,acct_no,monthly_amount,due_day,plan_type,status,lat,lng,gps_place,vlan,pppoe_username,last_updated_by,is_vendo_owner,vendo_purchase_price,vendo_purchased_at&order=name&limit=1000"), "subscribers"),
@@ -6475,7 +6510,6 @@ async function boot(){
     buildJobFloor(jobs);
     renderHeartbeat(hb);
     buildVouch(vouchers);
-    buildDevs(devices);
     SALES_MONTH={};
     (salesRows||[]).forEach(r=>{ SALES_MONTH[String(r.vendo)]=Number(r.total||0); });
 
@@ -6513,11 +6547,10 @@ async function refreshStatus(){
      otherwise one transient 401 would brand the page degraded until reload. */
   DEGRADED.clear();
   try{
-    const [status, subs, vouchers, devices, hb, roster, subrecs] = await Promise.all([
+    const [status, subs, vouchers, hb, roster, subrecs] = await Promise.all([
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.vendo&select=*&limit=1000"),
       sb("mikrotik_status?server_name=eq."+SERVER_Q+"&kind=eq.ppp&select=*&order=ppp_name&limit=1000"),
       soft(sb("hotspot_vouchers?server_name=eq."+SERVER_Q+"&select=vlan,username,voucher_code&limit=1000"), "vouchers"),
-      soft(sb(devicesQuery()), "connected devices"),
       soft(sb(HB_PATH), "poller heartbeat", null),
       soft(sb("ppp_roster?select=ppp_name,roster_name,area,match_status,confirmed_at,vendo_id&limit=1000"), "PPPoE roster", null),
       soft(sb("subscribers?select=id,name,area,status,phone,fb_name,monthly_amount,due_day,lat,vlan,pppoe_username,is_vendo_owner&order=name&limit=1000"), "subscribers", null)
@@ -6536,7 +6569,6 @@ async function refreshStatus(){
     }
     renderHeartbeat(hb);
     buildVouch(vouchers);
-    buildDevs(devices);
     await loadSuppress();
     withScroll(()=>{ render(); renderSubs(); renderDegraded(); });
   }catch(e){
