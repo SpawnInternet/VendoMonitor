@@ -1039,7 +1039,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-09-01-dapitan-v4-tick";
+const REV = "2026-09-02-dapitan-vendos-atomic";
 
 const SERVER = {
   name:     "Dapitan Server",
@@ -5945,6 +5945,14 @@ async function doAttach(vendoId){
   if(window._curMk!=null) openM(window._curMk);
 }
 async function doCreateLink(){
+  /* MONEY SAFETY: when the vendo list fails to load, every card on the board
+     looks unlinked and this dialog is offered for machines that already have
+     a record. Creating here would put a DUPLICATE into the harvest groups.
+     An empty VENDOS is never a real state, so refuse and say why. */
+  if(!VENDOS.length){
+    toast("Vendo list did not load — reload the page before creating anything");
+    return;
+  }
   const tg=_linkCtx.pickedTg;
   if(!tg){ toast("Pick a Telegram name first"); return; }
   const name=(document.getElementById('clName')||{}).value?.trim()||tg;
@@ -6448,15 +6456,34 @@ async function boot(){
        grows correctly past 10,000 where the old fixed list silently capped.
        Must NOT swallow errors: a dropped page silently shortens VENDOS, the
        dataset every card and every VLAN match is built from. A partial vendo
-       list is indistinguishable from vendos having been deleted. */
-    VENDOS=[];
+       list is indistinguishable from vendos having been deleted.
+
+       ATOMIC ASSIGNMENT — this is the bug that unlinked the whole board.
+       The walk used to do `VENDOS=[]` FIRST and then fetch. boot() re-runs
+       every 15 minutes, so one transient gateway hiccup on either page left
+       VENDOS permanently EMPTY: every card fell back to the raw router
+       comment, every area read "—", every green "✓ linked" marker vanished
+       and every popup offered "Create & link record" for a vendo that was
+       already linked. The only visible sign was one "Load failed" line
+       appended to the very bottom of the page, below hundreds of cards.
+       Accepting a create there would have written a DUPLICATE vendo into the
+       harvest groups. So: build into a local, and only publish it if the walk
+       completed. A failed reload now keeps the last good list. */
+    const fresh=[];
     for(let off=0; ; off+=1000){
       const page=await sb(`${SEL}&offset=${off}`);
-      const rows=page||[];
-      VENDOS=VENDOS.concat(rows);
-      if(rows.length<1000) break;
+      /* A non-array body (gateway error object, HTML error page) used to make
+         `rows.length` undefined, and `undefined < 1000` is false — so the walk
+         did NOT stop and span 200 pointless round-trips. Fail fast instead. */
+      if(!Array.isArray(page)) throw new Error("vendos: unexpected response at offset "+off);
+      fresh.push(...page);
+      if(page.length<1000) break;
       if(off>=200000) break;            // hard stop, never spin forever
     }
+    /* Zero vendos is never true for this business. Treat it as a failed read,
+       not as "all the vendos were deleted", and keep whatever we had. */
+    if(!fresh.length) throw new Error("vendos returned 0 rows — refusing to blank the board");
+    VENDOS=fresh;
     DUPVLAN=new Set(); BYVLAN={}; VLAN_CANDIDATES={};
     VENDOS.forEach(v=>{
       if(v.vlan==null)return;
@@ -6523,6 +6550,13 @@ async function boot(){
     // non-blocking: banner can fill in after the grid is on screen
     loadActiveHarvest().then(renderHarvestBanner).catch(()=>{});
   }catch(e){
+    /* This used to be the ONLY signal that boot died, appended below hundreds
+       of cards where nobody scrolls. The tick keeps repainting the grid from
+       mikrotik_status regardless, so a dead boot rendered a complete-looking
+       board built on stale or missing vendo data. Say it at the top, in red,
+       where renderDegraded() already puts every other broken source. */
+    DEGRADED.set("vendo records", (e && e.message) || "load failed");
+    try{ renderDegraded(); }catch(_){}
     document.body.insertAdjacentHTML('beforeend','<div class="empty">Load failed: '+esc(e.message)+'</div>');
   }
 }
@@ -6615,7 +6649,11 @@ async function refreshStatus(){
        is the idle stutter: a full re-render landing under the cursor while
        nothing on screen had changed. Router state is usually identical between
        ticks, so hash it and skip. Cheap to compute vs the render it avoids. */
-    const paintKey = STATUS.length+"|"+SUBS.length+"|"+
+    /* VENDOS.length belongs in this hash. Router state is usually identical
+       between ticks, so without it a grid painted while the vendo list was
+       empty would keep the "everything unlinked" view on screen even after
+       the next boot() repaired VENDOS. Names are half of what this grid says. */
+    const paintKey = STATUS.length+"|"+SUBS.length+"|"+VENDOS.length+"|"+
       STATUS.map(r=>r.vlan+":"+(r.online?1:0)+":"+(r.user_count||0)+":"+(r.lease_status||"")).join(",");
     if(paintKey !== LAST_PAINT || slow){
       LAST_PAINT = paintKey;
