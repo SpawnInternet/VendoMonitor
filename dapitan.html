@@ -1039,7 +1039,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-09-02-dapitan-vendos-atomic";
+const REV = "2026-09-02-dapitan-perf";
 
 const SERVER = {
   name:     "Dapitan Server",
@@ -1196,10 +1196,28 @@ let NAME_INDEX=new Map();
 // but is called from flagsOf() (once per card) AND again from applySearch(). Cache by
 // match_key; cleared whenever the underlying vendo data changes.
 let _pcCache=new Map();
+/* Perf: serverMatch() is called THREE times per card — nameOf(), areaOf() and
+   isCleanLink() each ask for it independently — and in the disambig/collision
+   branch every one of those calls scans the whole vendo list scoring names.
+   It is pure w.r.t. the same inputs popupCandidates depends on, so it caches
+   on the same key and is cleared by the same two places. */
+let _smCache=new Map();
+/* Perf: the disambig scan used to filter inServerArea() inside the per-card
+   loop and re-tokenise every record name on every comparison. Both are fixed
+   properties of the vendo list, so they are computed ONCE here instead of
+   ~1,400 x 2 times per scanned card. */
+let SERVER_VENDOS=[];
 function buildNameIndex(){
   NAME_INDEX=new Map();
+  SERVER_VENDOS=[];
   for(const v of VENDOS){
     if(!inServerArea(v)) continue;
+    SERVER_VENDOS.push(v);
+    /* Token/normalised forms hang off the record. VENDOS rows are replaced
+       wholesale on reload and mutated only through refreshVendoLocal(), which
+       calls straight back into here — so these can never outlive their row. */
+    v.__tokS = rcTokens(v.sheet_name);
+    v.__tokT = rcTokens(v.tg_name);
     for(const n of [normName(v.sheet_name), normName(v.tg_name)]){
       if(!n) continue;
       let a=NAME_INDEX.get(n);
@@ -1208,7 +1226,12 @@ function buildNameIndex(){
     }
   }
   _pcCache=new Map();
+  _smCache=new Map();
 }
+/* Cards are rebuilt from fresh STATUS rows on every poll. Both caches key on
+   match_key, so a router_comment that changed between ticks would otherwise
+   keep answering from the previous cycle. Called wherever STATUS is replaced. */
+function invalidateStatusCaches(){ _pcCache=new Map(); _smCache=new Map(); }
 function invalidateVendoCaches(){ buildNameIndex(); }
 let STATUS=[], SUBS=[];
 // Classified PPPoE outage rows from v_ppp_no_connection. The classification
@@ -1332,6 +1355,13 @@ async function sbRpc(fn, args){
 // THE row that actually belongs to THIS router's VLAN.
 // VLAN numbers repeat across areas, so we pick by router comment, not VLAN alone.
 function serverMatch(m){
+  const mk = m && m.match_key;
+  if(mk!=null && _smCache.has(mk)) return _smCache.get(mk);
+  const r=_serverMatchRaw(m);
+  if(mk!=null) _smCache.set(mk,r);
+  return r;
+}
+function _serverMatchRaw(m){
   const cands=popupCandidates(m);
   // In disambig/collision, no record token-matched the router on the VLAN path.
   // But a human may have LOCKED the correct record by name. Match by NAME (router
@@ -1343,9 +1373,13 @@ function serverMatch(m){
       // Match by NAME against the router comment across all vendos (VLANs repeat across
       // areas, so name is ground truth). Honor a LOCKED record above all.
       let best=null, bestSc=0, bestLocked=false;
-      VENDOS.forEach(v=>{
-        if(!inServerArea(v)) return; // don't bleed other areas/servers
-        const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc), nameMatchScore(rcToks, v.tg_name, rc));
+      /* SERVER_VENDOS is VENDOS already filtered by inServerArea(), and __tokS
+         / __tokT are the record's pre-tokenised names — both built once in
+         buildNameIndex(). Same rows, same scores, none of the per-comparison
+         rebuild work this loop used to repeat for every card on the board. */
+      SERVER_VENDOS.forEach(v=>{
+        const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc, v.__tokS),
+                          nameMatchScore(rcToks, v.tg_name,    rc, v.__tokT));
         if(sc<=0) return;
         const lk=(v.name_confirmed===true);
         // prefer locked; among same lock-state prefer higher score
@@ -1447,16 +1481,39 @@ function _lev(a,b){
   }
   return prev[n];
 }
+/* Perf: _fuzzyEq is the innermost call in the whole page — the disambig scan
+   reaches it ~30 times per record scored. Two exact, behaviour-preserving cuts:
+
+   1. LENGTH GATE. The function can only return true at edit distance <=1, or
+      <=2 when both words are >=8. Edit distance is at least the length
+      difference, so a gap of 3+ can never match and a gap of 2 can only match
+      in the long-word case. Rejecting those before _lev() skips the matrix
+      entirely; it cannot change a single verdict.
+   2. MEMO. The token vocabulary is small (a few thousand words) and the same
+      pairs are compared over and over across cards. Cache the verdict.
+      It is a pure function of two strings, so this never needs invalidating —
+      only bounding, in case a pathological comment set grows the vocabulary. */
+let _feCache=new Map();
 function _fuzzyEq(a,b){
   if(a===b) return true;
   if(a.length<5||b.length<5) return false;            // short words must match exactly
+  const gap=Math.abs(a.length-b.length);
+  if(gap>2) return false;
+  if(gap===2 && Math.min(a.length,b.length)<8) return false;
+  const k = a<b ? a+"\u0000"+b : b+"\u0000"+a;        // symmetric, so order the key
+  const hit=_feCache.get(k);
+  if(hit!==undefined) return hit;
   const d=_lev(a,b);
   // distance 1 = simple typo/spelling (denzel/denzil). distance 2 only for long words (>=8)
   // so genuinely different names like michel vs milcher (both <8) do NOT match.
-  return d<=1 || (d===2 && Math.min(a.length,b.length)>=8);
+  const r = d<=1 || (d===2 && Math.min(a.length,b.length)>=8);
+  if(_feCache.size>200000) _feCache=new Map();        // never grow without bound
+  _feCache.set(k,r);
+  return r;
 }
 // Score how strongly a record name matches the router comment (fuzzy meaningful-token overlap)
-function nameMatchScore(rcToks, name, rawComment){
+// `preToks` is the record's cached rcTokens() when the caller has one (see buildNameIndex).
+function nameMatchScore(rcToks, name, rawComment, preToks){
   if(!name) return 0;
   // NAME IS GROUND TRUTH. If the router comment and the record name are the same
   // string (ignoring case/accents/punctuation), that IS the machine. VLANs repeat
@@ -1465,7 +1522,7 @@ function nameMatchScore(rcToks, name, rawComment){
     const a=normName(name), b=normName(rawComment);
     if(a && a===b) return 999;
   }
-  const nToks=rcTokens(name);
+  const nToks=preToks||rcTokens(name);
   let hits=0; rcToks.forEach(t=>{ if(nToks.some(n=>_fuzzyEq(t,n))) hits++; });
   return hits;
 }
@@ -1530,7 +1587,8 @@ function _popupCandidatesRaw(m){
   // No exact name hit -> fall back to fuzzy token overlap among records on this VLAN.
   if(!primary && rcToks.length && onVlan.length){
     onVlan.forEach(v=>{
-      const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc), nameMatchScore(rcToks, v.tg_name, rc));
+      const sc=Math.max(nameMatchScore(rcToks, v.sheet_name, rc, v.__tokS),
+                        nameMatchScore(rcToks, v.tg_name,    rc, v.__tokT));
       if(sc>best){ best=sc; primary=v; }
     });
   }
@@ -1552,12 +1610,15 @@ function _popupCandidatesRaw(m){
   const sheets=new Set(), tgs=new Set();
   if(primary.sheet_name) sheets.add(primary.sheet_name);
   if(primary.tg_name) tgs.add(primary.tg_name);
-  const out=VENDOS.filter(v=>{
+  /* SERVER_VENDOS is the same rows this filter kept via inServerArea(), just
+     computed once instead of walking all ~1,400 records per card. */
+  const out=SERVER_VENDOS.filter(v=>{
     if(v.id===primary.id) return true;
     if(!(v.sheet_name||v.tg_name)) return false;
-    if(!inServerArea(v)) return false;
     return (v.sheet_name && sheets.has(v.sheet_name)) || (v.tg_name && tgs.has(v.tg_name));
   });
+  // primary is always in the list even if it sits outside the server subset.
+  if(!out.some(v=>v.id===primary.id)) out.unshift(primary);
   out._mode='dupes';
   return out;
 }
@@ -1602,8 +1663,17 @@ function isEmptySlot(m){
 //  - Restore could not undo it, because deleting the suppress row left the
 //    text match still hiding the machine.
 // The router's notes are field scribbles; the button is the decision.
+/* Perf: this runs for every card, and render() calls it again for every row of
+   the LIVE/waiting/nolease/empty splits — a linear scan of SUPPRESS each time.
+   The membership test is all that is wanted, so keep a Set alongside the list
+   and rebuild it wherever SUPPRESS is assigned. */
+let SUPPRESS_VLANS=new Set();
+function rebuildSuppressIndex(){
+  SUPPRESS_VLANS=new Set((SUPPRESS||[]).filter(s=>s && s.vlan!=null).map(s=>String(s.vlan)));
+  _pcCache=new Map(); _smCache=new Map();
+}
 function isPulledOut(m){
-  return m.vlan!=null && SUPPRESS.some(s=>s.vlan!=null && String(s.vlan)===String(m.vlan));
+  return m.vlan!=null && SUPPRESS_VLANS.has(String(m.vlan));
 }
 // Effective online: real link AND not pulled out / deactivated.
 function effOnline(m){ return !!m.online && !isPulledOut(m); }
@@ -1614,10 +1684,18 @@ function effOnline(m){ return !!m.online && !isPulledOut(m); }
 // It must not show up in Online / Waiting / No-lease / Empty, and must never
 // offer "Create & link record", or a sold unit gets re-created as a vendo and
 // pollutes the harvest groups.
+/* Same shape as isPulledOut: a per-card scan of the whole subscriber list to
+   answer one membership question. Rebuilt wherever SUBRECS is assigned. */
+let SOLD_VLANS=new Set();
+function rebuildSoldIndex(){
+  SOLD_VLANS=new Set((SUBRECS||[])
+    .filter(r=>r && r.is_vendo_owner===true && r.vlan!=null)
+    .map(r=>String(r.vlan)));
+  _pcCache=new Map(); _smCache=new Map();
+}
 function isSoldVendo(m){
   if(!m || m.vlan==null) return false;
-  return (SUBRECS||[]).some(r =>
-    r && r.is_vendo_owner===true && r.vlan!=null && String(r.vlan)===String(m.vlan));
+  return SOLD_VLANS.has(String(m.vlan));
 }
 
 function flagsOf(m){
@@ -1795,7 +1873,13 @@ function onlineViewToggle(n){
 }
 
 function render(){
-  _pcCache=new Map();
+  /* Was `_pcCache=new Map()` — the cache was destroyed at the top of EVERY
+     render, so it only ever served the calls within one pass. render() also
+     runs on each search keystroke, each sort flip and each 30s tick, so every
+     one of those re-matched all ~260 cards from scratch. Nothing render() does
+     changes VENDOS or STATUS, so it has no business invalidating anything.
+     The two real invalidation points are buildNameIndex() (vendo data moved)
+     and invalidateStatusCaches() (fresh poll rows), and both clear it. */
   // Pulled-out machines live on the Inactive tab only — they must not appear
   // in Online, Waiting, No-lease or Empty.
   const LIVE=STATUS.filter(m=>!isPulledOut(m) && !isSoldVendo(m));
@@ -5402,7 +5486,16 @@ document.addEventListener('click', e=>{
 });
 document.getElementById('q').oninput=applySearch;
 document.getElementById('flt').onchange=applySearch;
-document.getElementById('onq').oninput=(e)=>{ONLINE_Q=e.target.value;render();};
+/* Was a bare render() per keystroke: a full rebuild of four grids, ~260 cards
+   each, landing between one letter and the next. Coalesce to one paint after
+   typing settles. 110ms is below the ~150ms that reads as lag, so the box
+   still feels immediate while a fast typist pays for one render, not eight. */
+let _onqT=null;
+document.getElementById('onq').oninput=(e)=>{
+  ONLINE_Q=e.target.value;
+  clearTimeout(_onqT);
+  _onqT=setTimeout(()=>{ _onqT=null; render(); }, 110);
+};
 document.getElementById('sortBy').onchange=(e)=>{SORT_FIELD=e.target.value;render();};
 document.getElementById('sortDir').onclick=(e)=>{
   SORT_ASC=!SORT_ASC;
@@ -6328,6 +6421,7 @@ async function restore(kind, key, label){
 let SUPP_BOARD=null, SUPP_TAB='ALL';
 async function loadSuppress(){
   SUPPRESS = await sb("mikrotik_suppress?select=*&order=suppressed_at.desc") || [];
+  rebuildSuppressIndex();
   /* spawn_suppressed_board() joins each suppress row to its vendo and
      subscriber, so the cards can show the linked name, area and owner the
      raw suppress row does not carry. It returns NO money -- harvests are
@@ -6529,10 +6623,12 @@ async function boot(){
               +"&limit=1000"), "vendo outage view")
     ]);
     STATUS=status||[]; SUBS=subs||[]; GROUPS=groups||[];
+    invalidateStatusCaches();   // fresh poll rows -> per-card verdicts must be re-derived
     NOCON=nocon||[];
     VNOCON=vnocon||[];
     buildRoster(roster);
     SUBRECS=subrecs||[];
+    rebuildSoldIndex();
     BASHANG=bashang||[];
     buildJobFloor(jobs);
     renderHeartbeat(hb);
@@ -6626,6 +6722,7 @@ async function refreshStatus(){
     const [status, subs, hb, vouchers, roster, subrecs, suppress, board] = await Promise.all(jobs);
 
     STATUS=status||[]; SUBS=subs||[];
+    invalidateStatusCaches();   // fresh poll rows -> per-card verdicts must be re-derived
     renderHeartbeat(hb);
 
     if(slow){
@@ -6638,9 +6735,10 @@ async function refreshStatus(){
                                          if(fresh) by.delete(String(old.id));
                                          return fresh?{...old,...fresh}:old; })
                              .concat([...by.values()]);
+        rebuildSoldIndex();
       }
       buildVouch(vouchers);
-      if(Array.isArray(suppress)) SUPPRESS = suppress;
+      if(Array.isArray(suppress)){ SUPPRESS = suppress; rebuildSuppressIndex(); }
       SUPP_BOARD = board;
       renderInactive();
     }
