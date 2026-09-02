@@ -1039,11 +1039,18 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-08-31-srvbadge";
+const REV = "2026-09-02-dicayas-hbfix";
 
 const SERVER = {
   name:     "Dicayas Server",
   label:    "Dicayas",
+  /* hbService: poller v18 stopped writing the single shared row
+     "mikrotik_status_poller" and now writes one row PER SERVER
+     ("..._dicayas" / "..._dapitan"). This page was still asking for the old
+     name, got zero rows back, and reported "poller unknown" while the poller
+     was in fact healthy and beating every cycle. A false dead-poller alarm is
+     worse than no alarm: it trains you to ignore the pill. */
+  hbService:"mikrotik_status_poller_dicayas",
   areas:    ["dipolog", "mix areas"],
   offAreas: ["ROXAS", "DAPITAN", "SINDANGAN"]
 };
@@ -1608,7 +1615,7 @@ function cardHtml(m){
 // mikrotik_status.updated_at is NOT a liveness signal: the poller only writes
 // rows whose state changed, so a dead poller looks like a quiet network.
 // system_heartbeat is written every cycle, so that's what we watch.
-const HB_PATH="system_heartbeat?service_name=eq.mikrotik_status_poller&select=status,last_beat,cycle_count,detail,hostname&limit=1";
+const HB_PATH="system_heartbeat?service_name=eq."+encodeURIComponent(SERVER.hbService)+"&select=status,last_beat,cycle_count,detail,hostname&limit=1";
 
 let HB=null;
 function renderHeartbeat(rows){
