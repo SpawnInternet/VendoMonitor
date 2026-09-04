@@ -1049,7 +1049,7 @@ body.rail-on #railNav{display:block}
 /* Content revision. BUMP THIS whenever this file changes -- it is the half of
    the build pill that reports what is in the file, as opposed to when it was
    served. Format: YYYY-MM-DD plus a short tag for the change. */
-const REV = "2026-09-04-dapitan-vendosubs";
+const REV = "2026-09-04-dapitan-vendosubs2";
 
 const SERVER = {
   name:     "Dapitan Server",
@@ -1446,7 +1446,11 @@ async function sbFail(r, what){
   let detail='';
   try{
     const t=await r.text();
-    try{ const j=JSON.parse(t); detail=[j.message,j.details,j.hint].filter(Boolean).join(' — '); }
+    /* PostgREST answers with {message,details,hint}; the edge gateway answers
+       with {error}. Reading only the PostgREST shape turned every gateway
+       refusal into the generic "no permission" line below and hid the one
+       sentence that names the cause, e.g. "PATCH not allowed on subscribers". */
+    try{ const j=JSON.parse(t); detail=[j.message,j.details,j.hint,j.error].filter(Boolean).join(' — '); }
     catch{ detail=t.slice(0,180); }
   }catch{}
   if(r.status===401||r.status===403){
