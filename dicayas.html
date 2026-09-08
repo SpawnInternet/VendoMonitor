@@ -1083,15 +1083,33 @@ const KEY="gw";
 const H={apikey:KEY,Authorization:"Bearer "+KEY};
 (function installDicayasGateway(){
   const GW    = SB + '/functions/v1/spawn-gw-dicayas';
-  const TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';
+  /* SECURITY: the gateway token used to be a literal right here, in a file
+     served publicly from GitHub Pages. Anyone who opened View Source held
+     vendo edit/delete, ppp_roster, subscribers and suppression rights without
+     ever seeing a password prompt — while the buttons above them politely
+     asked for one.
+
+     It now uses the same admin token the money tables on this page already
+     require, minted by spawn-admin-login and shared via `spawn_admin_auth`.
+     That is not a new barrier in practice: the job floor and every
+     adminVerify() write on this page already needed that sign-in. */
   const _f    = window.fetch.bind(window);
   const RPC_RE  = /\/rest\/v1\/rpc\/([a-z_0-9]+)$/;
   const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
-  const post = (payload) => _f(GW, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'x-gw-token':TOKEN },
-    body: JSON.stringify(payload)
-  });
+  const noAuth = () => new Response(
+    JSON.stringify({error:'not signed in — sign in on the dashboard first (admin access required)'}),
+    {status:401, headers:{'Content-Type':'application/json'}});
+  const post = (payload) => {
+    // Read per request, never cached: the token has a 24h TTL and the page
+    // stays open far longer than that.
+    const tok = (typeof gwToken==='function') ? gwToken() : null;
+    if(!tok) return Promise.resolve(noAuth());
+    return _f(GW, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-gw-token':tok },
+      body: JSON.stringify(payload)
+    });
+  };
   window.fetch = function(input, init){
     try{
       const url  = (typeof input === 'string') ? input : (input && input.url) || '';
