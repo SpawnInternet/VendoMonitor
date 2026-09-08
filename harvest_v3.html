@@ -447,7 +447,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="text-align:center;padding-top:4px">
       <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.7</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px"></div>
     </div>
 
   </div>
@@ -997,6 +997,20 @@ function saveFieldToken(tok){
   GW_TOKEN=tok;
   try{ localStorage.setItem(FIELD_AUTH_KEY, JSON.stringify({token:tok, ts:Date.now()})); }catch(e){}
 }
+/* The gateway answers 401 when the token it was handed is no longer the one
+   the server expects — which is exactly what a GW_TOKEN rotation looks like
+   from the phone's side. Handled in one place so a rotation costs a collector
+   one PIN entry instead of a screen full of unexplained failures.
+   Guarded so twenty parallel requests all 401-ing trigger a single return. */
+let _gwReauthPending=false;
+function gwHandle401(){
+  if(_gwReauthPending) return;
+  _gwReauthPending=true;
+  GW_TOKEN=null;
+  try{ localStorage.removeItem(FIELD_AUTH_KEY); }catch(e){}
+  try{ toast('🔑 Session expired — please enter your PIN again', 3500); }catch(e){}
+  setTimeout(()=>{ try{ pinLogout(); }catch(e){ location.reload(); } _gwReauthPending=false; }, 600);
+}
 /* Exchange a PIN for the gateway token. Returns the collector row on success,
    null on a bad PIN, and throws on any network/server failure so the caller
    can fall back to the offline path instead of showing "Wrong PIN". */
@@ -1058,7 +1072,7 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
             method: 'POST',
             headers: { 'Content-Type':'application/json', 'x-gw-token': GW_TOKEN },
             body: JSON.stringify({ kind:'rest', table, method, query, body, prefer })
-          });
+          }).then(r=>{ if(r.status===401) gwHandle401(); return r; });
           if (method === 'GET') return _dedupe('GET|'+table+'|'+query, send);
           return send();
         }
@@ -1527,7 +1541,15 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.9';
+const APP_VERSION = 'v13.8';
+/* The badge used to be a hardcoded literal in the markup and had drifted to
+   v13.7 while APP_VERSION said v12.9 — so the number on screen told you
+   nothing about which build was actually running. Driven from APP_VERSION
+   now, so it cannot drift again. */
+try{
+  const _vb=document.getElementById('app-version-badge');
+  if(_vb) _vb.textContent=APP_VERSION;
+}catch(e){}
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
