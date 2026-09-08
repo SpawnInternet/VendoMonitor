@@ -976,8 +976,43 @@ var _eodPin = '';
 // ── v3 SECURITY: no service_role key in this file. ──
 // All DB/storage calls are transparently routed through the
 // Spawn Gateway edge function, which holds the real key server-side.
-const GW_URL   = SB + '/functions/v1/spawn-gw';
-const GW_TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';   // matches edge function GW_TOKEN secret
+const GW_URL    = SB + '/functions/v1/spawn-gw';
+const LOGIN_URL = SB + '/functions/v1/spawn-field-login';
+/* SECURITY: no gateway token at rest in this file. It used to be a literal
+   here, which meant anyone who opened View Source on this public page had
+   full gateway access without ever touching the PIN pad. The token is now
+   minted by spawn-field-login in exchange for a valid collector PIN.
+   7-day cache: a collector who starts the day in a dead spot must still be
+   able to work. Rotating the GW_TOKEN secret invalidates every cache. */
+let GW_TOKEN = null;
+const FIELD_AUTH_KEY = 'spawn_field_auth';
+const FIELD_AUTH_TTL = 7*24*60*60*1000;
+(function restoreFieldToken(){
+  try{
+    const s=JSON.parse(localStorage.getItem(FIELD_AUTH_KEY)||'null');
+    if(s && s.token && (Date.now()-s.ts) < FIELD_AUTH_TTL) GW_TOKEN=s.token;
+  }catch(e){}
+})();
+function saveFieldToken(tok){
+  GW_TOKEN=tok;
+  try{ localStorage.setItem(FIELD_AUTH_KEY, JSON.stringify({token:tok, ts:Date.now()})); }catch(e){}
+}
+/* Exchange a PIN for the gateway token. Returns the collector row on success,
+   null on a bad PIN, and throws on any network/server failure so the caller
+   can fall back to the offline path instead of showing "Wrong PIN". */
+async function fieldLogin(pin){
+  const r=await fetch(LOGIN_URL,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pin:pin})
+  });
+  if(r.status===401) return null;
+  if(r.status===429) throw new Error('THROTTLED');
+  if(!r.ok) throw new Error('login '+r.status);
+  const d=await r.json();
+  if(!d || !d.ok || !d.token) return null;
+  saveFieldToken(d.token);
+  return d;
+}
 // HDR kept as a harmless marker object so existing call sites are unchanged;
 // the fetch interceptor below detects it and reroutes to the gateway.
 const KEY = 'gw';
@@ -1492,7 +1527,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.8';
+const APP_VERSION = 'v12.9';
 
 // ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
 const SPAWN_CUTOFF_HOUR = 21;
@@ -1625,13 +1660,31 @@ async function pinLoadCollectors(){
     // Never select `pin` or `area_pin` here — this runs BEFORE anyone authenticates,
     // so every column returned is public. It was fetching all 10 columns and caching
     // them to localStorage, which put every collector's PIN on the device.
-    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&select=id,name,area,collector_code,photo_url&order=name.asc`,{headers:HDR,signal:ctrl.signal});
+    /* Roster comes from spawn-field-login, NOT the gateway. On a fresh install
+       there is no token yet, so a gateway fetch here would 401 and the picker
+       would silently fall back to the 4-name hardcoded list — dropping active
+       collectors from the screen. The login function serves names and areas
+       only, never PINs, and needs no token to do it. */
+    const r=await fetch(LOGIN_URL,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roster:true}), signal:ctrl.signal
+    });
     clearTimeout(tid);
-    const data=await r.json();
+    const _resp=await r.json();
+    const data=(_resp && _resp.ok && Array.isArray(_resp.collectors)) ? _resp.collectors : [];
     if(Array.isArray(data)&&data.length){
       // Defensive: strip credential fields before anything is cached, even though the
       // query above no longer requests them.
       const _safe=data.map(c=>{ const {pin,area_pin,...rest}=c; return rest; });
+      // Re-attach this device's own remembered PIN (set at last successful
+      // sign-in) so a roster refresh doesn't wipe offline login again.
+      try{
+        const _prev=JSON.parse(localStorage.getItem('spawn_collectors_cache')||'[]');
+        _safe.forEach(c=>{
+          const hit=Array.isArray(_prev)?_prev.find(p=>p.name===c.name&&p.pin):null;
+          if(hit) c.pin=hit.pin;
+        });
+      }catch(_){}
       _pinCollectors=_safe; render(_safe); _pinDbReady=true;
       try{ localStorage.setItem('spawn_collectors_cache', JSON.stringify(_safe)); }catch(e){}
     }
@@ -1722,23 +1775,19 @@ async function pinSubmit(){
     // Ask the server "is there a collector with this name AND this pin?" — it answers
     // with a row or nothing. The PIN is never sent back to the device, and the response
     // carries no `pin` column at all.
-    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.${encodeURIComponent(pin)}&active=eq.true&select=id,name,area,collector_code,photo_url`,{headers:HDR,signal:ctrl.signal});
+    /* The PIN is now checked by spawn-field-login, which holds the gateway
+       token and only releases it on a match. Previously this was a gateway
+       query — i.e. the door was already open and the PIN was checked on the
+       far side of it. Now the PIN is what opens the door. */
+    const acct=await fieldLogin(pin);
     clearTimeout(tid);
-    if(!r.ok) throw new Error('Server error '+r.status);
-    const rows=await r.json();
-    // FAIL CLOSED. If the gateway ever drops the `pin=eq.` filter, this query would
-    // return the collector regardless of PIN. A deliberately wrong PIN must return
-    // nothing; if it doesn't, the filter is not being honoured and we refuse to log in.
-    if(rows.length){
-      const probe=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.__nope__&active=eq.true&select=id&limit=1`,{headers:HDR});
-      const probeRows=await probe.json().catch(()=>[]);
-      if(Array.isArray(probeRows) && probeRows.length){
-        errEl.textContent='⚠️ Login unavailable — server misconfigured';
-        if(errEl){errEl.style.display='';}
-        if(btn){btn.disabled=false; btn.textContent='Login →';}
-        return;
-      }
-    }
+    // Name must match the one picked, so tapping "Gilbert" and typing Axcel's
+    // PIN does not sign you in as Axcel.
+    const rows=(acct && String(acct.name)===String(_pinSelectedName)) ? [acct] : [];
+    /* The old fail-closed probe checked that the gateway honoured `pin=eq.`.
+       There is no such query any more — a wrong PIN never yields a token — so
+       the probe would have tested nothing. Removed rather than left in place
+       looking like a safeguard. */
     if(!rows.length){
       errEl.textContent='❌ Wrong PIN — try again';
       if(errEl){errEl.style.display='';errEl.style.animation='none';void errEl.offsetWidth;errEl.style.animation='shake .4s ease';}
@@ -1759,6 +1808,16 @@ async function pinSubmit(){
     sessionStorage.setItem('col_team', selectedTeam||'');
     sessionStorage.setItem('col_pin', pin);
     localStorage.setItem('spawn_collector_name', collector.name||'');
+    /* Offline re-login was dead: the offline branch compares c.pin, but the
+       roster loader selects id,name,area,collector_code,photo_url — never pin
+       — so the match could never succeed. Remember this collector's own PIN,
+       on this collector's own phone, so a dead spot doesn't lock them out. */
+    try{
+      const _self=Object.assign({},collector,{pin:pin,team:selectedTeam});
+      const _list=(Array.isArray(_pinCollectors)?_pinCollectors:[]).filter(c=>c.name!==collector.name);
+      _list.push(_self); _pinCollectors=_list;
+      localStorage.setItem('spawn_collectors_cache', JSON.stringify(_list));
+    }catch(_){}
     // Auto-clear in-memory expenses if it's a new day
     const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
     const _lastDay = localStorage.getItem('spawn_last_active_date');
