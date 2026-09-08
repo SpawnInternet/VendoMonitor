@@ -386,11 +386,73 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'v2.1';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
-const HDR={'apikey':KEY,'Authorization':'Bearer '+KEY,'Content-Type':'application/json'};
+/* HDR is a SENTINEL, not a credential. The interceptor below swaps every
+   /rest/v1/ call onto spawn-gw-sub with the real token. Storage upload still
+   uses KEY directly and is left alone on purpose. */
+const HDR={'apikey':'gw','Authorization':'Bearer gw','Content-Type':'application/json'};
+
+const GW_URL    = SB + '/functions/v1/spawn-gw-sub';
+const LOGIN_URL = SB + '/functions/v1/spawn-field-login';
+const SUB_AUTH_KEY = 'sc_auth';
+const SUB_AUTH_TTL = 7*24*60*60*1000;   // collectors work offline for days
+let GW_TOKEN = null;
+(function restoreToken(){
+  try{
+    const a=JSON.parse(localStorage.getItem(SUB_AUTH_KEY)||'null');
+    if(a && a.token && (Date.now()-a.ts) < SUB_AUTH_TTL) GW_TOKEN=a.token;
+  }catch(e){}
+})();
+function saveToken(t){
+  GW_TOKEN=t;
+  try{ localStorage.setItem(SUB_AUTH_KEY, JSON.stringify({token:t, ts:Date.now()})); }catch(e){}
+}
+/* A rotated GW_TOKEN looks like a 401 from the phone's side. Drop the dead
+   token and send the collector back to the PIN pad once, rather than leaving
+   them staring at failures with no way out. */
+let _reauthPending=false;
+function gwHandle401(){
+  if(_reauthPending) return;
+  _reauthPending=true;
+  GW_TOKEN=null;
+  try{ localStorage.removeItem(SUB_AUTH_KEY); }catch(e){}
+  try{ toast('🔑 Session expired — please enter your PIN again',3500); }catch(e){}
+  setTimeout(()=>{ try{ doLogout(); }catch(e){ location.reload(); } _reauthPending=false; },600);
+}
+(function installSubGateway(){
+  const _f = window.fetch.bind(window);
+  const RPC_RE  = /\/rest\/v1\/rpc\/([a-z_0-9]+)$/;
+  const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
+  const post = (payload) => _f(GW_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-gw-token': GW_TOKEN||'' },
+    body: JSON.stringify(payload)
+  }).then(r=>{ if(r.status===401) gwHandle401(); return r; });
+  window.fetch = function(input, opts){
+    try{
+      const url = (typeof input==='string') ? input : (input && input.url) || '';
+      opts = opts || {};
+      // Storage and the login function must not be rewritten.
+      if(url.indexOf('/storage/v1/')>=0 || url.indexOf('/functions/v1/')>=0){
+        return _f(input, opts);
+      }
+      const method = (opts.method||'GET').toUpperCase();
+      const hdrs   = opts.headers || {};
+      const rpc = url.match(RPC_RE);
+      if(rpc) return post({ kind:'rpc', fn:rpc[1],
+                            body: opts.body ? JSON.parse(opts.body) : undefined });
+      const m = url.match(REST_RE);
+      if(m) return post({ kind:'rest', table:m[1], method,
+                          query: m[3]||'',
+                          body: opts.body ? JSON.parse(opts.body) : undefined,
+                          prefer: hdrs['Prefer'] || hdrs['prefer'] || '' });
+    }catch(e){}
+    return _f(input, opts);
+  };
+})();
 const AREAS=['ALL','DIPOLOG','DAPITAN','ROXAS','POLANCO','SINDANGAN','UNKNOWN'];
 const ACLR={'DIPOLOG':'#1e3cb8','DAPITAN':'#0f766e','ROXAS':'#b45309','POLANCO':'#7c3aed','SINDANGAN':'#be123c','UNKNOWN':'#64748b'};
 const QUICK=[500,800,1000,1200,1300,1500,1800,2000,2500];
@@ -455,9 +517,14 @@ async function loadCols(){
   const cached=JSON.parse(localStorage.getItem('sc_cols')||'[]');
   if(cached.length){_cols=cached;rnd(cached);}
   try{
-    const r=await fetch(SB+'/rest/v1/collectors?active=eq.true&select=name,area,collector_code&order=name.asc',{headers:HDR});
-    const d=await r.json();
-    if(Array.isArray(d)&&d.length){_cols=d;localStorage.setItem('sc_cols',JSON.stringify(d));rnd(d);}
+    /* Roster comes from spawn-field-login: on a fresh install there is no
+       token yet, so a gateway call would 401 and leave the picker empty.
+       It returns names and areas only, never PINs. */
+    const r=await fetch(LOGIN_URL,{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({roster:true})});
+    const resp=await r.json();
+    const d=(resp && resp.ok && Array.isArray(resp.collectors)) ? resp.collectors : [];
+    if(d.length){_cols=d;localStorage.setItem('sc_cols',JSON.stringify(d));rnd(d);}
   }catch{}
   if(!_cols.length)el.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--muted);font-size:12px;padding:12px">No connection — connect once to load the collector list.</div>';
 }
@@ -486,14 +553,24 @@ async function doLogin(){
   const btn=document.getElementById('login-btn');
   btn.disabled=true; btn.textContent='Checking...';
   try{
-    const r=await fetch(SB+'/rest/v1/rpc/spawn_field_login',{method:'POST',headers:HDR,body:JSON.stringify({p_name:_selName,p_pin:pin})});
-    const d=await r.json();
+    /* The PIN now buys the gateway token. Previously it was checked by an RPC
+       called with the anon key, which meant the data was already reachable
+       without ever passing the PIN pad. spawn-field-login also throttles
+       repeated failures per IP; the old RPC had no throttle at all. */
+    const r=await fetch(LOGIN_URL,{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:pin})});
     btn.textContent='Login →';
-    if(!Array.isArray(d)||!d.length){pinFail('Wrong PIN. Try again.');return;}
-    _col=d[0].name; _pin=pin;
+    if(r.status===429){pinFail('Too many attempts. Wait a few minutes.');return;}
+    const d=await r.json();
+    if(!d || !d.ok || !d.token){pinFail('Wrong PIN. Try again.');return;}
+    // Name must match the collector tapped, so one person's PIN cannot sign
+    // you in as somebody else.
+    if(String(d.name)!==String(_selName)){pinFail('Wrong PIN. Try again.');return;}
+    saveToken(d.token);
+    _col=d.name; _pin=pin;
     localStorage.setItem('sc_col',_col);
     localStorage.setItem('sc_pin',pin);
-    document.getElementById('tb-col').textContent=_col+(d[0].area?' · '+d[0].area:'');
+    document.getElementById('tb-col').textContent=_col+(d.area?' · '+d.area:'');
     showScreen('screen-main');
     await loadData();
     flushQ();
@@ -504,7 +581,9 @@ async function doLogin(){
 }
 function doLogout(){
   _col='';_pin='';_subs=[];_pays=[];
+  GW_TOKEN=null;
   localStorage.removeItem('sc_col');localStorage.removeItem('sc_pin');
+  localStorage.removeItem(SUB_AUTH_KEY);
   document.getElementById('pin-inp').value='';
   for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
   document.getElementById('login-btn').disabled=true;
