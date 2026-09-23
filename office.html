@@ -265,6 +265,42 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .calc-btn.copy{background:var(--spawn-blue);border-color:var(--spawn-blue);color:#fff}
 .calc-btn.use{background:var(--spawn-teal);border-color:var(--spawn-teal);color:#fff}
 @media (max-width:480px){.calc-panel{left:12px;right:12px;width:auto;bottom:84px}}
+/* Remittance summary (recon) */
+.rs-title{font-size:11px;font-weight:900;color:var(--spawn-navy);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.rs-result{border-radius:12px;padding:12px;text-align:center;margin-bottom:10px;border:1.5px solid}
+.rs-result-t{font-size:22px;font-weight:900;letter-spacing:.02em}
+.rs-result-s{font-size:11px;font-weight:600;margin-top:2px;opacity:.85}
+.rs-result.nc{background:#f3f4f6;border-color:#d1d5db;color:#374151}
+.rs-result.ok{background:var(--green-light);border-color:var(--green-mid);color:var(--spawn-teal)}
+.rs-result.short{background:var(--red-light);border-color:#fca5a5;color:var(--red)}
+.rs-result.over{background:#FEF7E8;border-color:#fcd34d;color:#b45309}
+.rs-tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.rs-tile{background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 10px;display:flex;flex-direction:column}
+.rs-tile span{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.rs-tile b{font-size:19px;font-weight:900;color:var(--spawn-navy);margin-top:2px}
+.rs-tile i{font-style:normal;font-size:11px;color:var(--muted);font-weight:600}
+.rs-tile.nc{background:#f3f4f6}
+.rs-tile.short{background:var(--red-light);border-color:#fecaca}.rs-tile.short span,.rs-tile.short b{color:var(--red)}
+.rs-tile.over{background:#FEF7E8;border-color:#fde68a}.rs-tile.over span,.rs-tile.over b{color:#b45309}
+.rs-lines{background:#fff;border:1px solid var(--border);border-radius:10px;padding:4px 12px;margin-bottom:10px}
+.rs-line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text)}
+.rs-line b{font-weight:800}
+.rs-line.red,.rs-line.red b{color:var(--red)}
+.rs-line.bugi,.rs-line.bugi b{color:#b45309}
+.rs-sub{display:flex;justify-content:space-between;padding:4px 0 4px 14px;font-size:12px;color:var(--muted);border-bottom:1px dashed var(--border)}
+.rs-net{display:flex;justify-content:space-between;align-items:center;padding:10px 0 8px;font-size:16px;font-weight:900;color:var(--spawn-navy)}
+.rs-net b{font-size:22px;color:var(--spawn-blue)}
+.rs-sec{display:flex;justify-content:space-between;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;padding:8px 2px 6px}
+.rs-sec.short{color:var(--red)}.rs-sec.over{color:#b45309}
+.rs-item{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--border);border-left:4px solid;border-radius:8px;padding:8px 10px;margin-bottom:6px}
+.rs-item.short{border-left-color:var(--red)}.rs-item.over{border-left-color:#F5A623}
+.rs-item-main{flex:1;min-width:0}
+.rs-item-name{font-size:14px;font-weight:800;color:var(--spawn-navy)}
+.rs-code{display:inline-block;background:var(--spawn-blue);color:#fff;font-size:11px;font-weight:900;padding:1px 7px;border-radius:5px;margin-right:6px}
+.rs-item-note{font-size:12px;color:var(--text);margin-top:2px}
+.rs-item-note.missing{color:var(--muted);font-style:italic}
+.rs-item-amt{font-size:15px;font-weight:900;white-space:nowrap}
+.rs-item.short .rs-item-amt{color:var(--red)}.rs-item.over .rs-item-amt{color:#b45309}
 /* Short & Over card */
 .so-card{background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden}
 .so-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;gap:8px}
@@ -1024,7 +1060,7 @@ function renderDetailSummary(harvests){
   const _so=soTotals(harvests);
   const _nCounted=harvests.filter(h=>vendoGap(h)!==null).length;
   const _nNot=harvests.length-_nCounted;
-  const _stFinal=_nNot>0?`<span class="status-pill nc">NOT COUNTED<span class="nc-num">${_nNot}</span></span>`:_st;
+  const _notAmt=harvests.filter(h=>vendoGap(h)===null).reduce((s,h)=>s+Number(h.spawn_share||0),0);
   document.getElementById('detail-summary').innerHTML=`
     <div class="ds-row top">
       <div class="ds-chip">
@@ -1045,10 +1081,14 @@ function renderDetailSummary(harvests){
         <span class="ds-lbl">Counted</span>
         <span class="ds-val" style="color:${totalCounted>0?'var(--spawn-blue)':'var(--muted)'}">₱${fmt(totalCounted)}</span>
       </div>
-      <div class="ds-chip">
-        <span class="ds-lbl">Status</span>
-        <span class="ds-val" style="color:${_sc};font-size:13px">${_stFinal}</span>
-      </div>
+      ${_nNot>0?`<div class="ds-chip" style="background:#f3f4f6">
+        <span class="ds-lbl" style="color:#4b5563">Not Counted</span>
+        <span class="ds-val" style="color:#374151">₱${fmt(_notAmt)}</span>
+        <span class="ds-sub">${_nNot} of ${harvests.length} vendo${harvests.length===1?'':'s'}</span>
+      </div>`:`<div class="ds-chip">
+        <span class="ds-lbl" style="color:var(--spawn-teal)">All Counted</span>
+        <span class="ds-val" style="color:${_sc};font-size:13px">${_st}</span>
+      </div>`}
       <div class="ds-chip">
         <span class="ds-lbl">Saved</span>
         <span class="ds-val" style="color:${saved===harvests.length?'var(--spawn-teal)':'var(--muted)'};font-size:14px">${saved}/${harvests.length}</span>
@@ -1675,8 +1715,8 @@ async function loadRecon(collector){
 
   try {
     const [hR, pR, eR, rR] = await Promise.all([
-      sbFetch(`harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=id,vendo_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at`),
-      sbFetch(`harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&saved_by=eq.office&select=harvest_id,pack_type,amount`),
+      sbFetch(`harvests?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&select=id,vendo_id,vendo_name,sheet_name,area,coins_total,net_collectible,spawn_share,harvested_at`),
+      sbFetch(`harvest_pack_items?collector=eq.${encodeURIComponent(collector)}&harvest_date=eq.${date}&saved_by=eq.office&select=harvest_id,pack_type,amount,note`),
       sbFetch(`collector_expenses?collector=eq.${encodeURIComponent(collector)}&expense_date=eq.${date}&select=id,category,description,amount`),
       sbFetch(`harvest_reconciliations?collector=eq.${encodeURIComponent(collector)}&recon_date=eq.${date}&select=id,confirmed_at,confirmed_by&limit=1`)
     ]);
@@ -1687,34 +1727,39 @@ async function loadRecon(collector){
     const existing = Array.isArray(rR) && rR.length > 0 ? rR[0] : null;
 
     // Build pack map
-    const packMap = {};
+    const packMap = {}, noteMap = {};
     packs.forEach(p => {
+      if(p.note && !noteMap[p.harvest_id]) noteMap[p.harvest_id]=stripSoTag(p.note);
       if(!packMap[p.harvest_id]) packMap[p.harvest_id]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
       packMap[p.harvest_id][p.pack_type] = (packMap[p.harvest_id][p.pack_type]||0) + Number(p.amount||0);
     });
 
+    harvests.forEach(h=>{ const a=allHarvests.find(x=>x.id===h.id); if(a) h._vendo_code=a.vendo_code||a._vendo_code||''; });
     const totalSpawn = harvests.reduce((s,h)=>s+parseFloat(h.spawn_share||0),0);
     const totalExp   = expenses.reduce((s,e)=>s+Number(e.amount||0),0);
 
     // Compute per-vendo pack totals (excl bugi for match)
     const PACK_LABELS = {mix:'₱1,000',peso:'₱300',bungkig:'Bungkig',bugi:'Bugi',bills:'Cash'};
     const PACK_COLORS = {mix:'#3B6FD4',peso:'#7B4FA6',bungkig:'#2BA89A',bugi:'#b45309',bills:'#F5A623'};
-    let totalCounted=0, totalShort=0, totalSurplus=0, totalBugi=0;
+    let totalCounted=0, totalShort=0, totalSurplus=0, totalBugi=0, notAmt=0, notN=0;
+    const shortList=[], overList=[];
     harvests.forEach(h=>{
       const pm=packMap[h.id]||{};
       const bugi=Number(pm.bugi||0);
       const counted=Object.entries(pm).filter(([k])=>k!=='bugi').reduce((s,[,v])=>s+v,0);
       const spawn=parseFloat(h.spawn_share||0);
-      const gap=counted-spawn;
+      if(counted<=0 && bugi<=0){ notAmt+=spawn; notN++; return; }   // not counted yet — not a short
+      const gap=Math.round((counted+bugi-spawn)*100)/100;
       totalCounted+=counted;
       totalBugi+=bugi;
-      if(gap<0) totalShort+=Math.abs(gap);
-      else if(gap>0) totalSurplus+=gap;
+      const item={h,gap,note:noteMap[h.id]||''};
+      if(gap<0){ totalShort+=-gap; shortList.push(item); }
+      else if(gap>0){ totalSurplus+=gap; overList.push(item); }
     });
     // Option B: Counted + Expenses + Bugi should = Spawn Share
     const netRemit=totalSpawn-totalExp-totalBugi;
     // Overall gap = net of per-vendo shorts/surpluses only (expenses don't create deficit)
-    const overallGap=totalCounted>0?totalSurplus-totalShort:null;
+    const overallGap=(totalCounted>0||totalBugi>0)?totalSurplus-totalShort:null;
 
     // Update header stats (null-safe)
     const setTxt=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
@@ -1737,10 +1782,10 @@ async function loadRecon(collector){
           const bugi=Number(pm.bugi||0);
           const packed = Object.entries(pm).filter(([k])=>k!=='bugi').reduce((s,[,v])=>s+v,0);
           const spawn  = parseFloat(h.spawn_share||0);
-          const gap    = packed > 0 ? packed - spawn : null;
           const hasPacks = packed > 0 || bugi > 0;
-          const cls    = !hasPacks ? 'uncounted' : gap===null||gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
-          const statusText = !hasPacks ? 'NOT COUNTED' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
+          const gap    = hasPacks ? Math.round((packed + bugi - spawn)*100)/100 : null;
+          const cls    = !hasPacks ? 'uncounted' : gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
+          const statusText = !hasPacks ? 'NOT COUNTED' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Over ₱${fmt(gap)}`;
           const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
             `<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':PACK_LABELS[k]+' ₱'+fmt(v)}</span>`
           ).join(' · ');
@@ -1764,39 +1809,42 @@ async function loadRecon(collector){
       : '<div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">No harvests for this date</div>';
 
     // ── REMITTANCE SUMMARY BOX ──
-    const overallColor = overallGap===null?'#6b7280':overallGap===0?'var(--spawn-teal)':overallGap>0?'#F5A623':'var(--red)';
-    const overallLabel = overallGap===null?'NOT COUNTED':overallGap===0?'✓ Balanced':overallGap>0?`+₱${fmt(overallGap)} Surplus`:`-₱${fmt(Math.abs(overallGap))} Deficit`;
+    const catIc = {Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
+    const esc = t => String(t||'').replace(/</g,'&lt;');
+    const soItems = (list,kind) => list.map(({h,gap,note})=>`<div class="rs-item ${kind}">
+        <div class="rs-item-main">
+          <div class="rs-item-name"><span class="rs-code">${h._vendo_code||'—'}</span>${esc(h.vendo_name||h.sheet_name||'—')}</div>
+          <div class="rs-item-note ${note?'':'missing'}">${note?esc(note):'No note'}</div>
+        </div>
+        <div class="rs-item-amt">${kind==='short'?'−':'+'}₱${fmt(Math.abs(gap))}</div>
+      </div>`).join('');
+    const netSO = totalSurplus-totalShort;
+    const resCls = notN>0 ? 'nc' : netSO===0 ? 'ok' : netSO>0 ? 'over' : 'short';
+    const resTitle = notN>0 ? 'NOT COUNTED' : netSO===0 ? '✓ BALANCED' : netSO>0 ? `OVER ₱${fmt(netSO)}` : `SHORT ₱${fmt(-netSO)}`;
+    const resSub = notN>0 ? `${notN} of ${harvests.length} vendos · ₱${fmt(notAmt)} not yet counted`
+                 : netSO===0 ? 'All vendos counted and matched' : `All vendos counted · short ₱${fmt(totalShort)} · over ₱${fmt(totalSurplus)}`;
     const summaryBox = document.getElementById('recon-summary-box');
     if(summaryBox) summaryBox.innerHTML = `
-      <div style="font-size:10px;font-weight:800;color:var(--spawn-navy);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Remittance Summary</div>
-      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:#6b7280">Total Spawn Share</span>
-        <span style="font-weight:700">₱${fmt(totalSpawn)}</span>
+      <div class="rs-title">📊 Remittance Summary</div>
+      <div class="rs-result ${resCls}">
+        <div class="rs-result-t">${resTitle}</div>
+        <div class="rs-result-s">${resSub}</div>
       </div>
-      ${totalShort>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:var(--red)">Total Short (per vendo)</span>
-        <span style="font-weight:700;color:var(--red)">−₱${fmt(totalShort)}</span>
-      </div>`:''}
-      ${totalSurplus>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:#F5A623">Total Surplus (per vendo)</span>
-        <span style="font-weight:700;color:#F5A623">+₱${fmt(totalSurplus)}</span>
-      </div>`:''}
-      ${totalBugi>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:#b45309">Bugi (Old Coins)</span>
-        <span style="font-weight:700;color:#b45309">−₱${fmt(totalBugi)}</span>
-      </div>`:''}
-      ${totalExp>0?`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span style="color:var(--red)">Expenses</span>
-        <span style="font-weight:700;color:var(--red)">−₱${fmt(totalExp)}</span>
-      </div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px;font-size:15px;font-weight:900">
-        <span style="color:var(--spawn-navy)">Net to Remit</span>
-        <span style="color:var(--spawn-blue)">₱${fmt(netRemit)}</span>
+      <div class="rs-tiles">
+        <div class="rs-tile"><span>Counted</span><b style="color:var(--spawn-blue)">₱${fmt(totalCounted)}</b><i>${harvests.length-notN} vendo${harvests.length-notN===1?'':'s'}</i></div>
+        <div class="rs-tile nc"><span>Not Counted</span><b>₱${fmt(notAmt)}</b><i>${notN} vendo${notN===1?'':'s'}</i></div>
+        <div class="rs-tile short"><span>Noted Short</span><b>−₱${fmt(totalShort)}</b><i>${shortList.length} vendo${shortList.length===1?'':'s'}</i></div>
+        <div class="rs-tile over"><span>Noted Over</span><b>+₱${fmt(totalSurplus)}</b><i>${overList.length} vendo${overList.length===1?'':'s'}</i></div>
       </div>
-      <div style="text-align:center;margin-top:8px;padding:8px;border-radius:10px;background:${overallGap===0?'var(--green-light)':overallGap===null?'#f3f4f6':'#fef2f2'};border:1.5px solid ${overallGap===0?'var(--green-mid)':overallGap===null?'var(--border)':'#fca5a5'}">
-        <div style="font-size:18px;font-weight:900;color:${overallColor}">${overallLabel}</div>
-        <div style="font-size:10px;color:#6b7280;margin-top:2px">Based on per-vendo pack count vs spawn share</div>
-      </div>`;
+      <div class="rs-lines">
+        <div class="rs-line"><span>Total Spawn Share</span><b>₱${fmt(totalSpawn)}</b></div>
+        <div class="rs-line red"><span>Expenses${expenses.length?` (${expenses.length})`:''}</span><b>−₱${fmt(totalExp)}</b></div>
+        ${expenses.map(e=>`<div class="rs-sub"><span>${catIc[e.category]||'📝'} ${esc(e.category)}${e.description?' · '+esc(e.description):''}</span><span>−₱${fmt(e.amount)}</span></div>`).join('')}
+        ${totalBugi>0?`<div class="rs-line bugi"><span>Bugi (Old Coins)</span><b>−₱${fmt(totalBugi)}</b></div>`:''}
+        <div class="rs-net"><span>Net to Remit</span><b>₱${fmt(netRemit)}</b></div>
+      </div>
+      ${shortList.length?`<div class="rs-sec short">⚠ Noted Short <span>−₱${fmt(totalShort)}</span></div>${soItems(shortList,'short')}`:''}
+      ${overList.length?`<div class="rs-sec over">▲ Noted Over <span>+₱${fmt(totalSurplus)}</span></div>${soItems(overList,'over')}`:''}`;
 
     // Render expenses
     const catIcons = {Fuel:'⛽',Food:'🍱',Repair:'🔧',Parking:'🅿️',Load:'📱',Other:'📝'};
