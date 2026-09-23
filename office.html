@@ -187,6 +187,58 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-save:active{transform:scale(.96)}
 .btn-save.saved{background:var(--green-light);color:var(--green);border:1.5px solid var(--green-mid)}
 .btn-save:disabled{opacity:.5}
+/* ── Short / Over (count helpers) ── */
+.dchip.notcounted{background:#f3f4f6;color:#4b5563;border:1px dashed #cbd5e1;letter-spacing:.02em}
+.so-link{border:none;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:800;white-space:nowrap}
+.so-link.short{background:var(--red-light);color:var(--red);box-shadow:inset 0 0 0 1.5px #fca5a5}
+.so-link.over{background:#FEF7E8;color:#b45309;box-shadow:inset 0 0 0 1.5px #fcd34d}
+.so-link .so-act{font-weight:600;text-decoration:underline;text-underline-offset:2px;opacity:.9}
+.so-link.noted .so-act{text-decoration:none}
+.so-link:active{transform:scale(.96)}
+.dchip.match{box-shadow:inset 0 0 0 1.5px var(--green-mid)}
+.note-field{transition:box-shadow .2s,background .2s}
+.note-field.need-short{background:#fff5f5;box-shadow:inset 0 0 0 1.5px #fca5a5}
+.note-field.need-over{background:#fffbeb;box-shadow:inset 0 0 0 1.5px #fcd34d}
+.note-field.flash{animation:noteflash .9s ease}
+@keyframes noteflash{0%,100%{box-shadow:inset 0 0 0 1.5px var(--border)}35%{box-shadow:inset 0 0 0 3px var(--spawn-blue)}}
+@media (prefers-reduced-motion:reduce){.note-field.flash{animation:none}}
+.so-tag{display:none;font-size:11px;font-weight:800;margin-bottom:4px}
+.so-tag.short{display:block;color:var(--red)}
+.so-tag.over{display:block;color:#b45309}
+.note-inp{width:100%;border:1.5px solid var(--border);border-radius:7px;padding:6px 8px;font-size:13px;font-family:inherit;resize:none;outline:none;color:var(--text);background:#fff;min-height:40px}
+.note-inp:focus{border-color:var(--spawn-blue)}
+/* summary third row */
+.ds-row.so{grid-template-columns:1fr 1fr}
+.detail-summary .ds-chip.so-cell{cursor:pointer}
+.detail-summary .ds-chip.so-cell.has.short{background:var(--red-light)}
+.detail-summary .ds-chip.so-cell.has.over{background:#FEF7E8}
+.ds-sub{display:block;font-size:10px;font-weight:600;color:var(--muted);margin-top:1px}
+.status-pill{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:900;letter-spacing:.02em}
+.status-pill.nc{background:#f3f4f6;color:#4b5563;border:1px dashed #cbd5e1}
+.status-pill.ok{background:var(--green-light);color:var(--spawn-teal)}
+.status-pill.short{background:var(--red-light);color:var(--red)}
+.status-pill.over{background:#FEF7E8;color:#b45309}
+/* Short & Over card */
+.so-card{background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:14px;overflow:hidden}
+.so-hd{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;gap:8px}
+.so-hd-title{font-size:14px;font-weight:800;color:var(--spawn-navy)}
+.so-tot{display:flex;gap:6px}
+.so-tot span{font-size:11px;font-weight:800;padding:3px 9px;border-radius:12px}
+.so-tot .t-short{background:var(--red-light);color:var(--red)}
+.so-tot .t-over{background:#FEF7E8;color:#b45309}
+.so-empty{padding:0 14px 12px;font-size:12px;color:var(--muted)}
+.so-row{display:flex;align-items:flex-start;gap:10px;padding:9px 14px;border:none;border-top:1px solid var(--border);cursor:pointer;background:#fff;width:100%;text-align:left;font-family:inherit;border-left:4px solid transparent}
+.so-row.short{border-left-color:var(--red)}
+.so-row.over{border-left-color:#F5A623}
+.so-row:active{background:var(--bg)}
+.so-row-main{flex:1;min-width:0}
+.so-row-name{font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.so-row-note{font-size:12px;color:var(--text);margin-top:2px}
+.so-row-note.missing{color:var(--red);font-style:italic}
+.so-row-amt{font-size:13px;font-weight:900;white-space:nowrap}
+.so-row.short .so-row-amt{color:var(--red)}
+.so-row.over .so-row-amt{color:#b45309}
+
 
 /* loading/empty */
 .loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:48px;color:var(--muted);font-size:13px}
@@ -590,7 +642,7 @@ async function loadHome(){
     }
 
     // Load pack items
-    const p=await sbFetch(`harvest_pack_items?harvest_date=eq.${currentDate}&saved_by=eq.office&select=harvest_id,pack_type,amount`);
+    const p=await sbFetch(`harvest_pack_items?harvest_date=eq.${currentDate}&saved_by=eq.office&select=harvest_id,pack_type,amount,note`);
     if(Array.isArray(p)) p.forEach(pk=>{
       if(!packState[pk.harvest_id]) packState[pk.harvest_id]={mix:0,peso:0,bungkig:0,bugi:0,bills:0};
       if(pk.pack_type==='mix')   packState[pk.harvest_id].mix  =(packState[pk.harvest_id].mix||0)+Number(pk.amount)/1000;
@@ -598,6 +650,7 @@ async function loadHome(){
       if(pk.pack_type==='bungkig') packState[pk.harvest_id].bungkig=(packState[pk.harvest_id].bungkig||0)+Number(pk.amount);
       if(pk.pack_type==='bugi')  packState[pk.harvest_id].bugi =(packState[pk.harvest_id].bugi||0)+Number(pk.amount);
       if(pk.pack_type==='bills') packState[pk.harvest_id].bills=(packState[pk.harvest_id].bills||0)+Number(pk.amount);
+      if(pk.note) officeNotes[pk.harvest_id]=pk.note;
       savedSet.add(pk.harvest_id);
     });
 
@@ -709,7 +762,7 @@ async function openCollector(collector){
   const firstUncounted=harvests.findIndex(h=>!savedSet.has(h.id));
   currentVendoIdx=firstUncounted>=0?firstUncounted:0;
   // Render expense card + slideshow
-  document.getElementById('detail-content').innerHTML=renderExpenseCard(collector)+'<div id="vendo-slide-wrap"></div>';
+  document.getElementById('detail-content').innerHTML=renderExpenseCard(collector)+'<div id="so-card-wrap">'+renderSOCard(collector)+'</div><div id="vendo-slide-wrap"></div>';
   document.getElementById('slide-float').style.display='flex';
   renderSlide(harvests);
   showScreen('detail');
@@ -723,6 +776,7 @@ function renderSlide(harvests){
   const isSaved=savedSet.has(h.id);
   const wrap=document.getElementById('vendo-slide-wrap');
   if(wrap) wrap.innerHTML='<div class="vendo-slide" id="vendo-slide-inner" style="padding:8px 10px;max-width:760px;margin:0 auto">'+renderVendo(h)+'</div>';
+  applyNoteState(h.id);
   // Counter
   const counter=document.getElementById('slide-counter');
   if(counter) counter.innerHTML=`<span>${currentVendoIdx+1}</span> of ${harvests.length}${isSaved?' <span style="color:var(--spawn-teal)">✓</span>':''}`;
@@ -811,7 +865,10 @@ function renderDetailSummary(harvests){
   const totalAccountedFor=totalCounted+totalExp+totalBugi;
   const _gap=totalCounted>0?totalAccountedFor-totalSpawn:null;
   const _sc=_gap===null?'var(--muted)':_gap===0?'var(--spawn-teal)':_gap>0?'#F5A623':'var(--red)';
-  const _st=_gap===null?'⏳ Pending':_gap===0?'✓ Match':_gap>0?`+₱${fmt(_gap)} Surplus`:`-₱${fmt(Math.abs(_gap))} Deficit`;
+  const _st=_gap===null?'<span class="status-pill nc">NOT COUNTED</span>':_gap===0?'<span class="status-pill ok">✓ Match</span>':_gap>0?`<span class="status-pill over">+₱${fmt(_gap)} Over</span>`:`<span class="status-pill short">−₱${fmt(Math.abs(_gap))} Short</span>`;
+  const _so=soTotals(harvests);
+  const _nCounted=harvests.filter(h=>vendoGap(h)!==null).length;
+  const _stFinal=(_gap===null||_nCounted===harvests.length)?_st:`<span class="status-pill nc">COUNTING ${_nCounted}/${harvests.length}</span>`;
   document.getElementById('detail-summary').innerHTML=`
     <div class="ds-row top">
       <div class="ds-chip">
@@ -834,11 +891,23 @@ function renderDetailSummary(harvests){
       </div>
       <div class="ds-chip">
         <span class="ds-lbl">Status</span>
-        <span class="ds-val" style="color:${_sc};font-size:13px">${_st}</span>
+        <span class="ds-val" style="color:${_sc};font-size:13px">${_stFinal}</span>
       </div>
       <div class="ds-chip">
         <span class="ds-lbl">Saved</span>
         <span class="ds-val" style="color:${saved===harvests.length?'var(--spawn-teal)':'var(--muted)'};font-size:14px">${saved}/${harvests.length}</span>
+      </div>
+    </div>
+    <div class="ds-row so">
+      <div class="ds-chip so-cell short ${_so.short>0?'has':''}" onclick="scrollToSO()">
+        <span class="ds-lbl" style="color:var(--red)">Noted Short</span>
+        <span class="ds-val" style="color:${_so.short>0?'var(--red)':'var(--muted)'}">₱${fmt(_so.short)}</span>
+        <span class="ds-sub">${_so.shortN?`${_so.shortN} vendo${_so.shortN>1?'s':''}${_so.missing?` · ${_so.missing} no note`:''}`:'none'}</span>
+      </div>
+      <div class="ds-chip so-cell over ${_so.over>0?'has':''}" onclick="scrollToSO()">
+        <span class="ds-lbl" style="color:#b45309">Noted Over</span>
+        <span class="ds-val" style="color:${_so.over>0?'#b45309':'var(--muted)'}">₱${fmt(_so.over)}</span>
+        <span class="ds-sub">${_so.overN?`${_so.overN} vendo${_so.overN>1?'s':''}`:'none'}</span>
       </div>
     </div>
   `;
@@ -869,8 +938,7 @@ function renderExpenseCard(collector){
         <button class="btn-add-exp" onclick="addExpense('${collector}')">Add</button>
       </div>
     </div>
-  </div>
-  ''`;
+  </div>`;
 }
 
 function renderExpList(collector){
@@ -1011,12 +1079,11 @@ function renderVendo(h){
             value="${ps.bills||''}" placeholder="₱0" min="0"
             oninput="onAmt(${h.id},'bills')">
         </div>
-        <div class="pack-field">
+        <div class="pack-field note-field" id="notefield-${h.id}">
           <div class="pack-label" style="color:#6b7280">Note</div>
-          <textarea id="packnote-${h.id}" rows="2" placeholder="Optional..."
-            style="width:100%;border:1.5px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;font-family:inherit;resize:none;outline:none;color:var(--text);background:#fff;height:38px"
-            onfocus="this.style.borderColor='var(--spawn-blue)'" onblur="this.style.borderColor='var(--border)'"
-          >${h._officeNote||''}</textarea>
+          <div class="so-tag" id="sotag-${h.id}"></div>
+          <textarea class="note-inp" id="packnote-${h.id}" rows="2" placeholder="Optional..."
+            oninput="onNoteInput(${h.id})">${getReason(h)}</textarea>
         </div>
       </div>
       <div class="def-strip" id="defstrip-${h.id}">
@@ -1029,16 +1096,126 @@ function renderVendo(h){
 function defStripHtml(hid,rec,cnt,isSaved,netTarget){
   const ps=packState[hid]||{};
   const bugi=ps.bugi||0;
+  const h=allHarvests.find(x=>x.id===hid);
+  const gap=h?vendoGap(h):null;
   let chips='';
-  if(cnt>0){
+  if(gap===null){
+    chips+=`<span class="dchip notcounted">NOT COUNTED</span>`;
+    chips+=`<span class="dchip spawn">Target ₱${fmt(rec)}</span>`;
+  } else {
     chips+=`<span class="dchip counted">Counted ₱${fmt(cnt)}</span>`;
     chips+=`<span class="dchip spawn">Target ₱${fmt(rec)}</span>`;
-    if(bugi>0) chips+=`<span class="dchip" style="background:#FEF7E8;color:#b45309;font-weight:700">Bugi −₱${fmt(bugi)}</span>`;
-  } else {
-    chips+=`<span class="dchip pending">⏳ Pending</span>`;
+    if(bugi>0) chips+=`<span class="dchip" style="background:#FEF7E8;color:#b45309;font-weight:700">Bugi ₱${fmt(bugi)}</span>`;
+    if(gap===0){
+      chips+=`<span class="dchip match">✓ Match</span>`;
+    } else {
+      const kind=gap<0?'short':'over';
+      const noted=!!(getReason(h)||'').trim();
+      chips+=`<button type="button" class="so-link ${kind} ${noted?'noted':''}" onclick="goNote(${hid})">${kind==='short'?'⚠ Short':'▲ Over'} ₱${fmt(Math.abs(gap))} <span class="so-act">${noted?'· Noted ✓':'· Add note'}</span></button>`;
+    }
   }
   chips+=`<button class="btn-save ${isSaved?'saved':''}" id="btnsave-${hid}" onclick="savePacks(${hid})">${isSaved?'✓ Saved':'Save'}</button>`;
   return chips;
+}
+
+// ── SHORT / OVER HELPERS ─────────────────────────────────
+var officeNotes={};
+// Per-vendo gap: (Counted + Bugi) − Spawn Share. null = not counted yet
+function vendoGap(h){
+  const ps=packState[h.id];
+  if(!ps) return null;
+  const cnt=calcCounted(ps), bugi=Number(ps.bugi||0);
+  if(cnt<=0 && bugi<=0) return null;
+  return Math.round((cnt+bugi-Number(h.spawn_share||0))*100)/100;
+}
+function soTagText(gap){ return gap<0?`Short ₱${fmt(-gap)}`:gap>0?`Over ₱${fmt(gap)}`:''; }
+function stripSoTag(n){ return String(n||'').replace(/^\[(Short|Over) ₱[\d,.]+\]\s*/,''); }
+function getReason(h){
+  if(h._officeNote==null) h._officeNote=stripSoTag(officeNotes[h.id]||'');
+  return h._officeNote;
+}
+function soTotals(harvests){
+  const t={short:0,over:0,shortN:0,overN:0,missing:0};
+  harvests.forEach(h=>{
+    const g=vendoGap(h); if(g===null||g===0) return;
+    if(g<0){ t.short+=-g; t.shortN++; if(!(getReason(h)||'').trim()) t.missing++; }
+    else { t.over+=g; t.overN++; }
+  });
+  return t;
+}
+function applyNoteState(hid){
+  const h=allHarvests.find(x=>x.id===hid); if(!h) return;
+  const g=vendoGap(h);
+  const tag=document.getElementById('sotag-'+hid);
+  const field=document.getElementById('notefield-'+hid);
+  const ta=document.getElementById('packnote-'+hid);
+  const kind=g===null||g===0?'':(g<0?'short':'over');
+  if(tag){ tag.className='so-tag '+kind; tag.textContent=kind?(kind==='short'?'⚠ ':'▲ ')+soTagText(g)+' — auto':''; }
+  if(field){ field.classList.remove('need-short','need-over'); if(kind&&!(ta&&ta.value.trim())) field.classList.add('need-'+kind); }
+  if(ta) ta.placeholder=kind==='short'?'Why short? e.g. kulang og ₱'+fmt(-g)+'…':kind==='over'?'Why over? e.g. sobra…':'Optional...';
+}
+function goNote(hid){
+  const ta=document.getElementById('packnote-'+hid);
+  const field=document.getElementById('notefield-'+hid);
+  if(!ta) return;
+  ta.scrollIntoView({behavior:'smooth',block:'center'});
+  setTimeout(()=>{ ta.focus(); const L=ta.value.length; try{ta.setSelectionRange(L,L);}catch{} },280);
+  if(field){ field.classList.remove('flash'); void field.offsetWidth; field.classList.add('flash'); }
+}
+function onNoteInput(hid){
+  const h=allHarvests.find(x=>x.id===hid); if(!h) return;
+  const ta=document.getElementById('packnote-'+hid);
+  h._officeNote=ta?ta.value:'';
+  savedSet.delete(hid);
+  // light refresh — keep typing focus in textarea
+  const strip=document.getElementById('defstrip-'+hid);
+  if(strip){
+    const ps=packState[hid]||{}; const rec=Number(h.spawn_share||0);
+    strip.innerHTML=defStripHtml(hid,rec,calcCounted(ps),false,0);
+  }
+  applyNoteState(hid);
+  refreshSOCard();
+  if(activeCollector) renderDetailSummary(allHarvests.filter(x=>x.collector===activeCollector));
+}
+function renderSOCard(collector){
+  const harvests=allHarvests.filter(h=>h.collector===collector);
+  const t=soTotals(harvests);
+  const rows=harvests.map((h,i)=>{
+    const g=vendoGap(h); if(g===null||g===0) return '';
+    const kind=g<0?'short':'over';
+    const reason=(getReason(h)||'').trim();
+    const code=h.vendo_code||h._vendo_code||'';
+    const name=h.vendo_name||h.sheet_name||h.tg_name||'—';
+    return `<button type="button" class="so-row ${kind}" onclick="openSONote(${i},${h.id})">
+      <div class="so-row-main">
+        <div class="so-row-name">${code?`<b style="color:var(--spawn-blue)">${code}</b> · `:''}${name}</div>
+        <div class="so-row-note ${reason?'':'missing'}">${reason?reason.replace(/</g,'&lt;'):'No note yet — tap to add'}</div>
+      </div>
+      <div class="so-row-amt">${kind==='short'?'−':'+'}₱${fmt(Math.abs(g))}</div>
+    </button>`;
+  }).join('');
+  return `<div class="so-card" id="so-card">
+    <div class="so-hd">
+      <div class="so-hd-title">⚖️ Short &amp; Over</div>
+      <div class="so-tot">
+        <span class="t-short">Short ₱${fmt(t.short)}</span>
+        <span class="t-over">Over ₱${fmt(t.over)}</span>
+      </div>
+    </div>
+    ${rows||'<div class="so-empty">No short or over yet. Counted vendos that don\'t match the target appear here.</div>'}
+  </div>`;
+}
+function refreshSOCard(){
+  const w=document.getElementById('so-card-wrap');
+  if(w && activeCollector) w.innerHTML=renderSOCard(activeCollector);
+}
+function scrollToSO(){
+  const c=document.getElementById('so-card');
+  if(c) c.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function openSONote(idx,hid){
+  if(currentVendoIdx!==idx) jumpSlide(idx);
+  setTimeout(()=>goNote(hid),120);
 }
 
 // ── PACK INTERACTIONS ────────────────────────────────────
@@ -1164,6 +1341,8 @@ function refreshStrip(hid){
   const netTarget=Math.max(0,rec-_collExp);
   const strip=document.getElementById('defstrip-'+hid);
   if(strip) strip.innerHTML=defStripHtml(hid,rec,cnt,savedSet.has(hid),netTarget);
+  applyNoteState(hid);
+  refreshSOCard();
   // Update detail summary + slide dots
   if(activeCollector){
     const harvests=allHarvests.filter(h=>h.collector===activeCollector);
@@ -1190,7 +1369,11 @@ async function savePacks(hid){
   const _rec=Number(h.spawn_share||0);
   const _cnt=calcCounted(ps);
   // Always read the note textarea first
-  let _packNote=(document.getElementById('packnote-'+hid)||{}).value||'';
+  let _packNote=((document.getElementById('packnote-'+hid)||{}).value||'').trim();
+  h._officeNote=_packNote;
+  const _g=vendoGap(h);
+  if(_g!==null && _g!==0) _packNote=`[${soTagText(_g)}]`+(_packNote?' '+_packNote:'');
+  officeNotes[hid]=_packNote;
 
   try{
     await sbDelete('harvest_pack_items?harvest_id=eq.'+hid+'&saved_by=eq.office');
@@ -1392,7 +1575,7 @@ async function loadRecon(collector){
           const gap    = packed > 0 ? packed - spawn : null;
           const hasPacks = packed > 0 || bugi > 0;
           const cls    = !hasPacks ? 'uncounted' : gap===null||gap===0 ? 'match' : gap < 0 ? 'short' : 'surplus';
-          const statusText = !hasPacks ? '⏳ Pending' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
+          const statusText = !hasPacks ? 'NOT COUNTED' : gap===0 ? '✓ Match' : gap<0 ? `Short ₱${fmt(Math.abs(gap))}` : `Surplus ₱${fmt(gap)}`;
           const packParts = Object.entries(pm).filter(([,v])=>v>0).map(([k,v])=>
             `<span style="color:${PACK_COLORS[k]};font-weight:700">${k==='mix'?Math.round(v/1000)+'×₱1k':k==='peso'?Math.round(v/300)+'×₱300':PACK_LABELS[k]+' ₱'+fmt(v)}</span>`
           ).join(' · ');
@@ -1406,7 +1589,7 @@ async function loadRecon(collector){
               <span class="rv-time">${t}</span>
             </div>
             <div class="rv-coins">📍 ${h.area||'—'} · Net ₱${fmt(h.net_collectible!=null?h.net_collectible:h.coins_total)}</div>
-            <div class="rv-packs">${packParts||'<span style="color:#F5A623;font-style:italic;font-weight:600">⏳ Pending office count</span>'}</div>
+            <div class="rv-packs">${packParts||'<span style="color:#F5A623;font-style:italic;font-weight:600">NOT COUNTED yet</span>'}</div>
             <div class="rv-bottom">
               <span class="rv-spawn">Spawn ₱${fmt(spawn)}</span>
               <span class="rv-status ${cls}">${statusText}</span>
@@ -1417,7 +1600,7 @@ async function loadRecon(collector){
 
     // ── REMITTANCE SUMMARY BOX ──
     const overallColor = overallGap===null?'#6b7280':overallGap===0?'var(--spawn-teal)':overallGap>0?'#F5A623':'var(--red)';
-    const overallLabel = overallGap===null?'Pending':overallGap===0?'✓ Balanced':overallGap>0?`+₱${fmt(overallGap)} Surplus`:`-₱${fmt(Math.abs(overallGap))} Deficit`;
+    const overallLabel = overallGap===null?'NOT COUNTED':overallGap===0?'✓ Balanced':overallGap>0?`+₱${fmt(overallGap)} Surplus`:`-₱${fmt(Math.abs(overallGap))} Deficit`;
     const summaryBox = document.getElementById('recon-summary-box');
     if(summaryBox) summaryBox.innerHTML = `
       <div style="font-size:10px;font-weight:800;color:var(--spawn-navy);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">📊 Remittance Summary</div>
