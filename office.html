@@ -1870,11 +1870,24 @@ loadAccounts();
 </div>
 <!-- ── PWA: service worker registration ────────────────────────── -->
 <script>
+// Own scope '/VendoMonitor/office' (prefix-matches office.html) so we never share
+// '/VendoMonitor/' with Harvest v3's sw-v3.js. Sharing that scope made the two
+// service workers replace each other → controllerchange → endless reload.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('sw-office.js', { scope: '/VendoMonitor/' })
+  var _scHadController = !!navigator.serviceWorker.controller;
+  window.addEventListener('load', async function () {
+    try {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      for (var i = 0; i < regs.length; i++) {
+        var r = regs[i], sw = r.active || r.waiting || r.installing;
+        if (sw && sw.scriptURL.indexOf('sw-office.js') !== -1 &&
+            new URL(r.scope).pathname !== '/VendoMonitor/office') {
+          try { await r.unregister(); } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    navigator.serviceWorker.register('sw-office.js', { scope: '/VendoMonitor/office' })
       .then(function (reg) {
-        // If an updated SW is waiting, activate it immediately
         if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         reg.addEventListener('updatefound', function () {
           var nw = reg.installing;
@@ -1887,13 +1900,16 @@ if ('serviceWorker' in navigator) {
         });
       })
       .catch(function (err) { console.warn('SW register failed:', err); });
-
-  var _reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', function () {
-    if (_reloaded) return;
-    _reloaded = true;
-    window.location.reload();
   });
+  // Reload once for a real Spawn Count update — never for another app's SW, never in a loop
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    var ctl = navigator.serviceWorker.controller;
+    if (!_scHadController) return;
+    if (!ctl || ctl.scriptURL.indexOf('sw-office.js') === -1) return;
+    var last = +(sessionStorage.getItem('sc_sw_reload') || 0);
+    if (Date.now() - last < 60000) return;
+    sessionStorage.setItem('sc_sw_reload', String(Date.now()));
+    window.location.reload();
   });
 }
 </script>
