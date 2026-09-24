@@ -135,9 +135,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-add-exp{background:var(--purple);color:#fff;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
 
 /* vendo block */
-.vendo-block{background:#fff;border-radius:14px;border:2px solid var(--border);margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:.3s}
+.vendo-block{background:#fff;border-radius:14px;border:2px solid var(--border);margin-bottom:12px;overflow:hidden;overflow:clip;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:.3s}
 .vendo-block.done{border-color:var(--spawn-teal);background:var(--green-light)}
 .vendo-hd{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start}
+/* vendo name stays visible while scrolling its packs */
+.vendo-hd{position:sticky;top:var(--vhd-top,300px);z-index:80;background:inherit;box-shadow:0 3px 8px -4px rgba(45,53,71,.18)}
 .vhd-left .vname{font-size:20px;font-weight:900;color:var(--spawn-navy);line-height:1.25;display:flex;align-items:center;flex-wrap:wrap;gap:6px 0}
 .vhd-left .varea{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:4px;letter-spacing:.04em}
 .vhd-right{text-align:right}
@@ -1416,6 +1418,26 @@ function setExpTop(){
   const sm=document.getElementById('detail-summary'); if(!sm) return;
   const top=(parseInt(getComputedStyle(sm).top)||107)+sm.offsetHeight;
   document.documentElement.style.setProperty('--exp-top',top+'px');
+  setVhdTop();
+}
+// Vendo header sticks just below the pinned expenses card
+let _vhdRO=null;
+function calcVhdTop(){
+  const sm=document.getElementById('detail-summary');
+  const base=sm?(parseInt(getComputedStyle(sm).top)||107)+sm.offsetHeight:260;
+  const ec=document.querySelector('.exp-card.pinned');
+  const top=base+(ec&&ec.offsetParent?ec.offsetHeight:0);
+  document.documentElement.style.setProperty('--vhd-top',top+'px');
+}
+function setVhdTop(){
+  calcVhdTop();
+  if(!window.ResizeObserver) return;
+  if(!_vhdRO) _vhdRO=new ResizeObserver(()=>calcVhdTop());
+  _vhdRO.disconnect();
+  const sm=document.getElementById('detail-summary');
+  const ec=document.querySelector('.exp-card.pinned');
+  if(sm) _vhdRO.observe(sm);
+  if(ec) _vhdRO.observe(ec);
 }
 window.addEventListener('resize',()=>setExpTop());
 function openSONote(idx,hid){
