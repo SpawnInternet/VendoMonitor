@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPAWN Internet — MikroTik Status Poller  (v18)
+SPAWN Internet — MikroTik Status Poller  (v19)
 =========================================================
 Runs every POLL_SECONDS on the 24/7 office server.
 - Connects to the office MikroTik router (API port 8728)
@@ -39,6 +39,27 @@ PATCH 2026-07-27 (v15): capture the PPPoE secret's PROFILE, COMMENT and
 DISABLED flag. Profile is the billing state ("20k" = throttled/cut off).
 mikrotik_status.service_state is GENERATED ALWAYS from those plus `online`
 and must NEVER be written from here.
+
+--------------------------------------------------------------------
+PATCH 2026-10-01 (v19): ACCURACY HARDENING. Measured first: none of these
+was corrupting data at the time, each one only held because something else
+happened to cover for it.
+
+  1. Previous state is read for THIS server only. match_key is the bare VLAN
+     number and VLANs repeat across servers, so the old unscoped read let
+     Dicayas vlan10 pick up Dapitan vlan10's offline_since (or reset it to
+     now when Dapitan's was online). A DB trigger was masking it.
+  2. Paged reads carry an explicit order, so a page boundary cannot skip or
+     repeat rows while the other poller is writing.
+  3. A rejected write no longer waits for the next full refresh (up to 30
+     min). The delta signatures are dropped so the next cycle resends all.
+  4. Traffic alone counts as online only above NOISE_BYTES. maybe_noise was
+     computed but never used, so a router ARP broadcast on a dead VLAN could
+     flip it online for one cycle and restart its downtime clock.
+  5. Voucher pull / match failures show in the heartbeat as WARN instead of
+     only in the console (rpc/match_hotspot_vouchers had been 401 for weeks).
+  6. Default socket timeout, so a half-open router connection cannot hang
+     the loop with no heartbeat.
 
 --------------------------------------------------------------------
 PATCH 2026-08-22 (v17): suppression no longer blocks writes. It was
@@ -107,6 +128,7 @@ except ImportError:
 
 import urllib.request
 import urllib.error
+import urllib.parse
 
 
 # ====================================================================
@@ -389,8 +411,14 @@ def fetch_previous_state(retries=2):
     empty. The caller MUST tell these apart -- v13 treated a failed fetch as
     "no history" and stamped every offline machine with the current time.
     """
+    # v19: THIS server only, in a stable order. match_key is the bare VLAN
+    # number for vendos and VLANs repeat across servers -- unscoped, the
+    # other server's row could win the dict and supply this row's clock.
+    path = ("mikrotik_status?select=match_key,online,offline_since"
+            f"&server_name=eq.{urllib.parse.quote(SERVER_NAME)}"
+            "&order=match_key")
     for attempt in range(retries + 1):
-        rows = sb_get_all("mikrotik_status?select=match_key,online,offline_since")
+        rows = sb_get_all(path)
         if rows is not None:
             return {r["match_key"]: r for r in rows if r.get("match_key")}
         if attempt < retries:
@@ -602,15 +630,19 @@ def poll_mikrotik(prev_state):
         live = delta > 0
         has_users = users_per_vlan.get(vlan, 0) > 0
 
-        # ONLINE = lease bound OR live byte movement OR customers connected.
-        online = (not disabled) and ((lease_status == "bound") or live or has_users)
-
         # Tiny movement with no lease is probably ARP/keepalive noise.
         is_noise = (lease_status != "bound") and live and (delta <= NOISE_BYTES)
+        # v19: noise no longer counts as online. Before, it was computed and
+        # stored but ignored, so the router's own broadcast on a dead VLAN
+        # flipped it online for a cycle and restarted its downtime clock.
+        real_traffic = live and not is_noise
+
+        # ONLINE = lease bound OR real byte movement OR customers connected.
+        online = (not disabled) and ((lease_status == "bound") or real_traffic or has_users)
 
         online_via = ("lease" if lease_status == "bound"
                       else ("users" if has_users
-                            else ("traffic" if live else None)))
+                            else ("traffic" if real_traffic else None)))
 
         comment = it.get("comment") or None
         try:
@@ -750,9 +782,13 @@ def match_vouchers_to_vendos():
 #  Main loop
 # ====================================================================
 def main():
-    print(f"[{datetime.now()}] SPAWN MikroTik poller v18 ({BUILD}) on {HOSTNAME}")
+    # v19: routeros_api opens its socket with no timeout, so a half-open router
+    # connection could block forever with no heartbeat. urllib calls pass
+    # their own timeout and are unaffected.
+    socket.setdefaulttimeout(60)
+    print(f"[{datetime.now()}] SPAWN MikroTik poller v19 ({BUILD}) on {HOSTNAME}")
     print(f"  Router: {MIKROTIK_HOST}:{MIKROTIK_PORT}  Poll: {POLL_SECONDS}s")
-    write_heartbeat("starting", f"Poller v18 build {BUILD} started", 0)
+    write_heartbeat("starting", f"Poller v19 build {BUILD} started", 0)
     cycle = 0
     status_sig = {}     # match_key -> signature tuple
     device_sig = {}     # server|vlan|mac -> signature tuple
@@ -789,6 +825,11 @@ def main():
             # uniq_mstatus_server_key backs this target.
             _, status_failed = sb_upsert("mikrotik_status", to_write,
                                          "server_name,match_key")
+            # v19: changed_rows() already recorded these rows as sent. If a
+            # chunk was rejected, forget every signature so the next cycle
+            # resends all rows instead of waiting up to 30 min for [FULL].
+            if status_failed:
+                status_sig = {}
 
             # -- Per-device detail (isolated + non-fatal) --
             d_count = 0
@@ -806,6 +847,8 @@ def main():
                     d.pop("_k", None)
                 _, dev_failed = sb_upsert("vendo_devices", d_write,
                                           "server_name,vlan,mac")
+                if dev_failed:
+                    device_sig = {}          # v19: resend next cycle
                 d_count = len(d_write)
             except Exception as de:
                 print(f"[{datetime.now()}] device upsert failed (non-fatal): "
@@ -813,7 +856,9 @@ def main():
 
             # -- Freewifi voucher pull (isolated + non-fatal) --
             v_count = 0
+            voucher_warn = ""
             if cycle % VOUCHER_EVERY_N_CYCLES == 0:
+                v_err_before = len(_SB_ERRORS)
                 try:
                     vrows = poll_freewifi_vouchers()
                     sb_upsert("hotspot_vouchers", vrows,
@@ -821,8 +866,16 @@ def main():
                     match_vouchers_to_vendos()
                     v_count = len(vrows)
                 except Exception as ve:
+                    voucher_warn = f"{type(ve).__name__}: {ve}"
                     print(f"[{datetime.now()}] voucher pull failed (non-fatal): "
-                          f"{type(ve).__name__}: {ve}")
+                          f"{voucher_warn}")
+                # v19: vouchers stay non-fatal (status remains 'running'), but a
+                # failure now shows on the heartbeat instead of only the console.
+                # Removed from _SB_ERRORS so they can't be mistaken for a failed
+                # status write in the WRITE FAILED headline below.
+                if len(_SB_ERRORS) > v_err_before:
+                    voucher_warn = voucher_warn or _SB_ERRORS[v_err_before]
+                    del _SB_ERRORS[v_err_before:]
 
             vendos = [r for r in rows if r["kind"] == "vendo"]
             ppps = [r for r in rows if r["kind"] == "ppp"]
@@ -858,6 +911,7 @@ def main():
                           f"{d_count}/{d_total} devices"
                           f"{f' - {recovered}x srv=all' if recovered else ''}"
                           f"{' - WARN offline_since held (no history)' if no_hist else ''}"
+                          f"{f' - WARN vouchers: {voucher_warn[:120]}' if voucher_warn else ''}"
                           f"{' [FULL]' if full else ''} - b{BUILD}")
                 write_heartbeat("running", detail, cycle)
                 print(f"[{datetime.now()}] cycle {cycle}: {detail} "
