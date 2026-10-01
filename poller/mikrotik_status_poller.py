@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SPAWN Internet — MikroTik Status Poller  (v19)
+SPAWN Internet — MikroTik Status Poller  (v20)
 =========================================================
 Runs every POLL_SECONDS on the 24/7 office server.
 - Connects to the office MikroTik router (API port 8728)
@@ -39,6 +39,21 @@ PATCH 2026-07-27 (v15): capture the PPPoE secret's PROFILE, COMMENT and
 DISABLED flag. Profile is the billing state ("20k" = throttled/cut off).
 mikrotik_status.service_state is GENERATED ALWAYS from those plus `online`
 and must NEVER be written from here.
+
+--------------------------------------------------------------------
+PATCH 2026-10-01 (v20): SELF-UPDATE, opt-in per box.
+
+The launcher only downloads new code when it starts, and this loop never
+exits, so every push needed someone to restart the task by hand. With
+SELF_UPDATE=true in .env, every SELF_UPDATE_EVERY_N_CYCLES the poller fetches
+the published file; if it differs from the running build AND compiles, it
+writes an 'updating' heartbeat and exits 0. Task Scheduler relaunches the
+launcher, which installs the new build.
+
+OFF BY DEFAULT ON PURPOSE: exiting is only safe when the scheduled task is
+set to start again (repeat every 5 min, "do not start a new instance"). On
+a box without that, an exit would leave the poller down. Turn it on per box
+only after checking the task settings.
 
 --------------------------------------------------------------------
 PATCH 2026-10-01 (v19): ACCURACY HARDENING. Measured first: none of these
@@ -116,6 +131,7 @@ import time
 import socket
 import json
 import re
+import hashlib
 import traceback
 from datetime import datetime, timezone
 
@@ -210,6 +226,16 @@ FULL_REFRESH_EVERY_N_CYCLES = _cfg_int("FULL_REFRESH_EVERY_N_CYCLES", 60)
 # Freewifi voucher pull
 VOUCHER_PROFILE        = os.environ.get("VOUCHER_PROFILE", "freewifi")
 VOUCHER_EVERY_N_CYCLES = _cfg_int("VOUCHER_EVERY_N_CYCLES", 6)
+
+# v20: self-update (see module docstring). Same URL the launcher pulls from.
+# SELFUPDATE is accepted too: it can be typed with no Shift key, which matters
+# over remote-desktop sessions that drop Shift (underscore and capitals).
+# Windows environment names are case-insensitive, so "selfupdate=true" works.
+SELF_UPDATE = (os.environ.get("SELF_UPDATE") or os.environ.get("SELFUPDATE")
+               or "false").strip().lower() == "true"
+SELF_UPDATE_EVERY_N_CYCLES = _cfg_int("SELF_UPDATE_EVERY_N_CYCLES", 20)
+SELF_UPDATE_URL = ("https://raw.githubusercontent.com/SpawnInternet/"
+                   "VendoMonitor/main/poller/mikrotik_status_poller.py")
 
 
 # ====================================================================
@@ -772,6 +798,32 @@ def poll_freewifi_vouchers():
     return out
 
 
+def newer_build_available():
+    """v20: build id of the published poller if it differs from the running
+    one AND compiles; otherwise None. Never raises -- an update check must
+    not be able to break a polling cycle."""
+    if BUILD == "local":                 # not started by the launcher
+        return None
+    try:
+        req = urllib.request.Request(SELF_UPDATE_URL,
+                                     headers={"Cache-Control": "no-cache"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            src = r.read()
+        new = hashlib.sha256(src).hexdigest()[:12]   # same id the launcher uses
+        if new == BUILD:
+            return None
+        compile(src, "mikrotik_status_poller.py", "exec")
+        return new
+    except SyntaxError as e:
+        print(f"[{datetime.now()}] self-update: published file does not "
+              f"compile, staying on {BUILD}: {e}")
+        return None
+    except Exception as e:
+        print(f"[{datetime.now()}] self-update check failed: "
+              f"{type(e).__name__}: {e}")
+        return None
+
+
 def match_vouchers_to_vendos():
     """Server-side safe match: fills vendo_id only where (server,vlan) -> 1 vendo.
     Never writes vendos. No-op if the RPC is absent."""
@@ -786,9 +838,11 @@ def main():
     # connection could block forever with no heartbeat. urllib calls pass
     # their own timeout and are unaffected.
     socket.setdefaulttimeout(60)
-    print(f"[{datetime.now()}] SPAWN MikroTik poller v19 ({BUILD}) on {HOSTNAME}")
-    print(f"  Router: {MIKROTIK_HOST}:{MIKROTIK_PORT}  Poll: {POLL_SECONDS}s")
-    write_heartbeat("starting", f"Poller v19 build {BUILD} started", 0)
+    print(f"[{datetime.now()}] SPAWN MikroTik poller v20 ({BUILD}) on {HOSTNAME}")
+    print(f"  Router: {MIKROTIK_HOST}:{MIKROTIK_PORT}  Poll: {POLL_SECONDS}s  "
+          f"Self-update: {'on' if SELF_UPDATE else 'off'}")
+    write_heartbeat("starting", f"Poller v20 build {BUILD} started"
+                    f"{' (self-update on)' if SELF_UPDATE else ''}", 0)
     cycle = 0
     status_sig = {}     # match_key -> signature tuple
     device_sig = {}     # server|vlan|mac -> signature tuple
@@ -912,7 +966,8 @@ def main():
                           f"{f' - {recovered}x srv=all' if recovered else ''}"
                           f"{' - WARN offline_since held (no history)' if no_hist else ''}"
                           f"{f' - WARN vouchers: {voucher_warn[:120]}' if voucher_warn else ''}"
-                          f"{' [FULL]' if full else ''} - b{BUILD}")
+                          f"{' [FULL]' if full else ''} - b{BUILD}"
+                          f"{' auto' if SELF_UPDATE else ''}")
                 write_heartbeat("running", detail, cycle)
                 print(f"[{datetime.now()}] cycle {cycle}: {detail} "
                       f"({time.time()-start:.1f}s)")
@@ -922,6 +977,16 @@ def main():
             print(f"[{datetime.now()}] ERROR cycle {cycle}: {err}")
             traceback.print_exc()
             write_heartbeat("error", err[:200], cycle)
+
+        # v20: between cycles, never mid-write. Exit 0 so the launcher keeps
+        # this build as last_good; Task Scheduler starts the new one.
+        if SELF_UPDATE and cycle % SELF_UPDATE_EVERY_N_CYCLES == 0:
+            new = newer_build_available()
+            if new:
+                msg = f"Updating {BUILD} -> {new}; restarting via launcher"
+                print(f"[{datetime.now()}] {msg}")
+                write_heartbeat("updating", msg, cycle)
+                return
 
         elapsed = time.time() - start
         time.sleep(max(1, POLL_SECONDS - elapsed))
