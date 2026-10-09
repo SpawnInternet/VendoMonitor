@@ -206,6 +206,39 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
   .sname{font-size:13.5px}
 }
 
+/* ══ v2.2 ══ paid status tiers, months picker, receipts, sync queue */
+.btn-edit{background:#e8f1fd;border:1px solid #b9d3f5;color:#025AC6}
+.btn-dir{background:var(--blue);color:#fff}
+.bg-maybe{background:#fff4d6;color:#8a5a00;border:1px dashed #d9a400}
+.sub-card.maybe{border-color:#f0d58c;background:#fffcf2}
+.paid-meta{font-size:10px;color:var(--muted);margin-top:4px;font-weight:600;max-width:124px;text-align:right;line-height:1.35;overflow-wrap:anywhere}
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mbtn{padding:11px 4px;background:#f0f4ff;border:1.5px solid var(--border);border-radius:11px;font-size:13px;font-weight:700;color:var(--navy);cursor:pointer;text-align:center;font-family:inherit}
+.mbtn.sel{background:#e8f1fd;border-color:var(--blue);color:var(--blue)}
+.covers{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.45}
+.covers b{color:var(--navy)}
+.warn-box{border-radius:12px;padding:10px 12px;font-size:12px;line-height:1.45;margin-bottom:14px}
+.warn-paid{background:#e9f7f1;border:1px solid #9fdcc4;color:#025c46}
+.warn-maybe{background:#fff7e0;border:1px solid #f0d58c;color:#6e4a00}
+.qbar{margin:10px 16px 0;padding:9px 12px;border-radius:12px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:10px;line-height:1.35}
+.qbar.wait{background:#e8f1fd;color:#024a9e}
+.qbar.bad{background:#fde8eb;color:#a3122a}
+.qbar button{border:none;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;background:#fff;color:inherit;flex-shrink:0}
+.rcpt{padding:20px 18px 18px;text-align:center}
+.rcpt-no{font-size:36px;font-weight:800;color:var(--navy);letter-spacing:.02em;font-variant-numeric:tabular-nums;margin:6px 0 2px}
+.rcpt-no.pending{font-size:24px;color:var(--muted)}
+.rcpt-lbl{font-size:12px;color:var(--muted)}
+.rcpt-amt{font-size:24px;font-weight:800;color:var(--green);margin-top:12px;font-variant-numeric:tabular-nums}
+.rcpt-rows{text-align:left;margin:14px 0 16px;border-top:1px solid var(--border)}
+.rcpt-rows div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.rcpt-rows span:first-child{color:var(--muted)}
+.rcpt-rows span:last-child{font-weight:700;color:var(--navy);text-align:right}
+.sync{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;display:inline-block;margin-top:5px}
+.sync.ok{background:#dcf3ea;color:#025c46}
+.sync.wait{background:#e8f1fd;color:#024a9e}
+.sync.phone{background:#fff4d6;color:#8a5a00}
+.sync.bad{background:#fde8eb;color:#a3122a}
+.hist-sub{font-size:11px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -234,10 +267,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
         placeholder="••••"
         style="width:100%;padding:13px;border:1.5px solid var(--border);border-radius:10px;font-size:26px;font-weight:700;letter-spacing:10px;text-align:center;font-family:monospace;outline:none;color:var(--navy);background:#f7f9ff"
         oninput="onPin(this)">
-      <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:10px">Login →</button>
+      <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:10px">Log in</button>
       <div id="pin-err" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
     </div>
-    <div style="text-align:center"><span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Reset</span></div>
+    <div style="text-align:center"><span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Reset</span><div style="font-size:10px;color:var(--muted);margin-top:6px" id="ver-lbl"></div></div>
   </div>
 </div>
 
@@ -253,16 +286,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
     <div class="tb-right">
       <div style="display:flex;align-items:center;gap:4px"><div class="odot" id="odot"></div><div class="olbl" id="olbl">Online</div></div>
-      <button class="btn-logout" onclick="doLogout()">Logout</button>
+      <button class="btn-logout" onclick="askLogout()">Log out</button>
     </div>
   </div>
 
   <div class="nav-tabs">
     <div class="nav-tab active" id="nav-subscribers" onclick="switchTab('subscribers')">📋 Subscribers</div>
-    <div class="nav-tab" id="nav-history" onclick="switchTab('history')">🕐 History</div>
+    <div class="nav-tab" id="nav-history" onclick="switchTab('history')">🧾 My receipts</div>
   </div>
 
   <div id="tab-subscribers">
+    <div id="qbar"></div>
     <div class="area-tabs" id="area-tabs"></div>
     <div class="chips" id="miss-chips"></div>
     <div class="srch-wrap">
@@ -360,6 +394,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
     <div style="padding:16px 16px 0">
       <div style="font-size:17px;font-weight:800;color:var(--navy)" id="pay-name">—</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:14px" id="pay-info">—</div>
+      <div id="pay-status"></div>
 
       <div class="clabel">Quick amount</div>
       <div class="agrid" id="agrid"></div>
@@ -369,15 +404,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
         <input type="number" inputmode="decimal" class="ti" id="pay-amt" placeholder="0.00" oninput="onAmt()">
       </div>
       <div style="margin-bottom:12px">
-        <div class="coin-label">Month</div>
-        <input type="month" class="ti" id="pay-month">
+        <div class="coin-label">Months paid</div>
+        <div class="mgrid" id="pay-mgrid"></div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div class="coin-label">Starting month</div>
+        <input type="month" class="ti" id="pay-month" onchange="onCover()">
+        <div class="covers" id="pay-covers"></div>
       </div>
       <div style="margin-bottom:14px">
         <div class="coin-label">Note <span>Optional</span></div>
         <input type="text" class="ti" id="pay-note" placeholder="e.g. partial, gcash, advance...">
       </div>
 
-      <button class="btn btn-green" id="pay-btn" onclick="submitPay()" style="margin-bottom:8px">✓ Record Payment</button>
+      <button class="btn btn-green" id="pay-btn" onclick="submitPay()" style="margin-bottom:8px">✓ Record payment</button>
       <button class="btn btn-gray" onclick="forceClosePay()">Cancel</button>
 
       <div id="pay-hist" style="margin-top:14px;padding-bottom:16px"></div>
@@ -385,8 +425,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
   </div>
 </div>
 
+<!-- ── RECEIPT SHEET ── -->
+<div class="overlay" id="rcpt-overlay" style="display:none" onclick="closeRcpt(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="mhandle"></div>
+    <div class="rcpt" id="rcpt-body"></div>
+  </div>
+</div>
+
 <script>
-const APP_VERSION = 'v2.1';
+const APP_VERSION = 'v2.2';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -453,8 +501,10 @@ function gwHandle401(){
     return _f(input, opts);
   };
 })();
-const AREAS=['ALL','DIPOLOG','DAPITAN','ROXAS','POLANCO','SINDANGAN','UNKNOWN'];
-const ACLR={'DIPOLOG':'#1e3cb8','DAPITAN':'#0f766e','ROXAS':'#b45309','POLANCO':'#7c3aed','SINDANGAN':'#be123c','UNKNOWN':'#64748b'};
+// Area tabs are built from the data, so a new area (MINAOG, SINAMAN...) shows up by itself.
+const AREA_ORDER=['DIPOLOG','DAPITAN','ROXAS','POLANCO','SINDANGAN','SINAMAN','MINAOG','UNKNOWN'];
+const ACLR={'DIPOLOG':'#025AC6','DAPITAN':'#028867','ROXAS':'#c98a00','POLANCO':'#311A8E','SINDANGAN':'#C01176','SINAMAN':'#DF1A35','MINAOG':'#0e7490','UNKNOWN':'#6f8098'};
+function areaOf(s){return (s&&s.area)||'UNKNOWN';}
 const QUICK=[500,800,1000,1200,1300,1500,1800,2000,2500];
 const PLANS=[20,50,100];
 
@@ -472,6 +522,7 @@ let _col='',_pin='',_cols=[],_subs=[],_pays=[],_cur=null,_area='ALL',_miss='';
 let _offline=false,_queue=[],_selName='';
 let _capturedGPS=null,_capturedBlob=null,_curDet=null,_baseline=null;
 let _curTab='subscribers',_saving=false;
+let _paid={},_paidYm='',_months=1,_paying=false,_flushing=false;
 
 // ── UTILS ──
 function toast(m,d=2500){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d);}
@@ -480,6 +531,24 @@ function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth
 function thisMonth(){return today().slice(0,7);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function initials(n){return String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';}
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sept','Oct','Nov','Dec'];
+function ymAdd(ym,n){const y=+ym.slice(0,4),m=+ym.slice(5,7);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function ymLabel(ym){return MON[+ym.slice(5,7)-1]+' '+ym.slice(0,4);}
+function coverText(a,b){ if(a===b) return ymLabel(a); return a.slice(0,4)===b.slice(0,4)? MON[+a.slice(5,7)-1]+' – '+ymLabel(b) : ymLabel(a)+' – '+ymLabel(b); }
+function sheetNote(a,n){ const b=ymAdd(a,n-1); return a===b?'Month of '+MON[+a.slice(5,7)-1]+'.':'Month of '+MON[+a.slice(5,7)-1]+'- '+MON[+b.slice(5,7)-1]+'.'; }
+function shortDate(d){ if(!d)return ''; return new Date(String(d).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'}); }
+function viaLabel(c){ const t=String(c||'').trim(); return t||'office'; }
+function newRef(){ try{ if(crypto&&crypto.randomUUID) return 'sc-'+crypto.randomUUID(); }catch(e){} return 'sc-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12); }
+function loadQ(){ try{ return JSON.parse(localStorage.getItem('sc_queue')||'[]'); }catch(e){ return []; } }
+function saveQ(){ localStorage.setItem('sc_queue',JSON.stringify(_queue)); }
+function savePays(){ try{ localStorage.setItem('sc_pays',JSON.stringify(_pays)); }catch(e){} }
+// One RPC helper. Errors carry the server's message (bad_pin, bad_amount, ...).
+async function rpc(fn,args){
+  const r=await fetch(SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:HDR,body:JSON.stringify(args)});
+  const t=await r.text(); let d=null; try{ d=JSON.parse(t); }catch(e){}
+  if(!r.ok){ const e=new Error((d&&(d.message||d.error))||t||('HTTP '+r.status)); e.status=r.status; throw e; }
+  return d;
+}
 
 // ── ONLINE ──
 function setOnline(){
@@ -559,7 +628,7 @@ async function doLogin(){
        repeated failures per IP; the old RPC had no throttle at all. */
     const r=await fetch(LOGIN_URL,{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:pin})});
-    btn.textContent='Login →';
+    btn.textContent='Log in';
     if(r.status===429){pinFail('Too many attempts. Wait a few minutes.');return;}
     const d=await r.json();
     if(!d || !d.ok || !d.token){pinFail('Wrong PIN. Try again.');return;}
@@ -575,9 +644,15 @@ async function doLogin(){
     await loadData();
     flushQ();
   }catch(e){
-    btn.textContent='Login →'; btn.disabled=false;
+    btn.textContent='Log in'; btn.disabled=false;
     pinFail('No connection. Log in once while online.');
   }
+}
+function myPending(){ return loadQ().filter(i=>i.type==='payment'&&i.rec&&i.rec.p_name===_col); }
+function askLogout(){
+  const n=myPending().length;
+  if(n&&!confirm(n+' payment'+(n>1?'s are':' is')+' not synced yet. '+(n>1?'They':'It')+' stay on this phone and send when you log in again. Log out?'))return;
+  doLogout();
 }
 function doLogout(){
   _col='';_pin='';_subs=[];_pays=[];
@@ -591,7 +666,11 @@ function doLogout(){
   _selName='';
   showScreen('screen-login');
 }
-function hardReset(){localStorage.clear();indexedDB.deleteDatabase('spawn-collect');location.reload();}
+function hardReset(){
+  const q=loadQ(), pays=q.filter(i=>i.type==='payment').length;
+  if(q.length&&!confirm(q.length+' unsynced record'+(q.length>1?'s':'')+(pays?' ('+pays+' payment'+(pays>1?'s':'')+')':'')+' are still on this phone. Resetting deletes them for good. Reset anyway?'))return;
+  localStorage.clear();indexedDB.deleteDatabase('spawn-collect');location.reload();
+}
 
 // ── DATA ──
 const SUBCOLS='id,name,area,phone,fb_name,address,due_day,monthly_amount,plan_type,plan_mbps,lat,lng,gps_place,gps_source,gps_updated_at,photo_url,acct_no,status';
@@ -607,10 +686,13 @@ async function loadData(){
   try{
     const r=await fetch(SB+'/rest/v1/subscriber_payments?payment_date=gte.'+m1+'&order=created_at.desc&limit=1000',{headers:HDR});
     const d=await r.json();
-    if(Array.isArray(d)){_pays=d;localStorage.setItem('sc_pays',JSON.stringify(d));}
+    // Payments still waiting on this phone are kept; the server copy replaces the rest.
+    const pend=(_pays.length?_pays:JSON.parse(localStorage.getItem('sc_pays')||'[]')).filter(p=>p._pending);
+    if(Array.isArray(d)){_pays=pend.concat(d);savePays();}
     else _pays=JSON.parse(localStorage.getItem('sc_pays')||'[]');
   }catch{_pays=JSON.parse(localStorage.getItem('sc_pays')||'[]');}
-  buildAreaTabs();buildChips();renderList();updateSum();
+  await loadPaid();
+  buildAreaTabs();buildChips();renderList();updateSum();renderQbar();
   document.getElementById('hist-month').value=thisMonth();
 }
 
@@ -625,16 +707,17 @@ function switchTab(tab){
 
 // ── AREA TABS ──
 function buildAreaTabs(){
-  const c={ALL:_subs.length};
-  AREAS.slice(1).forEach(a=>c[a]=_subs.filter(s=>s.area===a).length);
-  document.getElementById('area-tabs').innerHTML=AREAS
-    .filter(a=>a==='ALL'||c[a]>0)
-    .map(a=>'<div class="atab'+(a===_area?' active':'')+'" onclick="setArea(\''+a+'\')">'+a+' '+(c[a]||0)+'</div>').join('');
+  const c={};
+  _subs.forEach(s=>{const a=areaOf(s);c[a]=(c[a]||0)+1;});
+  const found=Object.keys(c).sort((a,b)=>{const ia=AREA_ORDER.indexOf(a),ib=AREA_ORDER.indexOf(b);return (ia<0?90:ia)-(ib<0?90:ib)||a.localeCompare(b);});
+  if(_area!=='ALL'&&!c[_area])_area='ALL';
+  document.getElementById('area-tabs').innerHTML=['ALL'].concat(found)
+    .map(a=>'<div class="atab'+(a===_area?' active':'')+'" onclick="setArea(\''+esc(a)+'\')">'+esc(a)+' '+(a==='ALL'?_subs.length:c[a])+'</div>').join('');
 }
 function setArea(a){_area=a;buildAreaTabs();buildChips();renderList();}
 
 // ── MISSING-INFO CHIPS ──
-function inArea(s){return _area==='ALL'||s.area===_area;}
+function inArea(s){return _area==='ALL'||areaOf(s)===_area;}
 function buildChips(){
   const scope=_subs.filter(inArea);
   let html='<div class="chip'+(_miss===''?' active':'')+'" onclick="setMiss(\'\')">All '+scope.length+'</div>';
@@ -646,6 +729,43 @@ function buildChips(){
   document.getElementById('miss-chips').innerHTML=html;
 }
 function setMiss(k){_miss=(_miss===k?'':k);buildChips();renderList();}
+
+// ── PAID STATUS ──
+// Paid      = an app payment for this subscriber, or a sheet/G-cash payment whose
+//             name matches exactly (or a confirmed alias).
+// Maybe paid = a payment whose name is spelled close but not the same, or a name
+//             two subscribers share. The collector asks before collecting.
+async function loadPaid(){
+  const ym=thisMonth();
+  try{
+    const d=await rpc('spawn_collect_paid_status',{p_name:_col,p_pin:_pin,p_ym:ym});
+    if(Array.isArray(d)){
+      _paid={}; d.forEach(x=>{_paid[x.subscriber_id]=x;}); _paidYm=ym;
+      try{ localStorage.setItem('sc_paid',JSON.stringify({ym,rows:d,at:Date.now()})); }catch(e){}
+      return;
+    }
+  }catch(e){}
+  try{
+    const c=JSON.parse(localStorage.getItem('sc_paid')||'null');
+    if(c&&c.ym===ym){ _paid={}; c.rows.forEach(x=>{_paid[x.subscriber_id]=x;}); _paidYm=ym; }
+  }catch(e){}
+}
+function payCovers(p,ym){
+  if(p._local) return ym>=p.cover_from&&ym<=p.cover_to;
+  if(p.coverage_ok&&p.coverage_from&&p.coverage_to) return ym>=String(p.coverage_from).slice(0,7)&&ym<=String(p.coverage_to).slice(0,7);
+  return p.month_year===ym;
+}
+function paidInfo(s){
+  const ym=thisMonth();
+  const mine=_pays.find(p=>p.subscriber_id===s.id&&payCovers(p,ym));
+  if(mine) return {level:'paid',paid_on:mine.payment_date,amount:mine.amount,collector:mine.collector,
+                   receipt:mine.invoice_no||'',paid_name:null,pending:!!mine._pending};
+  const x=(_paidYm===ym)&&_paid[s.id];
+  if(!x) return null;
+  const sure=(x.match==='linked'||x.match==='alias'||x.match==='name');
+  return {level:sure?'paid':'maybe',paid_on:x.paid_on,amount:x.amount,collector:x.collector,
+          receipt:x.invoice_no||'',paid_name:x.paid_name,match:x.match};
+}
 
 // ── SUBSCRIBER LIST ──
 function renderList(){
@@ -661,25 +781,24 @@ function renderList(){
     }
     return true;
   });
-  list.sort((a,b)=>{
-    const ap=_pays.some(p=>p.subscriber_id===a.id&&p.month_year===ym);
-    const bp=_pays.some(p=>p.subscriber_id===b.id&&p.month_year===ym);
-    if(ap&&!bp)return 1; if(!ap&&bp)return -1;
-    return (a.due_day||99)-(b.due_day||99);
-  });
+  // Unpaid first, then maybe-paid, then paid; earliest due day first within each.
+  const lvl=s=>{const pi=paidInfo(s);return !pi?0:(pi.level==='maybe'?1:2);};
+  const L={}; list.forEach(s=>{L[s.id]=lvl(s);});
+  list.sort((a,b)=>(L[a.id]-L[b.id])||((a.due_day||99)-(b.due_day||99)));
 
   const el=document.getElementById('sub-list');
   if(!list.length){el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">Nothing here — all done ✅</div>';return;}
 
   el.innerHTML=list.map(s=>{
-    const paid=_pays.some(p=>p.subscriber_id===s.id&&p.month_year===ym);
-    const clr=ACLR[s.area]||'#64748b';
+    const pi=paidInfo(s), paid=!!pi&&pi.level==='paid', maybe=!!pi&&pi.level==='maybe';
+    const clr=ACLR[areaOf(s)]||'#6f8098';
     const photo=s.photo_url
       ? '<img src="'+esc(s.photo_url)+'" style="width:42px;height:42px;border-radius:50%;object-fit:cover">'
       : '<div class="sav" style="background:'+clr+'">'+esc(initials(s.name))+'</div>';
 
     let badge='';
     if(paid){badge='<div class="badge bg-green">✓ Paid</div>';}
+    else if(maybe){badge='<div class="badge bg-maybe">? Maybe paid</div>';}
     else if(s.due_day){
       const diff=s.due_day-td;
       if(diff<0)badge='<div class="badge bg-red">'+Math.abs(diff)+'d late</div>';
@@ -690,7 +809,7 @@ function renderList(){
 
     const hasGPS=!!(s.lat&&s.lng);
     const gpsBtn=hasGPS
-      ? '<button class="rowbtn" style="background:#0284c7;color:#fff" onclick="event.stopPropagation();openMaps('+s.id+')">📍 Directions</button>'
+      ? '<button class="rowbtn btn-dir" onclick="event.stopPropagation();openMaps('+s.id+')">📍 Directions</button>'
       : '<button class="rowbtn" style="background:#fee2e2;color:#dc2626" onclick="event.stopPropagation();openDet('+s.id+')">📍 No GPS</button>';
 
     const dot='<div style="position:absolute;bottom:-1px;right:-1px;width:13px;height:13px;border-radius:50%;background:'
@@ -698,9 +817,11 @@ function renderList(){
       +(hasGPS?'':'!')+'</div>';
 
     const gaps=MISS.filter(m=>m.test(s)).map(m=>'<span class="miss">'+m.lbl+'</span>').join(' ');
-    const payer=paid?((_pays.find(p=>p.subscriber_id===s.id&&p.month_year===ym)||{}).collector||''):'';
+    let meta='';
+    if(paid) meta=(pi.pending?'on phone · ':'')+esc(viaLabel(pi.collector))+(pi.paid_on?' · '+esc(shortDate(pi.paid_on)):'');
+    else if(maybe) meta='as “'+esc(pi.paid_name||'')+'”<br>'+esc(viaLabel(pi.collector))+' · '+esc(shortDate(pi.paid_on));
 
-    return '<div class="sub-card'+(paid?' paid':'')+'" onclick="openPay('+s.id+')">'
+    return '<div class="sub-card'+(paid?' paid':maybe?' maybe':'')+'" onclick="openPay('+s.id+')">'
       +'<div style="position:relative;flex-shrink:0">'+photo+dot+'</div>'
       +'<div style="flex:1;min-width:0">'
         +'<div class="sname">'+esc(s.name)+'</div>'
@@ -708,11 +829,11 @@ function renderList(){
         +(gaps?'<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">'+gaps+'</div>':'')
         +'<div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">'
           +gpsBtn
-          +'<button class="rowbtn" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3cb8" onclick="event.stopPropagation();openDet('+s.id+')">✎ Edit Info</button>'
+          +'<button class="rowbtn btn-edit" onclick="event.stopPropagation();openDet('+s.id+')">✎ Edit info</button>'
         +'</div>'
       +'</div>'
       +'<div style="text-align:right;flex-shrink:0">'+badge
-        +(payer?'<div style="font-size:10px;color:var(--muted);margin-top:4px;font-weight:600">by '+esc(payer)+'</div>':'')
+        +(meta?'<div class="paid-meta">'+meta+'</div>':'')
       +'</div>'
     +'</div>';
   }).join('');
@@ -728,7 +849,6 @@ function openDet(subId){
   if(!_curDet)return;
   _capturedGPS=null;_capturedBlob=null;
   const s=_curDet;
-  const clr=ACLR[s.area]||'#64748b';
 
   document.getElementById('det-photo-wrap').innerHTML=s.photo_url
     ? '<img src="'+esc(s.photo_url)+'" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid rgba(255,255,255,.3);display:block;margin:0 auto">'
@@ -771,13 +891,7 @@ function openDet(subId){
   document.getElementById('det-gps-manual').style.display='none';
   document.getElementById('det-stamp-inp').value='';
 
-  const hist=_pays.filter(p=>p.subscriber_id===subId).slice(0,6);
-  document.getElementById('det-hist').innerHTML=hist.length
-    ? '<div class="clabel">Payment history</div>'+hist.map(p=>
-      '<div class="hist-row"><div><div style="font-size:13px;font-weight:700;color:var(--navy)">'+esc(p.month_year||'')+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+esc(p.payment_date||'')+' · '+esc(p.collector||'')+'</div></div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--green)">'+fmt(p.amount)+'</div></div>').join('')
-    : '<div style="font-size:12px;color:var(--muted);margin-top:8px">No payment history</div>';
+  loadSubHist(subId,'det-hist',6,'Payment history',()=>_curDet&&_curDet.id===subId);
 
   _baseline=snapshotForm();
   document.getElementById('det-overlay').style.display='flex';
@@ -1056,16 +1170,63 @@ function openPay(subId){
   document.getElementById('agrid').innerHTML=amts.map(a=>
     '<div class="abtn" onclick="selAmt('+a+',this)">'+fmt(a)+'</div>').join('');
   document.getElementById('pay-amt').value=_cur.monthly_amount||'';
-  document.getElementById('pay-month').value=thisMonth();
   document.getElementById('pay-note').value='';
-  const hist=_pays.filter(p=>p.subscriber_id===subId).slice(0,5);
-  document.getElementById('pay-hist').innerHTML=hist.length
-    ? '<div class="clabel">Recent payments</div>'+hist.map(p=>
-      '<div class="hist-row"><div><div style="font-size:13px;font-weight:700">'+esc(p.month_year||'')+'</div>'
-      +'<div style="font-size:11px;color:var(--muted)">'+esc(p.payment_date||'')+' · '+esc(p.collector||'')+'</div></div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--green)">'+fmt(p.amount)+'</div></div>').join('')
-    : '';
+
+  // Warn before collecting from someone who already paid this month.
+  const pi=paidInfo(_cur), ym=thisMonth();
+  let warn='';
+  if(pi&&pi.level==='paid'){
+    warn='<div class="warn-box warn-paid"><b>Already paid for '+esc(ymLabel(ym))+'.</b> '+fmt(pi.amount)
+      +' via '+esc(viaLabel(pi.collector))+' on '+esc(shortDate(pi.paid_on))+(pi.receipt?' · '+esc(pi.receipt):'')
+      +'. Only record this if they are paying for later months.</div>';
+  }else if(pi&&pi.level==='maybe'){
+    warn='<div class="warn-box warn-maybe"><b>Maybe paid for '+esc(ymLabel(ym))+'.</b> A payment under “'+esc(pi.paid_name||'')+'” — '
+      +fmt(pi.amount)+' via '+esc(viaLabel(pi.collector))+' on '+esc(shortDate(pi.paid_on))
+      +'. Ask the subscriber if that was them before collecting.</div>';
+  }
+  document.getElementById('pay-status').innerHTML=warn;
+
+  // Already paid this month → default to next month, the usual advance payment.
+  document.getElementById('pay-month').value=(pi&&pi.level==='paid')?ymAdd(ym,1):ym;
+  _months=1; renderMonths(); onCover();
+
+  loadSubHist(subId,'pay-hist',5,'Recent payments',()=>_cur&&_cur.id===subId);
   document.getElementById('pay-overlay').style.display='flex';
+}
+function renderMonths(){
+  document.getElementById('pay-mgrid').innerHTML=[1,2,3,4].map(n=>
+    '<div class="mbtn'+(_months===n?' sel':'')+'" onclick="pickMonths('+n+')">'+n+(n===1?' month':' months')+'</div>').join('');
+}
+function pickMonths(n){
+  // Keep the amount in step with the months when it still matches the monthly rate.
+  const inp=document.getElementById('pay-amt'), mo=_cur&&_cur.monthly_amount>0?+_cur.monthly_amount:0;
+  const cur=parseFloat(inp.value);
+  if(mo&&(!inp.value||cur===mo*_months)){ inp.value=mo*n; document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel')); }
+  _months=n; renderMonths(); onCover();
+}
+function onCover(){
+  const a=document.getElementById('pay-month').value||thisMonth(), b=ymAdd(a,_months-1);
+  document.getElementById('pay-covers').innerHTML='Covers <b>'+esc(coverText(a,b))+'</b> · sheet note “'+esc(sheetNote(a,_months))+'”';
+}
+function histRows(list){
+  return list.map(p=>
+    '<div class="hist-row"><div><div style="font-size:13px;font-weight:700;color:var(--navy)">'+esc(shortDate(p.payment_date))
+    +(p.invoice_no?' · '+esc(p.invoice_no):'')+(p._pending?' · on phone':'')+'</div>'
+    +'<div class="hist-sub">'+esc(viaLabel(p.collector))+(p.note?' · '+esc(p.note):'')+(p.match==='name'?' · matched by name':'')+'</div></div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--green)">'+fmt(p.amount)+'</div></div>').join('');
+}
+// Shows what is on the phone at once, then replaces it with the full history from the server.
+async function loadSubHist(subId,elId,limit,title,stillOpen){
+  const el=document.getElementById(elId);
+  const pend=_pays.filter(p=>p.subscriber_id===subId&&p._pending);
+  const draw=list=>{ el.innerHTML=list.length?'<div class="clabel">'+esc(title)+'</div>'+histRows(list)
+    :'<div style="font-size:12px;color:var(--muted);margin-top:8px">No payments on record yet</div>'; };
+  draw(_pays.filter(p=>p.subscriber_id===subId).slice(0,limit));
+  if(!navigator.onLine) return;
+  try{
+    const d=await rpc('spawn_collect_sub_history',{p_name:_col,p_pin:_pin,p_sub_id:subId,p_limit:limit});
+    if(Array.isArray(d)&&stillOpen()) draw(pend.concat(d).slice(0,limit));
+  }catch(e){}
 }
 function selAmt(a,el){
   document.getElementById('pay-amt').value=a;
@@ -1076,79 +1237,131 @@ function onAmt(){document.querySelectorAll('.abtn').forEach(b=>b.classList.remov
 function closePay(e){ if(e&&e.target!==document.getElementById('pay-overlay'))return; forceClosePay(); }
 function forceClosePay(){document.getElementById('pay-overlay').style.display='none';_cur=null;}
 
+// Saved to the phone's queue BEFORE sending, with a one-time reference. If the
+// app closes or the signal drops mid-send, the retry carries the same reference
+// and the server hands back the same receipt instead of recording it twice.
 async function submitPay(){
-  if(!_cur)return;
+  if(!_cur||_paying)return;
   const amt=parseFloat(document.getElementById('pay-amt').value);
   if(!(amt>0)){toast('Enter an amount');return;}
   if(amt>100000){toast('That amount looks wrong — check it');return;}
-  const btn=document.getElementById('pay-btn');
-  btn.disabled=true;btn.textContent='Saving...';
+  const start=document.getElementById('pay-month').value||thisMonth(), endM=ymAdd(start,_months-1), ym=thisMonth();
+  const pi=paidInfo(_cur);
+  if(pi&&pi.level==='paid'&&start<=ym&&endM>=ym&&
+     !confirm(_cur.name+' already shows as paid for '+ymLabel(ym)+'. Record another payment that also covers '+ymLabel(ym)+'?'))return;
 
-  const rec={
-    p_name:_col,p_pin:_pin,p_sub_id:_cur.id,p_amount:amt,
-    p_date:today(),p_month:document.getElementById('pay-month').value||thisMonth(),
-    p_note:document.getElementById('pay-note').value.trim()||null
-  };
-  const local={subscriber_id:_cur.id,subscriber_name:_cur.name,area:_cur.area,amount:amt,
-    payment_date:rec.p_date,month_year:rec.p_month,collector:_col,note:rec.p_note};
+  _paying=true;
+  const btn=document.getElementById('pay-btn'); btn.disabled=true; btn.textContent='Saving...';
+  const ref=newRef(), note=document.getElementById('pay-note').value.trim()||null;
+  const rec={p_name:_col,p_sub_id:_cur.id,p_amount:amt,p_date:today(),p_month:start,p_months:_months,p_note:note,p_client_ref:ref};
+  const local={_local:true,_pending:true,_ref:ref,subscriber_id:_cur.id,subscriber_name:_cur.name,area:_cur.area,
+    amount:amt,payment_date:rec.p_date,month_year:start,months:_months,cover_from:start,cover_to:endM,
+    collector:_col,note:note,invoice_no:null};
+  const item={type:'payment',ref,rec,at:Date.now()};
+  _queue.push(item); saveQ();
+  _pays.unshift(local); savePays();
 
+  let ok=false;
   if(navigator.onLine){
     try{
-      const r=await fetch(SB+'/rest/v1/rpc/spawn_sub_payment_add',{method:'POST',headers:HDR,body:JSON.stringify(rec)});
-      if(!r.ok){
-        const t=await r.text();
-        if(t.includes('bad_pin')){toast('PIN rejected — log out and back in');btn.disabled=false;btn.textContent='✓ Record Payment';return;}
-        throw new Error('HTTP '+r.status);
-      }
-      _pays.unshift(local);
-      toast('✅ Payment recorded');
+      const res=await rpc('spawn_collect_pay',{...rec,p_pin:_pin});
+      local.invoice_no=(res&&res.receipt_no)||null; local._pending=false; item.done=true; ok=true;
     }catch(e){
-      _queue.push({type:'payment',rec});
-      localStorage.setItem('sc_queue',JSON.stringify(_queue));
-      _pays.unshift(local);
-      toast('⚡ Queued — will sync');
+      const m=String(e.message||'');
+      if(m.includes('bad_pin')) item.err='pin';
+      else if(/bad_amount|bad_date|bad_months?|no_subscriber/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber/)[0];
     }
-  }else{
-    _queue.push({type:'payment',rec});
-    localStorage.setItem('sc_queue',JSON.stringify(_queue));
-    _pays.unshift(local);
-    toast('⚡ Saved offline — will sync');
   }
-  localStorage.setItem('sc_pays',JSON.stringify(_pays));
-  btn.disabled=false;btn.textContent='✓ Record Payment';
-  forceClosePay();renderList();updateSum();
+  _queue=_queue.filter(i=>!i.done); saveQ(); savePays();
+  _paying=false; btn.disabled=false; btn.textContent='✓ Record payment';
+  forceClosePay(); renderList(); updateSum(); renderQbar();
+  showReceipt(local, ok, item.err);
 }
 
-// ── HISTORY TAB ──
+function showReceipt(p,synced,err){
+  const rows=[['Subscriber',p.subscriber_name],['Covers',coverText(p.cover_from,p.cover_to)],
+              ['Date',shortDate(p.payment_date)],['Collector',p.collector]];
+  let head, sub;
+  if(synced){ head='Payment recorded'; sub='Give this receipt number to the subscriber'; }
+  else if(err==='pin'){ head='Saved on this phone'; sub='Your PIN was not accepted. Log out and log in again to send it.'; }
+  else if(err){ head='Saved on this phone'; sub='The server refused it ('+err.replace('rejected:','')+'). Show this to the office.'; }
+  else { head='Saved on this phone'; sub='No signal. It sends by itself when you are back online, and the receipt number comes then.'; }
+  document.getElementById('rcpt-body').innerHTML=
+    '<div class="rcpt-lbl">'+esc(head)+'</div>'
+    +'<div class="rcpt-no'+(p.invoice_no?'':' pending')+'">'+esc(p.invoice_no||'Receipt pending')+'</div>'
+    +'<div class="rcpt-lbl">'+esc(sub)+'</div>'
+    +'<div class="rcpt-amt">'+fmt(p.amount)+'</div>'
+    +'<div class="rcpt-rows">'+rows.map(r=>'<div><span>'+esc(r[0])+'</span><span>'+esc(r[1]||'—')+'</span></div>').join('')+'</div>'
+    +'<button class="btn btn-blue" onclick="closeRcpt()">Done</button>';
+  document.getElementById('rcpt-overlay').style.display='flex';
+}
+function closeRcpt(e){ if(e&&e.target!==document.getElementById('rcpt-overlay'))return; document.getElementById('rcpt-overlay').style.display='none'; }
+
+// ── SYNC BAR ──
+function renderQbar(){
+  const el=document.getElementById('qbar'); if(!el)return;
+  if(!_col){el.innerHTML='';return;}
+  const q=loadQ(), mine=q.filter(i=>i.type==='payment'&&i.rec&&i.rec.p_name===_col);
+  const pin=mine.filter(i=>i.err==='pin').length;
+  const rej=mine.filter(i=>i.err&&String(i.err).startsWith('rejected')).length;
+  const wait=mine.length-pin-rej, other=q.filter(i=>i.type!=='payment').length;
+  const pl=n=>n+' payment'+(n>1?'s':'');
+  let h='';
+  if(rej) h+='<div class="qbar bad"><span>'+pl(rej)+' refused by the server. Show the office before resetting the app.</span><button onclick="showRejected()">Details</button></div>';
+  if(pin) h+='<div class="qbar bad"><span>'+pl(pin)+(pin>1?' need':' needs')+' your PIN. Log out and log in again to send '+(pin>1?'them':'it')+'.</span><button onclick="doLogout()">Log in again</button></div>';
+  if(wait||other){
+    const parts=[]; if(wait)parts.push(pl(wait)); if(other)parts.push(other+' detail update'+(other>1?'s':''));
+    h+='<div class="qbar wait"><span>'+parts.join(' and ')+' saved on this phone, waiting to sync.</span><button onclick="flushQ()">Sync now</button></div>';
+  }
+  el.innerHTML=h;
+}
+function showRejected(){
+  const lines=myPending().filter(i=>i.err&&String(i.err).startsWith('rejected')).map(i=>{
+    const s=_subs.find(x=>x.id===i.rec.p_sub_id);
+    return (s?s.name:'#'+i.rec.p_sub_id)+' — '+fmt(i.rec.p_amount)+' on '+i.rec.p_date+' ('+String(i.err).replace('rejected:','')+')';
+  });
+  alert(lines.join('\n')||'Nothing refused');
+}
+
+// ── HISTORY TAB: my receipts and whether each one has reached the sheet ──
 async function renderHistory(){
   const ym=document.getElementById('hist-month').value||thisMonth();
-  let hist=_pays.filter(p=>p.month_year===ym);
+  let rows=[];
+  try{ rows=JSON.parse(localStorage.getItem('sc_rcpts')||'[]'); }catch(e){}
   if(navigator.onLine){
     try{
-      const r=await fetch(SB+'/rest/v1/subscriber_payments?month_year=eq.'+ym+'&order=created_at.desc&limit=1000',{headers:HDR});
-      const d=await r.json();
-      if(Array.isArray(d))hist=d;
-    }catch{}
+      const d=await rpc('spawn_collect_sync_status',{p_name:_col,p_pin:_pin,p_days:60});
+      if(Array.isArray(d)){ rows=d; try{ localStorage.setItem('sc_rcpts',JSON.stringify(d)); }catch(e){} }
+    }catch(e){}
   }
-  const byDate={};
-  hist.forEach(p=>{const d=p.payment_date||ym+'-01';(byDate[d]=byDate[d]||[]).push(p);});
+  rows=rows.map(r=>({name:r.subscriber_name,amount:r.amount,date:r.payment_date,receipt:r.receipt_no,
+    state:r.sheet_status==='sent'?'ok':'wait'}));
+  myPending().forEach(i=>{
+    const lp=_pays.find(p=>p._ref===i.ref), s=_subs.find(x=>x.id===i.rec.p_sub_id);
+    rows.unshift({name:(lp&&lp.subscriber_name)||(s&&s.name)||'#'+i.rec.p_sub_id,amount:i.rec.p_amount,date:i.rec.p_date,
+      receipt:null,state:i.err?'bad':'phone',err:i.err});
+  });
+  rows=rows.filter(r=>String(r.date||'').slice(0,7)===ym);
+  const CH={ok:['ok','In sheet ✓'],wait:['wait','Waiting for sheet'],phone:['phone','On phone — not sent'],bad:['bad','Needs attention']};
+  const byDate={}; rows.forEach(r=>{(byDate[r.date]=byDate[r.date]||[]).push(r);});
   const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
-  const total=hist.reduce((s,p)=>s+parseFloat(p.amount||0),0);
+  const total=rows.reduce((t,r)=>t+parseFloat(r.amount||0),0);
   document.getElementById('hist-list').innerHTML=
-    '<div style="background:#fff;border-radius:14px;padding:13px;border:0.5px solid var(--border);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">'
-    +'<div><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em">'+esc(ym)+' total</div>'
+    '<div class="hist-card" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div><div class="hist-sub" style="font-weight:700">My receipts · '+esc(ymLabel(ym))+'</div>'
     +'<div style="font-size:22px;font-weight:800;color:var(--navy)">'+fmt(total)+'</div></div>'
-    +'<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--blue)">'+hist.length+'</div>'
-    +'<div style="font-size:11px;color:var(--muted)">payments</div></div></div>'
+    +'<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:var(--blue)">'+rows.length+'</div>'
+    +'<div class="hist-sub">payments</div></div></div>'
     +dates.map(d=>
-      '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">'
+      '<div class="hist-sub" style="font-weight:700;margin:12px 0 6px">'
       +esc(new Date(d+'T12:00:00').toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'}))+'</div>'
-      +byDate[d].map(p=>
-        '<div class="hist-card"><div style="display:flex;justify-content:space-between;align-items:flex-start">'
-        +'<div><div class="hist-card-name">'+esc(p.subscriber_name||'—')+'</div>'
-        +'<div class="hist-card-meta">'+esc(p.area||'')+' · '+esc(p.collector||'')+(p.note?' · '+esc(p.note):'')+'</div></div>'
-        +'<div class="hist-card-amt">'+fmt(p.amount)+'</div></div></div>').join('')).join('')
-    +(!dates.length?'<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">No payments for '+esc(ym)+'</div>':'');
+      +byDate[d].map(r=>{const c=CH[r.state];
+        return '<div class="hist-card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
+        +'<div><div class="hist-card-name">'+esc(r.name||'—')+'</div>'
+        +'<div class="hist-card-meta">'+esc(r.receipt||'Receipt pending')+'</div>'
+        +'<span class="sync '+c[0]+'">'+c[1]+'</span></div>'
+        +'<div class="hist-card-amt">'+fmt(r.amount)+'</div></div></div>';}).join('')).join('')
+    +(!dates.length?'<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">No receipts in '+esc(ymLabel(ym))+' yet. Payments you record show up here.</div>':'');
 }
 
 // ── SUMMARY ──
@@ -1160,31 +1373,53 @@ function updateSum(){
 }
 
 // ── OFFLINE SYNC ──
+// Nothing is ever dropped silently. A payment only leaves the queue once the
+// server has confirmed it; a refused one stays and is shown on screen.
 async function flushQ(){
-  _queue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
-  if(!_queue.length||!navigator.onLine)return;
-  const rem=[];
+  if(_flushing)return;
+  _queue=loadQ();
+  if(!_queue.length||!navigator.onLine||!_col){renderQbar();return;}
+  _flushing=true; let sent=0;
   for(const item of _queue){
+    if(item.done)continue;
     try{
       if(item.type==='payment'){
-        const r=await fetch(SB+'/rest/v1/rpc/spawn_sub_payment_add',{method:'POST',headers:HDR,body:JSON.stringify({...item.rec,p_pin:item.rec.p_pin||_pin})});
-        if(!r.ok){ const t=await r.text(); if(!t.includes('bad_pin')) rem.push(item); }
+        if(!item.rec||item.rec.p_name!==_col)continue;          // another collector's — waits for them
+        if(item.err&&String(item.err).startsWith('rejected'))continue;
+        if(!item.ref){                                            // left over from v2.1
+          item.ref=newRef(); item.rec.p_client_ref=item.ref; item.rec.p_months=item.rec.p_months||1;
+          delete item.rec.p_pin; saveQ();
+        }
+        const args={...item.rec,p_pin:_pin};
+        const res=await rpc('spawn_collect_pay',args);
+        item.done=true; sent++; delete item.err;
+        const lp=_pays.find(p=>p._ref===item.ref);
+        if(lp){ lp.invoice_no=(res&&res.receipt_no)||lp.invoice_no; lp._pending=false; }
       }else if(item.type==='subUpdate'){
         const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+item.id,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},body:JSON.stringify(item.upd)});
-        if(!r.ok)rem.push(item);
+        if(r.ok)item.done=true;
       }else if(item.type==='photo'){
         const blob=await photoGet(item.key);
-        if(!blob)continue;
+        if(!blob){item.done=true;continue;}
         const url=await uploadPhoto(blob,item.id);
         const r=await fetch(SB+'/rest/v1/subscribers?id=eq.'+item.id,{method:'PATCH',headers:{...HDR,'Prefer':'return=minimal'},
           body:JSON.stringify({photo_url:url,last_updated_by:'collect:'+_col,last_updated_at:new Date().toISOString()})});
-        if(r.ok) photoDel(item.key); else rem.push(item);
+        if(r.ok){photoDel(item.key);item.done=true;}
       }
-    }catch{rem.push(item);}
+    }catch(e){
+      if(item.type==='payment'){
+        const m=String(e.message||'');
+        if(m.includes('bad_pin'))item.err='pin';
+        else if(/bad_amount|bad_date|bad_months?|no_subscriber/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber/)[0];
+        else item.err='net';
+      }
+    }
   }
-  _queue=rem;
-  localStorage.setItem('sc_queue',JSON.stringify(rem));
-  if(rem.length===0)toast('✅ Everything synced');
+  _queue=_queue.filter(i=>!i.done); saveQ(); savePays();
+  _flushing=false;
+  renderQbar(); renderList(); updateSum();
+  if(sent)toast('✅ '+sent+' payment'+(sent>1?'s':'')+' synced');
+  else if(!_queue.length)toast('✅ Everything synced');
 }
 
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
@@ -1192,6 +1427,8 @@ function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classL
 // ── INIT ──
 async function init(){
   setOnline();
+  const v=document.getElementById('ver-lbl'); if(v)v.textContent='Spawn Collect '+APP_VERSION;
+  setInterval(()=>{ if(_col&&navigator.onLine&&loadQ().length)flushQ(); },120000);
   _queue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
   await loadCols();
   const savedCol=localStorage.getItem('sc_col'), savedPin=localStorage.getItem('sc_pin');
