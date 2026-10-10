@@ -419,6 +419,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
       <div style="font-size:17px;font-weight:800;color:var(--navy)" id="pay-name">—</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:14px" id="pay-info">—</div>
       <div id="pay-status"></div>
+      <div id="pay-expect"></div>
 
       <div class="clabel">Quick amount</div>
       <div class="agrid" id="agrid"></div>
@@ -443,6 +444,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 
       <button class="btn btn-green" id="pay-btn" onclick="submitPay()" style="margin-bottom:8px">✓ Record payment</button>
       <button class="btn btn-gray" onclick="forceClosePay()">Cancel</button>
+      <div id="pay-plan" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
 
       <div id="pay-hist" style="margin-top:14px;padding-bottom:16px"></div>
     </div>
@@ -458,7 +460,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v2.4';
+const APP_VERSION = 'v2.6';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -546,7 +548,7 @@ let _col='',_pin='',_cols=[],_subs=[],_pays=[],_cur=null,_area='ALL',_miss='',_d
 let _offline=false,_queue=[],_selName='';
 let _capturedGPS=null,_capturedBlob=null,_curDet=null,_baseline=null;
 let _curTab='subscribers',_saving=false;
-let _paid={},_paidYm='',_months=1,_paying=false,_flushing=false;
+let _paid={},_paidYm='',_months=1,_paying=false,_flushing=false,_arr={},_info={};
 
 // ── UTILS ──
 function toast(m,d=2500){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),d);}
@@ -771,8 +773,18 @@ function setMiss(k){_miss=(_miss===k?'':k);buildChips();renderList();}
 //             name matches exactly (or a confirmed alias).
 // Maybe paid = a payment whose name is spelled close but not the same, or a name
 //             two subscribers share. The collector asks before collecting.
+async function loadArrears(){
+  const apply=rows=>{ _arr={}; _info={}; rows.forEach(x=>{ _info[x.subscriber_id]=x; if(x.months_behind>0||x.balance_total>0) _arr[x.subscriber_id]={subscriber_id:x.subscriber_id,months_behind:x.months_behind,unpaid_months:x.unpaid_months,amount_due:x.amount_due}; }); };
+  try{
+    const d=await rpc('spawn_collect_subinfo',{p_name:_col,p_pin:_pin});
+    if(Array.isArray(d)){ apply(d); try{ localStorage.setItem('sc_info',JSON.stringify({rows:d,at:Date.now()})); }catch(e){} renderList(); return; }
+  }catch(e){}
+  try{ const c=JSON.parse(localStorage.getItem('sc_info')||'null'); if(c){ apply(c.rows); renderList(); } }catch(e){}
+}
+function expected(s){ const i=_info[s.id]; return i&&i.due_now!=null?Number(i.due_now):(Number(s.monthly_amount)||0); }
 async function loadPaid(){
   const ym=thisMonth();
+  loadArrears();
   try{
     const d=await rpc('spawn_collect_paid_status',{p_name:_col,p_pin:_pin,p_ym:ym});
     if(Array.isArray(d)){
@@ -804,8 +816,17 @@ function paidInfo(s){
 }
 
 // ── SUBSCRIBER LIST ──
+function behind(s){
+  const a=_arr[s.id]; if(!a) return 0;
+  const pi=paidInfo(s); const cur=thisMonth().slice(5);
+  // a local/app payment for this month already counted? drop this month from the count
+  let n=Number(a.months_behind||0);
+  if(pi&&pi.level==='paid'&&a.unpaid_months&&a.unpaid_months.length&&a.unpaid_months[a.unpaid_months.length-1]===new Date().toLocaleString('en',{month:'short'})) n=Math.max(0,n-1);
+  return n;
+}
 function dueState(s){
-  const pi=paidInfo(s), td=new Date().getDate();
+  const pi=paidInfo(s), td=new Date().getDate(), nb=behind(s);
+  if(nb>0) return (nb===1 && s.due_day===td) ? 'today' : 'late';   // owes this month (due day passed) or earlier months
   if(pi&&pi.level==='paid') return 'paid';
   if(!s.due_day) return 'nodue';
   if(s.due_day===td) return 'today';
@@ -821,7 +842,7 @@ function renderToday(){
   const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col);
   const coll=tp.reduce((a,p)=>a+Number(p.amount||0),0);
   const tile=(k,lbl,v,cls)=>'<button type="button" class="tt '+cls+(_due===k?' on':'')+'" onclick="setDue(\''+k+'\')"><b>'+v+'</b><small>'+lbl+'</small></button>';
-  el.innerHTML='<div class="tt-row">'+tile('today','Due today',n.today,'t-amber')+tile('late','Late (unpaid)',n.late,'t-red')+tile('soon','Due in 5 days',n.soon,'t-blue')+tile('paid','Paid this month',n.paid,'t-green')+'</div>'
+  el.innerHTML='<div class="tt-row">'+tile('today','Due today',n.today,'t-amber')+tile('late','Behind / late',n.late,'t-red')+tile('soon','Due in 5 days',n.soon,'t-blue')+tile('paid','Paid this month',n.paid,'t-green')+'</div>'
     +'<div class="tt-foot">'+(tp.length?'Collected today: <b>₱'+coll.toLocaleString('en-PH')+'</b> · '+tp.length+' receipt'+(tp.length>1?'s':''):'No collections yet today')
     +(_due?' · <span class="tt-clear" onclick="setDue(\'\')">show all ✕</span>':'')+'</div>';
 }
@@ -857,7 +878,11 @@ function renderList(){
       : '<div class="sav" style="background:'+clr+'">'+esc(initials(s.name))+'</div>';
 
     let badge='';
-    if(paid){badge='<div class="badge bg-green">✓ Paid</div>';}
+    const nb=behind(s), ar=_arr[s.id];
+    if(nb>=1){
+      badge='<div class="badge bg-red">'+(nb===1?(dueState(s)==='today'?'Due today':'1 mo behind'):nb+' mo behind')+'</div>';
+    }
+    else if(paid){badge='<div class="badge bg-green">✓ Paid</div>';}
     else if(maybe){badge='<div class="badge bg-maybe">? Maybe paid</div>';}
     else if(s.due_day){
       const diff=s.due_day-td;
@@ -878,7 +903,11 @@ function renderList(){
 
     const gaps=MISS.filter(m=>m.test(s)).map(m=>'<span class="miss">'+m.lbl+'</span>').join(' ');
     let meta='';
-    if(paid) meta=(pi.pending?'on phone · ':'')+esc(viaLabel(pi.collector))+(pi.paid_on?' · '+esc(shortDate(pi.paid_on)):'');
+    const info=_info[s.id]||{};
+    if(nb>=1&&ar) meta='<b style="color:#dc2626">Owes ₱'+Number(ar.amount_due||0).toLocaleString('en-PH')+'</b> · '+esc((ar.unpaid_months||[]).join(', '))+(info.balance_total>0?' · balance ₱'+Number(info.balance_total).toLocaleString('en-PH'):'');
+    if(!paid&&info.ded_amount>0) meta+=(meta?'<br>':'')+'<b style="color:#2563eb">Collect ₱'+Number(info.due_now).toLocaleString('en-PH')+'</b> · '+info.ded_days+' days no internet −₱'+Number(info.ded_amount).toLocaleString('en-PH');
+    if(info.plan_request) meta+=(meta?'<br>':'')+'<span style="color:#b45309">⏳ Plan change ₱'+Number(info.plan_request.new).toLocaleString('en-PH')+' from '+esc(info.plan_request.from)+' — waiting for office</span>';
+    else if(paid) meta=(pi.pending?'on phone · ':'')+esc(viaLabel(pi.collector))+(pi.paid_on?' · '+esc(shortDate(pi.paid_on)):'');
     else if(maybe) meta='as “'+esc(pi.paid_name||'')+'”<br>'+esc(viaLabel(pi.collector))+' · '+esc(shortDate(pi.paid_on));
 
     return '<div class="sub-card'+(paid?' paid':maybe?' maybe':'')+'" onclick="openPay('+s.id+')">'
@@ -935,13 +964,13 @@ function openDet(subId){
   document.getElementById('det-due-inp').value=s.due_day||'';
   document.getElementById('det-amt-inp').value=s.monthly_amount||'';
 
-  // Money fields: a collector may FILL a blank, but not CHANGE a set value.
-  const amtLocked=!!(s.monthly_amount>0);
+  // v2.6: rate and plan are office-only. Collectors use "Request plan change" instead.
+  const amtLocked=true;
   const amtInp=document.getElementById('det-amt-inp');
   amtInp.disabled=amtLocked;
-  document.getElementById('det-amt-note').textContent=amtLocked?'Set by office — ask to change':'Fill in';
-  const planLocked=!!s.plan_mbps;
-  document.getElementById('det-plan-note').textContent=planLocked?'Set by office — ask to change':'Fill in';
+  document.getElementById('det-amt-note').textContent='Office only — use Request plan change';
+  const planLocked=true;
+  document.getElementById('det-plan-note').textContent='Office only';
   _planPick=s.plan_mbps||null;
   renderPlanGrid(planLocked);
 
@@ -1229,8 +1258,9 @@ function openPay(subId){
   const amts=[...new Set([_cur.monthly_amount,...QUICK].filter(a=>a>0))].slice(0,9);
   document.getElementById('agrid').innerHTML=amts.map(a=>
     '<div class="abtn" onclick="selAmt('+a+',this)">'+fmt(a)+'</div>').join('');
-  document.getElementById('pay-amt').value=_cur.monthly_amount||'';
+  document.getElementById('pay-amt').value=expected(_cur)||_cur.monthly_amount||'';
   document.getElementById('pay-note').value='';
+  renderExpect(); renderPlanReq();
 
   // Warn before collecting from someone who already paid this month.
   const pi=paidInfo(_cur), ym=thisMonth();
@@ -1252,6 +1282,33 @@ function openPay(subId){
 
   loadSubHist(subId,'pay-hist',5,'Recent payments',()=>_cur&&_cur.id===subId);
   document.getElementById('pay-overlay').style.display='flex';
+}
+function renderExpect(){
+  const el=document.getElementById('pay-expect'); if(!el||!_cur) return;
+  const i=_info[_cur.id]||{}, ym=thisMonth(), rate=Number(i.rate||_cur.monthly_amount||0), due=expected(_cur);
+  if(!rate){ el.innerHTML='<div class="warn-box warn-maybe">No monthly amount on record. Ask the office before collecting.</div>'; return; }
+  let h='<div class="warn-box" style="background:#eef3fb;color:#1e3a8a"><b>To collect for '+esc(ymLabel(ym))+': ₱'+due.toLocaleString('en-PH')+'</b>';
+  if(i.ded_amount>0) h+='<br>₱'+rate.toLocaleString('en-PH')+' − '+i.ded_days+' days no internet (₱'+Number(i.ded_amount).toLocaleString('en-PH')+'), approved by the office';
+  if(i.balance_total>0) h+='<br>Plus balance from earlier months: ₱'+Number(i.balance_total).toLocaleString('en-PH');
+  if(i.months_behind>1) h+='<br>Behind: '+esc((i.unpaid_months||[]).join(', '))+' · total owed ₱'+Number(i.amount_due||0).toLocaleString('en-PH');
+  h+='<br><span style="font-size:11px">Deductions and plan changes are set by the office only.</span></div>';
+  el.innerHTML=h;
+}
+function renderPlanReq(){
+  const el=document.getElementById('pay-plan'); if(!el||!_cur) return;
+  const i=_info[_cur.id]||{}, rate=Number(i.rate||_cur.monthly_amount||0);
+  const plan=rate===1000?'20 Mbps':rate===1500?'50 Mbps':rate===2000?'100 Mbps':'';
+  if(i.plan_request) el.innerHTML='Plan: ₱'+rate.toLocaleString('en-PH')+(plan?' · '+plan:'')+' · <span style="color:#b45309">⏳ change to ₱'+Number(i.plan_request.new).toLocaleString('en-PH')+' from '+esc(i.plan_request.from)+' is waiting for office approval</span>';
+  else el.innerHTML='Plan: ₱'+rate.toLocaleString('en-PH')+(plan?' · '+plan:'')+' · <span style="color:#2563eb;font-weight:700;cursor:pointer" onclick="askPlanChange()">Request plan change</span>';
+}
+async function askPlanChange(){
+  if(!_cur) return;
+  const pick=prompt('New plan for '+_cur.name+'?\n1 = ₱1,000 · 20 Mbps\n2 = ₱1,500 · 50 Mbps\n3 = ₱2,000 · 100 Mbps\n\nType 1, 2 or 3:');
+  const amt={'1':1000,'2':1500,'3':2000}[String(pick||'').trim()]; if(!amt) return;
+  const from=prompt('Starting which month? (YYYY-MM)', ymAdd(thisMonth(),1)); if(!from||!/^\d{4}-\d{2}$/.test(from)) return;
+  try{ await rpc('spawn_collect_plan_request',{p_name:_col,p_pin:_pin,p_sub_id:_cur.id,p_new:amt,p_effective_ym:from,p_note:null});
+    toast('Request sent to the office'); await loadArrears(); renderPlanReq(); renderList(); }
+  catch(e){ toast(String(e.message||'').includes('request_pending')?'A request is already waiting for the office':'Could not send: '+e.message); }
 }
 function renderMonths(){
   document.getElementById('pay-mgrid').innerHTML=[1,2,3,4].map(n=>
@@ -1310,9 +1367,16 @@ async function submitPay(){
   if(pi&&pi.level==='paid'&&start<=ym&&endM>=ym&&
      !confirm(_cur.name+' already shows as paid for '+ymLabel(ym)+'. Record another payment that also covers '+ymLabel(ym)+'?'))return;
 
+  const exp=expected(_cur)*_months;
+  let noteAuto='';
+  if(exp>0&&amt<exp-0.5){
+    const short=exp-amt;
+    if(!confirm('This is ₱'+short.toLocaleString('en-PH')+' short of what is due (₱'+exp.toLocaleString('en-PH')+'). Record as PARTIAL payment? The balance stays on the account for the office to follow up.'))return;
+    noteAuto='partial · balance '+short.toLocaleString('en-PH');
+  }
   _paying=true;
   const btn=document.getElementById('pay-btn'); btn.disabled=true; btn.textContent='Saving...';
-  const ref=newRef(), note=document.getElementById('pay-note').value.trim()||null;
+  const ref=newRef(), noteIn=document.getElementById('pay-note').value.trim(), note=[noteAuto,noteIn].filter(Boolean).join(' · ')||null;
   const rec={p_name:_col,p_sub_id:_cur.id,p_amount:amt,p_date:today(),p_month:start,p_months:_months,p_note:note,p_client_ref:ref};
   const local={_local:true,_pending:true,_ref:ref,subscriber_id:_cur.id,subscriber_name:_cur.name,area:_cur.area,
     amount:amt,payment_date:rec.p_date,month_year:start,months:_months,cover_from:start,cover_to:endM,
@@ -1325,7 +1389,7 @@ async function submitPay(){
   if(navigator.onLine){
     try{
       const res=await rpc('spawn_collect_pay',{...rec,p_pin:_pin});
-      local.invoice_no=(res&&res.receipt_no)||null; local._pending=false; item.done=true; ok=true;
+      local.invoice_no=(res&&res.receipt_no)||null; local._pending=false; item.done=true; ok=true; loadArrears();
     }catch(e){
       const m=String(e.message||'');
       if(m.includes('bad_pin')) item.err='pin';
