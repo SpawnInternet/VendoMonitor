@@ -434,7 +434,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v2.2';
+const APP_VERSION = 'v2.3';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -444,7 +444,7 @@ const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6
 const HDR={'apikey':'gw','Authorization':'Bearer gw','Content-Type':'application/json'};
 
 const GW_URL    = SB + '/functions/v1/spawn-gw-sub';
-const LOGIN_URL = SB + '/functions/v1/spawn-field-login';
+const LOGIN_URL = SB + '/functions/v1/spawn-collect-login';
 const SUB_AUTH_KEY = 'sc_auth';
 const SUB_AUTH_TTL = 7*24*60*60*1000;   // collectors work offline for days
 let GW_TOKEN = null;
@@ -627,7 +627,7 @@ async function doLogin(){
        without ever passing the PIN pad. spawn-field-login also throttles
        repeated failures per IP; the old RPC had no throttle at all. */
     const r=await fetch(LOGIN_URL,{method:'POST',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:pin})});
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({name:_selName,pin:pin})});
     btn.textContent='Log in';
     if(r.status===429){pinFail('Too many attempts. Wait a few minutes.');return;}
     const d=await r.json();
