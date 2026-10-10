@@ -280,6 +280,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 #screen-main{padding-bottom:78px}
 #screen-login .bottom-nav{display:none}
 .sum-bar{display:none!important}  /* v3.0: the home card shows today's collection; the bottom nav takes this spot */
+.pm{font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px}
+.pm-g{background:#dbeafe;color:#1d4ed8}.pm-c{background:#dcfce7;color:#15803d}.pm-o{background:#ede9fe;color:#6d28d9}.pm-m{background:#e0e7ff;color:#3730a3}.pm-u{background:#f3f4f6;color:#6b7280}
+.askrow{margin-top:6px;font-size:11px;color:var(--muted);display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.askrow button{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--blue);font-family:inherit}
 </style>
 </head>
 <body>
@@ -346,8 +350,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
       <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.75;margin-top:4px"><span id="hm-bar-l">Paid this month</span><span id="hm-bar-r">0%</span></div>
     </div>
     <div class="ha-grid">
-      <button class="home-action-btn" onclick="goList('')"><div class="ha-icon">📋</div><div class="ha-label">Subscribers</div><div class="ha-sub" id="ha-all">—</div></button>
-      <button class="home-action-btn" onclick="goList('today')"><div class="ha-icon" style="background:#fef3c7">📅</div><div class="ha-label">Due today</div><div class="ha-sub" id="ha-today">—</div></button>
+      <button class="home-action-btn" style="grid-column:1/-1;background:linear-gradient(135deg,#E7F0FB,#fff)" onclick="goList('route')"><div class="ha-icon">🗺️</div><div class="ha-label">My route · to collect</div><div class="ha-sub" id="ha-route">—</div></button>
+      <button class="home-action-btn" onclick="goList('ask')"><div class="ha-icon" style="background:#f3f4f6">❓</div><div class="ha-label">Ask how they pay</div><div class="ha-sub" id="ha-ask">—</div></button>
+      <button class="home-action-btn" onclick="goList('')"><div class="ha-icon">📋</div><div class="ha-label">All subscribers</div><div class="ha-sub" id="ha-all">—</div></button>
       <button class="home-action-btn" onclick="goList('late')"><div class="ha-icon" style="background:#fee2e2">⏰</div><div class="ha-label">Behind / late</div><div class="ha-sub" id="ha-late">—</div></button>
       <button class="home-action-btn" onclick="switchTab('history')"><div class="ha-icon" style="background:#dcfce7">🧾</div><div class="ha-label">My receipts</div><div class="ha-sub" id="ha-rcpt">—</div></button>
     </div>
@@ -502,7 +507,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v3.0';
+const APP_VERSION = 'v3.1';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -804,7 +809,10 @@ function renderHome(){
   document.getElementById('hm-bar-l').textContent='Paid this month: '+n.paid+' of '+act.length;
   document.getElementById('hm-bar-r').textContent=pct+'%';
   document.getElementById('ha-all').textContent=act.length+' active';
-  document.getElementById('ha-today').textContent=n.today+(n.today===1?' subscriber':' subscribers');
+  const route=_subs.filter(onRoute), ask=_subs.filter(askMode);
+  const rAmt=route.reduce((a,s)=>a+Number((_info[s.id]||{}).amount_due||expected(s)||0),0);
+  document.getElementById('ha-route').textContent=route.length?route.length+' subscriber'+(route.length>1?'s':'')+' · ₱'+rAmt.toLocaleString('en-PH'):'Nothing to collect right now ✓';
+  document.getElementById('ha-ask').textContent=ask.length+' to ask';
   document.getElementById('ha-late').textContent=n.late+' behind';
   document.getElementById('ha-rcpt').textContent=tp.length+' today';
   document.getElementById('hm-recent').innerHTML=tp.length?tp.slice(0,6).map(p=>'<div class="home-recent-row"><div><div class="home-recent-name">'+esc(p.subscriber_name||'')+'</div><div class="home-recent-meta">'+esc(p.invoice_no||(p._pending?'on phone':''))+(p.note?' · '+esc(p.note):'')+'</div></div><div class="home-recent-amt">₱'+Number(p.amount||0).toLocaleString('en-PH')+'</div></div>').join('')
@@ -849,6 +857,12 @@ async function loadArrears(){
   }catch(e){}
   try{ const c=JSON.parse(localStorage.getItem('sc_info')||'null'); if(c){ apply(c.rows); renderList(); } }catch(e){}
 }
+function firstName(x){ return String(x||'').trim().split(/\s+/)[0].toLowerCase(); }
+function payMode(s){ const i=_info[s.id]; return (i&&i.pay_mode)||'unknown'; }
+function mine(s){ const i=_info[s.id]||{}; const uc=i.usual_collector; return !uc || firstName(uc)===firstName(_col); }
+function needsVisit(s){ const d=dueState(s); return d==='today'||d==='late'||d==='soon'; }
+function onRoute(s){ return s.status!=='cutoff' && payMode(s)==='cash' && mine(s) && needsVisit(s); }
+function askMode(s){ return s.status!=='cutoff' && payMode(s)==='unknown' && needsVisit(s); }
 function expected(s){ const i=_info[s.id]; return i&&i.due_now!=null?Number(i.due_now):(Number(s.monthly_amount)||0); }
 async function loadPaid(){
   const ym=thisMonth();
@@ -911,7 +925,8 @@ function renderToday(){
   const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col);
   const coll=tp.reduce((a,p)=>a+Number(p.amount||0),0);
   const tile=(k,lbl,v,cls)=>'<button type="button" class="tt '+cls+(_due===k?' on':'')+'" onclick="setDue(\''+k+'\')"><b>'+v+'</b><small>'+lbl+'</small></button>';
-  el.innerHTML='<div class="tt-row">'+tile('today','Due today',n.today,'t-amber')+tile('late','Behind / late',n.late,'t-red')+tile('soon','Due in 5 days',n.soon,'t-blue')+tile('paid','Paid this month',n.paid,'t-green')+'</div>'
+  const route=_subs.filter(s=>inArea(s)&&onRoute(s)).length;
+  el.innerHTML='<div class="tt-row">'+tile('route','My route',route,'t-blue')+tile('today','Due today',n.today,'t-amber')+tile('late','Behind',n.late,'t-red')+tile('paid','Paid',n.paid,'t-green')+'</div>'
     +'<div class="tt-foot">'+(tp.length?'Collected today: <b>₱'+coll.toLocaleString('en-PH')+'</b> · '+tp.length+' receipt'+(tp.length>1?'s':''):'No collections yet today')
     +(_due?' · <span class="tt-clear" onclick="setDue(\'\')">show all ✕</span>':'')+'</div>';
 }
@@ -923,7 +938,9 @@ function renderList(){
   renderToday();
   let list=_subs.filter(s=>{
     if(!inArea(s))return false;
-    if(_due&&dueState(s)!==_due)return false;
+    if(_due==='route'){ if(!onRoute(s))return false; }
+    else if(_due==='ask'){ if(!askMode(s))return false; }
+    else if(_due&&dueState(s)!==_due)return false;
     if(mdef&&!mdef.test(s))return false;
     if(q){
       const hay=((s.name||'')+' '+(s.address||'')+' '+(s.fb_name||'')+' '+(s.phone||'')).toLowerCase();
@@ -934,10 +951,11 @@ function renderList(){
   // Unpaid first, then maybe-paid, then paid; earliest due day first within each.
   const lvl=s=>{const pi=paidInfo(s);return !pi?0:(pi.level==='maybe'?1:2);};
   const L={}; list.forEach(s=>{L[s.id]=lvl(s);});
-  list.sort((a,b)=>(L[a.id]-L[b.id])||((a.due_day||99)-(b.due_day||99)));
+  if(_due==='route'||_due==='ask') list.sort((a,b)=>((a.due_day||99)-(b.due_day||99))||(a.name||'').localeCompare(b.name||''));
+  else list.sort((a,b)=>(L[a.id]-L[b.id])||((a.due_day||99)-(b.due_day||99)));
 
   const el=document.getElementById('sub-list');
-  if(!list.length){el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">'+(_due==='today'?'Nobody is due today in this area ✅':_due==='late'?'No late subscribers here ✅':'Nothing here — all done ✅')+'</div>';return;}
+  if(!list.length){el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">'+(_due==='route'?'Nothing to collect in this area right now ✅':_due==='ask'?'Nobody left to ask here ✅':_due==='today'?'Nobody is due today in this area ✅':_due==='late'?'No late subscribers here ✅':'Nothing here — all done ✅')+'</div>';return;}
 
   el.innerHTML=list.map(s=>{
     const pi=paidInfo(s), paid=!!pi&&pi.level==='paid', maybe=!!pi&&pi.level==='maybe';
@@ -970,7 +988,9 @@ function renderList(){
       +(hasGPS?'#22c55e':'#f59e0b')+';border:2px solid #fff;font-size:8px;line-height:9px;text-align:center;color:#fff;font-weight:800">'
       +(hasGPS?'':'!')+'</div>';
 
-    const gaps=MISS.filter(m=>m.test(s)).map(m=>'<span class="miss">'+m.lbl+'</span>').join(' ');
+    const pm=payMode(s), pmPill=pm==='gcash'?'<span class="pm pm-g">GCash</span>':pm==='office'?'<span class="pm pm-o">Office</span>':pm==='cash'?'<span class="pm pm-c">Cash</span>':pm==='mixed'?'<span class="pm pm-m">GCash/Cash</span>':'<span class="pm pm-u">Pays by?</span>';
+    const askRow=pm==='unknown'?'<div class="askrow" onclick="event.stopPropagation()">How do they pay? <button onclick="setMode('+s.id+',\'cash\')">Cash to me</button><button onclick="setMode('+s.id+',\'gcash\')">GCash</button><button onclick="setMode('+s.id+',\'office\')">Office</button></div>':'';
+    const gaps=pmPill+(_due==='route'?'':' '+MISS.filter(m=>m.test(s)).map(m=>'<span class="miss">'+m.lbl+'</span>').join(' '));
     let meta='';
     const info=_info[s.id]||{};
     if(nb>=1&&ar) meta='<b style="color:#dc2626">Owes ₱'+Number(ar.amount_due||0).toLocaleString('en-PH')+'</b> · '+esc((ar.unpaid_months||[]).join(', '))+(info.balance_total>0?' · balance ₱'+Number(info.balance_total).toLocaleString('en-PH'):'');
@@ -984,7 +1004,7 @@ function renderList(){
       +'<div style="flex:1;min-width:0">'
         +'<div class="sname">'+esc(s.name)+'</div>'
         +'<div class="saddr">'+esc(s.address||s.area||'—')+'</div>'
-        +(gaps?'<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">'+gaps+'</div>':'')
+        +(gaps?'<div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">'+gaps+'</div>':'')+askRow
         +'<div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">'
           +gpsBtn
           +'<button class="rowbtn btn-edit" onclick="event.stopPropagation();openDet('+s.id+')">✎ Edit info</button>'
@@ -1378,6 +1398,10 @@ async function askPlanChange(){
   try{ await rpc('spawn_collect_plan_request',{p_name:_col,p_pin:_pin,p_sub_id:_cur.id,p_new:amt,p_effective_ym:from,p_note:null});
     toast('Request sent to the office'); await loadArrears(); renderPlanReq(); renderList(); }
   catch(e){ toast(String(e.message||'').includes('request_pending')?'A request is already waiting for the office':'Could not send: '+e.message); }
+}
+async function setMode(id,mode){
+  try{ await rpc('spawn_collect_set_pay_mode',{p_name:_col,p_pin:_pin,p_sub_id:id,p_mode:mode}); toast('Saved'); await loadArrears(); }
+  catch(e){ toast('Could not save: '+e.message); }
 }
 function renderMonths(){
   document.getElementById('pay-mgrid').innerHTML=[1,2,3,4].map(n=>
