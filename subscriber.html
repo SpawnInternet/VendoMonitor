@@ -239,6 +239,24 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 .sync.phone{background:#fff4d6;color:#8a5a00}
 .sync.bad{background:#fde8eb;color:#a3122a}
 .hist-sub{font-size:11px;color:var(--muted)}
+
+.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.kp button{height:56px;border-radius:12px;border:1.5px solid var(--border);background:#fff;font-size:24px;font-weight:800;color:var(--navy);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.kp button:active{background:#e8eefc;transform:scale(.97)}
+.kp .kp-x{font-size:18px;color:var(--muted);background:#f7f9ff}
+.today{padding:10px 16px 0}
+.tt-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tt{border:1.5px solid var(--border);border-radius:12px;background:#fff;padding:8px 4px;text-align:center;line-height:1.1}
+.tt b{display:block;font-size:20px;font-weight:900}.tt small{display:block;font-size:10.5px;color:var(--muted);margin-top:2px}
+.tt.t-amber b{color:#b45309}.tt.t-red b{color:#dc2626}.tt.t-blue b{color:#2563eb}.tt.t-green b{color:#16a34a}
+.tt.on{background:var(--navy);border-color:var(--navy)}.tt.on b,.tt.on small{color:#fff}
+.tt-foot{font-size:12px;color:var(--muted);text-align:center;margin-top:6px}
+.tt-clear{color:#2563eb;font-weight:700;cursor:pointer}
+
+.cpills{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:4px 0 10px}
+.cpill{padding:10px 20px;border-radius:999px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:800;color:var(--blue);min-height:0;width:auto;display:inline-block}
+.cpill.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
+.kp button{height:62px}
 </style>
 </head>
 <body>
@@ -254,20 +272,25 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
       <div style="font-size:12px;color:var(--muted);margin-top:4px">Subscriber collection &amp; records</div>
     </div>
     <div class="card">
-      <div class="clabel">Collector</div>
-      <div id="col-list" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+      <div class="clabel" style="text-align:center">Select your name then enter PIN</div>
+      <div id="col-list" class="cpills"></div>
     </div>
     <div class="card">
-      <div class="clabel">4-digit PIN</div>
+
       <div style="display:flex;justify-content:center;gap:16px;margin:4px 0 12px">
         <div class="pd" id="pd1"></div><div class="pd" id="pd2"></div>
         <div class="pd" id="pd3"></div><div class="pd" id="pd4"></div>
       </div>
-      <input type="password" inputmode="numeric" maxlength="4" id="pin-inp"
-        placeholder="••••"
-        style="width:100%;padding:13px;border:1.5px solid var(--border);border-radius:10px;font-size:26px;font-weight:700;letter-spacing:10px;text-align:center;font-family:monospace;outline:none;color:var(--navy);background:#f7f9ff"
-        oninput="onPin(this)">
-      <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:10px">Log in</button>
+      <input type="password" inputmode="numeric" maxlength="4" id="pin-inp" oninput="onPin(this)" aria-label="PIN"
+        style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
+      <div class="kp" id="kp">
+        <button type="button" onclick="kp('1')">1</button><button type="button" onclick="kp('2')">2</button><button type="button" onclick="kp('3')">3</button>
+        <button type="button" onclick="kp('4')">4</button><button type="button" onclick="kp('5')">5</button><button type="button" onclick="kp('6')">6</button>
+        <button type="button" onclick="kp('7')">7</button><button type="button" onclick="kp('8')">8</button><button type="button" onclick="kp('9')">9</button>
+        <button type="button" class="kp-x" onclick="kp('b')">⌫</button><button type="button" onclick="kp('0')">0</button><button type="button" class="kp-x" onclick="kp('c')">✕</button>
+      </div>
+      <div id="kp-hint" style="font-size:12px;color:var(--muted);text-align:center;margin-top:8px">Logs in by itself after 4 digits</div>
+      <button class="btn btn-blue" id="login-btn" onclick="doLogin()" disabled style="margin-top:10px;display:none">Log in</button>
       <div id="pin-err" style="color:var(--red);font-size:12px;text-align:center;margin-top:8px;display:none"></div>
     </div>
     <div style="text-align:center"><span onclick="hardReset()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">⚠️ App stuck? Reset</span><div style="font-size:10px;color:var(--muted);margin-top:6px" id="ver-lbl"></div></div>
@@ -297,6 +320,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 
   <div id="tab-subscribers">
     <div id="qbar"></div>
+    <div class="today" id="today"></div>
     <div class="area-tabs" id="area-tabs"></div>
     <div class="chips" id="miss-chips"></div>
     <div class="srch-wrap">
@@ -434,7 +458,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v2.3';
+const APP_VERSION = 'v2.4';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -518,7 +542,7 @@ const MISS=[
   {k:'plan',  lbl:'No plan',    test:s=>!s.plan_mbps}
 ];
 
-let _col='',_pin='',_cols=[],_subs=[],_pays=[],_cur=null,_area='ALL',_miss='';
+let _col='',_pin='',_cols=[],_subs=[],_pays=[],_cur=null,_area='ALL',_miss='',_due='';
 let _offline=false,_queue=[],_selName='';
 let _capturedGPS=null,_capturedBlob=null,_curDet=null,_baseline=null;
 let _curTab='subscribers',_saving=false;
@@ -578,10 +602,8 @@ async function loadCols(){
   if(!el)return;
   const rnd=list=>{
     el.innerHTML=list.map(c=>
-      '<div class="cbtn" data-name="'+esc(c.name)+'" onclick="selCol(this,\''+esc(c.name).replace(/'/g,"\\'")+'\')">'
-      +'<div class="cav">'+esc(initials(c.name))+'</div>'
-      +'<div class="cname">'+esc(c.name)+'</div>'
-      +'<div class="cteam">'+esc(c.area||'')+'</div></div>').join('');
+      '<button type="button" class="cbtn cpill" data-name="'+esc(c.name)+'" onclick="selCol(this,\''+esc(c.name).replace(/'/g,"\\'")+'\')">'
+      +esc(c.name)+'</button>').join('');
   };
   const cached=JSON.parse(localStorage.getItem('sc_cols')||'[]');
   if(cached.length){_cols=cached;rnd(cached);}
@@ -608,10 +630,24 @@ function onPin(inp){
   for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.toggle('on',i<=inp.value.length);
   document.getElementById('login-btn').disabled=inp.value.length<4||!_selName;
   document.getElementById('pin-err').style.display='none';
+  if(inp.value.length===4){
+    if(!_selName){ pinFail('Tap your name first.'); inp.value=''; onPin(inp); return; }
+    doLogin();
+  }
 }
+function kp(k){
+  const inp=document.getElementById('pin-inp');
+  if(k==='c') inp.value=''; else if(k==='b') inp.value=inp.value.slice(0,-1); else if(inp.value.length<4) inp.value+=k;
+  onPin(inp);
+}
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('screen-login').classList.contains('active')||e.target===document.getElementById('pin-inp')) return;
+  if(/^\d$/.test(e.key)) kp(e.key); else if(e.key==='Backspace') kp('b'); else if(e.key==='Escape') kp('c');
+});
 function pinFail(msg){
   const e=document.getElementById('pin-err');
   e.textContent=msg; e.style.display='block';
+  setTimeout(()=>{ const i=document.getElementById('pin-inp'); if(i){ i.value=''; for(let k=1;k<=4;k++)document.getElementById('pd'+k).classList.remove('on'); } },600);
   document.getElementById('pin-inp').value='';
   for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
   document.getElementById('login-btn').disabled=true;
@@ -768,12 +804,36 @@ function paidInfo(s){
 }
 
 // ── SUBSCRIBER LIST ──
+function dueState(s){
+  const pi=paidInfo(s), td=new Date().getDate();
+  if(pi&&pi.level==='paid') return 'paid';
+  if(!s.due_day) return 'nodue';
+  if(s.due_day===td) return 'today';
+  if(s.due_day<td) return 'late';
+  if(s.due_day-td<=5) return 'soon';
+  return 'later';
+}
+function renderToday(){
+  const el=document.getElementById('today'); if(!el) return;
+  const act=_subs.filter(s=>inArea(s)&&s.status!=='cutoff');
+  const n={today:0,late:0,soon:0,paid:0};
+  act.forEach(s=>{const d=dueState(s); if(n[d]!=null)n[d]++;});
+  const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col);
+  const coll=tp.reduce((a,p)=>a+Number(p.amount||0),0);
+  const tile=(k,lbl,v,cls)=>'<button type="button" class="tt '+cls+(_due===k?' on':'')+'" onclick="setDue(\''+k+'\')"><b>'+v+'</b><small>'+lbl+'</small></button>';
+  el.innerHTML='<div class="tt-row">'+tile('today','Due today',n.today,'t-amber')+tile('late','Late (unpaid)',n.late,'t-red')+tile('soon','Due in 5 days',n.soon,'t-blue')+tile('paid','Paid this month',n.paid,'t-green')+'</div>'
+    +'<div class="tt-foot">'+(tp.length?'Collected today: <b>₱'+coll.toLocaleString('en-PH')+'</b> · '+tp.length+' receipt'+(tp.length>1?'s':''):'No collections yet today')
+    +(_due?' · <span class="tt-clear" onclick="setDue(\'\')">show all ✕</span>':'')+'</div>';
+}
+function setDue(k){ _due=(_due===k?'':k); renderToday(); renderList(); window.scrollTo({top:0,behavior:'smooth'}); }
 function renderList(){
   const q=(document.getElementById('srch-inp')?.value||'').toLowerCase().trim();
   const ym=thisMonth(),td=new Date().getDate();
   const mdef=MISS.find(m=>m.k===_miss);
+  renderToday();
   let list=_subs.filter(s=>{
     if(!inArea(s))return false;
+    if(_due&&dueState(s)!==_due)return false;
     if(mdef&&!mdef.test(s))return false;
     if(q){
       const hay=((s.name||'')+' '+(s.address||'')+' '+(s.fb_name||'')+' '+(s.phone||'')).toLowerCase();
@@ -787,7 +847,7 @@ function renderList(){
   list.sort((a,b)=>(L[a.id]-L[b.id])||((a.due_day||99)-(b.due_day||99)));
 
   const el=document.getElementById('sub-list');
-  if(!list.length){el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">Nothing here — all done ✅</div>';return;}
+  if(!list.length){el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted);font-size:14px">'+(_due==='today'?'Nobody is due today in this area ✅':_due==='late'?'No late subscribers here ✅':'Nothing here — all done ✅')+'</div>';return;}
 
   el.innerHTML=list.map(s=>{
     const pi=paidInfo(s), paid=!!pi&&pi.level==='paid', maybe=!!pi&&pi.level==='maybe';
