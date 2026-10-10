@@ -8,13 +8,13 @@
 <meta name="theme-color" content="#1e2d5a">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{--blue:#1e3cb8;--navy:#1e2d5a;--green:#15803d;--red:#dc2626;--amber:#d97706;--bg:#f0f4ff;--card:#fff;--border:#e0e4f0;--text:#1e2d5a;--muted:#8b99b8}
+:root{--blue:#025AC6;--navy:#0146A0;--green:#16a34a;--red:#dc2626;--amber:#d97706;--bg:#F7F8FC;--card:#fff;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--blue-light:#EEF1FA}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 .screen{display:none;min-height:100vh;flex-direction:column}
 .screen.active{display:flex}
-.topbar{background:var(--navy);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.topbar{background:linear-gradient(135deg,#01408f,#025AC6);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(2,90,198,.3)}
 .tb-logo{font-size:15px;font-weight:700;color:#fff;display:flex;align-items:center;gap:7px}
-.tb-sub{font-size:10px;color:#93c5fd;margin-top:1px}
+.tb-sub{font-size:10px;color:rgba(255,255,255,.75);margin-top:1px}
 .tb-right{display:flex;align-items:center;gap:8px}
 .odot{width:8px;height:8px;border-radius:50%;background:#22c55e}
 .odot.off{background:#ef4444}
@@ -257,6 +257,29 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 .cpill{padding:10px 20px;border-radius:999px;border:1.5px solid var(--border);background:#fff;font-size:15px;font-weight:800;color:var(--blue);min-height:0;width:auto;display:inline-block}
 .cpill.sel{background:var(--blue);color:#fff;border-color:var(--blue)}
 .kp button{height:62px}
+
+.hero{background:linear-gradient(135deg,#0146A0,#025AC6);border-radius:16px;padding:18px;color:#fff;margin-bottom:12px;box-shadow:0 4px 14px rgba(2,90,198,.25)}
+.hero-k{font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em}
+.hero-v{font-size:34px;font-weight:800;line-height:1;margin-top:4px}
+.hero-s{font-size:12px;opacity:.8;margin-top:4px}
+.hero-bar{height:6px;background:rgba(255,255,255,.25);border-radius:3px;overflow:hidden;margin-top:12px}
+.hero-bar div{height:100%;width:0;background:#fff;border-radius:3px;transition:.5s}
+.ha-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.home-action-btn{background:#fff;border:1px solid #eef2f7;border-radius:18px;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:6px;font-family:inherit;width:100%;box-shadow:0 2px 10px rgba(2,90,198,.05)}
+.home-action-btn:active{transform:scale(.97);background:#f7f8fc}
+.ha-icon{width:46px;height:46px;border-radius:14px;background:#E7F0FB;display:flex;align-items:center;justify-content:center;font-size:22px}
+.ha-label{font-size:13px;font-weight:700;color:var(--text)}
+.ha-sub{font-size:11px;color:var(--muted)}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px}
+.home-recent-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
+.home-recent-row:last-child{border-bottom:none}
+.home-recent-name{font-size:13px;font-weight:600}.home-recent-meta{font-size:10px;color:var(--muted);margin-top:1px}.home-recent-amt{font-size:14px;font-weight:700;color:var(--blue)}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:flex;z-index:90;box-shadow:0 -2px 12px rgba(0,0,0,.08);padding-bottom:env(safe-area-inset-bottom,0)}
+.bnav-item{flex:1;background:none;border:none;padding:8px 4px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-family:inherit}
+.bnav-item.active{color:var(--blue)}.bnav-icon{font-size:20px}.bnav-label{font-size:11px;font-weight:700}
+#screen-main{padding-bottom:78px}
+#screen-login .bottom-nav{display:none}
+.sum-bar{display:none!important}  /* v3.0: the home card shows today's collection; the bottom nav takes this spot */
 </style>
 </head>
 <body>
@@ -313,12 +336,25 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
     </div>
   </div>
 
-  <div class="nav-tabs">
-    <div class="nav-tab active" id="nav-subscribers" onclick="switchTab('subscribers')">📋 Subscribers</div>
-    <div class="nav-tab" id="nav-history" onclick="switchTab('history')">🧾 My receipts</div>
+  <div id="tab-home" style="padding:16px 16px 0">
+    <div class="hero">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="hero-k">Today's collection</div><div class="hero-v" id="hm-total">₱0</div><div class="hero-s" id="hm-sub">No receipts yet today</div></div>
+        <div style="text-align:right"><div class="hero-k">Collector</div><div style="font-size:15px;font-weight:700;margin-top:2px" id="hm-col">—</div></div>
+      </div>
+      <div class="hero-bar"><div id="hm-bar"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.75;margin-top:4px"><span id="hm-bar-l">Paid this month</span><span id="hm-bar-r">0%</span></div>
+    </div>
+    <div class="ha-grid">
+      <button class="home-action-btn" onclick="goList('')"><div class="ha-icon">📋</div><div class="ha-label">Subscribers</div><div class="ha-sub" id="ha-all">—</div></button>
+      <button class="home-action-btn" onclick="goList('today')"><div class="ha-icon" style="background:#fef3c7">📅</div><div class="ha-label">Due today</div><div class="ha-sub" id="ha-today">—</div></button>
+      <button class="home-action-btn" onclick="goList('late')"><div class="ha-icon" style="background:#fee2e2">⏰</div><div class="ha-label">Behind / late</div><div class="ha-sub" id="ha-late">—</div></button>
+      <button class="home-action-btn" onclick="switchTab('history')"><div class="ha-icon" style="background:#dcfce7">🧾</div><div class="ha-label">My receipts</div><div class="ha-sub" id="ha-rcpt">—</div></button>
+    </div>
+    <div class="card" style="margin-top:12px"><div class="card-title">Recent payments today</div><div id="hm-recent"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No payments yet today</div></div></div>
   </div>
 
-  <div id="tab-subscribers">
+  <div id="tab-subscribers" style="display:none">
     <div id="qbar"></div>
     <div class="today" id="today"></div>
     <div class="area-tabs" id="area-tabs"></div>
@@ -412,6 +448,12 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <!-- ── PAYMENT MODAL ── -->
+<div class="bottom-nav" id="bnav">
+  <button class="bnav-item active" id="bn-home" onclick="switchTab('home')"><div class="bnav-icon">🏠</div><div class="bnav-label">Home</div></button>
+  <button class="bnav-item" id="bn-subscribers" onclick="switchTab('subscribers')"><div class="bnav-icon">📋</div><div class="bnav-label">Subscribers</div></button>
+  <button class="bnav-item" id="bn-history" onclick="switchTab('history')"><div class="bnav-icon">🧾</div><div class="bnav-label">Receipts</div></button>
+</div>
+
 <div class="overlay" id="pay-overlay" style="display:none" onclick="closePay(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="mhandle"></div>
@@ -460,7 +502,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v2.6';
+const APP_VERSION = 'v3.0';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -679,7 +721,9 @@ async function doLogin(){
     localStorage.setItem('sc_pin',pin);
     document.getElementById('tb-col').textContent=_col+(d.area?' · '+d.area:'');
     showScreen('screen-main');
+    switchTab('home');
     await loadData();
+    renderHome();
     flushQ();
   }catch(e){
     btn.textContent='Log in'; btn.disabled=false;
@@ -736,11 +780,35 @@ async function loadData(){
 
 function switchTab(tab){
   _curTab=tab;
+  document.getElementById('tab-home').style.display=tab==='home'?'block':'none';
   document.getElementById('tab-subscribers').style.display=tab==='subscribers'?'block':'none';
   document.getElementById('tab-history').style.display=tab==='history'?'flex':'none';
-  document.getElementById('nav-subscribers').className='nav-tab'+(tab==='subscribers'?' active':'');
-  document.getElementById('nav-history').className='nav-tab'+(tab==='history'?' active':'');
+  ['home','subscribers','history'].forEach(t=>{const b=document.getElementById('bn-'+t); if(b)b.className='bnav-item'+(tab===t?' active':'');});
   if(tab==='history')renderHistory();
+  if(tab==='home')renderHome();
+  window.scrollTo(0,0);
+}
+function goList(filter){ _due=filter||''; switchTab('subscribers'); renderToday(); renderList(); }
+function renderHome(){
+  const el=document.getElementById('hm-total'); if(!el||!_col) return;
+  const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col);
+  const tot=tp.reduce((a,p)=>a+Number(p.amount||0),0);
+  el.textContent='₱'+tot.toLocaleString('en-PH');
+  document.getElementById('hm-sub').textContent=tp.length?tp.length+' receipt'+(tp.length>1?'s':'')+' today':'No receipts yet today';
+  document.getElementById('hm-col').textContent=_col;
+  const act=_subs.filter(s=>s.status!=='cutoff');
+  const n={today:0,late:0,soon:0,paid:0};
+  act.forEach(s=>{const d=dueState(s); if(n[d]!=null)n[d]++;});
+  const pct=act.length?Math.round(n.paid/act.length*100):0;
+  document.getElementById('hm-bar').style.width=pct+'%';
+  document.getElementById('hm-bar-l').textContent='Paid this month: '+n.paid+' of '+act.length;
+  document.getElementById('hm-bar-r').textContent=pct+'%';
+  document.getElementById('ha-all').textContent=act.length+' active';
+  document.getElementById('ha-today').textContent=n.today+(n.today===1?' subscriber':' subscribers');
+  document.getElementById('ha-late').textContent=n.late+' behind';
+  document.getElementById('ha-rcpt').textContent=tp.length+' today';
+  document.getElementById('hm-recent').innerHTML=tp.length?tp.slice(0,6).map(p=>'<div class="home-recent-row"><div><div class="home-recent-name">'+esc(p.subscriber_name||'')+'</div><div class="home-recent-meta">'+esc(p.invoice_no||(p._pending?'on phone':''))+(p.note?' · '+esc(p.note):'')+'</div></div><div class="home-recent-amt">₱'+Number(p.amount||0).toLocaleString('en-PH')+'</div></div>').join('')
+    :'<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No payments yet today</div>';
 }
 
 // ── AREA TABS ──
@@ -835,6 +903,7 @@ function dueState(s){
   return 'later';
 }
 function renderToday(){
+  renderHome();
   const el=document.getElementById('today'); if(!el) return;
   const act=_subs.filter(s=>inArea(s)&&s.status!=='cutoff');
   const n={today:0,late:0,soon:0,paid:0};
@@ -1560,7 +1629,9 @@ async function init(){
     _col=savedCol;_pin=savedPin;
     document.getElementById('tb-col').textContent=_col;
     showScreen('screen-main');
+    switchTab('home');
     await loadData();
+    renderHome();
     flushQ();
   }
 }
