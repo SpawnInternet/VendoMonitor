@@ -649,7 +649,7 @@ body{background:
 </div>
 
 <script>
-const APP_VERSION = 'v4.3';
+const APP_VERSION = 'v4.4';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -966,6 +966,7 @@ async function loadData(){
 }
 
 function switchTab(tab){
+  if(!_navBack&&_curTab&&tab!==_curTab){ _tabStack.push(_curTab); if(_tabStack.length>10)_tabStack.shift(); }
   _curTab=tab; setTimeout(saveView,0);
   document.getElementById('tab-home').style.display=tab==='home'?'block':'none';
   document.getElementById('tab-subscribers').style.display=tab==='subscribers'?'block':'none';
@@ -1938,7 +1939,8 @@ if('serviceWorker' in navigator){
 
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');
   const f=document.getElementById('calc-fab'); if(f) f.style.display=id==='screen-main'?'flex':'none';
-  const nv=document.getElementById('bnav'); if(nv) nv.style.display=id==='screen-main'?'flex':'none';}
+  const nv=document.getElementById('bnav'); if(nv) nv.style.display=id==='screen-main'?'flex':'none';
+  if(id==='screen-main') armBack();}
 
 // ══ v4.0 OUTAGE REPORT ══ the collector reports; only the office approves a deduction
 const OUT_REASONS=['No signal','Fiber cut','Modem / router','Area-wide outage'];
@@ -2035,6 +2037,28 @@ function renderCalc(){
   document.getElementById('calc-k').innerHTML=K.map(k=>'<button type="button" class="'+('÷×−+'.includes(k)?'op':k==='='?'eq':k==='÷30'?'k30':'')+'" onclick="calcKey(\''+k+'\')">'+k+'</button>').join('');
 }
 function calcUse(){ const v=Number(_calcV); if(v>0){ document.getElementById('pay-amt').value=v; onAmt(); } closeCalc(); }
+
+// ══ v4.4 PHONE BACK BUTTON ══
+// Back closes whatever is open (calculator, sheets, payment, details), then returns to the
+// previous tab, then Home. On Home it asks once; a second back within 2 s closes the app.
+let _tabStack=[], _navBack=false, _lastBackAt=0;
+function armBack(){ try{ if(!(history.state&&history.state.scGuard)) history.pushState({scGuard:1},''); }catch(e){} }
+function closeTopLayer(){
+  const order=[['calc-overlay',closeCalc],['out-overlay',closeOutage],['de-overlay',closeDayEnd],
+    ['rcpt-overlay',()=>{document.getElementById('rcpt-overlay').style.display='none';}],
+    ['pay-overlay',forceClosePay],['det-overlay',forceCloseDetail]];
+  for(const [id,fn] of order){ const el=document.getElementById(id); if(el&&el.style.display==='flex'){ try{fn();}catch(e){ el.style.display='none'; } return true; } }
+  return false;
+}
+window.addEventListener('popstate',()=>{
+  const main=document.getElementById('screen-main');
+  if(!_col||!main||!main.classList.contains('active')) return;          // login screen: normal back
+  if(closeTopLayer()){ armBack(); return; }
+  if(_curTab!=='home'){ const prev=_tabStack.pop()||'home'; _navBack=true; try{ switchTab(prev==='subscribers'||prev==='history'?prev:'home'); }finally{ _navBack=false; } armBack(); return; }
+  const now=Date.now();
+  if(now-_lastBackAt<2000){ history.back(); return; }                    // second press on Home: leave
+  _lastBackAt=now; toast('Press back again to close Spawn Collect'); armBack();
+});
 
 // ── INIT ──
 async function init(){
