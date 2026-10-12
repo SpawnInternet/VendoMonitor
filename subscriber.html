@@ -551,7 +551,7 @@ body{background:
 
       <div class="clabel">How did they pay?</div>
       <div class="meth" id="pay-meth"><button type="button" data-m="cash" onclick="pickMethod('cash')">Cash</button><button type="button" data-m="gcash" onclick="pickMethod('gcash')">GCash</button></div>
-      <div class="paper-box" id="pay-paper-wrap"><div class="coin-label">Paper receipt no. <span id="pay-paper-hint">write the same number on the paper</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-paper" placeholder="e.g. 2401" autocomplete="off"></div>
+      <div class="paper-box" id="pay-paper-wrap"><div class="coin-label">Paper receipt no. <span id="pay-paper-hint">required · same number as the carbon copy</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-paper" placeholder="e.g. 2401" autocomplete="off"></div>
       <div class="paper-box" id="pay-gref-wrap" style="display:none"><div class="coin-label">GCash reference no. <span>from their screenshot</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-gref" placeholder="13-digit ref" autocomplete="off"></div>
       <div class="clabel">Quick amount</div>
       <div class="agrid" id="agrid"></div>
@@ -646,7 +646,7 @@ body{background:
 </div>
 
 <script>
-const APP_VERSION = 'v4.0';
+const APP_VERSION = 'v4.1';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1547,7 +1547,7 @@ function renderMethod(){
   document.getElementById('pay-paper-wrap').style.display=_method==='gcash'?'none':'block';
   document.getElementById('pay-gref-wrap').style.display=_method==='gcash'?'block':'none';
   const l=(()=>{try{return localStorage.getItem('sc_paper_last_'+_col);}catch(e){return null;}})();
-  document.getElementById('pay-paper-hint').textContent=l?'last used: '+l:'write the same number on the paper';
+  document.getElementById('pay-paper-hint').textContent=l?'required · last used: '+l:'required · same number as the carbon copy';
 }
 function addNote(t){ const n=document.getElementById('pay-note'); const v=n.value.trim(); if(!v.toLowerCase().includes(t)) n.value=v?v+' · '+t:t; }
 function renderExpect(){
@@ -1638,7 +1638,7 @@ async function submitPay(){
   const gref=_method==='gcash'?document.getElementById('pay-gref').value.replace(/\s/g,''):'';
   if(paper&&!/^\d{1,10}$/.test(paper)){toast('Paper receipt no. should be numbers only');return;}
   if(paper&&_pays.some(p=>p.collector===_col&&p.paper_no===paper)){toast('Paper receipt '+paper+' was already used');return;}
-  if(_method==='cash'&&!paper&&!confirm('No paper receipt number. Record this cash payment anyway?'))return;
+  if(_method==='cash'&&!paper){toast('Write the paper receipt no. first — every cash payment needs one');document.getElementById('pay-paper').focus();return;}
   const start=document.getElementById('pay-month').value||thisMonth(), endM=ymAdd(start,_months-1), ym=thisMonth();
   const pi=paidInfo(_cur);
   if(pi&&pi.level==='paid'&&start<=ym&&endM>=ym&&
@@ -1672,7 +1672,7 @@ async function submitPay(){
     }catch(e){
       const m=String(e.message||'');
       if(m.includes('bad_pin')) item.err='pin';
-      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method/)[0];
+      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/)[0];
     }
   }
   _queue=_queue.filter(i=>!i.done); saveQ(); savePays();
@@ -1819,7 +1819,7 @@ async function flushQ(){
       if(item.type==='payment'){
         const m=String(e.message||'');
         if(m.includes('bad_pin'))item.err='pin';
-        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method/)[0];
+        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/)[0];
         else item.err='net';
       }
     }
