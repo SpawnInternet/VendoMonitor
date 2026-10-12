@@ -289,6 +289,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style id="collect-v4">
 /* ══ Spawn Collect v4.0 — Spawn Harvest core, shiny ══ */
+html,body{overscroll-behavior-y:contain}
 html,body,button,input,select,textarea{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
 body{background:
   radial-gradient(70% 45% at 100% 8%,rgba(192,17,118,.12),rgba(192,17,118,0) 70%),
@@ -413,7 +414,7 @@ body{background:
     </div>
     <div class="tb-right">
       <div style="display:flex;align-items:center;gap:4px"><div class="odot" id="odot"></div><div class="olbl" id="olbl">Online</div></div>
-      <button class="btn-logout" onclick="askLogout()">Log out</button>
+      
     </div>
   </div>
 
@@ -437,6 +438,8 @@ body{background:
     <button type="button" class="ask-banner" id="hm-ask" onclick="goList('ask')" style="display:none">❓ <span><b id="hm-ask-n">0</b> to ask how they pay</span></button>
     <button type="button" class="find-btn" onclick="findAny()">＋ Paid but not on my route — find any subscriber</button>
     <div class="card" style="margin-top:12px"><div class="card-title">Recent payments today</div><div id="hm-recent"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No payments yet today</div></div></div>
+    <button type="button" class="btn" onclick="askLogout()" style="margin:4px 0 96px;background:rgba(255,255,255,.75);border:1px solid #e5e9f3;color:#4b5563;font-size:16px">← Logout</button>
+    <div style="text-align:center;font-size:12px;color:var(--muted);margin:-86px 0 96px">🔒 Auto sign-out at 9:00 PM</div>
   </div>
 
   <div id="tab-subscribers" style="display:none">
@@ -552,7 +555,7 @@ body{background:
       <div class="clabel">How did they pay?</div>
       <div class="meth" id="pay-meth"><button type="button" data-m="cash" onclick="pickMethod('cash')">Cash</button><button type="button" data-m="gcash" onclick="pickMethod('gcash')">GCash</button></div>
       <div class="paper-box" id="pay-paper-wrap"><div class="coin-label">Paper receipt no. <span id="pay-paper-hint">required · same number as the carbon copy</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-paper" placeholder="e.g. 2401" autocomplete="off"></div>
-      <div class="paper-box" id="pay-gref-wrap" style="display:none"><div class="coin-label">GCash reference no. <span>from their screenshot</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-gref" placeholder="13-digit ref" autocomplete="off"></div>
+      <div class="paper-box" id="pay-gref-wrap" style="display:none"><div class="coin-label">GCash reference no. <span>required · from their screenshot</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-gref" placeholder="13-digit ref" autocomplete="off"></div>
       <div class="clabel">Quick amount</div>
       <div class="agrid" id="agrid"></div>
 
@@ -646,7 +649,7 @@ body{background:
 </div>
 
 <script>
-const APP_VERSION = 'v4.1';
+const APP_VERSION = 'v4.2';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -841,6 +844,36 @@ function pinFail(msg){
   for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
   document.getElementById('login-btn').disabled=true;
 }
+// ══ v4.2 SESSION (same rules as Spawn Harvest) ══
+// Signed in for the same day only, until 9:00 PM Manila time. A refresh keeps you
+// signed in and returns you to the screen you were on. After one online sign-in the
+// PIN also works with no signal: the phone keeps only a salted SHA-256 check of it.
+const SC_CUTOFF_HOUR=21;
+function manilaNow(){ const d=new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
+  return {date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),hour:d.getHours()}; }
+function sessionValid(){ try{ const s=JSON.parse(localStorage.getItem('sc_sess')||'null'); const n=manilaNow();
+  return !!(s&&s.date===n.date&&n.hour<SC_CUTOFF_HOUR); }catch(e){ return false; } }
+function saveSession(){ try{ localStorage.setItem('sc_sess',JSON.stringify({date:manilaNow().date})); }catch(e){} }
+async function pinCheckHash(name,pin){
+  const salt=(localStorage.getItem('sc_salt')||(()=>{const s=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');localStorage.setItem('sc_salt',s);return s;})());
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(salt+'|'+String(name).toLowerCase()+'|'+pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function offlineLogin(name,pin){
+  try{ const m=JSON.parse(localStorage.getItem('sc_pinchk')||'{}'); const k=String(name).toLowerCase();
+    if(!m[k]) return false; return m[k]===await pinCheckHash(name,pin); }catch(e){ return false; }
+}
+async function rememberPin(name,pin){
+  try{ const m=JSON.parse(localStorage.getItem('sc_pinchk')||'{}'); m[String(name).toLowerCase()]=await pinCheckHash(name,pin); localStorage.setItem('sc_pinchk',JSON.stringify(m)); }catch(e){}
+}
+function saveView(){ try{ localStorage.setItem('sc_view',JSON.stringify({tab:_curTab,due:_due,pm:_pm,area:_area})); }catch(e){} }
+function enterMain(){
+  document.getElementById('tb-col').textContent=_col;
+  showScreen('screen-main');
+  let v=null; try{ v=JSON.parse(localStorage.getItem('sc_view')||'null'); }catch(e){}
+  if(v&&v.tab){ _due=v.due||''; _pm=v.pm||'all'; _area=v.area||'ALL'; switchTab(v.tab); } else switchTab('home');
+}
+setInterval(()=>{ if(_col&&!sessionValid()&&!_paying){ const p=document.getElementById('pay-overlay'); if(p&&p.style.display==='flex') return; toast('🔒 9:00 PM — signed out. Unsynced payments stay on this phone.',4000); doLogout(); } },60000);
 // PIN is verified on the server. The browser never downloads anybody's PIN.
 async function doLogin(){
   const pin=document.getElementById('pin-inp').value;
@@ -851,6 +884,14 @@ async function doLogin(){
        called with the anon key, which meant the data was already reachable
        without ever passing the PIN pad. spawn-field-login also throttles
        repeated failures per IP; the old RPC had no throttle at all. */
+    if(!navigator.onLine){
+      if(await offlineLogin(_selName,pin)){
+        _col=_selName; _pin=pin; localStorage.setItem('sc_col',_col); localStorage.setItem('sc_pin',pin); saveSession();
+        try{ const a=JSON.parse(localStorage.getItem(SUB_AUTH_KEY)||'null'); if(a&&a.token) GW_TOKEN=a.token; }catch(e){}
+        btn.textContent='Log in'; enterMain(); await loadData(); renderHome(); return;
+      }
+      btn.textContent='Log in'; btn.disabled=false; pinFail('No signal. Sign in once with signal on this phone first.'); return;
+    }
     const r=await fetch(LOGIN_URL,{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({name:_selName,pin:pin})});
     btn.textContent='Log in';
@@ -864,6 +905,7 @@ async function doLogin(){
     _col=d.name; _pin=pin;
     localStorage.setItem('sc_col',_col);
     localStorage.setItem('sc_pin',pin);
+    saveSession(); rememberPin(_col,pin);
     document.getElementById('tb-col').textContent=_col+(d.area?' · '+d.area:'');
     showScreen('screen-main');
     switchTab('home');
@@ -885,7 +927,7 @@ function doLogout(){
   _col='';_pin='';_subs=[];_pays=[];
   GW_TOKEN=null;
   localStorage.removeItem('sc_col');localStorage.removeItem('sc_pin');
-  localStorage.removeItem(SUB_AUTH_KEY);
+  try{ localStorage.removeItem('sc_sess'); localStorage.removeItem('sc_view'); }catch(e){}
   document.getElementById('pin-inp').value='';
   for(let i=1;i<=4;i++)document.getElementById('pd'+i).classList.remove('on');
   document.getElementById('login-btn').disabled=true;
@@ -924,7 +966,7 @@ async function loadData(){
 }
 
 function switchTab(tab){
-  _curTab=tab;
+  _curTab=tab; setTimeout(saveView,0);
   document.getElementById('tab-home').style.display=tab==='home'?'block':'none';
   document.getElementById('tab-subscribers').style.display=tab==='subscribers'?'block':'none';
   document.getElementById('tab-history').style.display=tab==='history'?'flex':'none';
@@ -982,7 +1024,7 @@ function renderPmSeg(){
   el.innerHTML=[['all','All '+act.length],['cash','Cash '+c],['gcash','GCash '+g]]
     .map(([k,l])=>'<button type="button" class="'+(_pm===k?'on':'')+'" onclick="setPm(\''+k+'\')">'+l+'</button>').join('');
 }
-function setPm(k){ _pm=k; renderList(); }
+function setPm(k){ _pm=k; renderList(); saveView(); }
 
 // ── AREA TABS ──
 function buildAreaTabs(){
@@ -993,7 +1035,7 @@ function buildAreaTabs(){
   document.getElementById('area-tabs').innerHTML=['ALL'].concat(found)
     .map(a=>'<div class="atab'+(a===_area?' active':'')+'" onclick="setArea(\''+esc(a)+'\')">'+esc(a)+' '+(a==='ALL'?_subs.length:c[a])+'</div>').join('');
 }
-function setArea(a){_area=a;buildAreaTabs();buildChips();renderList();}
+function setArea(a){_area=a;buildAreaTabs();buildChips();renderList();saveView();}
 
 // ── MISSING-INFO CHIPS ──
 function inArea(s){return _area==='ALL'||areaOf(s)===_area;}
@@ -1638,6 +1680,9 @@ async function submitPay(){
   const gref=_method==='gcash'?document.getElementById('pay-gref').value.replace(/\s/g,''):'';
   if(paper&&!/^\d{1,10}$/.test(paper)){toast('Paper receipt no. should be numbers only');return;}
   if(paper&&_pays.some(p=>p.collector===_col&&p.paper_no===paper)){toast('Paper receipt '+paper+' was already used');return;}
+  if(_method==='gcash'&&!gref){toast('Type the GCash reference no. from their screenshot — no ref, no proof');document.getElementById('pay-gref').focus();return;}
+  if(gref&&!/^\d{8,20}$/.test(gref)){toast('GCash reference no. should be 8–20 numbers');return;}
+  if(gref&&_pays.some(p=>p.gcash_ref===gref)){toast('That GCash reference was already used');return;}
   if(_method==='cash'&&!paper){toast('Write the paper receipt no. first — every cash payment needs one');document.getElementById('pay-paper').focus();return;}
   const start=document.getElementById('pay-month').value||thisMonth(), endM=ymAdd(start,_months-1), ym=thisMonth();
   const pi=paidInfo(_cur);
@@ -1672,7 +1717,7 @@ async function submitPay(){
     }catch(e){
       const m=String(e.message||'');
       if(m.includes('bad_pin')) item.err='pin';
-      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/)[0];
+      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/)[0];
     }
   }
   _queue=_queue.filter(i=>!i.done); saveQ(); savePays();
@@ -1819,7 +1864,7 @@ async function flushQ(){
       if(item.type==='payment'){
         const m=String(e.message||'');
         if(m.includes('bad_pin'))item.err='pin';
-        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required/)[0];
+        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/)[0];
         else item.err='net';
       }
     }
@@ -1998,14 +2043,16 @@ async function init(){
   _queue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
   await loadCols();
   const savedCol=localStorage.getItem('sc_col'), savedPin=localStorage.getItem('sc_pin');
-  if(savedCol&&savedPin){
+  // Signed in before v4.2 (no daily session yet): keep them in once, so the update never locks anyone out offline.
+  if(savedCol&&savedPin&&!localStorage.getItem('sc_sess')&&manilaNow().hour<SC_CUTOFF_HOUR){ saveSession(); rememberPin(savedCol,savedPin); }
+  if(savedCol&&savedPin&&sessionValid()){
     _col=savedCol;_pin=savedPin;
-    document.getElementById('tb-col').textContent=_col;
-    showScreen('screen-main');
-    switchTab('home');
+    enterMain();
     await loadData();
-    renderHome();
+    if(_curTab==='home') renderHome(); else renderList();
     flushQ();
+  }else if(savedCol){
+    localStorage.removeItem('sc_col'); localStorage.removeItem('sc_pin'); try{ localStorage.removeItem('sc_sess'); }catch(e){}
   }
 }
 document.addEventListener('DOMContentLoaded',init);
