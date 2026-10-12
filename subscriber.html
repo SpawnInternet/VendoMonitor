@@ -507,7 +507,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 </div>
 
 <script>
-const APP_VERSION = 'v3.1';
+const APP_VERSION = 'v3.2';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1639,12 +1639,72 @@ async function flushQ(){
   else if(!_queue.length)toast('✅ Everything synced');
 }
 
+/* ══ v3.2 ══ OFFLINE APP + NO SURPRISE RELOADS
+   Collect gets its own service worker (sub-sw.js, scope /VendoMonitor/subscriber) so the
+   app opens with no signal. It NEVER reloads by itself: when a new version is downloaded,
+   a small "Update" button appears, and it only works when no payment/detail sheet is open.
+   Payments already waiting in the queue are kept in localStorage and survive the update. */
+function _sheetOpen(){
+  return ['pay-overlay','det-overlay','rcpt-overlay'].some(id=>{
+    const el=document.getElementById(id); return el && el.style.display && el.style.display!=='none';
+  });
+}
+function _swBanner(show){
+  let b=document.getElementById('sw-update');
+  if(!show){ if(b) b.remove(); return; }
+  if(b) return;
+  b=document.createElement('button');
+  b.id='sw-update';
+  b.type='button';
+  b.textContent='⬆ New version — tap to update';
+  b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:500;'+
+    'background:#1e2d5a;color:#fff;border:0;border-radius:22px;padding:10px 18px;font:600 14px system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25)';
+  b.onclick=()=>{
+    if(_sheetOpen()){ toast('Finish or close the open payment first',2500); return; }
+    const w=window._swWaiting;
+    if(w){ window._swUserUpdate=true; w.postMessage({type:'SKIP_WAITING'}); }
+    else location.reload();
+  };
+  document.body.appendChild(b);
+}
+function _swMarkReady(){
+  const v=document.getElementById('ver-lbl');
+  if(v && v.textContent.indexOf('offline ready')<0) v.textContent='Spawn Collect '+APP_VERSION+' · offline ready ✓';
+}
+if('serviceWorker' in navigator){
+  // Reload ONLY when the collector tapped Update — never on its own.
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(window._swUserUpdate && !window._swReloaded){ window._swReloaded=true; location.reload(); }
+  });
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/VendoMonitor/sub-sw.js',{scope:'/VendoMonitor/subscriber'})
+      .then(reg=>{
+        const watch=(w)=>{ if(!w) return;
+          w.addEventListener('statechange',()=>{
+            if(w.state==='installed'){
+              if(navigator.serviceWorker.controller){ window._swWaiting=w; _swBanner(true); }
+              else _swMarkReady();          // first install: nothing to replace, just ready offline
+            }
+            if(w.state==='activated') _swMarkReady();
+          });
+        };
+        if(reg.waiting && navigator.serviceWorker.controller){ window._swWaiting=reg.waiting; _swBanner(true); }
+        if(reg.active) _swMarkReady();
+        watch(reg.installing);
+        reg.addEventListener('updatefound',()=>watch(reg.installing));
+        // Look for a new version when the app comes back to the front (never forces it).
+        document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && navigator.onLine) reg.update().catch(()=>{}); });
+      })
+      .catch(err=>console.warn('Collect SW registration failed:',err));
+  });
+}
+
 function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
 
 // ── INIT ──
 async function init(){
   setOnline();
-  const v=document.getElementById('ver-lbl'); if(v)v.textContent='Spawn Collect '+APP_VERSION;
+  const v=document.getElementById('ver-lbl'); if(v)v.textContent='Spawn Collect '+APP_VERSION; if(navigator.serviceWorker&&navigator.serviceWorker.controller)_swMarkReady();
   setInterval(()=>{ if(_col&&navigator.onLine&&loadQ().length)flushQ(); },120000);
   _queue=JSON.parse(localStorage.getItem('sc_queue')||'[]');
   await loadCols();
