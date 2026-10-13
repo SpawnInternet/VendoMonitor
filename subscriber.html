@@ -649,7 +649,7 @@ body{background:
 </div>
 
 <script>
-const APP_VERSION = 'v4.5';
+const APP_VERSION = 'v4.6';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1877,16 +1877,29 @@ async function flushQ(){
   else if(!_queue.length)toast('✅ Everything synced');
 }
 
-/* ══ v3.2 ══ OFFLINE APP + NO SURPRISE RELOADS
-   Collect gets its own service worker (sub-sw.js, scope /VendoMonitor/subscriber) so the
-   app opens with no signal. It NEVER reloads by itself: when a new version is downloaded,
-   a small "Update" button appears, and it only works when no payment/detail sheet is open.
-   Payments already waiting in the queue are kept in localStorage and survive the update. */
+/* ══ v4.6 ══ OFFLINE APP + AUTOMATIC UPDATES (still no surprise mid-work reloads)
+   Collect keeps its own service worker (sub-sw.js) so the app opens with no signal.
+   A new version now applies BY ITSELF, but only at a safe moment: nothing open
+   (no payment, details, receipt, day end, outage, calculator), not mid-save, and not
+   while typing. Mid-work, it waits and applies the moment the sheet closes or the app
+   is next opened. Queued offline payments live in localStorage and survive the reload. */
 function _sheetOpen(){
-  return ['pay-overlay','det-overlay','rcpt-overlay'].some(id=>{
+  return ['pay-overlay','det-overlay','rcpt-overlay','de-overlay','out-overlay','calc-overlay'].some(id=>{
     const el=document.getElementById(id); return el && el.style.display && el.style.display!=='none';
   });
 }
+function _swSafeNow(){
+  if(_sheetOpen()||_paying) return false;
+  const a=document.activeElement;
+  if(a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA')&&String(a.value||'').length) return false;
+  return true;
+}
+function _swTryAuto(){
+  const w=window._swWaiting;
+  if(!w||window._swUserUpdate) return;
+  if(_swSafeNow()){ window._swUserUpdate=true; _swBanner(false); w.postMessage({type:'SKIP_WAITING'}); }
+}
+setInterval(_swTryAuto,3000);
 function _swBanner(show){
   let b=document.getElementById('sw-update');
   if(!show){ if(b) b.remove(); return; }
@@ -1920,13 +1933,13 @@ if('serviceWorker' in navigator){
         const watch=(w)=>{ if(!w) return;
           w.addEventListener('statechange',()=>{
             if(w.state==='installed'){
-              if(navigator.serviceWorker.controller){ window._swWaiting=w; _swBanner(true); }
+              if(navigator.serviceWorker.controller){ window._swWaiting=w; _swTryAuto(); if(window._swWaiting&&!window._swUserUpdate) _swBanner(true); }
               else _swMarkReady();          // first install: nothing to replace, just ready offline
             }
             if(w.state==='activated') _swMarkReady();
           });
         };
-        if(reg.waiting && navigator.serviceWorker.controller){ window._swWaiting=reg.waiting; _swBanner(true); }
+        if(reg.waiting && navigator.serviceWorker.controller){ window._swWaiting=reg.waiting; _swTryAuto(); if(window._swWaiting&&!window._swUserUpdate) _swBanner(true); }
         if(reg.active) _swMarkReady();
         watch(reg.installing);
         reg.addEventListener('updatefound',()=>watch(reg.installing));
