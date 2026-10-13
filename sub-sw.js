@@ -10,7 +10,7 @@
 //   * Never touches Supabase / gateway / login calls — the app's own queue handles those.
 //   * Never reloads the page. A new version waits until the collector taps "Update".
 
-const VERSION  = 'v4.7';
+const VERSION  = 'v4.8';
 const CACHE    = 'spawn-collect-' + VERSION;
 const APP_HTML = '/VendoMonitor/subscriber.html';
 const SHELL = [
