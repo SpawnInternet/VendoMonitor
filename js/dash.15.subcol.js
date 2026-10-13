@@ -215,8 +215,8 @@
         :'<div class="sc-empty">Nothing collected on this date</div>'}</div></div>`;
   }
 
-  function popup(who, date){
-    const list = rows.filter(p => whoOf(p) === who);
+  function popup(who, date, src){
+    const list = (src || rows).filter(p => whoOf(p) === who);
     let ov = document.getElementById('cx-popup'); if (ov) ov.remove();
     ov = document.createElement('div'); ov.id = 'cx-popup';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:12px;';
@@ -254,4 +254,80 @@
   if (!wrap()) document.addEventListener('DOMContentLoaded', wrap);
   window.subcolLoad = load;
   window.colSeg = setSeg;
+
+  // ══════════════════════════════════════════════════════════
+  // SUBSCRIBERS TAB — live "Today's Subscriber Collection" card
+  // Same idea as "Today's Harvest Summary" on the Harvest tab: always on top,
+  // one chip per collector (tap for his list), refreshes every 60 s.
+  // The Subscribers tab redraws its whole panel, so the card re-attaches itself.
+  // ══════════════════════════════════════════════════════════
+  let live = [], liveAt = null, liveBusy = false;
+  function liveHost(){
+    const panel = document.getElementById('panel-subscribers'); if (!panel) return null;
+    css();
+    let el = document.getElementById('sub-live');
+    if (!el || el.parentNode !== panel) {
+      el = document.createElement('div'); el.id = 'sub-live'; el.style.cssText = 'padding:12px 12px 0 12px;max-width:1200px;margin:0 auto';
+      panel.insertBefore(el, panel.firstChild);
+      liveDraw();
+    }
+    return el;
+  }
+  async function liveLoad(){
+    if (liveBusy) return; liveBusy = true;
+    try {
+      const d = todayPH();
+      const pays = await sb('subscriber_payments', `payment_date=eq.${d}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at&order=created_at.asc`, 2000);
+      live = ordered(Array.isArray(pays) ? pays : []);
+      try { await fillAreas(live); } catch(e){}
+      liveAt = new Date();
+    } catch(e) {} finally { liveBusy = false; }
+    liveDraw();
+  }
+  function liveDraw(){
+    const el = document.getElementById('sub-live'); if (!el) return;
+    const d = todayPH();
+    const btn = 'padding:2px 8px;border:1px solid #e5e7eb;border-radius:5px;background:#fff;font-size:11px;cursor:pointer;color:#6b7280;font-family:inherit';
+    const when = liveAt ? 'updated ' + liveAt.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : 'loading…';
+    if (!live.length) {
+      el.innerHTML = `<div class="cx-card" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <b style="font-size:12px;color:#025AC6">📶 Today's Subscriber Collection</b>
+        <span style="display:flex;gap:10px;align-items:center;font-size:12px;color:#6b7280">${liveAt?'📭 No subscriber payments recorded today yet':'Loading…'} <button type="button" id="sl-r" style="${btn}">↻</button></span></div>`;
+    } else {
+      const by = {};
+      live.forEach(p => { const w = whoOf(p), m = methodOf(p);
+        by[w] = by[w] || {n:0,total:0,cash:0,gcash:0,unknown:0,areas:new Set()};
+        by[w].n++; by[w].total += Number(p.amount||0); by[w][m] += Number(p.amount||0); if (p.area) by[w].areas.add(p.area); });
+      const total = live.reduce((s,p)=>s+Number(p.amount||0),0);
+      const cash = Object.values(by).reduce((s,x)=>s+x.cash,0), gc = Object.values(by).reduce((s,x)=>s+x.gcash,0);
+      const names = Object.keys(by).sort((a,b)=>by[b].total-by[a].total);
+      el.innerHTML = `<div class="cx-card">
+        <div class="cx-head"><b style="font-size:12px;color:#025AC6">📶 Today's Subscriber Collection</b>
+          <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <span style="font-size:11px;color:#6b7280">${live.length} payment${live.length===1?'':'s'} · cash ${peso(cash)} · GCash ${peso(gc)} · ${when}</span>
+            <span style="font-size:15px;font-weight:800;color:#025AC6">${peso(total)}</span>
+            <button type="button" id="sl-r" style="${btn}">↻</button></span></div>
+        <div class="cx-cols">${names.map(n=>{ const x=by[n]; return `<div class="cx-col" data-who="${esc(n)}">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">${avatar(n)}<b style="font-size:12px;color:#1e293b">${esc(n)}</b></div>
+          <div style="font-size:14px;font-weight:800;color:#025AC6">${peso(x.total)}</div>
+          <div style="font-size:10px;color:#6b7280">${x.n} payment${x.n!==1?'s':''} · ${[...x.areas].join(', ')||'—'} <span style="color:#025AC6">▸</span></div>
+          <div style="font-size:10px;margin-top:2px"><span style="color:#027e60">Cash ${peso(x.cash)}</span> · <span style="color:#025AC6">GCash ${peso(x.gcash)}</span>${x.unknown?` · <span style="color:#64748b">? ${peso(x.unknown)}</span>`:''}</div></div>`; }).join('')}</div></div>`;
+      el.querySelectorAll('.cx-col').forEach(c => c.onclick = () => popup(c.dataset.who, d, live));
+    }
+    const r = document.getElementById('sl-r'); if (r) r.onclick = () => liveLoad();
+  }
+  function liveStart(){
+    const panel = document.getElementById('panel-subscribers'); if (!panel) return;
+    new MutationObserver(() => { if (!document.getElementById('sub-live') || document.getElementById('sub-live').parentNode !== panel) liveHost(); })
+      .observe(panel, {childList: true});
+    const visible = () => panel.offsetParent !== null || panel.classList.contains('active') || getComputedStyle(panel).display !== 'none';
+    // load when the tab opens, then every minute while it is on screen
+    new MutationObserver(() => { if (visible() && (!liveAt || Date.now() - liveAt > 30000)) { liveHost(); liveLoad(); } })
+      .observe(panel, {attributes: true, attributeFilter: ['class','style']});
+    setInterval(() => { if (visible() && document.visibilityState === 'visible') liveLoad(); }, 60000);
+    liveHost();
+    if (visible()) liveLoad();
+  }
+  window.subLiveLoad = liveLoad;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', liveStart); else liveStart();
 })();
