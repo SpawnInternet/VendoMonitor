@@ -383,7 +383,8 @@ body.simple-mode .sm-back{display:flex;align-items:center;gap:6px;margin:10px 16
 .sm-sum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;margin:4px 0 8px;border-radius:14px;background:#fff;box-shadow:0 2px 8px rgba(17,24,39,.05)}
 .sm-sum b{font-size:13px;color:#0f2a5c}.sm-sum span{display:flex;gap:4px;flex-wrap:wrap;flex:1}.sm-sum strong{font-size:16px;color:#0f2a5c;font-variant-numeric:tabular-nums}
 .sm-sum em,.sm-chips em{font-style:normal;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
-em.t{background:#fff1cc;color:#966500}em.l{background:#fee2e2;color:#d91934}em.s{background:#eef4ff;color:#025ac6}em.p{background:#e7f6f1;color:#027e60}
+em.t{background:#fff1cc;color:#966500}em.t.big{font-size:13px;padding:4px 11px}em.n{background:#f1f5f9;color:#94a3b8}
+.sm-an small.sm-lt{color:#d91934;font-weight:700}em.l{background:#fee2e2;color:#d91934}em.s{background:#eef4ff;color:#025ac6}em.p{background:#e7f6f1;color:#027e60}
 .sm-area{margin-bottom:8px}
 .sm-ac{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border:0;border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 3px 10px rgba(17,24,39,.06);font-family:inherit;cursor:pointer;text-align:left}
 .sm-area.open .sm-ac{box-shadow:0 0 0 2px #c7d2fe inset,0 3px 10px rgba(17,24,39,.06)}
@@ -807,7 +808,7 @@ body.simple-mode #calc-fab{display:none!important}
 </div>
 
 <script>
-const APP_VERSION = 'v4.16';
+const APP_VERSION = 'v4.17';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -2534,9 +2535,9 @@ function renderSimpleList(){
   const sums=areas.map(a=>{ const x={today:0,late:0,soon:0,paid:0,amt:0};
     by[a].forEach(s=>{ const st=dueState(s);
       if(st==='today') x.today++; else if(st==='late') x.late++; else if(st==='soon') x.soon++; else if(st==='paid'||st==='free') x.paid++;
-      if(st==='today'||st==='late'||st==='soon') x.amt+=smAmount(s,st); });
+      if(st==='today'||st==='late') x.amt+=smAmount(s,st); });
     tot.today+=x.today; tot.late+=x.late; tot.soon+=x.soon; tot.amt+=x.amt; return x; });
-  const head=(!q&&_smTab==='route')?'<div class="sm-sum"><b>Today\'s route</b><span><em class="t">'+tot.today+' due today</em><em class="l">'+tot.late+' late</em><em class="s">'+tot.soon+' soon</em></span><strong>'+pesoK(tot.amt)+'</strong></div>':'';
+  const head=(!q&&_smTab==='route')?'<div class="sm-sum"><b>Today</b><span><em class="t">'+tot.today+' due today</em></span><strong>'+pesoK(tot.amt)+'</strong></div>':'';
   el.innerHTML=head+areas.map((a,ai)=>{
     const rows=by[a], x=sums[ai], open=q?true:!!_smOpen[_smTab+'|'+a];
     let body='';
@@ -2547,13 +2548,15 @@ function renderSimpleList(){
         g[k].sort(k==='LATE'?((x,y)=>(behind(y[0])-behind(x[0]))||byDue(x,y)):byDue);
         body+='<div class="sm-gl '+(k==='LATE'?'late':k==='DUE'?'due':'paid')+'">'+k+' · '+g[k].length+'</div>'+g[k].map(([s,st])=>smRow(s,st)).join(''); });
     }
-    const chips=(x.today?'<em class="t">'+x.today+' due today</em>':'')+(x.late?'<em class="l">'+x.late+' late</em>':'')+(x.soon?'<em class="s">'+x.soon+' soon</em>':'')
-      +(_smTab!=='route'&&x.paid?'<em class="p">'+x.paid+' paid</em>':'');
+    // one main number per area: due today. Late only as a small line. Nothing else.
+    const route=_smTab==='route'&&!q;
+    const sub=route?(x.late?'<small class="sm-lt">+'+x.late+' late</small>':'<small>'+rows.length+' to visit</small>'):'<small>'+rows.length+' subscriber'+(rows.length===1?'':'s')+'</small>';
+    const chips=route?(x.today?'<em class="t big">'+x.today+' due today</em>':'<em class="n">none today</em>'):'';
     return '<div class="sm-area'+(open?' open':'')+'"><button type="button" class="sm-ac" data-a="'+esc(a)+'" onclick="smToggle(this.dataset.a)">'
       +'<i style="background:'+(SM_AREA_COLOR[String(a).toUpperCase()]||'#94a3b8')+'"></i>'
-      +'<span class="sm-an"><b>'+esc(a)+'</b><small>'+rows.length+(_smTab==='route'&&!q?' to visit':' subscribers')+'</small></span>'
+      +'<span class="sm-an"><b>'+esc(a)+'</b>'+sub+'</span>'
       +'<span class="sm-chips">'+chips+'</span>'
-      +(x.amt?'<strong>'+pesoK(x.amt)+'</strong>':'')
+      +(route&&x.amt?'<strong>'+pesoK(x.amt)+'</strong>':'')
       +'<em class="sm-arw">'+(q?'':(open?'▲':'▼'))+'</em></button>'+body+'</div>';
   }).join('');
 }
