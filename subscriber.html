@@ -411,6 +411,8 @@ body.simple-mode #pay-amt{font-size:30px;font-weight:800;text-align:center;heigh
 .cd-btn.main{border:0;color:#fff;background:linear-gradient(135deg,#0146a0 0%,#025ac6 55%,#631f70 100%);box-shadow:0 6px 14px rgba(1,70,160,.35)}
 .cd-gps{margin-top:8px;padding:10px 12px;border-radius:12px;background:#f5f7fd;font-size:13px;color:#374151}
 .cd-gps b{font-size:18px}
+.cd-x{position:absolute;top:12px;right:12px;width:40px;height:40px;border-radius:999px;border:1.5px solid #dde5f2;background:#fff;color:#4b5563;font:700 18px Inter,system-ui,sans-serif;cursor:pointer;z-index:2}
+#cd-overlay .modal{position:relative}
 .cd-why{margin:0 16px 8px;font-size:13px;font-weight:700;color:#c01176;text-align:center;min-height:18px}
 #back-fab{position:fixed;left:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;border:0;z-index:330;display:none;align-items:center;justify-content:center;
   color:#0f2a5c;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(17,24,39,.22),inset 0 1px 0 #fff;outline:1.5px solid #c7d2fe;outline-offset:-1.5px;cursor:pointer}
@@ -650,6 +652,7 @@ body.simple-mode #back-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 <div class="overlay" id="cd-overlay" style="display:none;z-index:260">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="mhandle"></div>
+    <button type="button" class="cd-x" aria-label="Close" onclick="cdClose()">✕</button>
     <div class="cd-h">Complete details</div>
     <div class="cd-s"><b id="cd-name">—</b> · payment saved ✓ — fill up what's missing before the next subscriber</div>
     <div class="cd-f" id="cd-phone-wrap"><div class="cd-l">📞 PHONE NUMBER <span>required</span></div>
@@ -734,7 +737,7 @@ body.simple-mode #back-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 </div>
 
 <script>
-const APP_VERSION = 'v4.9';
+const APP_VERSION = 'v4.10';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -2396,6 +2399,15 @@ async function cdSave(){
   toast(navigator.onLine?'✓ Details saved — uploading':'✓ Details saved on phone — uploads when there is signal',3000);
   renderQbar(); smRefresh();
   if(navigator.onLine) flushQ();
+}
+// X: closes for now. The payment stays saved; the details stay pending, so the
+// route shows "still need details" and the sheet comes back next time the app opens.
+function cdClose(){
+  if(_cdDirty()&&!confirm('Close without saving what you typed?')) return;
+  cdStopGps(); _cd=null;
+  document.getElementById('cd-overlay').style.display='none';
+  toast('Details still needed — tap the yellow bar on your route to finish',3000);
+  smRefresh();
 }
 function cdSkipOnce(){
   if(!_cd) return;
