@@ -318,7 +318,7 @@
   }
   function liveStart(){
     const panel = document.getElementById('panel-subscribers'); if (!panel) return;
-    new MutationObserver(() => { if (!document.getElementById('sub-live') || document.getElementById('sub-live').parentNode !== panel) liveHost(); })
+    new MutationObserver(() => { if (!document.getElementById('sub-live') || document.getElementById('sub-live').parentNode !== panel) { liveHost(); if (typeof stShell==='function' && stTab==='book') stShell(false); } })
       .observe(panel, {childList: true});
     const visible = () => panel.offsetParent !== null || panel.classList.contains('active') || getComputedStyle(panel).display !== 'none';
     // load when the tab opens, then every minute while it is on screen
@@ -329,5 +329,183 @@
     if (visible()) liveLoad();
   }
   window.subLiveLoad = liveLoad;
+
+  // ══════════════════════════════════════════════════════════
+  // SUBSCRIBERS TAB — organized like the Harvest tab
+  //   live card (above) → section bar → section content
+  //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
+  // Numbers come from v_sub_book = the same month table Spawn Collect uses.
+  // ══════════════════════════════════════════════════════════
+  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['ded','📶 No internet'],['book','📒 Old book']];
+  let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
+  let book = null, bookAt = 0, bookBusy = false;
+  let bf = {state:'', area:'', q:'', how:''};
+  let payDate = '', payRows = [], payFilt = '';
+  const STATE = {
+    paid:{l:'Paid',c:'#027e60',b:'#e7f6f1'}, partial:{l:'Partial',c:'#966500',b:'#fff1cc'}, late:{l:'Late',c:'#d91934',b:'#fee2e2'},
+    due_soon:{l:'Due within 5 days',c:'#b45309',b:'#fff7ed'}, upcoming:{l:'Not due yet',c:'#475569',b:'#f1f5f9'},
+    disconnected:{l:'Disconnected',c:'#64748b',b:'#e2e8f0'}, free:{l:'Free',c:'#7c3aed',b:'#f3e8ff'},
+    no_rate:{l:'No rate',c:'#64748b',b:'#f1f5f9'}, no_due_day:{l:'No due day',c:'#64748b',b:'#f1f5f9'} };
+  const howOf = r => r.pay_mode==='gcash'?'GCash':r.pay_mode==='cash'?'Cash':r.pay_mode==='mixed'?'Mixed':r.pay_mode==='office'?'Office':'?';
+  const short = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'2-digit'}) : '—';
+
+  function stCss(){
+    if (document.getElementById('st-style')) return;
+    const s = document.createElement('style'); s.id = 'st-style';
+    s.textContent = `
+      #st-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin:0 12px 12px}
+      #st-bar .t{font-size:15px;font-weight:800;color:#025AC6;margin-right:6px}
+      #st-bar button{padding:7px 12px;border:1px solid #e5e7eb;border-radius:9px;background:#fff;font-size:13px;font-weight:700;color:#334155;cursor:pointer;font-family:inherit}
+      #st-bar button.on{background:#025AC6;border-color:#025AC6;color:#fff}
+      #st-body{padding:0 12px 80px}
+      .st-k{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:12px}
+      @media(max-width:900px){.st-k{grid-template-columns:repeat(3,minmax(0,1fr))}}
+      @media(max-width:520px){.st-k{grid-template-columns:repeat(2,minmax(0,1fr))}}
+      .st-k div{background:#fff;border:1px solid #e5e7eb;border-bottom:3px solid var(--c);border-radius:12px;padding:9px 12px;cursor:pointer}
+      .st-k div.on{outline:2px solid var(--c)}
+      .st-k b{display:block;font-size:20px;font-weight:800;color:var(--c);font-variant-numeric:tabular-nums}
+      .st-k span{font-size:11px;color:#6b7280}
+      .st-f{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+      .st-f select,.st-f input{padding:8px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;background:#fff}
+      .st-f input{flex:1;min-width:180px}
+      .st-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}`;
+    document.head.appendChild(s);
+  }
+  function stShell(withBody){
+    const panel = document.getElementById('panel-subscribers'); if (!panel) return null;
+    css(); stCss();
+    if (withBody) { panel.innerHTML = ''; }
+    liveHost();
+    let bar = document.getElementById('st-bar');
+    if (!bar || bar.parentNode !== panel) {
+      bar = document.createElement('div'); bar.id = 'st-bar';
+      const live = document.getElementById('sub-live');
+      panel.insertBefore(bar, live ? live.nextSibling : panel.firstChild);
+    }
+    bar.innerHTML = '<span class="t">📶 Subscribers</span>' + ST_TABS.map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('');
+    bar.querySelectorAll('button').forEach(b => b.onclick = () => stGo(b.dataset.k));
+    if (withBody) { const body = document.createElement('div'); body.id = 'st-body'; panel.appendChild(body); return body; }
+    return null;
+  }
+  const origInit = window.subscribersInit;
+  function stGo(k){
+    stTab = k; try { localStorage.setItem('sub_tab', k); } catch(e){}
+    if (k === 'book') { stShell(false); if (typeof origInit === 'function') origInit(); return; }
+    const body = stShell(true);
+    body.innerHTML = '<div class="sc-empty">Loading…</div>';
+    if (k === 'subs' || k === 'late') bookLoad().then(()=>{ if (stTab===k) (k==='subs'?drawBook:drawLate)(); });
+    else if (k === 'pays') payLoad(payDate || todayPH());
+    else if (k === 'ded') dedLoad();
+  }
+  async function bookLoad(force){
+    if (book && !force && Date.now() - bookAt < 60000) return;
+    if (bookBusy) return; bookBusy = true;
+    try { const r = await sb('v_sub_book', 'select=*&order=name.asc', 3000); if (Array.isArray(r)) { book = r; bookAt = Date.now(); } }
+    finally { bookBusy = false; }
+  }
+
+  // 👥 Subscribers
+  function drawBook(){
+    const body = document.getElementById('st-body'); if (!body || !book) return;
+    const cnt = k => book.filter(r=>r.state===k), sum = (a,f) => a.reduce((s,r)=>s+Number(r[f]||0),0);
+    const K = [['paid','Paid this month',cnt('paid').length,peso(sum(cnt('paid'),'this_paid'))],
+               ['partial','Partial',cnt('partial').length,'balance '+peso(sum(cnt('partial'),'this_balance'))],
+               ['late','Late',cnt('late').length,peso(sum(cnt('late'),'owed'))+' owed'],
+               ['due_soon','Due within 5 days',cnt('due_soon').length,''],
+               ['upcoming','Not due yet',cnt('upcoming').length,''],
+               ['disconnected','Disconnected',cnt('disconnected').length,'']];
+    const areas = [...new Set(book.map(r=>r.area||'—'))].sort();
+    body.innerHTML = `<div class="st-k">${K.map(([k,l,n,s])=>`<div data-k="${k}" class="${bf.state===k?'on':''}" style="--c:${STATE[k].c}"><b>${n}</b><span>${l}${s?' · '+s:''}</span></div>`).join('')}</div>
+      <div class="st-f"><select id="st-area"><option value="">All areas</option>${areas.map(a=>`<option${bf.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select>
+        <select id="st-how"><option value="">Any payment way</option>${['Cash','GCash','Mixed','Office','?'].map(x=>`<option${bf.how===x?' selected':''}>${x}</option>`).join('')}</select>
+        <input id="st-q" type="search" placeholder="Search name, account no. or phone" value="${esc(bf.q)}">
+        ${bf.state?`<button type="button" class="cx-chip on" id="st-clear">${esc(STATE[bf.state].l)} ✕</button>`:''}</div>
+      <div class="cx-card"><div class="sc-scroll" id="st-tbl"></div></div>`;
+    body.querySelectorAll('.st-k div').forEach(d => d.onclick = () => { bf.state = bf.state===d.dataset.k ? '' : d.dataset.k; drawBook(); });
+    body.querySelector('#st-area').onchange = e => { bf.area = e.target.value; drawBookTable(); };
+    body.querySelector('#st-how').onchange = e => { bf.how = e.target.value; drawBookTable(); };
+    body.querySelector('#st-q').oninput = e => { bf.q = e.target.value.trim().toLowerCase(); drawBookTable(); };
+    const c = body.querySelector('#st-clear'); if (c) c.onclick = () => { bf.state=''; drawBook(); };
+    drawBookTable();
+  }
+  function drawBookTable(){
+    const el = document.getElementById('st-tbl'); if (!el) return;
+    const ORDER = ['late','partial','due_soon','upcoming','paid','free','no_rate','no_due_day','disconnected'];
+    let list = book.filter(r => (!bf.state || r.state===bf.state) && (!bf.area || (r.area||'—')===bf.area) && (!bf.how || howOf(r)===bf.how)
+      && (!bf.q || (String(r.name||'')+' '+String(r.acct_no||'')+' '+String(r.phone||'')).toLowerCase().includes(bf.q)));
+    list.sort((a,b)=> (ORDER.indexOf(a.state)-ORDER.indexOf(b.state)) || (Number(b.owed)-Number(a.owed)) || String(a.name).localeCompare(String(b.name)));
+    const shown = list.slice(0, 600);
+    el.innerHTML = `<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th class="n">Due</th><th class="n">Monthly</th><th>This month</th><th>Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>`
+      + shown.map(r => { const s = STATE[r.state] || STATE.upcoming;
+          const tm = r.state==='paid' ? 'Paid '+peso(r.this_paid) : r.state==='partial' ? peso(r.this_paid)+' · bal '+peso(r.this_balance) : s.l;
+          const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '—';
+          return `<tr><td><b>${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+            <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
+            <td><span class="st-badge" style="background:${s.b};color:${s.c}">${esc(tm)}</span></td><td>${owes}</td>
+            <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
+      + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} owed</td><td colspan="3"></td></tr></tbody></table>`;
+  }
+
+  // ⏳ Late — who owes, most owed first
+  function drawLate(){
+    const body = document.getElementById('st-body'); if (!body || !book) return;
+    const list = book.filter(r => r.state==='late' || r.state==='partial' || (r.state!=='disconnected' && Number(r.owed)>0))
+      .sort((a,b)=>(Number(b.months_behind)-Number(a.months_behind))||(Number(b.owed)-Number(a.owed)));
+    const byArea = {}; list.forEach(r=>{ const a=r.area||'—'; byArea[a]=byArea[a]||{n:0,o:0}; byArea[a].n++; byArea[a].o+=Number(r.owed||0); });
+    const tot = list.reduce((s,r)=>s+Number(r.owed||0),0);
+    body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>⏳ ${list.length} subscribers owe ${peso(tot)}</b><span style="font-size:11px;color:#6b7280">last 3 months · this month counts after its due day · disconnected not included</span></div>
+      <div class="cx-chips" style="padding:10px 14px">${Object.entries(byArea).sort((a,b)=>b[1].o-a[1].o).map(([a,x])=>`<span class="cx-chip">${esc(a)} · ${x.n} · ${peso(x.o)}</span>`).join('')}</div></div>
+      <div class="cx-card"><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Phone</th><th>Months owed</th><th class="n">Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>
+      ${list.map(r=>`<tr><td><b>${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
+        <td>${(r.unpaid_months||[]).length?esc(r.unpaid_months.join(', ')):(Number(r.this_balance)>0?'balance this month':'balance')}</td>
+        <td class="n"><b style="color:#d91934">${peso(r.owed)}</b></td><td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount):'—'}</td>
+        <td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`).join('')}
+      <tr class="tot"><td colspan="4">Total</td><td class="n">${peso(tot)}</td><td colspan="3"></td></tr></tbody></table></div></div>`;
+  }
+
+  // 🧾 Payments — any date, same list as COLLECTIONS → Subscribers
+  async function payLoad(date){
+    payDate = date;
+    const body = document.getElementById('st-body'); if (!body) return;
+    const pays = await sb('subscriber_payments', `payment_date=eq.${date}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at&order=created_at.asc`, 2000);
+    if (payDate !== date || stTab !== 'pays') return;
+    payRows = ordered(Array.isArray(pays) ? pays : []);
+    try { await fillAreas(payRows); } catch(e){}
+    const names = [...new Set(payRows.map(whoOf))].sort();
+    if (payFilt && !names.includes(payFilt)) payFilt = '';
+    const sum = payRows.reduce((s,p)=>s+Number(p.amount||0),0);
+    const by = {cash:0,gcash:0,unknown:0}; payRows.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
+    body.innerHTML = `<div class="cx-card"><div class="cx-head"><span class="cx-nav" id="sp-nav"><button type="button" data-d="-1">◀</button><button type="button" data-d="0">Today</button><button type="button" data-d="1">▶</button></span>
+        <input type="date" id="sp-date" value="${esc(date)}" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit;font-size:13px">
+        <b style="margin-left:auto">${payRows.length} payment${payRows.length===1?'':'s'} · ${peso(sum)}</b><span style="font-size:11px;color:#6b7280">cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}</span></div>
+      <div class="cx-chips" style="padding:10px 14px"><button class="cx-chip${payFilt===''?' on':''}" data-c="">All (${payRows.length})</button>${names.map(n=>`<button class="cx-chip${payFilt===n?' on':''}" data-c="${esc(n)}">${esc(n)} (${payRows.filter(p=>whoOf(p)===n).length})</button>`).join('')}</div>
+      <div class="sc-scroll" id="sp-list"></div></div>`;
+    const draw = () => { const l = payRows.filter(p => !payFilt || whoOf(p)===payFilt); document.getElementById('sp-list').innerHTML = l.length ? table(l) : '<div class="sc-empty">📭 No subscriber payments on this date</div>'; };
+    body.querySelectorAll('.cx-chip[data-c]').forEach(b => b.onclick = () => { payFilt = b.dataset.c; body.querySelectorAll('.cx-chip[data-c]').forEach(x=>x.classList.toggle('on', x.dataset.c===payFilt)); draw(); });
+    body.querySelector('#sp-date').onchange = e => payLoad(e.target.value || todayPH());
+    body.querySelectorAll('#sp-nav button').forEach(b => b.onclick = () => { if (b.dataset.d==='0') return payLoad(todayPH()); const t=new Date(payDate+'T12:00:00'); t.setDate(t.getDate()+Number(b.dataset.d)); payLoad(t.toLocaleDateString('en-CA')); });
+    draw();
+  }
+
+  // 📶 No internet — deductions this month (applied automatically by Spawn Collect)
+  async function dedLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    const m1 = todayPH().slice(0,7) + '-01';
+    const [ded] = await Promise.all([sb('sub_deductions', `ym=eq.${m1}&select=id,subscriber_id,days,rate,amount,reason,approved_by,approved_at,voided_at,voided_by&order=approved_at.desc`, 1000), bookLoad()]);
+    if (stTab !== 'ded') return;
+    const names = {}; (book||[]).forEach(r => names[r.id] = r);
+    const list = Array.isArray(ded) ? ded : [];
+    const live = list.filter(d => !d.voided_at), tot = live.reduce((s,d)=>s+Number(d.amount||0),0);
+    body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>📶 No-internet deductions · ${esc(new Date(m1+'T12:00:00').toLocaleDateString('en-PH',{month:'long',year:'numeric'}))}</b>
+        <span style="font-size:12px;color:#6b7280">${live.length} subscriber${live.length===1?'':'s'} · <b style="color:#966500">−${peso(tot)}</b> · applied automatically when the collector reports it</span></div>
+      <div class="sc-scroll">${list.length?`<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th class="n">Days</th><th class="n">Monthly</th><th class="n">Deducted</th><th>Reason</th><th>Reported by</th><th>When</th><th>Status</th></tr></thead><tbody>
+        ${list.map(d=>{ const s=names[d.subscriber_id]||{}; return `<tr style="${d.voided_at?'opacity:.5;text-decoration:line-through':''}"><td><b>${esc(s.name||('#'+d.subscriber_id))}</b></td><td>${esc(s.area||'—')}</td>
+          <td class="n">${d.days}</td><td class="n">${peso(d.rate)}</td><td class="n"><b style="color:#966500">−${peso(d.amount)}</b></td><td>${esc(d.reason||'')}</td>
+          <td>${esc(String(d.approved_by||'').replace(/^auto:/,''))}</td><td style="white-space:nowrap">${d.approved_at?new Date(d.approved_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):'—'}</td>
+          <td>${d.voided_at?'Voided':'Applied'}</td></tr>`; }).join('')}</tbody></table>`:'<div class="sc-empty">No deductions this month</div>'}</div></div>`;
+  }
+
+  // The tab button calls subscribersInit(); route it through the sections.
+  window.subscribersInit = function(){ stGo(stTab); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', liveStart); else liveStart();
 })();
