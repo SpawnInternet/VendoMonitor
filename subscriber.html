@@ -412,6 +412,11 @@ body.simple-mode #pay-amt{font-size:30px;font-weight:800;text-align:center;heigh
 .cd-gps{margin-top:8px;padding:10px 12px;border-radius:12px;background:#f5f7fd;font-size:13px;color:#374151}
 .cd-gps b{font-size:18px}
 .cd-why{margin:0 16px 8px;font-size:13px;font-weight:700;color:#c01176;text-align:center;min-height:18px}
+#back-fab{position:fixed;left:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:18px;border:0;z-index:330;display:none;align-items:center;justify-content:center;
+  color:#0f2a5c;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(17,24,39,.22),inset 0 1px 0 #fff;outline:1.5px solid #c7d2fe;outline-offset:-1.5px;cursor:pointer}
+body.simple-mode #back-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+#back-fab svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.modal{padding-bottom:76px}
 </style>
 </head>
 <body>
@@ -707,6 +712,9 @@ body.simple-mode #pay-amt{font-size:30px;font-weight:800;text-align:center;heigh
   </div>
 </div>
 
+<!-- ── FLOATING BACK BUTTON (v4.8) — same as the phone's back button ── -->
+<button type="button" id="back-fab" aria-label="Back" onclick="goBackStep()"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+
 <!-- ── FLOATING CALCULATOR (v4.0) ── -->
 <button type="button" id="calc-fab" aria-label="Open calculator" onclick="openCalc()"><svg viewBox="0 0 24 24"><rect x="4.5" y="2.5" width="15" height="19" rx="2.5"/><path d="M8 6.5h8M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5v3.5M8.5 18h.01M12 18h.01"/></svg></button>
 <div class="overlay" id="calc-overlay" style="display:none;z-index:300" onclick="if(event.target===this)closeCalc()">
@@ -726,7 +734,7 @@ body.simple-mode #pay-amt{font-size:30px;font-weight:800;text-align:center;heigh
 </div>
 
 <script>
-const APP_VERSION = 'v4.7';
+const APP_VERSION = 'v4.8';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -2410,6 +2418,19 @@ function closeTopLayer(){
   for(const [id,fn] of order){ const el=document.getElementById(id); if(el&&el.style.display==='flex'){ try{fn();}catch(e){ el.style.display='none'; } return true; } }
   return false;
 }
+function goBackStep(){
+  // floating button: one step back, never closes the app
+  if(closeTopLayer()) return true;
+  if(_curTab!==homeTab()){ const prev=_tabStack.pop()||homeTab(); _navBack=true; try{ switchTab(['subscribers','history','simple'].includes(prev)?prev:'home'); }finally{ _navBack=false; } return true; }
+  return false;
+}
+function anyLayerOpen(){ return ['calc-overlay','out-overlay','de-overlay','rcpt-overlay','pay-overlay','det-overlay','cd-overlay'].some(id=>{ const e=document.getElementById(id); return e&&e.style.display==='flex'; }); }
+setInterval(()=>{
+  const f=document.getElementById('back-fab'); if(!f) return;
+  const main=document.getElementById('screen-main');
+  const show=!!_col&&main&&main.classList.contains('active')&&(anyLayerOpen()||_curTab!==homeTab());
+  f.style.display=show?'flex':'none';
+},300);
 window.addEventListener('popstate',()=>{
   const main=document.getElementById('screen-main');
   if(!_col||!main||!main.classList.contains('active')) return;          // login screen: normal back
