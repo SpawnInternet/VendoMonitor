@@ -389,6 +389,18 @@ body.simple-mode .sm-back{display:flex;align-items:center;gap:6px;margin:10px 16
 .sm-rm{flex:1;min-width:0}.sm-rn{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-rw{font-size:13px;font-weight:600;color:#966500}.sm-row.late .sm-rw{color:#d91934}.sm-row.paid .sm-rw{color:#027e60}
 .sm-miss{color:#c01176;font-weight:700}
+.ms-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.ms{border-radius:10px;padding:5px 2px;text-align:center;background:#fff;border:1.5px solid #e2e8f0}
+.ms b{display:block;font-size:11px;color:#334155}.ms i{display:block;font-style:normal;font-size:16px;font-weight:800;line-height:1.1}
+.ms small{display:block;font-size:9.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ms-paid{background:#ecfdf5;border-color:#a7f0cf}.ms-paid i{color:#027e60}
+.ms-owe{background:#fff1f2;border-color:#fecdd3}.ms-owe i{color:#d91934}
+.ms-part{background:#fff8e6;border-color:#f5d98f}.ms-part i{color:#966500}
+.ms-next i{color:#94a3b8}.ms-none i{color:#cbd5e1}
+.ms-first{outline:2.5px solid #025ac6;outline-offset:1px}
+.ms-today{margin-top:8px;padding:8px 10px;border-radius:10px;background:#025ac6;color:#fff;font-weight:800;font-size:13.5px}
+.sm-ow{font-size:12px;font-weight:700;color:#d91934;margin-top:2px}
+.sm-lp{font-size:11.5px;color:#6b7280;margin-top:1px}
 .sm-part{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#fff1cc;color:#966500;font-size:10px;font-weight:800;letter-spacing:.05em;vertical-align:2px}
 .sm-ra{text-align:right}.sm-ra b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}.sm-ra small{font-size:11px;color:#966500}
 .sm-empty{text-align:center;padding:30px 10px;color:#6b7280;font-size:14px}
@@ -781,7 +793,7 @@ body.simple-mode #back-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 </div>
 
 <script>
-const APP_VERSION = 'v4.13';
+const APP_VERSION = 'v4.14';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1237,12 +1249,12 @@ function setMiss(k){_miss=(_miss===k?'':k);buildChips();renderList();}
 // Maybe paid = a payment whose name is spelled close but not the same, or a name
 //             two subscribers share. The collector asks before collecting.
 async function loadArrears(){
-  const apply=rows=>{ _arr={}; _info={}; rows.forEach(x=>{ _info[x.subscriber_id]=x; if(x.months_behind>0||x.balance_total>0) _arr[x.subscriber_id]={subscriber_id:x.subscriber_id,months_behind:x.months_behind,unpaid_months:x.unpaid_months,amount_due:x.amount_due}; }); };
+  const apply=(rows,at)=>{ window._infoAt=at||Date.now(); _arr={}; _info={}; rows.forEach(x=>{ _info[x.subscriber_id]=x; if(x.months_behind>0||x.balance_total>0) _arr[x.subscriber_id]={subscriber_id:x.subscriber_id,months_behind:x.months_behind,unpaid_months:x.unpaid_months,amount_due:x.amount_due}; }); };
   try{
     const d=await rpc('spawn_collect_subinfo',{p_name:_col,p_pin:_pin});
     if(Array.isArray(d)){ apply(d); try{ localStorage.setItem('sc_info',JSON.stringify({rows:d,at:Date.now()})); }catch(e){} renderList(); return; }
   }catch(e){}
-  try{ const c=JSON.parse(localStorage.getItem('sc_info')||'null'); if(c){ apply(c.rows); renderList(); } }catch(e){}
+  try{ const c=JSON.parse(localStorage.getItem('sc_info')||'null'); if(c){ apply(c.rows,c.at||1); renderList(); } }catch(e){}
 }
 function firstName(x){ return String(x||'').trim().split(/\s+/)[0].toLowerCase(); }
 function payMode(s){ const i=_info[s.id]; return (i&&i.pay_mode)||'unknown'; }
@@ -1299,6 +1311,18 @@ function ymOfLabel(lbl){
 }
 function owedMonths(s){
   const i=_info[s.id]||{}, rate=expected(s), out=[];
+  if(Array.isArray(i.owed)){
+    i.owed.forEach(o=>{ const ym=String(o.ym).slice(0,7); const amt=o.kind==='balance'?Number(o.due):(ym===thisMonth()?rate:Number(o.due)||rate);
+      const ex=out.find(x=>x.ym===ym); if(ex) ex.amount=Math.max(ex.amount,amt); else out.push({ym,amount:amt,kind:o.kind}); });
+    const pi=paidInfo(s), cur=thisMonth();
+    if(pi&&pi.level==='partial'){ const o=out.find(x=>x.ym===cur); if(o) o.amount=pi.balance; else out.push({ym:cur,amount:pi.balance,kind:'balance'}); }
+    if(pi&&pi.level==='paid'){ const j=out.findIndex(x=>x.ym===cur); if(j>=0) out.splice(j,1); }
+    // a payment recorded on this phone today already fills the oldest owed months
+    let paidHere=_pays.filter(p=>p.subscriber_id===s.id&&p._at&&p._at>(window._infoAt||0)).reduce((a,p)=>a+Number(p.amount||0),0);
+    out.sort((a,b)=>a.ym.localeCompare(b.ym));
+    while(paidHere>0.5&&out.length){ if(paidHere>=out[0].amount-0.5){ paidHere-=out[0].amount; out.shift(); } else { out[0].amount-=paidHere; paidHere=0; } }
+    return out;
+  }
   (i.unpaid_months||[]).map(ymOfLabel).filter(Boolean).sort().forEach(ym=>{ if(!out.some(o=>o.ym===ym)) out.push({ym,amount:rate}); });
   const pi=paidInfo(s), cur=thisMonth();
   if(pi&&pi.level==='partial'){ const o=out.find(x=>x.ym===cur); if(o) o.amount=pi.balance; else out.push({ym:cur,amount:pi.balance}); }
@@ -1306,6 +1330,21 @@ function owedMonths(s){
   return out.sort((a,b)=>a.ym.localeCompare(b.ym));
 }
 function monLbl(ym){ return MON[+ym.slice(5,7)-1].slice(0,3); }
+function coversList(s,amt){
+  const o=owedMonths(s), rate=expected(s)||Number(s.monthly_amount)||0, out=[];
+  let left=Number(amt)||0, k=0;
+  let next=o.length?ymAdd(o[o.length-1].ym,1):(()=>{ const pi=paidInfo(s); return pi&&pi.level==='paid'?ymAdd(thisMonth(),1):thisMonth(); })();
+  while(left>0.5&&out.length<6){
+    let ym, need;
+    if(k<o.length){ ym=o[k].ym; need=o[k].amount; } else { ym=next; need=rate; next=ymAdd(next,1); }
+    if(need<=0) break;
+    out.push({ym, full:left>=need-0.5}); left-=need; k++;
+  }
+  return out;
+}
+function lastPaidText(s){ const i=_info[s.id]||{}; if(!i.last_paid) return 'No payment on record';
+  const d=new Date(String(i.last_paid).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'});
+  return 'Last paid '+d+(i.last_paid_for?' · for '+monLbl(String(i.last_paid_for).slice(0,7)):''); }
 function owedLabel(s){ const o=owedMonths(s); if(!o.length) return ''; return o.length===1?'for '+monLbl(o[0].ym):'for '+monLbl(o[0].ym)+'–'+monLbl(o[o.length-1].ym); }
 // How many months an amount covers, starting at the oldest owed month.
 function monthsFor(s,amt){
@@ -1797,7 +1836,7 @@ function openPay(subId){
   const owed=owedMonths(_cur);
   document.getElementById('pay-month').value=owed.length?owed[0].ym:((pi&&pi.level==='paid')?ymAdd(ym,1):ym);
   if(owed.length>1){ const tot=owed.reduce((a,o)=>a+o.amount,0); document.getElementById('pay-amt').value=tot; }
-  _months=monthsFor(_cur,document.getElementById('pay-amt').value); renderMonths(); onCover(); smPayLabel();
+  _months=monthsFor(_cur,document.getElementById('pay-amt').value); renderMonths(); onCover(); smPayLabel(); renderExpect();
 
   loadSubHist(subId,'pay-hist',5,'Recent payments',()=>_cur&&_cur.id===subId);
   document.getElementById('pay-overlay').style.display='flex';
@@ -1814,22 +1853,34 @@ function renderMethod(){
 function addNote(t){ const n=document.getElementById('pay-note'); const v=n.value.trim(); if(!v.toLowerCase().includes(t)) n.value=v?v+' · '+t:t; }
 function renderExpect(){
   const el=document.getElementById('pay-expect'); if(!el||!_cur) return;
-  const i=_info[_cur.id]||{}, ym=thisMonth(), rate=Number(i.rate||_cur.monthly_amount||0), due=expected(_cur);
+  const i=_info[_cur.id]||{}, ym=thisMonth(), rate=Number(i.rate||_cur.monthly_amount||0);
   if(!rate){ el.innerHTML='<div class="warn-box warn-maybe">No monthly amount on record. Ask the office before collecting.</div>'; return; }
-  const ow=owedMonths(_cur), ppi=paidInfo(_cur), pesoL=n=>'₱'+Number(n||0).toLocaleString('en-PH');
-  let h='<div class="warn-box" style="background:#eef3fb;color:#1e3a8a">';
-  if(ow.length){
-    const tot=ow.reduce((a,o)=>a+o.amount,0);
-    h+='<b>Owes '+pesoL(tot)+'</b>: '+ow.map(o=>esc(MON[+o.ym.slice(5,7)-1])+' '+pesoL(o.amount)+(ppi&&ppi.level==='partial'&&o.ym===ym?' (balance)':'')).join(' · ')
-      +'<br><span style="font-size:12px">Money goes to <b>'+esc(MON[+ow[0].ym.slice(5,7)-1])+'</b> first, then the next month — like BASHANG.</span>';
-  } else if(ppi&&ppi.level==='paid'){
-    h+='<b>'+esc(ymLabel(ym))+' is paid.</b> A payment now goes to '+esc(ymLabel(ymAdd(ym,1)))+' (advance).';
-  } else {
-    h+='<b>To collect for '+esc(ymLabel(ym))+': '+pesoL(due)+'</b>';
+  const ow=owedMonths(_cur), pesoL=n=>'₱'+Number(n||0).toLocaleString('en-PH');
+  // month strip: the last 6 months + next month, each marked
+  const hist={}; (i.months||[]).forEach(m=>{ hist[String(m.ym).slice(0,7)]=m; });
+  const owedSet={}; ow.forEach(o=>owedSet[o.ym]=o);
+  let strip='', mm=ymAdd(ym,-5);
+  for(let k=0;k<7;k++){
+    const m=hist[mm]||{}, o=owedSet[mm], paid=Number(m.amount||0)>0;
+    let cls='ms-none', mark='·', sub='';
+    if(o&&o.kind==='balance'){ cls='ms-part'; mark='½'; sub='bal '+pesoL(o.amount); }
+    else if(o){ cls='ms-owe'; mark='✗'; sub='owes'; }
+    else if(paid){ cls='ms-paid'; mark='✓'; sub=m.paid_date?new Date(String(m.paid_date).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'}):'paid'; }
+    else if(mm>=ym){ cls='ms-next'; mark='·'; sub=mm===ym?'due '+(_cur.due_day||'—'):'next'; }
+    else { cls='ms-none'; mark='–'; sub='—'; }
+    strip+='<div class="ms '+cls+(ow.length&&ow[0].ym===mm?' ms-first':'')+'"><b>'+esc(monLbl(mm))+'</b><i>'+mark+'</i><small>'+esc(sub)+'</small></div>';
+    mm=ymAdd(mm,1);
   }
-  if(i.ded_amount>0) h+='<br>'+pesoL(rate)+' − '+i.ded_days+' days no internet (−'+pesoL(i.ded_amount)+') this month';
-  if(ppi&&ppi.level==='partial') h+='<br><span style="color:#966500">Already paid '+pesoL(ppi.paid_sum)+' this month</span>';
-  h+='<br><span style="font-size:11px">Plan changes are set by the office. The office sees all deductions.</span></div>';
+  let h='<div class="warn-box" style="background:#eef3fb;color:#1e3a8a">';
+  h+='<div class="ms-row">'+strip+'</div>';
+  h+='<div style="margin-top:6px;font-size:12.5px;color:#475569">'+esc(lastPaidText(_cur))+'</div>';
+  if(ow.length){ const tot=ow.reduce((a,o)=>a+o.amount,0);
+    h+='<div style="margin-top:4px"><b style="color:#d91934">Owes '+pesoL(tot)+'</b> · '+ow.map(o=>esc(monLbl(o.ym))+' '+pesoL(o.amount)).join(' · ')+'</div>';
+  } else h+='<div style="margin-top:4px"><b style="color:#027e60">Nothing owed.</b> A payment now is for '+esc(ymLabel(paidInfo(_cur)&&paidInfo(_cur).level==='paid'?ymAdd(ym,1):ym))+'.</div>';
+  const amt=Number(document.getElementById('pay-amt').value||0), cv=coversList(_cur,amt);
+  if(amt>0&&cv.length) h+='<div class="ms-today">Today\'s ₱'+amt.toLocaleString('en-PH')+' → '+cv.map(c=>esc(MON[+c.ym.slice(5,7)-1])+(c.full?'':' (part)')).join(', ')+'</div>';
+  if(i.ded_amount>0) h+='<div style="margin-top:4px;font-size:12px">'+pesoL(rate)+' − '+i.ded_days+' days no internet (−'+pesoL(i.ded_amount)+') this month</div>';
+  h+='</div>';
   el.innerHTML=h;
 }
 function renderPlanReq(){
@@ -1894,7 +1945,7 @@ function selAmt(a,el){
   document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
 }
-function onAmt(){document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel')); if(_cur){ const n=monthsFor(_cur,document.getElementById('pay-amt').value); if(n!==_months){ _months=n; renderMonths(); onCover(); } } smPayLabel();}
+function onAmt(){document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel')); if(_cur){ renderExpect(); const n=monthsFor(_cur,document.getElementById('pay-amt').value); if(n!==_months){ _months=n; renderMonths(); onCover(); } } smPayLabel();}
 function closePay(e){ if(e&&e.target!==document.getElementById('pay-overlay'))return; forceClosePay(); }
 function forceClosePay(){document.getElementById('pay-overlay').style.display='none';_cur=null;}
 
@@ -1935,7 +1986,7 @@ async function submitPay(){
     p_method:_method,p_paper_no:paper||null,p_gcash_ref:gref||null};
   const local={_local:true,_pending:true,_ref:ref,subscriber_id:_cur.id,subscriber_name:_cur.name,area:_cur.area,
     amount:amt,payment_date:rec.p_date,month_year:start,months:_months,cover_from:start,cover_to:endM,
-    collector:_col,note:note,invoice_no:null,pay_method:_method,paper_no:paper||null,gcash_ref:gref||null};
+    collector:_col,note:note,invoice_no:null,pay_method:_method,paper_no:paper||null,gcash_ref:gref||null,_at:Date.now()};
   if(paper){ try{ localStorage.setItem('sc_paper_last_'+_col,paper); }catch(e){} }
   const item={type:'payment',ref,rec,at:Date.now()};
   _queue.push(item); saveQ();
@@ -2350,6 +2401,7 @@ function smWhen(s,st){
 function smAmount(s,st){
   const i=_info[s.id]||{};
   if(st==='paid'){ const pi=paidInfo(s); return pi&&pi.amount?Number(pi.amount):0; }
+  const owAll=owedMonths(s); if(owAll.length) return owAll.reduce((a,o)=>a+o.amount,0);
   if(behind(s)>1&&Number(i.amount_due)>0) return Number(i.amount_due);
   const pi=paidInfo(s); if(pi&&pi.level==='partial') return pi.balance;
   return expected(s)||Number(s.monthly_amount||0);
@@ -2369,8 +2421,12 @@ function smRow(s,st){
   const how=(_smTab==='all'||_smQ)?(pm==='gcash'?' · GCash':pm==='cash'?' · Cash':pm==='unknown'?' · ask how they pay':' · '+pm):'';
   const cls=st==='late'?'late':(st==='paid'?'paid':'due');
   const pi=st!=='paid'?paidInfo(s):null, part=pi&&pi.level==='partial';
+  const ow=st!=='paid'?owedMonths(s):[];
+  const owLine=ow.length?('Owes '+ow.map(o=>monLbl(o.ym)).join(', ')+' → pay for '+monLbl(ow[0].ym)+' first'):'';
   return '<button type="button" class="sm-row '+cls+'" onclick="openPay('+s.id+')"><div class="sm-rm"><div class="sm-rn">'+esc(s.name||'—')+(part?' <span class="sm-part">PARTIAL</span>':'')+'</div>'
-    +'<div class="sm-rw">'+esc(smWhen(s,st)+how)+(miss?' <span class="sm-miss">· details missing</span>':'')+'</div></div>'
+    +'<div class="sm-rw">'+esc(smWhen(s,st)+how)+(miss?' <span class="sm-miss">· details missing</span>':'')+'</div>'
+    +(owLine?'<div class="sm-ow">'+esc(owLine)+'</div>':'')
+    +'<div class="sm-lp">'+esc(lastPaidText(s))+'</div></div>'
     +'<div class="sm-ra"><b>'+peso0(amt)+'</b>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></button>';
 }
 function renderSimple(){
