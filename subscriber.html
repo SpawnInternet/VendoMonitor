@@ -380,6 +380,19 @@ body.simple-mode .sm-back{display:flex;align-items:center;gap:6px;margin:10px 16
 .sm-search{display:flex;align-items:center;gap:10px;height:46px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.96);border:1.5px solid #c7d2fe;margin-bottom:8px}
 .sm-search input{flex:1;border:0;outline:none;background:transparent;font:500 15px Inter,system-ui,sans-serif;min-width:0}
 .sm-pend{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;margin:2px 0 8px;border-radius:14px;border:1.5px solid #f5d98f;background:#fff8e6;color:#966500;font:700 14px Inter,system-ui,sans-serif;text-align:left;cursor:pointer}
+.sm-sum{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;margin:4px 0 8px;border-radius:14px;background:#fff;box-shadow:0 2px 8px rgba(17,24,39,.05)}
+.sm-sum b{font-size:13px;color:#0f2a5c}.sm-sum span{display:flex;gap:4px;flex-wrap:wrap;flex:1}.sm-sum strong{font-size:16px;color:#0f2a5c;font-variant-numeric:tabular-nums}
+.sm-sum em,.sm-chips em{font-style:normal;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
+em.t{background:#fff1cc;color:#966500}em.l{background:#fee2e2;color:#d91934}em.s{background:#eef4ff;color:#025ac6}em.p{background:#e7f6f1;color:#027e60}
+.sm-area{margin-bottom:8px}
+.sm-ac{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border:0;border-radius:16px;background:rgba(255,255,255,.97);box-shadow:0 3px 10px rgba(17,24,39,.06);font-family:inherit;cursor:pointer;text-align:left}
+.sm-area.open .sm-ac{box-shadow:0 0 0 2px #c7d2fe inset,0 3px 10px rgba(17,24,39,.06)}
+.sm-ac i{width:12px;height:12px;border-radius:999px;flex-shrink:0}
+.sm-an{display:flex;flex-direction:column;min-width:78px}.sm-an b{font-size:14px;font-weight:800;letter-spacing:.03em;color:#0f2a5c}.sm-an small{font-size:11px;color:#6b7280}
+.sm-chips{display:flex;gap:4px;flex-wrap:wrap;flex:1}
+.sm-ac strong{font-size:15px;font-weight:800;color:#0f2a5c;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sm-arw{font-style:normal;color:#6b7280;font-size:13px}
+.sm-area.open{padding-bottom:4px}
 .sm-ah{display:flex;align-items:center;gap:8px;width:100%;padding:10px 2px 6px;border:0;background:transparent;font-family:inherit;cursor:pointer}
 .sm-ah i{width:10px;height:10px;border-radius:999px;display:inline-block}.sm-ah b{font-size:14px;font-weight:800;letter-spacing:.04em;color:#0f2a5c}
 .sm-ah span{font-size:13px;color:#6b7280}.sm-ah em{margin-left:auto;font-size:13px;font-style:normal;color:#6b7280}
@@ -794,7 +807,7 @@ body.simple-mode #calc-fab{display:none!important}
 </div>
 
 <script>
-const APP_VERSION = 'v4.15';
+const APP_VERSION = 'v4.16';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1924,7 +1937,7 @@ function pickMonths(n){
   const inp=document.getElementById('pay-amt'), mo=_cur&&_cur.monthly_amount>0?+_cur.monthly_amount:0;
   const cur=parseFloat(inp.value);
   if(mo&&(!inp.value||cur===mo*_months)){ inp.value=mo*n; document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel')); }
-  _months=n; renderMonths(); onCover();
+  _months=n; renderMonths(); onCover(); renderExpect(); smPayLabel();
 }
 function onCover(){
   const a=document.getElementById('pay-month').value||thisMonth(), b=ymAdd(a,_months-1);
@@ -1953,8 +1966,10 @@ async function loadSubHist(subId,elId,limit,title,stillOpen){
 }
 function selAmt(a,el){
   document.getElementById('pay-amt').value=a;
+  if(_cur){ const n=monthsFor(_cur,a); if(n!==_months){ _months=n; renderMonths(); onCover(); } }
   document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
+  renderExpect(); smPayLabel();
 }
 function onAmt(){document.querySelectorAll('.abtn').forEach(b=>b.classList.remove('sel')); if(_cur){ renderExpect(); const n=monthsFor(_cur,document.getElementById('pay-amt').value); if(n!==_months){ _months=n; renderMonths(); onCover(); } } smPayLabel();}
 function closePay(e){ if(e&&e.target!==document.getElementById('pay-overlay'))return; forceClosePay(); }
@@ -2406,12 +2421,13 @@ const SIMPLE_USERS=['mark'];
 const SM_AREA_COLOR={DIPOLOG:'#025AC6',DAPITAN:'#028867',SINDANGAN:'#C01176',POLANCO:'#FFB725',ROXAS:'#311A8E',MINAOG:'#0EA5E9',SINAMAN:'#DF1A35'};
 let _smTab=(()=>{ try{ return localStorage.getItem('sc_smtab')||'route'; }catch(e){ return 'route'; } })();
 let _smClosed={}, _smQ='', _cdAfter=null, _cd=null;
+let _smOpen=(()=>{ try{ const o=JSON.parse(localStorage.getItem('sc_area_open')||'null'); return o&&o.d===new Date().toDateString()?o.a:{}; }catch(e){ return {}; } })();
 function isSimple(){ return !!_col && SIMPLE_USERS.includes(firstName(_col)); }
 function homeTab(){ return isSimple()?'simple':'home'; }
 function applyMode(){ document.body.classList.toggle('simple-mode', isSimple()); }
 function peso0(n){ return '₱'+Number(n||0).toLocaleString('en-PH'); }
 function smSetTab(t){ _smTab=t; try{ localStorage.setItem('sc_smtab',t); }catch(e){} renderSimple(); }
-function smToggle(a){ const k=_smTab+'|'+a; _smClosed[k]=!_smClosed[k]; renderSimpleList(); }
+function smToggle(a){ const k=_smTab+'|'+a; _smOpen[k]=!_smOpen[k]; try{ localStorage.setItem('sc_area_open',JSON.stringify({d:new Date().toDateString(),a:_smOpen})); }catch(e){} renderSimpleList(); }
 function smSearch(v){ _smQ=String(v||'').trim().toLowerCase(); renderSimpleList(); }
 
 // Details count as done when the server has them OR they are saved on this phone waiting to upload.
@@ -2512,8 +2528,17 @@ function renderSimpleList(){
   const areas=Object.keys(by).sort((a,b)=>by[b].length-by[a].length);
   if(!areas.length){ el.innerHTML='<div class="sm-empty">'+(q?'No one found with that name':(_smTab==='route'?'Nobody on your route right now 🎉':'No subscribers loaded yet'))+'</div>'; return; }
   const order=['DUE','LATE','PAID THIS MONTH'];
-  el.innerHTML=areas.map((a,ai)=>{
-    const rows=by[a], open=q?true:!_smClosed[_smTab+'|'+a];
+  const pesoK=n=>'₱'+Number(n||0).toLocaleString('en-PH');
+  // area summary first (closed by default): due today · late · soon · ₱ to collect
+  const tot={today:0,late:0,soon:0,amt:0};
+  const sums=areas.map(a=>{ const x={today:0,late:0,soon:0,paid:0,amt:0};
+    by[a].forEach(s=>{ const st=dueState(s);
+      if(st==='today') x.today++; else if(st==='late') x.late++; else if(st==='soon') x.soon++; else if(st==='paid'||st==='free') x.paid++;
+      if(st==='today'||st==='late'||st==='soon') x.amt+=smAmount(s,st); });
+    tot.today+=x.today; tot.late+=x.late; tot.soon+=x.soon; tot.amt+=x.amt; return x; });
+  const head=(!q&&_smTab==='route')?'<div class="sm-sum"><b>Today\'s route</b><span><em class="t">'+tot.today+' due today</em><em class="l">'+tot.late+' late</em><em class="s">'+tot.soon+' soon</em></span><strong>'+pesoK(tot.amt)+'</strong></div>':'';
+  el.innerHTML=head+areas.map((a,ai)=>{
+    const rows=by[a], x=sums[ai], open=q?true:!!_smOpen[_smTab+'|'+a];
     let body='';
     if(open){
       const g={}; rows.forEach(s=>{ const st=dueState(s); (g[gOf(st)]=g[gOf(st)]||[]).push([s,st]); });
@@ -2522,8 +2547,14 @@ function renderSimpleList(){
         g[k].sort(k==='LATE'?((x,y)=>(behind(y[0])-behind(x[0]))||byDue(x,y)):byDue);
         body+='<div class="sm-gl '+(k==='LATE'?'late':k==='DUE'?'due':'paid')+'">'+k+' · '+g[k].length+'</div>'+g[k].map(([s,st])=>smRow(s,st)).join(''); });
     }
-    return '<div><button type="button" class="sm-ah" data-a="'+esc(a)+'" onclick="smToggle(this.dataset.a)"><i style="background:'+(SM_AREA_COLOR[String(a).toUpperCase()]||'#94a3b8')+'"></i><b>'+esc(a)+'</b>'
-      +'<span>'+rows.length+(_smTab==='route'&&!q?' to visit':'')+'</span><em>'+(q?'':(open?'Hide ▲':'Show ▼'))+'</em></button>'+body+'</div>';
+    const chips=(x.today?'<em class="t">'+x.today+' due today</em>':'')+(x.late?'<em class="l">'+x.late+' late</em>':'')+(x.soon?'<em class="s">'+x.soon+' soon</em>':'')
+      +(_smTab!=='route'&&x.paid?'<em class="p">'+x.paid+' paid</em>':'');
+    return '<div class="sm-area'+(open?' open':'')+'"><button type="button" class="sm-ac" data-a="'+esc(a)+'" onclick="smToggle(this.dataset.a)">'
+      +'<i style="background:'+(SM_AREA_COLOR[String(a).toUpperCase()]||'#94a3b8')+'"></i>'
+      +'<span class="sm-an"><b>'+esc(a)+'</b><small>'+rows.length+(_smTab==='route'&&!q?' to visit':' subscribers')+'</small></span>'
+      +'<span class="sm-chips">'+chips+'</span>'
+      +(x.amt?'<strong>'+pesoK(x.amt)+'</strong>':'')
+      +'<em class="sm-arw">'+(q?'':(open?'▲':'▼'))+'</em></button>'+body+'</div>';
   }).join('');
 }
 function smPayLabel(){
