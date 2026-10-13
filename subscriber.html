@@ -389,6 +389,7 @@ body.simple-mode .sm-back{display:flex;align-items:center;gap:6px;margin:10px 16
 .sm-rm{flex:1;min-width:0}.sm-rn{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sm-rw{font-size:13px;font-weight:600;color:#966500}.sm-row.late .sm-rw{color:#d91934}.sm-row.paid .sm-rw{color:#027e60}
 .sm-miss{color:#c01176;font-weight:700}
+.sm-part{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#fff1cc;color:#966500;font-size:10px;font-weight:800;letter-spacing:.05em;vertical-align:2px}
 .sm-ra{text-align:right}.sm-ra b{display:block;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}.sm-ra small{font-size:11px;color:#966500}
 .sm-empty{text-align:center;padding:30px 10px;color:#6b7280;font-size:14px}
 .sm-bar{position:fixed;left:0;right:0;bottom:0;z-index:120;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 14px calc(14px + env(safe-area-inset-bottom,0px));background:rgba(255,255,255,.95);border-top:1px solid #e6e7ea;backdrop-filter:blur(8px)}
@@ -780,7 +781,7 @@ body.simple-mode #back-fab{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 </div>
 
 <script>
-const APP_VERSION = 'v4.11';
+const APP_VERSION = 'v4.12';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1271,17 +1272,27 @@ function payCovers(p,ym){
   if(p.coverage_ok&&p.coverage_from&&p.coverage_to) return ym>=String(p.coverage_from).slice(0,7)&&ym<=String(p.coverage_to).slice(0,7);
   return p.month_year===ym;
 }
+// v4.12: a payment smaller than what is due this month is PARTIAL, not paid.
+// The subscriber stays on the route and shows the balance still to collect.
+function monthShare(p){ const n=Math.max(1,Number(p.months||p.coverage_months||1)); return Number(p.amount||0)/n; }
 function paidInfo(s){
-  const ym=thisMonth();
-  const mine=_pays.find(p=>p.subscriber_id===s.id&&payCovers(p,ym));
-  if(mine) return {level:'paid',paid_on:mine.payment_date,amount:mine.amount,collector:mine.collector,
-                   receipt:mine.invoice_no||'',paid_name:null,pending:!!mine._pending};
+  const ym=thisMonth(), due=expected(s);
+  const mineAll=_pays.filter(p=>p.subscriber_id===s.id&&payCovers(p,ym));
   const x=(_paidYm===ym)&&_paid[s.id];
+  const localSum=mineAll.reduce((a,p)=>a+monthShare(p),0);
+  const paidSum=Math.max(localSum, x?Number(x.amount||0):0);
+  const partial=(r)=>{ if(due>0&&paidSum>0&&paidSum<due-0.5){ r.level='partial'; r.paid_sum=paidSum; r.balance=Math.round((due-paidSum)*100)/100; } return r; };
+  if(mineAll.length){ const mine=mineAll[0];
+    return partial({level:'paid',paid_on:mine.payment_date,amount:mine.amount,collector:mine.collector,
+                   receipt:mine.invoice_no||'',paid_name:null,pending:!!mine._pending}); }
   if(!x) return null;
   const sure=(x.match==='linked'||x.match==='alias'||x.match==='name');
-  return {level:sure?'paid':'maybe',paid_on:x.paid_on,amount:x.amount,collector:x.collector,
+  const r={level:sure?'paid':'maybe',paid_on:x.paid_on,amount:x.amount,collector:x.collector,
           receipt:x.invoice_no||'',paid_name:x.paid_name,match:x.match};
+  return sure?partial(r):r;
 }
+// What is still to collect this month (balance after a partial payment).
+function dueLeft(s){ const pi=paidInfo(s); return pi&&pi.level==='partial'?pi.balance:expected(s); }
 
 // ── SUBSCRIBER LIST ──
 function behind(s){
@@ -1294,6 +1305,11 @@ function behind(s){
 }
 function dueState(s){
   const pi=paidInfo(s), td=new Date().getDate(), nb=behind(s);
+  if(pi&&pi.level==='partial'){
+    if(nb>1) return 'late';
+    if(!s.due_day) return 'late';
+    return s.due_day===td?'today':(s.due_day<td?'late':'soon');
+  }
   if(nb>0) return (nb===1 && s.due_day===td) ? 'today' : 'late';   // owes this month (due day passed) or earlier months
   if(pi&&pi.level==='paid') return 'paid';
   if(!s.due_day) return 'nodue';
@@ -1734,7 +1750,7 @@ function openPay(subId){
   const amts=[...new Set([expected(_cur),_cur.monthly_amount,(+_cur.monthly_amount||0)*2].filter(a=>a>0))].slice(0,3);
   document.getElementById('agrid').innerHTML=amts.map(a=>
     '<div class="abtn" onclick="selAmt('+a+',this)">'+fmt(a)+'</div>').join('');
-  document.getElementById('pay-amt').value=expected(_cur)||_cur.monthly_amount||'';
+  document.getElementById('pay-amt').value=dueLeft(_cur)||_cur.monthly_amount||'';
   document.getElementById('pay-note').value='';
   document.getElementById('pay-overlay').classList.remove('more');
   const pm=payMode(_cur); _method=(pm==='cash'||pm==='gcash')?pm:null;
@@ -1778,6 +1794,7 @@ function renderExpect(){
   if(!rate){ el.innerHTML='<div class="warn-box warn-maybe">No monthly amount on record. Ask the office before collecting.</div>'; return; }
   let h='<div class="warn-box" style="background:#eef3fb;color:#1e3a8a"><b>To collect for '+esc(ymLabel(ym))+': ₱'+due.toLocaleString('en-PH')+'</b>';
   if(i.ded_amount>0) h+='<br>₱'+rate.toLocaleString('en-PH')+' − '+i.ded_days+' days no internet (−₱'+Number(i.ded_amount).toLocaleString('en-PH')+')';
+  const ppi=paidInfo(_cur); if(ppi&&ppi.level==='partial') h+='<br><b style="color:#966500">Already paid ₱'+Number(ppi.paid_sum).toLocaleString('en-PH')+' this month — balance ₱'+Number(ppi.balance).toLocaleString('en-PH')+'</b>';
   if(i.balance_total>0) h+='<br>Plus balance from earlier months: ₱'+Number(i.balance_total).toLocaleString('en-PH');
   if(i.months_behind>1) h+='<br>Behind: '+esc((i.unpaid_months||[]).join(', '))+' · total owed ₱'+Number(i.amount_due||0).toLocaleString('en-PH');
   h+='<br><span style="font-size:11px">Plan changes are set by the office. The office sees all deductions.</span></div>';
@@ -1871,7 +1888,7 @@ async function submitPay(){
   if(pi&&pi.level==='paid'&&start<=ym&&endM>=ym&&
      !(await uiConfirm('Already paid?', _cur.name+' already shows as paid for '+ymLabel(ym)+'. Record another payment that also covers '+ymLabel(ym)+'?','Record anyway','Cancel','warn')))return;
 
-  const exp=expected(_cur)*_months;
+  const exp=(pi&&pi.level==='partial'&&start===ym)?(pi.balance+expected(_cur)*(_months-1)):expected(_cur)*_months;
   let noteAuto='';
   if(exp>0&&amt<exp-0.5){
     const short=exp-amt;
@@ -2301,10 +2318,12 @@ function smAmount(s,st){
   const i=_info[s.id]||{};
   if(st==='paid'){ const pi=paidInfo(s); return pi&&pi.amount?Number(pi.amount):0; }
   if(behind(s)>1&&Number(i.amount_due)>0) return Number(i.amount_due);
+  const pi=paidInfo(s); if(pi&&pi.level==='partial') return pi.balance;
   return expected(s)||Number(s.monthly_amount||0);
 }
 function smNote(s,st){
   const i=_info[s.id]||{};
+  const pi=paidInfo(s); if(pi&&pi.level==='partial') return 'balance · paid '+peso0(pi.paid_sum);
   if(st!=='paid'&&Number(i.ded_amount)>0) return '−'+peso0(i.ded_amount)+' no internet';
   if(st==='late'&&behind(s)>1) return behind(s)+' months';
   return '';
@@ -2314,7 +2333,8 @@ function smRow(s,st){
   const pm=payMode(s);
   const how=(_smTab==='all'||_smQ)?(pm==='gcash'?' · GCash':pm==='cash'?' · Cash':pm==='unknown'?' · ask how they pay':' · '+pm):'';
   const cls=st==='late'?'late':(st==='paid'?'paid':'due');
-  return '<button type="button" class="sm-row '+cls+'" onclick="openPay('+s.id+')"><div class="sm-rm"><div class="sm-rn">'+esc(s.name||'—')+'</div>'
+  const pi=st!=='paid'?paidInfo(s):null, part=pi&&pi.level==='partial';
+  return '<button type="button" class="sm-row '+cls+'" onclick="openPay('+s.id+')"><div class="sm-rm"><div class="sm-rn">'+esc(s.name||'—')+(part?' <span class="sm-part">PARTIAL</span>':'')+'</div>'
     +'<div class="sm-rw">'+esc(smWhen(s,st)+how)+(miss?' <span class="sm-miss">· details missing</span>':'')+'</div></div>'
     +'<div class="sm-ra"><b>'+peso0(amt)+'</b>'+(note?'<small>'+esc(note)+'</small>':'')+'</div></button>';
 }
