@@ -577,7 +577,7 @@ body{background:
         <input type="text" class="ti" id="pay-note" placeholder="e.g. partial, advance...">
       </div>
       <div class="nchips"><button type="button" onclick="addNote('partial')">Partial</button><button type="button" onclick="addNote('advance')">Advance</button><button type="button" onclick="addNote('promise to pay')">Promise to pay</button></div>
-      <button type="button" class="out-btn" onclick="openOutage()">📶 No internet some days? Report to the office</button>
+      <button type="button" class="out-btn" onclick="openOutage()">📶 No internet some days? Deduct it</button>
 
       <button class="btn btn-green" id="pay-btn" onclick="submitPay()" style="margin-bottom:8px">✓ Record payment</button>
       <button class="btn btn-gray" onclick="forceClosePay()">Cancel</button>
@@ -603,7 +603,7 @@ body{background:
       <div class="clabel">What happened?</div>
       <div class="nchips" id="out-reasons" style="margin:0 0 12px"></div>
       <div class="warn-box warn-maybe" id="out-calc">—</div>
-      <button class="btn btn-blue" type="button" id="out-btn" onclick="sendOutage()" style="margin-top:10px">Send to office</button>
+      <button class="btn btn-blue" type="button" id="out-btn" onclick="sendOutage()" style="margin-top:10px">Apply deduction</button>
       <button class="btn btn-gray" type="button" onclick="closeOutage()" style="margin-top:8px">Cancel</button>
     </div>
   </div>
@@ -649,7 +649,7 @@ body{background:
 </div>
 
 <script>
-const APP_VERSION = 'v4.4';
+const APP_VERSION = 'v4.5';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1598,10 +1598,10 @@ function renderExpect(){
   const i=_info[_cur.id]||{}, ym=thisMonth(), rate=Number(i.rate||_cur.monthly_amount||0), due=expected(_cur);
   if(!rate){ el.innerHTML='<div class="warn-box warn-maybe">No monthly amount on record. Ask the office before collecting.</div>'; return; }
   let h='<div class="warn-box" style="background:#eef3fb;color:#1e3a8a"><b>To collect for '+esc(ymLabel(ym))+': ₱'+due.toLocaleString('en-PH')+'</b>';
-  if(i.ded_amount>0) h+='<br>₱'+rate.toLocaleString('en-PH')+' − '+i.ded_days+' days no internet (₱'+Number(i.ded_amount).toLocaleString('en-PH')+'), approved by the office';
+  if(i.ded_amount>0) h+='<br>₱'+rate.toLocaleString('en-PH')+' − '+i.ded_days+' days no internet (−₱'+Number(i.ded_amount).toLocaleString('en-PH')+')';
   if(i.balance_total>0) h+='<br>Plus balance from earlier months: ₱'+Number(i.balance_total).toLocaleString('en-PH');
   if(i.months_behind>1) h+='<br>Behind: '+esc((i.unpaid_months||[]).join(', '))+' · total owed ₱'+Number(i.amount_due||0).toLocaleString('en-PH');
-  h+='<br><span style="font-size:11px">Deductions and plan changes are set by the office only.</span></div>';
+  h+='<br><span style="font-size:11px">Plan changes are set by the office. The office sees all deductions.</span></div>';
   el.innerHTML=h;
 }
 function renderPlanReq(){
@@ -1957,19 +1957,30 @@ function renderOutage(){
   document.getElementById('out-days').textContent=_outDays;
   document.getElementById('out-reasons').innerHTML=OUT_REASONS.map(r=>'<button type="button" style="'+(r===_outReason?'background:#141b2e;color:#fff;border-color:#141b2e':'')+'" onclick="_outReason=\''+r+'\';renderOutage()">'+r+'</button>').join('');
   const rate=Number((_info[_cur&&_cur.id]||{}).rate||(_cur&&_cur.monthly_amount)||0);
-  document.getElementById('out-calc').innerHTML=rate?'<b>Possible deduction: '+fmt(rate)+' ÷ 30 × '+_outDays+' = −'+fmt(Math.round(rate/30*_outDays))+'</b><br>Not deducted yet. The office checks it first — collect the full amount unless the office says otherwise.'
-    :'No monthly amount on record. The office will work out the deduction.';
+  document.getElementById('out-calc').innerHTML=rate?'<b>Deduction: '+fmt(rate)+' ÷ 30 × '+_outDays+' = −'+fmt(Math.round(rate/30*_outDays))+'</b><br>Applied right away — collect the lower amount. The office sees every deduction and can void a wrong one.'
+    :'No monthly amount on record. This goes to the office to work out.';
 }
 async function sendOutage(){
   if(!_cur) return;
   const rec={p_name:_col,p_sub_id:_cur.id,p_days:_outDays,p_from:document.getElementById('out-from').value||null,
     p_to:document.getElementById('out-to').value||null,p_reason:_outReason,p_note:null};
   if(navigator.onLine){
-    try{ await rpc('spawn_collect_outage_report',{...rec,p_pin:_pin}); toast('Sent to the office for approval'); closeOutage(); return; }
+    try{
+      const r=await rpc('spawn_collect_outage_report',{...rec,p_pin:_pin});
+      const res=Array.isArray(r)?r[0]:r;
+      if(res&&res.applied){
+        const amt=document.getElementById('pay-amt'); const was=expected(_cur);
+        const i=_info[_cur.id]||(_info[_cur.id]={}); i.ded_days=res.month_days; i.ded_amount=res.month_deduction; i.due_now=res.due_now;
+        renderExpect();
+        if(amt&&(!amt.value||Number(amt.value)===Number(was))){ amt.value=res.due_now; try{onAmt();}catch(e){} }
+        toast('Deducted −₱'+Number(res.month_deduction).toLocaleString('en-PH')+' this month — the office can see it');
+      } else { toast('No monthly amount on record — sent to the office'); }
+      closeOutage(); return;
+    }
     catch(e){ if(String(e.message||'').includes('bad_pin')){ toast('PIN not accepted — log in again'); return; } }
   }
   _queue=loadQ(); _queue.push({type:'outage',ref:newRef(),rec,at:Date.now()}); saveQ(); renderQbar();
-  toast('Saved on phone — sends when there is signal'); closeOutage();
+  toast('Saved on phone — the deduction applies when it syncs'); closeOutage();
 }
 
 // ══ v4.0 DAY END ══ paper receipts in number order, gaps flagged, cash in app vs in hand
