@@ -360,7 +360,7 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['ded','📶 No internet'],['book','📒 Old book']];
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false;
   let bf = {state:'', area:'', q:'', how:''};
@@ -436,6 +436,7 @@
     if (k === 'subs' || k === 'late') bookLoad().then(()=>{ if (stTab===k) (k==='subs'?drawBook:drawLate)(); });
     else if (k === 'pays') payLoad(payDate || todayPH());
     else if (k === 'ded') dedLoad();
+    else if (k === 'chk') chkLoad();
   }
   async function bookLoad(force){
     if (book && !force && Date.now() - bookAt < 60000) return;
@@ -558,6 +559,52 @@
           <td class="n">${d.days}</td><td class="n">${peso(d.rate)}</td><td class="n"><b style="color:#966500">−${peso(d.amount)}</b></td><td>${esc(d.reason||'')}</td>
           <td>${esc(String(d.approved_by||'').replace(/^auto:/,''))}</td><td style="white-space:nowrap">${d.approved_at?new Date(d.approved_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):'—'}</td>
           <td>${d.voided_at?'Voided':'Applied'}</td></tr>`; }).join('')}</tbody></table>`:'<div class="sc-empty">No deductions this month</div>'}</div></div>`;
+  }
+
+  // ✅ Office check — transition period: Spawn Collect payment vs the row the office types in the sheet.
+  //   confirmed = office typed the same OR / GCash ref and amount · waiting = not typed yet
+  //   mismatch  = same OR / ref, different amount · typed_not_in_app = office row from an app collector with no app payment
+  //   Plus the receipt-delay trail from the merged sheet-sync duplicates. Read-only.
+  let chkRows = null, chkTrail = null, chkFilt = '';
+  const CHK = {
+    confirmed:        { l:'Confirmed',          c:'#15803d', bg:'#e7f6ec', d:'Office typed the same OR / ref and amount' },
+    waiting_for_office:{ l:'Waiting for office', c:'#2563eb', bg:'#e6effd', d:'In the app, office has not typed it yet' },
+    mismatch:         { l:'Amount differs',     c:'#d91934', bg:'#fde8eb', d:'Same OR / ref, but a different amount — check it' },
+    typed_not_in_app: { l:'Typed, not in app',  c:'#966500', bg:'#fdf3dc', d:'Office has it from an app collector, the app does not' }
+  };
+  const chkKey = r => r.status in CHK ? r.status : 'waiting_for_office';
+  const chkBadge = k => `<span class="st-badge" style="background:${CHK[k].bg};color:${CHK[k].c}">${CHK[k].l}</span>`;
+  async function chkLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    const [rows, trail] = await Promise.all([
+      allRows('v_collect_office_check', 'select=*&order=payment_date.desc,payment_id.desc'),
+      allRows('subscriber_payments_merged', 'select=collector,first_logged_at,receipt_added_at,amount,merged_at')]);
+    if (stTab !== 'chk') return;
+    chkRows = rows; chkTrail = trail;
+    drawChk();
+  }
+  function drawChk(){
+    const body = document.getElementById('st-body'); if (!body || !chkRows) return;
+    const cnt = k => chkRows.filter(r => chkKey(r)===k).length;
+    const amt = k => chkRows.filter(r => chkKey(r)===k).reduce((s,r)=>s+Number(r.amount||0),0);
+    const kpis = Object.keys(CHK).map(k => `<div data-k="${k}" class="${chkFilt===k?'on':''}" style="--c:${CHK[k].c}"><b>${cnt(k)}</b><span>${CHK[k].l}${amt(k)?' · '+peso(amt(k)):''}</span></div>`).join('');
+    const list = chkRows.filter(r => !chkFilt || chkKey(r)===chkFilt);
+    const short = d => d ? new Date(String(d).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'}) : '—';
+    const office = r => r.side === 'sheet' ? '<span style="color:#6b7280">this is the office row</span>'
+      : (r.sheet_invoice ? `${esc(r.sheet_invoice)} · ${peso(r.sheet_amount)} · ${short(r.sheet_date)}` : '<span style="color:#9ca3af">not typed yet</span>');
+    const table = list.length ? `<table class="sc-tbl"><thead><tr><th>Date</th><th>Subscriber</th><th>Collector</th><th class="n">Amount</th><th>OR / ref</th><th>Status</th><th>Office sheet row</th></tr></thead><tbody>
+      ${list.map(r => { const k = chkKey(r); return `<tr><td style="white-space:nowrap">${short(r.payment_date)}</td><td><b>${esc(r.subscriber_name||'')}</b>${r.receipt?` <span style="color:#9ca3af">${esc(r.receipt)}</span>`:''}</td>
+        <td>${esc(cap(firstName(r.collector)))}</td><td class="n">${peso(r.amount)}</td><td>${esc(r.ref||'—')}</td><td>${chkBadge(k)}</td><td>${office(r)}</td></tr>`; }).join('')}</tbody></table>`
+      : `<div class="sc-empty">${chkRows.length ? 'Nothing in this group' : '📭 No Spawn Collect payments yet — this fills in once the collectors record payments in the app'}</div>`;
+    const by = {}; (chkTrail||[]).forEach(t => { const c = cap(firstName(t.collector)); const x = by[c] = by[c] || {n:0, d:0, k:0};
+      x.n++; if (t.first_logged_at && t.receipt_added_at) { x.d += (new Date(t.receipt_added_at) - new Date(t.first_logged_at)) / 86400000; x.k++; } });
+    const trail = Object.entries(by).sort((a,b)=>b[1].n-a[1].n).map(([c,x]) => `<span class="cx-chip">${esc(c)} · ${x.n} · ${x.k ? (x.d/x.k).toFixed(1)+' days' : '—'}</span>`).join('');
+    body.innerHTML = `<div class="st-k" id="chk-k" style="grid-template-columns:repeat(4,minmax(0,1fr))">${kpis}</div>
+      <div class="cx-card"><div class="cx-head"><b>✅ Spawn Collect vs office sheet</b><span style="font-size:11px;color:#6b7280">${chkFilt ? esc(CHK[chkFilt].d) : 'Each app payment counts once — the office row is only a check'}</span></div>
+        <div class="sc-scroll">${table}</div></div>
+      ${trail ? `<div class="cx-card"><div class="cx-head"><b>🧾 Receipt no. delay</b><span style="font-size:11px;color:#6b7280">payments the office typed first and added the receipt no. later · per collector: count · average days</span></div>
+        <div class="cx-chips" style="padding:10px 14px">${trail}</div></div>` : ''}`;
+    body.querySelectorAll('#chk-k div[data-k]').forEach(d => d.onclick = () => { chkFilt = chkFilt === d.dataset.k ? '' : d.dataset.k; drawChk(); });
   }
 
   // The tab button calls subscribersInit(); route it through the sections.
