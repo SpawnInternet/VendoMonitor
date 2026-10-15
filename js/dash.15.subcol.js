@@ -28,6 +28,27 @@
   }
   const whoOf = p => isGcashWord(p.collector) ? 'Office' : cap(firstName(p.collector));
   const refOf = p => p.paper_no ? 'OR ' + p.paper_no : (p.gcash_ref ? 'GC ' + p.gcash_ref : (p.invoice_no || ''));
+  // v4.21: a voided payment stays visible (struck through) but never counts
+  const isVd = p => !!p.voided_at;
+  async function fetchAudit(date){
+    try{
+      const s = new Date(date + 'T00:00:00+08:00').toISOString();
+      const e = new Date(new Date(date + 'T00:00:00+08:00').getTime() + 86400000).toISOString();
+      const a = await sb('spawn_collect_audit', `created_at=gte.${s}&created_at=lt.${e}&select=id,payment_id,action,collector,subscriber_name,area,amount,old_value,new_value,reason,created_at&order=created_at.desc`, 500);
+      return Array.isArray(a) ? a : [];
+    }catch(e){ return []; }
+  }
+  function auditHtml(list){
+    const t = x => new Date(x).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'});
+    return `<div class="cx-card"><div class="cx-head"><b>✏️ Edits & voids — Spawn Collect</b><span style="font-size:11px;color:#6b7280">every change the collector approved with his PIN</span></div>
+      ${list.length ? `<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Time</th><th>Collector</th><th>Subscriber</th><th class="n">Amount</th><th>What changed</th><th>Reason</th></tr></thead><tbody>
+      ${list.map(a=>`<tr><td style="white-space:nowrap">${esc(t(a.created_at))}</td><td>${esc(cap(firstName(a.collector)))}</td><td>${esc(a.subscriber_name||'')}${a.area?` <span style="color:#9ca3af">${esc(a.area)}</span>`:''}</td><td class="n"><b>${peso(a.amount)}</b></td>
+        <td>${a.action==='void'
+          ? `<span class="sc-badge" style="background:#fee2e2;color:#d91934">VOIDED</span> <span class="sc-mono" style="color:#6b7280;text-decoration:line-through">${esc(a.old_value||'')}</span>`
+          : `<span class="sc-badge" style="background:#fff1cc;color:#966500">OR FIXED</span> <span class="sc-mono">${esc(a.old_value||'—')} → <b>${esc(a.new_value||'')}</b></span>`}</td>
+        <td style="color:#6b7280">${esc(a.reason||'—')}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="sc-empty">No edits or voids on this date</div>'}</div>`;
+  }
   const cleanNote = p => String(p.note||'').replace(/\s*OR\s+\d+/i,'').replace(/\s*GCash( ref [0-9 ]+)?/i,'').trim();
   const timeOf = p => isApp(p) && p.created_at ? new Date(p.created_at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : '—';
   const avatar = (name) => (typeof window.collectorAvatar === 'function') ? window.collectorAvatar(name, 26)
@@ -45,7 +66,7 @@
     rows.forEach(p=>{ if(!p.area&&m[p.subscriber_id]) p.area=m[p.subscriber_id]; });
   }
 
-  let rows = [], hrows = [], filt = '', curDate = '';
+  let rows = [], hrows = [], filt = '', curDate = '', arows = [];
   let seg = (()=>{ try { return localStorage.getItem('col_seg') || 'harvest'; } catch(e){ return 'harvest'; } })();
   const HARVEST_IDS = ['col-summary','col-area-filter','col-list'];
 
@@ -133,27 +154,30 @@
     if (!hosts()) return;
     curDate = date;
     document.getElementById('cx-top').innerHTML = '<div class="sc-empty">Loading…</div>';
-    const [pays, harv] = await Promise.all([
-      sb('subscriber_payments', `payment_date=eq.${date}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at&order=created_at.asc`, 2000),
-      sb('harvests', `harvest_date=eq.${date}&select=collector,spawn_share,area`, 3000)
+    const [pays, harv, aud] = await Promise.all([
+      sb('subscriber_payments', `payment_date=eq.${date}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at,voided_at,voided_by,void_reason&order=created_at.asc`, 2000),
+      sb('harvests', `harvest_date=eq.${date}&select=collector,spawn_share,area`, 3000),
+      fetchAudit(date)
     ]);
     if (curDate !== date) return;                      // a newer date was picked meanwhile
     rows = ordered(Array.isArray(pays) ? pays : []);
     try { await fillAreas(rows); } catch(e){}
     if (curDate !== date) return;
     hrows = Array.isArray(harv) ? harv : [];
+    arows = Array.isArray(aud) ? aud : [];
     drawTop(date); drawSubs(date); drawCols(); setSeg(seg);
   }
 
   function drawTop(date){
+    const rowsL = rows.filter(p=>!isVd(p));
     const h = hrows.reduce((s,r)=>s+Number(r.spawn_share||0),0);
-    const t = rows.reduce((s,r)=>s+Number(r.amount||0),0);
-    const by = {cash:0,gcash:0,unknown:0}; rows.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
+    const t = rowsL.reduce((s,r)=>s+Number(r.amount||0),0);
+    const by = {cash:0,gcash:0,unknown:0}; rowsL.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
     const top = document.getElementById('cx-top');
     top.innerHTML = `<div class="cx-top">
       <div class="cx-c" data-k="harvest"><div class="l">🪙 Harvest · Spawn share</div><div class="v" style="color:#15803d">${peso(h)}</div><div class="s">${hrows.length} vendo${hrows.length===1?'':'s'} harvested</div></div>
       <div class="cx-c" data-k="subs"><div class="l">📶 Subscribers · paid</div><div class="v" style="color:#025AC6">${peso(t)}</div>
-        <div class="s">${rows.length?`${rows.length} payment${rows.length===1?'':'s'} · cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}`:'no payments'}</div></div>
+        <div class="s">${rowsL.length?`${rowsL.length} payment${rowsL.length===1?'':'s'} · cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}`:'no payments'}${arows.length?` · <b style="color:#d97706">${arows.length} edit${arows.length===1?'':'s'}/void${arows.length===1?'':'s'}</b>`:''}</div></div>
       <div class="cx-c tot"><div class="l">Total collected · ${esc(date)}</div><div class="v">${peso(h+t)}</div><div class="s">harvest share + subscribers · all areas</div></div>
     </div>`;
     top.querySelectorAll('.cx-c[data-k]').forEach(c => c.onclick = () => setSeg(c.dataset.k));
@@ -161,9 +185,9 @@
 
   function drawSubs(date){
     const el = document.getElementById('cx-subs');
-    if (!rows.length) { el.innerHTML = '<div class="cx-card"><div class="sc-empty">📭 No subscriber payments on this date</div></div>'; return; }
+    if (!rows.length) { el.innerHTML = '<div class="cx-card"><div class="sc-empty">📭 No subscriber payments on this date</div></div>' + auditHtml(arows); return; }
     const by = {};
-    rows.forEach(p => { const w = whoOf(p), m = methodOf(p);
+    rows.filter(p=>!isVd(p)).forEach(p => { const w = whoOf(p), m = methodOf(p);
       by[w] = by[w] || {n:0,total:0,cash:0,gcash:0,unknown:0,areas:new Set()};
       by[w].n++; by[w].total += Number(p.amount||0); by[w][m] += Number(p.amount||0); if (p.area) by[w].areas.add(p.area); });
     const names = Object.keys(by).sort((a,b)=>by[b].total-by[a].total);
@@ -178,22 +202,24 @@
       <div class="cx-card"><div class="cx-head"><b>Payments</b><div class="cx-chips" id="cx-chips">
         <button class="cx-chip${filt===''?' on':''}" data-c="">All (${rows.length})</button>
         ${names.map(n=>`<button class="cx-chip${filt===n?' on':''}" data-c="${esc(n)}">${esc(n)} (${by[n].n})</button>`).join('')}</div></div>
-        <div class="sc-scroll" id="cx-list"></div></div>`;
+        <div class="sc-scroll" id="cx-list"></div></div>`
+      + auditHtml(arows);
     el.querySelectorAll('.cx-col').forEach(c => c.onclick = () => popup(c.dataset.who, date));
     el.querySelectorAll('#cx-chips .cx-chip').forEach(b => b.onclick = () => { filt = b.dataset.c; el.querySelectorAll('#cx-chips .cx-chip').forEach(x=>x.classList.toggle('on', x.dataset.c===filt)); drawList(); });
     drawList();
   }
 
   function table(list){
-    const sum = list.reduce((s,p)=>s+Number(p.amount||0),0);
+    const liveL = list.filter(p=>!isVd(p)), vN = list.length - liveL.length;
+    const sum = liveL.reduce((s,p)=>s+Number(p.amount||0),0);
     return `<table class="sc-tbl"><thead><tr><th>Time</th><th>Collector</th><th>Subscriber</th><th>Area</th><th class="n">Amount</th><th>Paid by</th><th>OR / Ref</th><th>Note</th></tr></thead><tbody>`
-      + list.map(p=>{ const m = methodOf(p), app = isApp(p);
-          return `<tr><td style="white-space:nowrap">${esc(timeOf(p))}</td><td>${esc(whoOf(p))}</td>
-            <td>${esc(p.subscriber_name||'')} <span class="sc-badge ${app?'sc-app':'sc-sheet'}">${app?'Collect':'Office sheet'}</span></td><td>${esc(p.area||'—')}</td>
-            <td class="n"><b>${peso(p.amount)}</b></td>
+      + list.map(p=>{ const m = methodOf(p), app = isApp(p), v = isVd(p);
+          return `<tr style="${v?'opacity:.5':''}"><td style="white-space:nowrap">${esc(timeOf(p))}</td><td>${esc(whoOf(p))}</td>
+            <td style="${v?'text-decoration:line-through':''}">${esc(p.subscriber_name||'')} ${v?`<span class="sc-badge" style="background:#fee2e2;color:#d91934;text-decoration:none">VOID</span>`:`<span class="sc-badge ${app?'sc-app':'sc-sheet'}">${app?'Collect':'Office sheet'}</span>`}</td><td>${esc(p.area||'—')}</td>
+            <td class="n"><b style="${v?'text-decoration:line-through':''}">${peso(p.amount)}</b></td>
             <td><span class="sc-badge ${m==='cash'?'sc-cash':m==='gcash'?'sc-gcash':'sc-unk'}">${m==='cash'?'Cash':m==='gcash'?'GCash':'—'}</span></td>
-            <td class="sc-mono">${esc(refOf(p))}</td><td style="color:#6b7280">${esc(cleanNote(p))}</td></tr>`; }).join('')
-      + `<tr class="tot"><td colspan="4">${list.length} payment${list.length===1?'':'s'}</td><td class="n">${peso(sum)}</td><td colspan="3"></td></tr></tbody></table>`;
+            <td class="sc-mono" style="${v?'text-decoration:line-through':''}">${esc(refOf(p))}</td><td style="color:#6b7280">${v?esc(p.void_reason||'voided'):esc(cleanNote(p))}</td></tr>`; }).join('')
+      + `<tr class="tot"><td colspan="4">${liveL.length} payment${liveL.length===1?'':'s'}${vN?` · ${vN} voided`:''}</td><td class="n">${peso(sum)}</td><td colspan="3"></td></tr></tbody></table>`;
   }
   function drawList(){
     const el = document.getElementById('cx-list'); if (!el) return;
@@ -205,7 +231,7 @@
     const per = {};
     const add = (w,k,v) => { per[w] = per[w] || {harv:0,cash:0,gcash:0,unknown:0}; per[w][k] += v; };
     hrows.forEach(r => add(cap(firstName(r.collector)), 'harv', Number(r.spawn_share||0)));
-    rows.forEach(p => add(whoOf(p), methodOf(p), Number(p.amount||0)));
+    rows.forEach(p => { if (isVd(p)) return; add(whoOf(p), methodOf(p), Number(p.amount||0)); });
     const names = Object.keys(per).sort((a,b)=>{ const t=x=>x.harv+x.cash+x.gcash+x.unknown; return t(per[b])-t(per[a]); });
     const tot = names.reduce((a,n)=>{ const x=per[n]; a.h+=x.harv; a.c+=x.cash; a.g+=x.gcash; a.u+=x.unknown; return a; },{h:0,c:0,g:0,u:0});
     document.getElementById('cx-cols').innerHTML = `<div class="cx-card"><div class="cx-head"><b>👥 By collector — harvest + subscribers</b><span style="font-size:11px;color:#6b7280">Cash = to hand in · GCash goes to the GCash account</span></div>
@@ -221,9 +247,10 @@
     ov = document.createElement('div'); ov.id = 'cx-popup';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:12px;';
     ov.onclick = e => { if (e.target === ov) ov.remove(); };
-    const sum = list.reduce((s,p)=>s+Number(p.amount||0),0);
-    const cash = list.filter(p=>methodOf(p)==='cash').reduce((s,p)=>s+Number(p.amount||0),0);
-    const gc = list.filter(p=>methodOf(p)==='gcash').reduce((s,p)=>s+Number(p.amount||0),0);
+    const lv = list.filter(p=>!isVd(p));
+    const sum = lv.reduce((s,p)=>s+Number(p.amount||0),0);
+    const cash = lv.filter(p=>methodOf(p)==='cash').reduce((s,p)=>s+Number(p.amount||0),0);
+    const gc = lv.filter(p=>methodOf(p)==='gcash').reduce((s,p)=>s+Number(p.amount||0),0);
     ov.innerHTML = `<div style="background:#fff;border-radius:16px;width:100%;max-width:820px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">
       <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;color:#fff;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%)">
         ${avatar(who)}<div style="flex:1"><div style="font-weight:800;font-size:15px">${esc(who)} — subscriber payments · ${esc(date)}</div>
@@ -283,14 +310,14 @@
     try {
       const d = todayPH(), m1 = d.slice(0,7) + '-01';
       const [pays, harv] = await Promise.all([
-        sb('subscriber_payments', `payment_date=eq.${d}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at&order=created_at.asc`, 2000),
+        sb('subscriber_payments', `payment_date=eq.${d}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at,voided_at,voided_by,void_reason&order=created_at.asc`, 2000),
         sb('harvests', `harvest_date=eq.${d}&select=collector,spawn_share,area`, 3000)]);
       live = ordered(Array.isArray(pays) ? pays : []);
       liveHarv = Array.isArray(harv) ? harv : [];
       try { await fillAreas(live); } catch(e){}
       if (!month || Date.now() - monthAt > 300000 || month.m1 !== m1) {          // month totals every 5 minutes
         const [mp, mh] = await Promise.all([
-          allRows('subscriber_payments', `payment_date=gte.${m1}&payment_date=lte.${d}&select=amount`),
+          allRows('subscriber_payments', `payment_date=gte.${m1}&payment_date=lte.${d}&voided_at=is.null&select=amount`),
           allRows('harvests', `harvest_date=gte.${m1}&harvest_date=lte.${d}&select=spawn_share`)]);
         month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, harv: sumF(mh,'spawn_share'), harvN: mh.length }; monthAt = Date.now();
       }
@@ -311,10 +338,11 @@
     const d = todayPH();
     const when = liveAt ? 'updated ' + liveAt.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : 'loading…';
     // subscribers today
-    const bs = {}; live.forEach(p => { const w = whoOf(p), m = methodOf(p);
+    const lv = live.filter(p=>!isVd(p));
+    const bs = {}; lv.forEach(p => { const w = whoOf(p), m = methodOf(p);
       bs[w] = bs[w] || {n:0,total:0,cash:0,gcash:0,unknown:0,areas:new Set()};
       bs[w].n++; bs[w].total += Number(p.amount||0); bs[w][m] += Number(p.amount||0); if (p.area) bs[w].areas.add(p.area); });
-    const sT = sumF(live,'amount');
+    const sT = sumF(lv,'amount');
     // harvest today
     const bh = {}; liveHarv.forEach(r => { const w = cap(firstName(r.collector));
       bh[w] = bh[w] || {n:0,total:0,areas:new Set()}; bh[w].n++; bh[w].total += Number(r.spawn_share||0); if (r.area) bh[w].areas.add(r.area); });
@@ -326,8 +354,8 @@
           <div class="lv-sub">${liveHarv.length} vendo${liveHarv.length===1?'':'s'} harvested · Spawn share</div>
           <div class="cx-cols">${liveHarv.length?chipsHtml(bh,'#15803d','vendo'):'<span class="lv-none">No harvest recorded yet today</span>'}</div></div>
         <div class="cx-card lv-s"><div class="cx-head"><b style="color:#025AC6">📶 Subscribers today</b><span class="lv-amt" style="color:#025AC6">${peso(sT)}</span></div>
-          <div class="lv-sub">${live.length} payment${live.length===1?'':'s'} · cash ${peso(sumF(live.filter(p=>methodOf(p)==='cash'),'amount'))} · GCash ${peso(sumF(live.filter(p=>methodOf(p)==='gcash'),'amount'))} · tap a name for the list</div>
-          <div class="cx-cols">${live.length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
+          <div class="lv-sub">${lv.length} payment${lv.length===1?'':'s'} · cash ${peso(sumF(lv.filter(p=>methodOf(p)==='cash'),'amount'))} · GCash ${peso(sumF(lv.filter(p=>methodOf(p)==='gcash'),'amount'))} · tap a name for the list</div>
+          <div class="cx-cols">${lv.length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
       </div>
       <div class="lv-month">
         <div><span>📅 Today · total collected</span><b>${peso(hT+sT)}</b></div>
@@ -447,7 +475,7 @@
 
   // 👥 Subscribers — who paid TODAY first (live), then late, partly paid, due soon…
   function paidToday(){
-    const m = {}; live.forEach(p => { if (!p.subscriber_id) return; const x = m[p.subscriber_id] = m[p.subscriber_id] || {amt:0, at:'', who:whoOf(p), how:methodOf(p)};
+    const m = {}; live.forEach(p => { if (!p.subscriber_id || isVd(p)) return; const x = m[p.subscriber_id] = m[p.subscriber_id] || {amt:0, at:'', who:whoOf(p), how:methodOf(p)};
       x.amt += Number(p.amount||0); if (String(p.created_at||'') > x.at) x.at = String(p.created_at||''); }); return m;
   }
   function drawBook(){
@@ -523,19 +551,22 @@
   async function payLoad(date){
     payDate = date;
     const body = document.getElementById('st-body'); if (!body) return;
-    const pays = await sb('subscriber_payments', `payment_date=eq.${date}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at&order=created_at.asc`, 2000);
+    const pays = await sb('subscriber_payments', `payment_date=eq.${date}&select=id,subscriber_id,subscriber_name,area,amount,collector,pay_method,paper_no,gcash_ref,invoice_no,note,created_at,voided_at,voided_by,void_reason&order=created_at.asc`, 2000);
     if (payDate !== date || stTab !== 'pays') return;
     payRows = ordered(Array.isArray(pays) ? pays : []);
     try { await fillAreas(payRows); } catch(e){}
     const names = [...new Set(payRows.map(whoOf))].sort();
     if (payFilt && !names.includes(payFilt)) payFilt = '';
-    const sum = payRows.reduce((s,p)=>s+Number(p.amount||0),0);
-    const by = {cash:0,gcash:0,unknown:0}; payRows.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
+    const aud = await fetchAudit(date);
+    if (payDate !== date || stTab !== 'pays') return;
+    const payL = payRows.filter(p=>!isVd(p));
+    const sum = payL.reduce((s,p)=>s+Number(p.amount||0),0);
+    const by = {cash:0,gcash:0,unknown:0}; payL.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
     body.innerHTML = `<div class="cx-card"><div class="cx-head"><span class="cx-nav" id="sp-nav"><button type="button" data-d="-1">◀</button><button type="button" data-d="0">Today</button><button type="button" data-d="1">▶</button></span>
         <input type="date" id="sp-date" value="${esc(date)}" style="padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;font:inherit;font-size:13px">
-        <b style="margin-left:auto">${payRows.length} payment${payRows.length===1?'':'s'} · ${peso(sum)}</b><span style="font-size:11px;color:#6b7280">cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}</span></div>
+        <b style="margin-left:auto">${payL.length} payment${payL.length===1?'':'s'} · ${peso(sum)}</b><span style="font-size:11px;color:#6b7280">cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}</span></div>
       <div class="cx-chips" style="padding:10px 14px"><button class="cx-chip${payFilt===''?' on':''}" data-c="">All (${payRows.length})</button>${names.map(n=>`<button class="cx-chip${payFilt===n?' on':''}" data-c="${esc(n)}">${esc(n)} (${payRows.filter(p=>whoOf(p)===n).length})</button>`).join('')}</div>
-      <div class="sc-scroll" id="sp-list"></div></div>`;
+      <div class="sc-scroll" id="sp-list"></div></div>` + auditHtml(aud);
     const draw = () => { const l = payRows.filter(p => !payFilt || whoOf(p)===payFilt); document.getElementById('sp-list').innerHTML = l.length ? table(l) : '<div class="sc-empty">📭 No subscriber payments on this date</div>'; };
     body.querySelectorAll('.cx-chip[data-c]').forEach(b => b.onclick = () => { payFilt = b.dataset.c; body.querySelectorAll('.cx-chip[data-c]').forEach(x=>x.classList.toggle('on', x.dataset.c===payFilt)); draw(); });
     body.querySelector('#sp-date').onchange = e => payLoad(e.target.value || todayPH());
