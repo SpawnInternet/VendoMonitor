@@ -1288,6 +1288,20 @@ function lfConnect(){
 //  • Every failed save now says so (red toast) instead of silently "working".
 //  • Notes only save when the text actually changed (no write on every blur).
 function _rcRow(id){ return (rcAllRows||[]).find(r=>r.id===id); }
+// After any recon edit, ask the server to rebuild the one-fetch snapshot so a
+// page reload inside the 5-minute cron window still shows the edit. Debounced:
+// one ping per burst of edits, fire-and-forget, never blocks the UI.
+let _rcPingT=null;
+function _rcPingCache(){
+  clearTimeout(_rcPingT);
+  _rcPingT=setTimeout(()=>{
+    try{
+      fetch(`${_SB}/functions/v1/write-recon-cache`,{method:'POST',
+        headers:{'x-cache-secret':'spawn-cache-2026','Content-Type':'application/json'},
+        body:'{}'}).catch(()=>{});
+    }catch(e){}
+  },8000);
+}
 async function _rcPatchHarvest(id, body){
   const r = await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
     method:'PATCH',
@@ -1305,7 +1319,7 @@ async function rcConfirmRow(id, btn){
   try{
     await _rcPatchHarvest(id, { reconcile_status:'ok' });
     const row=_rcRow(id); if(row) row.reconcile_status='ok';
-    _rcAfterRowChange();
+    _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Confirm not saved: '+e.message);
     if(btn){ btn.disabled=false; btn.textContent='✅ OK'; }
@@ -1316,7 +1330,7 @@ async function rcClearConfirm(id, btn){
   try{
     await _rcPatchHarvest(id, { reconcile_status:null });
     const row=_rcRow(id); if(row) row.reconcile_status=null;
-    _rcAfterRowChange();
+    _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Undo not saved: '+e.message);
     if(btn){ btn.disabled=false; btn.textContent='✕ undo'; }
@@ -1335,6 +1349,7 @@ async function rcSaveNote(id, val, inp){
   try{
     await _rcPatchHarvest(id, { admin_notes: next||null });
     if(row) row.admin_notes = next||null;
+    _rcPingCache();
     const box=document.getElementById('rcnote-'+id);
     if(box){ box.style.borderColor='#16a34a'; setTimeout(()=>{ if(box) box.style.borderColor='#e5e7eb'; }, 1200); }
   }catch(e){
@@ -1378,24 +1393,45 @@ async function rcRun(){
       // Cache hit if cache window COVERS requested window (superset) — filter client-side
       const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
       if (cacheCovers) {
+        // The snapshot is now FULLY PRE-COMPUTED server-side every 5 minutes
+        // (write-recon-cache v14): tg_income_live, cloud_income_live, RPC
+        // windows and tg_name fills are already in the file. One fetch = the
+        // same rows the live path would have built with 4+ requests.
+        const mapCached = row=>{
+          const tgInc = row.tg_income_live!=null ? Number(row.tg_income_live)
+                      : row.tg_income!=null ? Number(row.tg_income) : null;
+          const cloudInc = row.cloud_income_live!=null ? Number(row.cloud_income_live) : null;
+          const totalInc = (tgInc!=null||cloudInc!=null) ? Number(tgInc||0)+Number(cloudInc||0) : null;
+          const coins = Number(row.coins_total||0);
+          const gap = totalInc!=null ? totalInc-coins : (row.recon_gap!=null?Number(row.recon_gap):null);
+          const gap_pct = (coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
+          const flag = gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+          return {...row,
+            _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
+            collector:row.collector||'Unknown',
+            tg_income:tgInc, cloud_income:cloudInc, total_income:totalInc, gap, gap_pct, flag,
+            window_estimated:false,
+            route_code:row.route_code||'ADMIN',
+            is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
+          };
+        };
         rcAllRows = d.rows.filter(r=>{
           const hd = r.harvest_date || '';
           return hd >= from && hd <= to;
-        });
+        }).map(mapCached);
         const age = Math.round((Date.now() - new Date(d.generated_at||0).getTime())/60000);
-        // Say plainly that this is cached. Silent staleness is what makes an
-        // edit look like it didn't save. The refresh button lives in the
-        // toolbar, not here — rcFilter() overwrites this element on every
-        // filter change, so any button placed here would vanish.
+        rcFilter();
+        // Label AFTER rcFilter — rcFilter overwrites rc-count with a plain
+        // count, which is why the old "cached Xmin ago" note never showed.
         const ageEl = document.getElementById('rc-count');
         if(ageEl){
-          const stale = age >= 5;
+          const stale = age >= 8;
           ageEl.innerHTML = rcAllRows.length + ' harvests · '
-            + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';">'
-            + (stale ? '⚠ cached ' : 'cached ') + age + 'min ago</span>';
+            + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';" title="One-fetch snapshot, rebuilt every 5 minutes with live TG + Cloud income">'
+            + (stale ? '⚠ snapshot ' : '⚡ snapshot ') + age + 'min ago</span>';
         }
-        rcFilter();
-        // Refresh in background if older than 10min OR no rows matched (new harvests not in cache)
+        // The snapshot rebuilds every 5 min, so a background live read is only
+        // needed when it is unexpectedly old or empty for this range.
         if (age > 10 || !rcAllRows.length) setTimeout(()=>rcRunFresh(from,to,fromISO,toISO,el), 100);
         return;
       }
@@ -1595,6 +1631,7 @@ async function rcRun(){
         }catch(e){}
       }
       console.log('[rcRun] background save complete:',toSave.length,'rows');
+      _rcPingCache();
     })();
   }
   } catch(e) { console.error('rcRun error',e); document.getElementById('rc-content').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>'; }
