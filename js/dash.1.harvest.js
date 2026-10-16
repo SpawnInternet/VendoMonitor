@@ -1328,8 +1328,14 @@ async function rcConfirmRow(id, btn){
 async function rcClearConfirm(id, btn){
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
-    await _rcPatchHarvest(id, { reconcile_status:null });
-    const row=_rcRow(id); if(row) row.reconcile_status=null;
+    // Undoing an AUTO mark writes 'unauto' instead of NULL: the auto-marker
+    // only ever touches NULL rows, so an undone auto row stays yours — it will
+    // never be re-marked behind your back. Undoing a manual OK goes back to
+    // NULL (and may be auto-marked later if it qualifies — it was clean).
+    const row=_rcRow(id);
+    const next = (row && row.reconcile_status==='auto') ? 'unauto' : null;
+    await _rcPatchHarvest(id, { reconcile_status: next });
+    if(row) row.reconcile_status=next;
     _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Undo not saved: '+e.message);
@@ -1922,6 +1928,16 @@ async function rcnSaveNames(vendoName){
             body:JSON.stringify({tg_name:tg})});
         }catch(e){ console.error('harvest_group_items tg_name sync failed:',e); }
       }
+      // New/changed TG link → income basis changed → clear any AUTO marks on
+      // this vendo's rows (manual OKs are kept).
+      if(tg){
+        try{
+          await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}&reconcile_status=eq.auto`,{method:'PATCH',
+            headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+            body:JSON.stringify({reconcile_status:null})});
+          if(Array.isArray(rcAllRows)) rcAllRows.forEach(rr=>{ if(rr.vendo_id===id&&rr.reconcile_status==='auto') rr.reconcile_status=null; });
+        }catch(e){ console.error('auto-clear on relink failed:',e); }
+      }
       toast('✅ Names saved!');
       htAllRows=[];
       // update local cache row so reopening shows fresh values
@@ -1962,6 +1978,16 @@ async function rcnSaveHarvestWindow(){
       headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
+      // The window defines the income this row was auto-checked against — an
+      // AUTO-OK made on the old window no longer stands. Manual OK is kept.
+      try{
+        await fetch(`${_SB}/rest/v1/harvests?id=eq.${row.id}&reconcile_status=eq.auto`,{method:'PATCH',
+          headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+          body:JSON.stringify({reconcile_status:null})});
+        if(row.reconcile_status==='auto') row.reconcile_status=null;
+        const cr2=(rcAllRows||[]).find(x=>x.id===row.id);
+        if(cr2&&cr2.reconcile_status==='auto') cr2.reconcile_status=null;
+      }catch(e){ console.error('auto-clear on window edit failed:',e); }
       // keep vendos.last_harvest_date in sync if harvest_date changed
       if(hd && row.vendo_id){
         await fetch(`${_SB}/rest/v1/vendos?id=eq.${row.vendo_id}`,{method:'PATCH',
@@ -2147,6 +2173,14 @@ async function rcnUnlink(vendoName, opts){
         headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
         body:JSON.stringify({tg_name:null, tg_income:null, recon_gap:null, recon_flag:null, recon_at:null})});
     }catch(e){ console.error('harvests unlink sync failed:',e); }
+    // An AUTO-OK that was based on this TG link no longer stands — clear it.
+    // (Manual ✅ OK is your judgment and is left alone.)
+    try{
+      await fetch(`${_SB}/rest/v1/harvests?vendo_id=eq.${id}&reconcile_status=eq.auto`,{method:'PATCH',
+        headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+        body:JSON.stringify({reconcile_status:null})});
+      if(Array.isArray(rcAllRows)) rcAllRows.forEach(rr=>{ if(rr.vendo_id===id&&rr.reconcile_status==='auto') rr.reconcile_status=null; });
+    }catch(e){ console.error('auto-clear on unlink failed:',e); }
     try{
       await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${id}`,{method:'PATCH',
         headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
@@ -2273,7 +2307,7 @@ function rcFilter(){
           <div class="rcg-ava" style="background:linear-gradient(135deg,${_grad[0]},${_grad[1]});">${initial}</div>
           <div style="min-width:0;flex:1;">
             <div style="font-weight:900;font-size:15.5px;color:#1a2250;letter-spacing:-.01em;">${collector}</div>
-            <div style="font-size:10px;color:#8a93a9;margin-top:1px;">${cd.rows.length} harvests${colConfirmed?` · ☑ ${colConfirmed} confirmed`:''}</div>
+            <div style="font-size:10px;color:#8a93a9;margin-top:1px;">${cd.rows.length} harvests${colConfirmed?` · ☑ ${colConfirmed} confirmed`:''}${st.autoN?` · ⚡ ${st.autoN}`:''}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
             ${deficitN?`<span class="rcg-pill" style="background:#fee2e2;color:#DF1A35;">${deficitN} DEFICIT</span>`:''}
@@ -2333,9 +2367,12 @@ function _rcDays(r){
 }
 function _rcStats(rows){
   const s={count:rows.length, coins:0, tg:0, cloud:0, gap:0, exactN:0, surplusN:0, deficitN:0,
-           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0};
+           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0};
   rows.forEach(r=>{
-    if(r.reconcile_status==='ok') s.confirmed++;
+    // 'auto' counts as confirmed work done — but stays its own kind, and is
+    // always reversible (undo, unlink, window edit all clear it).
+    if(r.reconcile_status==='ok'||r.reconcile_status==='auto') s.confirmed++;
+    if(r.reconcile_status==='auto') s.autoN++;
     if(_rcIsZeroTg(r)) s.zeroN++;
     if(r.gap==null){ s.unmatchedN++; s.unmatchedCoins+=Number(r.coins_total||0); return; }
     s.coins+=Number(r.coins_total||0);
@@ -2365,8 +2402,9 @@ const _RC_FILTERS = [
   ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
   ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
   ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
-  ['todo',    '⏳ Not confirmed', r=>r.reconcile_status!=='ok'],
-  ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'],
+  ['todo',    '⏳ Needs me',    r=>r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'],
+  ['auto',    '⚡ Auto-OK',     r=>r.reconcile_status==='auto'],
+  ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'||r.reconcile_status==='auto'],
 ];
 function _rcSearchHit(r,q){
   if(!q) return true;
@@ -2519,7 +2557,7 @@ function _rcBookCell(h){
 }
 function _rcRowHtml(h, showCloud, flat){
   const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
-  const done = h.reconcile_status==='ok';
+  const done = h.reconcile_status==='ok' || h.reconcile_status==='auto';
   const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
   const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 6px;margin-left:5px;">no TG</span>' : '';
   const unlinkKey = h.sheet_name||h.tg_name;
@@ -2550,8 +2588,10 @@ function _rcRowHtml(h, showCloud, flat){
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
     <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
     <td style="min-width:172px;">
-      ${done
+      ${h.reconcile_status==='ok'
         ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
+        : h.reconcile_status==='auto'
+        ? `<span class="rca-pill" style="background:#e0f2fe;color:#0369a1;" title="Auto-confirmed by the system: real TG chain, gap within ±₱20, BASHANG book agrees or absent. You can still unlink the TG name or edit the window — doing so removes this mark.">⚡ Auto-OK</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove auto-OK — the row goes back to ⏳ Needs me and will NOT be auto-marked again">✕ undo</button>`
         : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>`}
       <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
@@ -2583,7 +2623,7 @@ function _rcRenderHead(d, collector){
     <div class="rca-avatar">${_rcEsc((collector||'?').trim().charAt(0).toUpperCase())}</div>
     <div style="min-width:160px;position:relative;">
       <div style="font-size:19px;font-weight:900;letter-spacing:-.01em;">${_rcEsc(collector)}</div>
-      <div style="font-size:11px;opacity:.9;margin-top:1px;">${s.count} harvests · ☑ ${s.confirmed} confirmed (${pct}%)</div>
+      <div style="font-size:11px;opacity:.9;margin-top:1px;">${s.count} harvests · ☑ ${s.confirmed} confirmed (${pct}%)${s.autoN?` · ⚡ ${s.autoN} auto`:''}</div>
       <div class="rca-prog"><div style="width:${pct}%;"></div></div>
     </div>
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;position:relative;">
