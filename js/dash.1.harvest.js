@@ -1421,167 +1421,115 @@ async function rcRun(){
     return;
   }
 
-  // Check if all rows already have saved recon data
-  const allSaved = harvestRows.length > 0 && harvestRows.every(r=>r.recon_at && r.tg_income!=null);
+  // ── PHASE 1: SHOW NOW, FROM SAVED COLUMNS ──────────────────────
+  // Every previous run already wrote tg_income/recon_gap onto the harvests
+  // rows, so the numbers are ALREADY in the one fetch we just did. Render them
+  // immediately — no spinner, no waiting on TG. Phase 2 below reads live
+  // income in the background and swaps the figures in when it lands.
+  const _rcFromSaved = row=>{
+    const tgInc=(row.tg_income!=null)?Number(row.tg_income):null;
+    const coins=Number(row.coins_total||0);
+    const gap=tgInc!=null?tgInc-coins:(row.recon_gap!=null?Number(row.recon_gap):null);
+    const gap_pct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
+    const flag = gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+    return {...row,
+      _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
+      collector:row.actual_collector||row.collector||'Unknown',
+      tg_income:tgInc, gap, gap_pct, flag, cloud_income:null, total_income:tgInc,
+      window_estimated:false,
+      route_code:row.route_code||'ADMIN',
+      is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
+    };
+  };
+  rcAllRows=harvestRows.map(_rcFromSaved);
+  const savedAt=harvestRows.map(r=>r.recon_at).filter(Boolean).sort().pop();
+  const allSaved = harvestRows.every(r=>r.recon_at && r.tg_income!=null);
+  rcFilter();
+  const cnt=document.getElementById('rc-count');
+  // Everything already carries saved figures and nothing forced a live read →
+  // done in ONE request. (↻ Refresh sets rcBypassCache and gets the live path.)
   if(allSaved && !rcBypassCache){
-    rcAllRows=harvestRows.map(row=>{
-      const tgInc=(row.tg_income!=null)?Number(row.tg_income):null;
-      const coins=Number(row.coins_total||0);
-      // recompute gap fresh (saved recon_gap may be null/stale)
-      const gap=tgInc!=null?tgInc-coins:(row.recon_gap!=null?Number(row.recon_gap):null);
-      const gap_pct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-      // recompute flag with current ±20 rule (do NOT trust saved recon_flag)
-      const flag = gap==null ? 'nodata'
-                 : Math.abs(gap)<=20 ? 'ok'
-                 : gap>20 ? 'alert'
-                 : 'warn';
-      return {
-        ...row,
-        collector:row.actual_collector||row.collector||'Unknown',
-        tg_income:tgInc, gap, gap_pct, flag,
-        is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
-      };
-    });
-    document.getElementById('rc-count').textContent=rcAllRows.length+' harvests · saved '+Math.round((Date.now()-new Date(harvestRows[0].recon_at).getTime())/60000)+'min ago';
-    rcFilter();
+    if(cnt) cnt.textContent=rcAllRows.length+' harvests · saved '+(savedAt?Math.round((Date.now()-new Date(savedAt).getTime())/60000)+'min ago':'');
     return;
   }
-  el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income for ${harvestRows.length} harvests…</div>`;
+  if(cnt) cnt.innerHTML=rcAllRows.length+' harvests · <span style="color:#b45309;">⏳ updating live…</span>';
+
+  // ── PHASE 2: LIVE INCOME, IN THE BACKGROUND ────────────────────
+  // The table from phase 1 stays on screen and usable the whole time.
 
   // Build tg_name map: harvest id → tg_name
   const tgMap={};
   harvestRows.forEach(r=>{ if(r.tg_name) tgMap[r.id]=r.tg_name; });
 
-  // Lookup by vendo_id
-  const noTgIds=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.vendo_id).map(r=>r.vendo_id))];
-  const vendoTgMap={};
-  for(let i=0;i<noTgIds.length;i+=200){
-    try{
-      const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${noTgIds.slice(i,i+200).join(',')})&select=id,tg_name&limit=200`,{headers:_HDR});
-      const vd=await rv.json();
-      vd.forEach(v=>{ if(v.tg_name) vendoTgMap[v.id]=v.tg_name; });
-    }catch(e){}
-  }
-  harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.vendo_id&&vendoTgMap[r.vendo_id]) tgMap[r.id]=vendoTgMap[r.vendo_id]; });
-
-  // Lookup by sheet_name
-  const noTgNames=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.sheet_name).map(r=>r.sheet_name))];
-  const sheetTgMap={};
-  for(let i=0;i<noTgNames.length;i+=50){
-    try{
-      const encoded=noTgNames.slice(i,i+50).map(n=>encodeURIComponent(n)).join(',');
-      const rv=await fetch(`${_SB}/rest/v1/vendos?or=(${noTgNames.slice(i,i+50).map(n=>`sheet_name.eq.${encodeURIComponent(n)}`).join(',')})&select=sheet_name,tg_name&limit=50`,{headers:_HDR});
-      const vd=await rv.json();
-      vd.forEach(v=>{ if(v.tg_name) sheetTgMap[v.sheet_name]=v.tg_name; });
-    }catch(e){}
-  }
-  harvestRows.forEach(r=>{ if(!tgMap[r.id]&&r.sheet_name&&sheetTgMap[r.sheet_name]) tgMap[r.id]=sheetTgMap[r.sheet_name]; });
-
-  // Fetch TG income per unique window — PARALLELIZED in batches for speed
-  // Key: "tg_name|window_start|harvest_date" to dedupe identical windows
-  const tgRowIncomeMap={};
-  const uniqueWindows=[];
-  const seenKeys=new Set();
-  for(const row of harvestRows){
-    const tg=tgMap[row.id];
-    if(!tg) continue;
-    const ws=row.harvest_window_start||from;
-    const we=row.harvest_date||to;
-    const key=tg+'|'+ws+'|'+we;
-    if(seenKeys.has(key)) continue;
-    seenKeys.add(key);
-    uniqueWindows.push({tg,ws,we,key});
-  }
-  // TIME-AWARE TG income via server RPC (spawn_tg_recon) — does submission-time
-  // cutoff server-side, so post-harvest transactions fall to next cycle.
-  // Keyed by tg_name (RPC returns one row per harvest this month).
   const rpcById={};      // harvest_id -> {tg_income, audited, submitted_at, window_start}
-  const rpcTgByName={};  // fallback: tg_name -> tg_income (for rows the id-map misses)
-  try{
-    const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{
-      method:'POST', headers:{..._HDR}, body:JSON.stringify({})
-    });
-    let rj=await rr.json();
-    // SHAPE: spawn_tg_recon is declared RETURNS jsonb — a single value that
-    // happens to be an ARRAY of harvest objects. PostgREST therefore hands back
-    // [ [ {...}, {...} ] ]  — an array whose one element is the real array —
-    // NOT [ {...}, {...} ]. The old code did rj.forEach(o => o.harvest_id...),
-    // where o was the inner ARRAY, so harvest_id was undefined, rpcById stayed
-    // empty, every gap computed null, and the whole table rendered "—" / "OK"
-    // with the colours gone. Unwrap before use.
-    if(Array.isArray(rj) && rj.length===1 && Array.isArray(rj[0])) rj = rj[0];
-    else if(rj && !Array.isArray(rj) && Array.isArray(rj.spawn_tg_recon)) rj = rj.spawn_tg_recon;
-    if(Array.isArray(rj)){
-      rj.forEach(o=>{
-        if(o && o.harvest_id!=null){
-          rpcById[o.harvest_id]={
-            tg_income:Number(o.tg_income||0),
-            audited:!!o.audited,
-            submitted_at:o.submitted_at||null,
-            window_start:o.window_start||null,
-            has_chain:!!o.has_chain
-          };
-        }
-        if(o && o.tg_name && rpcTgByName[o.tg_name]===undefined){
-          rpcTgByName[o.tg_name]=Number(o.tg_income||0);
-        }
-      });
-    }
-  }catch(e){ console.warn('[rcRun] time-aware RPC failed, falling back to date-only fetch',e); }
-
-  // Spawn Cloud coin income per harvest (cloud-linked vendos only).
-  // Same window rule as spawn_tg_recon; merged so total income = TG + cloud.
+  const rpcTgByName={};  // fallback: tg_name -> tg_income
   const cloudById={};
-  try{
-    const cr=await fetch(`${_SB}/rest/v1/rpc/spawn_cloud_recon_income`,{
-      method:'POST', headers:{..._HDR}, body:JSON.stringify({})
-    });
-    let cj=await cr.json();
-    if(Array.isArray(cj) && cj.length===1 && Array.isArray(cj[0])) cj = cj[0];
-    else if(cj && !Array.isArray(cj) && Array.isArray(cj.spawn_cloud_recon_income)) cj = cj.spawn_cloud_recon_income;
-    if(Array.isArray(cj)){
-      cj.forEach(o=>{ if(o && o.harvest_id!=null) cloudById[o.harvest_id]=Number(o.cloud_income||0); });
-    }
-  }catch(e){ console.warn('[rcRun] cloud income RPC failed',e); }
+  const vendoTgMap={}, sheetTgMap={};
 
-  // Fallback fetch (date-only) — used only for windows the RPC didn't cover.
-  async function fetchWindowTotal(w){
-    let total=0,off2=0;
-    while(true){
+  // Everything phase 2 needs, fired AT THE SAME TIME (was 4+ sequential waits):
+  //   1. time-aware TG income RPC   2. cloud income RPC
+  //   3. vendos tg_name by id       4. vendos tg_name by sheet_name
+  const noTgIds=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.vendo_id).map(r=>r.vendo_id))];
+  const noTgNames=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&!r.vendo_id&&r.sheet_name).map(r=>r.sheet_name))];
+  const jobs=[];
+  jobs.push((async()=>{
+    try{
+      const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({})});
+      let rj=await rr.json();
+      // RETURNS jsonb → PostgREST wraps the array: [[{...}]]. Unwrap before use.
+      if(Array.isArray(rj) && rj.length===1 && Array.isArray(rj[0])) rj = rj[0];
+      else if(rj && !Array.isArray(rj) && Array.isArray(rj.spawn_tg_recon)) rj = rj.spawn_tg_recon;
+      if(Array.isArray(rj)) rj.forEach(o=>{
+        if(o && o.harvest_id!=null) rpcById[o.harvest_id]={tg_income:Number(o.tg_income||0),audited:!!o.audited,submitted_at:o.submitted_at||null,window_start:o.window_start||null,has_chain:!!o.has_chain};
+        if(o && o.tg_name && rpcTgByName[o.tg_name]===undefined) rpcTgByName[o.tg_name]=Number(o.tg_income||0);
+      });
+    }catch(e){ console.warn('[rcRun] time-aware RPC failed',e); }
+  })());
+  jobs.push((async()=>{
+    try{
+      const cr=await fetch(`${_SB}/rest/v1/rpc/spawn_cloud_recon_income`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({})});
+      let cj=await cr.json();
+      if(Array.isArray(cj) && cj.length===1 && Array.isArray(cj[0])) cj = cj[0];
+      else if(cj && !Array.isArray(cj) && Array.isArray(cj.spawn_cloud_recon_income)) cj = cj.spawn_cloud_recon_income;
+      if(Array.isArray(cj)) cj.forEach(o=>{ if(o && o.harvest_id!=null) cloudById[o.harvest_id]=Number(o.cloud_income||0); });
+    }catch(e){ console.warn('[rcRun] cloud income RPC failed',e); }
+  })());
+  for(let i=0;i<noTgIds.length;i+=200){
+    const ids=noTgIds.slice(i,i+200);
+    jobs.push((async()=>{
       try{
-        const rt=await fetch(
-          `${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(w.tg)}&is_skipped=eq.false&date=gte.${w.ws}&date=lte.${w.we}&select=amount&limit=1000&offset=${off2}`,
-          {headers:_HDR}
-        );
-        const td=await rt.json();
-        if(!Array.isArray(td)||!td.length) break;
-        total+=td.reduce((s,t)=>s+Number(t.amount||0),0);
-        if(td.length<1000) break;
-        off2+=1000;
-      }catch(e){break;}
-    }
-    return {key:w.key,total};
+        const rv=await fetch(`${_SB}/rest/v1/vendos?id=in.(${ids.join(',')})&select=id,tg_name&limit=200`,{headers:_HDR});
+        (await rv.json()).forEach(v=>{ if(v.tg_name) vendoTgMap[v.id]=v.tg_name; });
+      }catch(e){}
+    })());
   }
-  // Only fetch windows whose harvests are NOT covered by the RPC id-map.
-  const coveredTg=new Set(harvestRows.filter(r=>rpcById[r.id]).map(r=>tgMap[r.id]).filter(Boolean));
-  const needFetch=uniqueWindows.filter(w=>!coveredTg.has(w.tg) && rpcTgByName[w.tg]===undefined);
-  for(let i=0;i<needFetch.length;i+=10){
-    const chunk=needFetch.slice(i,i+10);
-    const results=await Promise.all(chunk.map(fetchWindowTotal));
-    results.forEach(r=>{ tgRowIncomeMap[r.key]=r.total; });
-    if(el) el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--mu);">Fetching TG income… ${Math.min(i+10,needFetch.length)}/${needFetch.length}</div>`;
+  for(let i=0;i<noTgNames.length;i+=50){
+    const names=noTgNames.slice(i,i+50);
+    jobs.push((async()=>{
+      try{
+        const rv=await fetch(`${_SB}/rest/v1/vendos?or=(${names.map(n=>`sheet_name.eq.${encodeURIComponent(n)}`).join(',')})&select=sheet_name,tg_name&limit=50`,{headers:_HDR});
+        (await rv.json()).forEach(v=>{ if(v.tg_name) sheetTgMap[v.sheet_name]=v.tg_name; });
+      }catch(e){}
+    })());
   }
-  const tgIncomeMap={}; // legacy compat placeholder
+  await Promise.all(jobs);
+  harvestRows.forEach(r=>{
+    if(!tgMap[r.id]&&r.vendo_id&&vendoTgMap[r.vendo_id]) tgMap[r.id]=vendoTgMap[r.vendo_id];
+    if(!tgMap[r.id]&&r.sheet_name&&sheetTgMap[r.sheet_name]) tgMap[r.id]=sheetTgMap[r.sheet_name];
+  });
+
+  // NO MORE PER-WINDOW TRANSACTION FETCHES. The old fallback fired one
+  // paginated /transactions query PER vendo-window the RPCs did not cover —
+  // the "Fetching TG income… 40/120" storm that froze the tab. Rows the RPCs
+  // do not cover simply KEEP the value saved on their harvests row by the
+  // last run / nightly cron — which phase 1 is already showing.
 
   // Build final rows with true deficit formula
   // True deficit = TG income - (coins_total + saloy)
   rcAllRows=harvestRows.map(row=>{
     const tg=tgMap[row.id]||null;
-    const ws=row.harvest_window_start||from;
-    const we=row.harvest_date||to;
-    const rowKey=tg ? tg+'|'+ws+'|'+we : null;
     // Prefer per-harvest RPC data (by harvest id — no tg_name collision);
-    // then tg_name fallback; then date-only fetch.
+    // then tg_name fallback; then the value already saved on the harvests row.
     let tgInc=null, rpcAudited=false, rpcWinStart=null, rpcSubmit=null, rpcHasChain=true;
     const byId=rpcById[row.id];
     if(byId){
@@ -1590,8 +1538,8 @@ async function rcRun(){
       rpcHasChain=byId.has_chain;
     } else if(tg && rpcTgByName[tg]!==undefined){
       tgInc=rpcTgByName[tg];
-    } else if(rowKey!=null){
-      tgInc=(tgRowIncomeMap[rowKey]??null);
+    } else if(row.tg_income!=null){
+      tgInc=Number(row.tg_income);
     }
     const coins=Number(row.coins_total||0);
     const cloudInc=cloudById[row.id]!==undefined?Number(cloudById[row.id]):null;
@@ -1622,8 +1570,10 @@ async function rcRun(){
     };
   });
 
-  // Render immediately, then save tg_income/gap/flag to DB in the BACKGROUND
+  // Phase 2 done — swap the live figures in and clear the "updating" badge.
   rcFilter();
+  const cnt2=document.getElementById('rc-count');
+  if(cnt2) cnt2.textContent=rcAllRows.length+' harvests · live just now';
   // Write back ONLY rows whose figures changed. The old code PATCHed every
   // matched row on every live read — hundreds of writes per Refresh click,
   // which is what made Refresh slow and the DB busy.
