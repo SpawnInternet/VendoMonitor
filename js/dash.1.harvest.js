@@ -2386,6 +2386,14 @@ function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
 function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
 // One coin vendo cannot take >₱2,000/day. A value like that means a bad
 // transaction in the feed (a parsed "total" message) or a wrong link.
+// A SHORT row whose window spans more than 45 days usually means a missed /
+// undigitized harvest inside the window (paper era) — the TG income covers
+// months while the coins are only the latest box. Not proven utang.
+function _rcLongWindowShort(r){
+  if(r.flag!=='alert') return false;
+  const d=_rcDays(r);
+  return !!d && d>45;
+}
 function _rcImpossible(r){
   if(r.total_income==null) return false;
   const d=_rcDays(r)||1;
@@ -2435,6 +2443,7 @@ const _RC_FILTERS = [
   ['surplus', '🟡 Surplus',    r=>r.flag==='warn'],
   ['exact',   '✅ Exact',      r=>r.flag==='ok'],
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
+  ['longwin', '⏳ Long window', r=>_rcLongWindowShort(r)],
   ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
   ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
   ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
@@ -2611,7 +2620,8 @@ function _rcRowHtml(h, showCloud, flat){
   const sv = _rcSurplus(h);
   const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#8a93a9;margin-top:1px;font-variant-numeric:tabular-nums;">${_php(Math.abs(sv)/days)}/day</div>` : '';
   const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>'
-    : _rcImpossible(h) ? '<div style="font-size:9px;color:#DF1A35;font-weight:800;margin-top:3px;" title="This income is more than ₱2,000 per day — impossible for one coin vendo. Usually one bad transaction in the TG feed (a parsed total message) or a wrong link. Do not treat this gap as real money before checking.">🚫 impossible income — check feed</div>' : '';
+    : _rcImpossible(h) ? '<div style="font-size:9px;color:#DF1A35;font-weight:800;margin-top:3px;" title="This income is more than ₱2,000 per day — impossible for one coin vendo. Usually one bad transaction in the TG feed (a parsed total message) or a wrong link. Do not treat this gap as real money before checking.">🚫 impossible income — check feed</div>'
+    : _rcLongWindowShort(h) ? `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-top:3px;" title="This short covers a ${_rcDays(h)}-day window. A window that long usually hides a missed or undigitized harvest in between — the TG income spans months but the coins are only the latest box. Check the paper ledger or fix the window (🔗 button) BEFORE charging this to anyone's account.">⏳ ${_rcDays(h)}-day window — history gap?</div>` : '';
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
     <td style="min-width:152px;">
       <div style="display:flex;align-items:center;gap:5px;"><span style="font-weight:800;color:#1a2250;">${name}</span>${noTg}
