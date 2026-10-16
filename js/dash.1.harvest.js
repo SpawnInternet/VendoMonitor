@@ -1501,6 +1501,7 @@ async function rcRun(){
   const rpcTgByName={};  // fallback: tg_name -> tg_income
   const cloudById={};
   const vendoTgMap={}, sheetTgMap={};
+  const officeByVendo={}; // vendo_id -> [{record_date, amount}] — BASHANG office book
 
   // Everything phase 2 needs, fired AT THE SAME TIME (was 4+ sequential waits):
   //   1. time-aware TG income RPC   2. cloud income RPC
@@ -1546,6 +1547,23 @@ async function rcRun(){
         const rv=await fetch(`${_SB}/rest/v1/vendos?or=(${names.map(n=>`sheet_name.eq.${encodeURIComponent(n)}`).join(',')})&select=sheet_name,tg_name&limit=50`,{headers:_HDR});
         (await rv.json()).forEach(v=>{ if(v.tg_name) sheetTgMap[v.sheet_name]=v.tg_name; });
       }catch(e){}
+    })());
+  }
+  // BASHANG office book for the window (±5 days slack for late/early encoding).
+  {
+    const pad=(s,n)=>{ const d=new Date(s+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+    jobs.push((async()=>{
+      try{
+        let off=0;
+        while(off<=9000){
+          const r=await fetch(`${_SB}/rest/v1/office_harvest_records?vendo_id=not.is.null&record_date=gte.${pad(from,-5)}&record_date=lte.${pad(to,5)}&select=vendo_id,record_date,amount&limit=1000&offset=${off}`,{headers:_HDR});
+          const d=await r.json();
+          if(!Array.isArray(d)||!d.length) break;
+          d.forEach(o=>{ (officeByVendo[o.vendo_id]=officeByVendo[o.vendo_id]||[]).push({record_date:o.record_date, amount:Number(o.amount||0)}); });
+          if(d.length<1000) break;
+          off+=1000;
+        }
+      }catch(e){ console.warn('[rcRun] office/BASHANG fetch failed',e); }
     })());
   }
   await Promise.all(jobs);
@@ -1594,7 +1612,22 @@ async function rcRun(){
                : 'warn';
     const rc=row.route_code||'ADMIN';
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
+    // Nearest BASHANG office record for this vendo within ±3 days of the
+    // harvest date. The office book records the SPAWN SHARE, so it is compared
+    // against spawn_share in the popup — a cross-check that still holds when
+    // the TG window is wrong.
+    let bashang_amount=null, bashang_date=null;
+    const recs=row.vendo_id!=null?officeByVendo[row.vendo_id]:null;
+    if(recs && row.harvest_date){
+      const hd=Date.parse(row.harvest_date);
+      let bestD=4;
+      recs.forEach(o=>{
+        const dd=Math.abs(Math.round((Date.parse(o.record_date)-hd)/86400000));
+        if(dd<bestD){ bestD=dd; bashang_amount=o.amount; bashang_date=o.record_date; }
+      });
+    }
     return {...row,
+      bashang_amount, bashang_date,
       _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg,tg_income:tgInc,cloud_income:cloudInc,total_income:totalInc,gap,gap_pct:gapPct,flag,
@@ -2280,6 +2313,13 @@ function _rcStats(rows){
   });
   return s;
 }
+// BASHANG office book vs the harvest's spawn share (the book records share,
+// not gross coins). ±20 tolerance, same as the recon rule.
+function _rcBookState(r){
+  if(r.bashang_amount==null) return 'none';
+  const d=Number(r.bashang_amount)-Number(r.spawn_share||0);
+  return Math.abs(d)<=20 ? 'match' : 'diff';
+}
 const _RC_FILTERS = [
   ['all',     'All',           r=>true],
   ['deficit', '🔴 Deficit',    r=>r.flag==='alert'],
@@ -2287,6 +2327,8 @@ const _RC_FILTERS = [
   ['exact',   '✅ Exact',      r=>r.flag==='ok'],
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
   ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
+  ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
+  ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
   ['todo',    '⏳ Not confirmed', r=>r.reconcile_status!=='ok'],
   ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'],
 ];
@@ -2422,6 +2464,23 @@ function _rcCountPills(rows){
        + `<span class="rca-pill" style="background:${s.confirmed===s.count?'#d9f7e4':'#eef1f8'};color:${s.confirmed===s.count?'#0f8c43':'#64748b'};">☑ ${s.confirmed}/${s.count}</span>`;
 }
 
+// 📒 Bashang cell: the office amount, compared against this harvest's spawn
+// share. When the TG window is wrong and income looks lacking, this is the
+// office book's independent proof of what was collected.
+function _rcBookCell(h){
+  const st=_rcBookState(h);
+  if(st==='none') return `<span style="color:#b6bdcf;font-size:10px;" title="No BASHANG office record found for this vendo within ±3 days of the harvest date">— not in book</span>`;
+  const amt=Number(h.bashang_amount);
+  const share=Number(h.spawn_share||0);
+  const dateNote=(h.bashang_date&&h.bashang_date!==h.harvest_date)?`<div style="font-size:8.5px;color:#8a93a9;">📅 ${_rcEsc(h.bashang_date)}</div>`:'';
+  if(st==='match'){
+    return `<b style="color:#0f8c43;font-variant-numeric:tabular-nums;" title="BASHANG office record matches this harvest's spawn share (±₱20)">${_php(amt)} ✓</b>
+      <div style="font-size:8.5px;color:#8a93a9;">= share</div>${dateNote}`;
+  }
+  const d=amt-share;
+  return `<b style="color:#b45309;font-variant-numeric:tabular-nums;" title="BASHANG office record differs from this harvest's spawn share">${_php(amt)}</b>
+    <div style="font-size:8.5px;color:#b45309;font-weight:800;">Δ ${d>0?'+':'−'}${_php(Math.abs(d))} vs share ${_php(share)}</div>${dateNote}`;
+}
 function _rcRowHtml(h, showCloud, flat){
   const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
   const done = h.reconcile_status==='ok';
@@ -2448,6 +2507,7 @@ function _rcRowHtml(h, showCloud, flat){
     <td style="white-space:nowrap;"><b style="color:#1a2250;">${_rcEsc(h.harvest_date||'—')}</b>${time?`<div style="font-size:9px;color:#8a93a9;">🕒 ${_rcEsc(time)}</div>`:''}${flat?`<div style="font-size:9px;color:#025AC6;font-family:monospace;font-weight:700;">${_rcEsc(h.route_code||'')}</div>`:''}</td>
     <td style="font-size:10px;color:#8a93a9;line-height:1.35;">${_rcEsc(ws)}<br>→ ${_rcEsc(we)}${days?`<div style="font-weight:800;color:#44506b;">${days} day${days===1?'':'s'}</div>`:''}</td>
     <td class="r" style="font-weight:700;color:#1a2250;">${_php(h.coins_total)}</td>
+    <td class="r">${_rcBookCell(h)}</td>
     <td class="r" style="color:#44506b;">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
     ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>
     <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
@@ -2466,7 +2526,7 @@ function _rcRowHtml(h, showCloud, flat){
 function _rcTable(rows, showCloud, flat){
   return `<div style="overflow-x:auto;"><table class="rca"><thead><tr>
     <th>Vendo</th><th>Area</th><th>Harvested</th><th>Window</th>
-    <th class="r">Coins</th><th class="r">TG Income</th>
+    <th class="r">Coins</th><th class="r" title="BASHANG office book — records the SPAWN SHARE. Compared against this harvest's spawn share, not gross coins.">📒 Bashang</th><th class="r">TG Income</th>
     ${showCloud?'<th class="r" style="color:#028867;">☁ Cloud</th><th class="r">Total Income</th>':''}
     <th class="r" title="Coins minus income. + = extra coins (surplus), − = coins short">Coins − Income</th>
     <th class="c">Flag</th><th>Confirm / Note</th>
