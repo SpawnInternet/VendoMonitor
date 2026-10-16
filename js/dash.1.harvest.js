@@ -1679,7 +1679,7 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
   if(overlay) overlay.remove();
   overlay = document.createElement('div');
   overlay.id = 'rc-names-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100002;display:flex;align-items:center;justify-content:center;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:100002;display:flex;align-items:center;justify-content:center;padding:16px;animation:rcaFade .16s ease;';
   overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
 
   const matchStatus = tgName
@@ -1687,13 +1687,13 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
     : '<span style="background:#fef9c3;color:#b45309;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">⚠ Unmatched</span>';
 
   overlay.innerHTML = `
-  <div style="background:#fff;border-radius:14px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);">
-    <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;">
+  <div class="rca-modal" style="background:#fff;border-radius:20px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(13,8,55,.5);">
+    <div class="rca-headwrap" style="border-radius:20px 20px 0 0;display:flex;align-items:center;justify-content:space-between;">
       <div>
         <div style="font-size:14px;font-weight:700;">${sheetName||vendoName||'—'}</div>
         <div style="font-size:11px;opacity:.8;">${area||''}</div>
       </div>
-      <button onclick="document.getElementById('rc-names-overlay').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:16px;width:28px;height:28px;border-radius:50%;cursor:pointer;">✕</button>
+      <button class="rca-hbtn" onclick="document.getElementById('rc-names-overlay').remove()" style="width:32px;height:32px;font-size:15px;position:relative;">✕</button>
     </div>
     <div style="padding:16px;" id="rcn-body">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
@@ -1983,10 +1983,10 @@ async function rcnQuickLink(vendoName, tgName){
 function rcPickVendo(rows, title){
   return new Promise(resolve=>{
     const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;animation:rcaFade .16s ease;';
     const cards=rows.map(r=>{
       const dead = (r._harvests===0);
-      return `<div onclick="this.closest('[data-pick]').__pick(${r.id})" style="border:2px solid ${dead?'#e5e7eb':'#025AC6'};background:${dead?'#f9fafb':'#f0f6ff'};border-radius:11px;padding:11px 13px;margin-bottom:9px;cursor:pointer;transition:.12s;" onmouseover="this.style.transform='translateX(3px)'" onmouseout="this.style.transform=''">
+      return `<div onclick="this.closest('[data-pick]').__pick(${r.id})" style="border:2px solid ${dead?'#e7ebf4':'#025AC6'};background:${dead?'#fafbfe':'linear-gradient(135deg,#f0f6ff,#eaf3ff)'};border-radius:14px;padding:12px 14px;margin-bottom:9px;cursor:pointer;transition:.14s;box-shadow:0 1px 3px rgba(26,34,78,.06);" onmouseover="this.style.transform='translateX(4px)';this.style.boxShadow='0 6px 18px rgba(2,90,198,.2)'" onmouseout="this.style.transform='';this.style.boxShadow='0 1px 3px rgba(26,34,78,.06)'">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
           <div style="font-weight:800;font-size:14px;color:#111;">#${r.id} · ${r.sheet_name||'(no sheet name)'}</div>
           ${dead?'<span style="background:#e5e7eb;color:#6b7280;font-size:9px;font-weight:800;padding:2px 7px;border-radius:99px;">EMPTY</span>'
@@ -1998,13 +1998,13 @@ function rcPickVendo(rows, title){
         </div>
       </div>`;
     }).join('');
-    ov.innerHTML=`<div data-pick style="background:#fff;border-radius:15px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 17px;">
-        <div style="font-size:15px;font-weight:800;">${title||'Which vendo?'}</div>
-        <div style="font-size:11px;opacity:.85;margin-top:2px;">${rows.length} rows share this name — pick the right one</div>
+    ov.innerHTML=`<div data-pick class="rca-modal" style="background:#fff;border-radius:20px;max-width:440px;width:100%;box-shadow:0 30px 80px rgba(13,8,55,.5);overflow:hidden;">
+      <div class="rca-headwrap">
+        <div style="font-size:15.5px;font-weight:900;position:relative;">${title||'Which vendo?'}</div>
+        <div style="font-size:11px;opacity:.88;margin-top:2px;position:relative;">${rows.length} rows share this name — pick the right one</div>
       </div>
-      <div style="padding:14px;max-height:60vh;overflow-y:auto;">${cards}</div>
-      <div style="padding:0 14px 14px;"><button style="width:100%;padding:9px;border:1px solid #d1d5db;background:#fff;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#6b7280;">Cancel</button></div>
+      <div style="padding:14px;max-height:60vh;overflow-y:auto;background:linear-gradient(180deg,#f6f8fd,#fff);">${cards}</div>
+      <div style="padding:0 14px 14px;background:#fff;"><button style="width:100%;padding:10px;border:1.5px solid #e2e8f6;background:#fff;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;color:#6b7280;transition:.14s;" onmouseover="this.style.background='#f6f8fd'" onmouseout="this.style.background='#fff'">Cancel</button></div>
     </div>`;
     const box=ov.querySelector('[data-pick]');
     box.__pick=(id)=>{ ov.remove(); resolve(id); };
@@ -2114,6 +2114,7 @@ async function rcnUnlink(vendoName, opts){
 }
 
 function rcFilter(){
+  _rcEnsureCss();
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
   const rows=rcAllRows.filter(r=>{
@@ -2190,34 +2191,38 @@ function rcFilter(){
     // every collector on every filter change. That was the slow part.
     window._rcDetail[collector] = { rows: cd.rows, ...st };
 
-    // build the collapsed card
+    // build the collapsed card (redesigned — classes in #rca-css / .rcg-*)
     const initial=(collector||'?').trim().charAt(0).toUpperCase();
-    const gapTxt=fmtP(Math.abs(colGap));
-    const gapChipColor=Math.abs(colGap)<100?'#15803d':colGap>0?'#b45309':'#dc2626';
-    const gapChipBg=Math.abs(colGap)<100?'#dcfce7':colGap>0?'#fef9c3':'#fee2e2';
+    // stable per-collector color from the name, from the Spawn palette
+    const _pal=[['#311A8E','#025AC6'],['#025AC6','#0ea5e9'],['#C01176','#DF1A35'],['#028867','#10b981'],['#b45309','#FFB725'],['#4338ca','#7c3aed']];
+    let _h=0; for(const ch of collector) _h=(_h*31+ch.charCodeAt(0))>>>0;
+    const _grad=_pal[_h%_pal.length];
+    const allDone = st.count>0 && colConfirmed===st.count;
     cardData.push({collector, sortKey:collector, html:`
-      <div onclick="rcShowCollector('${collector.replace(/'/g,"\\'")}')" style="background:#fff;border:1.5px solid #c7d2fe;border-radius:12px;padding:14px;cursor:pointer;transition:.12s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.10)';this.style.borderColor='#6d28d9';" onmouseout="this.style.boxShadow='none';this.style.borderColor='#c7d2fe';">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-          <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex-shrink:0;">${initial}</div>
+      <div class="rcg-card" onclick="rcShowCollector('${collector.replace(/'/g,"\\'")}')">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:13px;">
+          <div class="rcg-ava" style="background:linear-gradient(135deg,${_grad[0]},${_grad[1]});">${initial}</div>
           <div style="min-width:0;flex:1;">
-            <div style="font-weight:800;font-size:15px;color:#1e3a8a;">${collector}</div>
-            <div style="font-size:10px;color:var(--mu);">${cd.rows.length} harvests${colConfirmed?` · ${colConfirmed} confirmed`:''}</div>
+            <div style="font-weight:900;font-size:15.5px;color:#1a2250;letter-spacing:-.01em;">${collector}</div>
+            <div style="font-size:10px;color:#8a93a9;margin-top:1px;">${cd.rows.length} harvests${colConfirmed?` · ☑ ${colConfirmed} confirmed`:''}</div>
           </div>
-          ${deficitN?`<span style="background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${deficitN} DEFICIT</span>`:''}
-          ${surplusN?`<span style="background:#fef9c3;color:#b45309;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">${surplusN} SURPLUS</span>`:''}
-          ${unmatchedN?`<span title="${unmatchedN} harvests have no TG name linked, holding ${fmtP(unmatchedCoins)} in coins. Not counted as deficit — they need a TG match first." style="background:#e0e7ff;color:#4338ca;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">🔗 ${unmatchedN} NO TG</span>`:''}
-          ${(!deficitN&&!surplusN)?`<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:800;">✅ OK</span>`:''}
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+            ${deficitN?`<span class="rcg-pill" style="background:#fee2e2;color:#DF1A35;">${deficitN} DEFICIT</span>`:''}
+            ${surplusN?`<span class="rcg-pill" style="background:#fef3c7;color:#b45309;">${surplusN} SURPLUS</span>`:''}
+            ${unmatchedN?`<span class="rcg-pill" title="${unmatchedN} harvests have no TG name linked, holding ${fmtP(unmatchedCoins)} in coins. Not counted as deficit — they need a TG match first." style="background:#e4e9fb;color:#4338ca;">🔗 ${unmatchedN} NO TG</span>`:''}
+            ${(!deficitN&&!surplusN)?`<span class="rcg-pill" style="background:#d9f7e4;color:#0f8c43;">✅ OK</span>`:''}
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-          <div style="background:#eff6ff;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#1565c0;">${fmtP(colCoins)}</div><div style="font-size:8px;color:var(--mu);">Coins${unmatchedN?' (matched only)':''}</div></div>
-          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:13px;font-weight:800;color:#15803d;">${fmtP(colTG)}</div><div style="font-size:8px;color:var(--mu);">TG Income</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">
+          <div class="rcg-tile" style="background:#eff5ff;"><div class="v" style="color:#025AC6;">${fmtP(colCoins)}</div><div class="l" style="color:#7a86a5;">Coins${unmatchedN?' (matched)':''}</div></div>
+          <div class="rcg-tile" style="background:#edfbf3;"><div class="v" style="color:#0f8c43;">${fmtP(colTG)}</div><div class="l" style="color:#7a86a5;">TG Income</div></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px;">
-          <div style="background:#f0fdf4;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#15803d;">${exactN}</div><div style="font-size:8px;color:var(--mu);font-weight:700;">✅ EXACT</div></div>
-          <div style="background:#fef9c3;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#b45309;">${surplusN}</div><div style="font-size:8px;color:#b45309;font-weight:700;">🟡 SURPLUS</div><div style="font-size:9px;font-weight:800;color:#b45309;margin-top:1px;">${surplusN?fmtP(surplusAmt):'—'}</div></div>
-          <div style="background:#fee2e2;border-radius:7px;padding:8px;text-align:center;"><div style="font-size:15px;font-weight:800;color:#dc2626;">${deficitN}</div><div style="font-size:8px;color:#dc2626;font-weight:700;">🔴 DEFICIT</div><div style="font-size:9px;font-weight:800;color:#dc2626;margin-top:1px;">${deficitN?fmtP(deficitAmt):'—'}</div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:7px;">
+          <div class="rcg-tile" style="background:#edfbf3;"><div class="v" style="color:#0f8c43;">${exactN}</div><div class="l" style="color:#0f8c43;">✅ Exact</div></div>
+          <div class="rcg-tile" style="background:#fff8e6;"><div class="v" style="color:#b45309;">${surplusN}</div><div class="l" style="color:#b45309;">🟡 Surplus</div><div style="font-size:9.5px;font-weight:800;color:#b45309;margin-top:1px;font-variant-numeric:tabular-nums;">${surplusN?fmtP(surplusAmt):'—'}</div></div>
+          <div class="rcg-tile" style="background:#fff0f0;"><div class="v" style="color:#DF1A35;">${deficitN}</div><div class="l" style="color:#DF1A35;">🔴 Deficit</div><div style="font-size:9.5px;font-weight:800;color:#DF1A35;margin-top:1px;font-variant-numeric:tabular-nums;">${deficitN?fmtP(deficitAmt):'—'}</div></div>
         </div>
-        <div style="margin-top:10px;font-size:10px;color:#6d28d9;font-weight:700;text-align:center;border-top:1px solid #f1f5f9;padding-top:8px;">Tap to reconcile ›</div>
+        <div class="rcg-foot">${allDone?'All confirmed — audit done ✓':'Tap to reconcile ›'}</div>
       </div>`});
   });
 
@@ -2231,12 +2236,9 @@ function rcFilter(){
 // ══════════════════════════════════════════════════════════
 // RECON POPUP — AUDIT MODE
 // ══════════════════════════════════════════════════════════
-// Built ON DEMAND for the one collector you open. The old code pre-built the
-// full HTML for EVERY collector inside rcFilter() on every filter/refresh, then
-// showed a frozen copy of it — so confirm/undo/link/refresh changed the
-// database but the popup kept showing the old snapshot ("button did nothing").
-// Now the popup always renders from the live rows in rcAllRows and re-renders
-// itself after every action.
+// Built ON DEMAND for the one collector you open, always rendered from the
+// live rows in rcAllRows, re-rendered after every action. Same arrangement as
+// before — this version is the visual redesign (classes in #rca-css).
 //
 // MONEY SAFETY: nothing here writes money. Counting rules are unchanged:
 //   gap = income − coins   (income = TG + Cloud)
@@ -2293,49 +2295,115 @@ function _rcSearchHit(r,q){
   return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes].some(x=>x&&String(x).toLowerCase().includes(q));
 }
 
+// ── DESIGN SYSTEM (scoped: #rc-modal …, global: .rcg-… collector cards) ──
 function _rcEnsureCss(){
   if(document.getElementById('rca-css')) return;
   const st=document.createElement('style');
   st.id='rca-css';
   st.textContent=`
-  #rc-modal .rca-chip{border:1.5px solid #dbe3f4;background:#fff;color:#374151;border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
-  #rc-modal .rca-chip b{margin-left:4px;}
-  #rc-modal .rca-chip.on{background:#1e3cb8;border-color:#1e3cb8;color:#fff;}
-  #rc-modal .rca-chip:disabled{opacity:.4;cursor:default;}
-  #rc-modal table.rca{width:100%;border-collapse:collapse;font-size:11px;}
-  #rc-modal table.rca th{padding:5px 8px;text-align:left;color:#6b7280;font-weight:600;border-bottom:1px solid #eef0f4;background:#f9fafb;white-space:nowrap;}
-  #rc-modal table.rca td{padding:6px 8px;border-bottom:1px solid #f1f3f7;vertical-align:middle;}
-  #rc-modal table.rca .r{text-align:right;}
+  @keyframes rcaFade{from{opacity:0}to{opacity:1}}
+  @keyframes rcaPop{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+  @keyframes rcaRow{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  #rc-modal{animation:rcaFade .16s ease;}
+  #rc-modal .rca-modal{animation:rcaPop .22s cubic-bezier(.2,.9,.3,1.1);}
+  #rc-modal *{-webkit-tap-highlight-color:transparent;}
+
+  /* header */
+  #rc-modal .rca-headwrap{background:linear-gradient(130deg,#311A8E 0%,#1e3cb8 45%,#025AC6 100%);color:#fff;padding:16px 20px 14px;flex-shrink:0;position:relative;overflow:hidden;}
+  #rc-modal .rca-headwrap::after{content:'';position:absolute;top:-70px;right:-50px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,183,37,.28),transparent 62%);pointer-events:none;}
+  #rc-modal .rca-avatar{width:46px;height:46px;border-radius:15px;background:linear-gradient(135deg,#FFB725,#f59e0b);color:#311A8E;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;flex-shrink:0;box-shadow:0 6px 16px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.5);}
+  #rc-modal .rca-glass{background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:6px 12px;backdrop-filter:blur(6px);text-align:right;min-width:72px;}
+  #rc-modal .rca-glass .l{font-size:9px;opacity:.78;letter-spacing:.05em;text-transform:uppercase;font-weight:700;}
+  #rc-modal .rca-glass .v{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:1px;white-space:nowrap;}
+  #rc-modal .rca-stat{cursor:pointer;transition:.15s;}
+  #rc-modal .rca-stat:hover{background:rgba(255,255,255,.24);transform:translateY(-1px);}
+  #rc-modal .rca-hbtn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.26);color:#fff;height:34px;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.15s;backdrop-filter:blur(6px);}
+  #rc-modal .rca-hbtn:hover{background:rgba(255,255,255,.3);}
+  #rc-modal .rca-hbtn:disabled{opacity:.55;cursor:wait;}
+  #rc-modal .rca-prog{height:5px;background:rgba(255,255,255,.22);border-radius:99px;margin-top:6px;overflow:hidden;}
+  #rc-modal .rca-prog>div{height:100%;background:linear-gradient(90deg,#4ade80,#FFB725);border-radius:99px;transition:width .4s ease;}
+
+  /* toolbar */
+  #rc-modal .rca-tools{flex-shrink:0;padding:10px 16px;border-bottom:1px solid #e7ebf6;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;}
+  #rc-modal .rca-chip{border:1.5px solid #e2e8f6;background:#fff;color:#44506b;border-radius:99px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:.14s;}
+  #rc-modal .rca-chip b{margin-left:5px;font-variant-numeric:tabular-nums;background:#eef2fb;border-radius:99px;padding:1px 6px;font-size:10px;color:#44506b;}
+  #rc-modal .rca-chip:hover{border-color:#b9c6ef;transform:translateY(-1px);box-shadow:0 2px 8px rgba(30,60,184,.1);}
+  #rc-modal .rca-chip.on{background:linear-gradient(135deg,#1e3cb8,#025AC6);border-color:transparent;color:#fff;box-shadow:0 4px 12px rgba(30,60,184,.3);}
+  #rc-modal .rca-chip.on b{background:rgba(255,255,255,.22);color:#fff;}
+  #rc-modal .rca-chip:disabled{opacity:.35;cursor:default;transform:none;box-shadow:none;}
+  #rc-modal #rca-q{padding:7px 12px;border:1.5px solid #e2e8f6;border-radius:10px;font-size:12px;font-family:inherit;width:195px;background:#f8faff;transition:.14s;outline:none;}
+  #rc-modal #rca-q:focus{border-color:#025AC6;background:#fff;box-shadow:0 0 0 3px rgba(2,90,198,.12);}
+  #rc-modal #rca-sort{padding:7px 10px;border:1.5px solid #e2e8f6;border-radius:10px;font-size:12px;font-weight:600;font-family:inherit;background:#f8faff;color:#44506b;cursor:pointer;outline:none;}
+  #rc-modal #rca-sort:focus{border-color:#025AC6;box-shadow:0 0 0 3px rgba(2,90,198,.12);}
+
+  /* body */
+  #rc-modal #rca-body{overflow-y:auto;flex:1;background:linear-gradient(180deg,#f3f6fd, #eef2fb);scrollbar-width:thin;scrollbar-color:#c3cdeb transparent;}
+  #rc-modal #rca-body::-webkit-scrollbar{width:9px;}
+  #rc-modal #rca-body::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;border:2px solid #f3f6fd;}
+  #rc-modal .rca-day{margin-top:14px;border:1px solid #e3e9f8;border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 1px 3px rgba(26,34,78,.05), 0 8px 24px -18px rgba(26,34,78,.25);}
+  #rc-modal .rca-date{position:sticky;top:0;z-index:2;background:linear-gradient(90deg,#eef2ff,#f6f8ff);padding:9px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #e3e9f8;backdrop-filter:blur(4px);}
+  #rc-modal .rca-route{background:#fbfcff;padding:7px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #eef1f9;}
+  #rc-modal .rca-sum{margin-left:auto;font-size:11px;display:flex;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums;color:#44506b;}
+  #rc-modal .rca-sum b{font-variant-numeric:tabular-nums;}
+
+  /* table */
+  #rc-modal table.rca{width:100%;border-collapse:collapse;font-size:11.5px;}
+  #rc-modal table.rca th{padding:7px 10px;text-align:left;color:#8a93a9;font-weight:800;font-size:9px;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid #edf0f8;background:#fafbff;white-space:nowrap;}
+  #rc-modal table.rca td{padding:8px 10px;border-bottom:1px solid #f2f4fa;vertical-align:middle;}
+  #rc-modal table.rca tbody tr{transition:background .12s;animation:rcaRow .18s ease both;}
+  #rc-modal table.rca tbody tr:hover{background:#f3f7ff;}
+  #rc-modal table.rca .r{text-align:right;font-variant-numeric:tabular-nums;}
   #rc-modal table.rca .c{text-align:center;}
-  #rc-modal tr.f-alert{background:#fef2f2;} #rc-modal tr.f-warn{background:#fffbeb;} #rc-modal tr.f-nodata{background:#f3f6fb;}
-  #rc-modal tr.is-done td{opacity:.62;} #rc-modal tr.is-done td:last-child{opacity:1;}
-  #rc-modal .rca-pill{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;display:inline-block;}
-  #rc-modal .rca-ok{border:1px solid #16a34a;background:#f0fdf4;color:#15803d;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
-  #rc-modal .rca-ok:disabled{opacity:.5;cursor:wait;}
-  #rc-modal .rca-undo{border:none;background:none;cursor:pointer;font-size:11px;color:#9ca3af;padding:2px 4px;}
-  #rc-modal .rca-note{width:100%;box-sizing:border-box;padding:3px 6px;border:1px solid #e5e7eb;border-radius:5px;font-size:10px;font-family:inherit;margin-top:4px;}
-  #rc-modal .rca-date{position:sticky;top:0;z-index:2;background:#eef2ff;padding:7px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e0e7ff;}
-  #rc-modal .rca-route{background:#f8faff;padding:6px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #eef0f4;}
-  #rc-modal .rca-sum{margin-left:auto;font-size:11px;display:flex;gap:10px;flex-wrap:wrap;}
-  #rc-modal .rca-link{cursor:pointer;font-weight:700;margin-left:5px;}
-  #rc-modal .rca-stat{cursor:pointer;border-radius:8px;padding:2px 6px;}
-  #rc-modal .rca-stat:hover{background:rgba(255,255,255,.15);}
+  #rc-modal tr.f-alert{background:#fff6f6;box-shadow:inset 3px 0 0 #DF1A35;}
+  #rc-modal tr.f-alert:hover{background:#ffefef;}
+  #rc-modal tr.f-warn{background:#fffcf0;box-shadow:inset 3px 0 0 #FFB725;}
+  #rc-modal tr.f-warn:hover{background:#fff8e1;}
+  #rc-modal tr.f-nodata{background:#f5f8fd;box-shadow:inset 3px 0 0 #93a7d4;}
+  #rc-modal tr.is-done td{opacity:.55;}
+  #rc-modal tr.is-done td:last-child{opacity:1;}
+
+  /* pills + actions */
+  #rc-modal .rca-pill{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;white-space:nowrap;display:inline-block;letter-spacing:.01em;}
+  #rc-modal .rca-ok{border:none;background:linear-gradient(135deg,#19b355,#0f8c43);color:#fff;padding:5px 13px;border-radius:9px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(16,140,67,.3), inset 0 1px 0 rgba(255,255,255,.25);transition:.14s;}
+  #rc-modal .rca-ok:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(16,140,67,.4), inset 0 1px 0 rgba(255,255,255,.25);}
+  #rc-modal .rca-ok:disabled{opacity:.55;cursor:wait;transform:none;}
+  #rc-modal .rca-undo{border:none;background:none;cursor:pointer;font-size:10.5px;color:#9aa3b8;padding:2px 5px;font-family:inherit;border-radius:6px;transition:.12s;}
+  #rc-modal .rca-undo:hover{color:#DF1A35;background:#fee2e2;}
+  #rc-modal .rca-note{width:100%;box-sizing:border-box;padding:4px 8px;border:1.5px solid #e9edf6;border-radius:8px;font-size:10.5px;font-family:inherit;margin-top:5px;background:#fafbff;transition:.14s;outline:none;}
+  #rc-modal .rca-note:focus{border-color:#025AC6;background:#fff;box-shadow:0 0 0 3px rgba(2,90,198,.1);}
+  #rc-modal .rca-link{cursor:pointer;font-weight:800;margin-left:6px;border-radius:5px;padding:0 3px;transition:.12s;}
+  #rc-modal .rca-link:hover{background:#fee2e2;}
+  #rc-modal .rca-iconbtn{border:none;background:#eef2fb;cursor:pointer;font-size:11px;padding:2px 5px;line-height:1.4;border-radius:7px;transition:.12s;}
+  #rc-modal .rca-iconbtn:hover{background:#dbe5fa;transform:scale(1.08);}
+  #rc-modal .rca-empty{padding:52px 20px;text-align:center;color:#7d879f;font-size:13px;}
+  #rc-modal .rca-empty a{color:#025AC6;font-weight:800;text-decoration:none;}
+
+  /* collector cards on the main recon tab */
+  .rcg-card{background:#fff;border:1.5px solid #e2e8fa;border-radius:18px;padding:16px;cursor:pointer;transition:.16s;box-shadow:0 1px 3px rgba(26,34,78,.05);}
+  .rcg-card:hover{transform:translateY(-3px);border-color:#025AC6;box-shadow:0 14px 30px -14px rgba(2,90,198,.4);}
+  .rcg-ava{width:44px;height:44px;border-radius:14px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:19px;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 4px 10px rgba(26,34,78,.18);}
+  .rcg-tile{border-radius:11px;padding:9px 8px;text-align:center;}
+  .rcg-tile .v{font-size:14px;font-weight:900;font-variant-numeric:tabular-nums;}
+  .rcg-tile .l{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-top:2px;}
+  .rcg-pill{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;white-space:nowrap;}
+  .rcg-foot{margin-top:12px;font-size:10.5px;font-weight:800;text-align:center;border-top:1px solid #f0f3fb;padding-top:9px;background:linear-gradient(90deg,#311A8E,#025AC6);-webkit-background-clip:text;background-clip:text;color:transparent;}
   `;
   document.head.appendChild(st);
 }
 
 function _rcFlagPill(f){
-  return f==='alert' ? '<span class="rca-pill" style="background:#fee2e2;color:#dc2626;">🔴 Short</span>'
-       : f==='warn'  ? '<span class="rca-pill" style="background:#fef9c3;color:#b45309;">🟡 Surplus</span>'
-       : f==='nodata'? '<span class="rca-pill" style="background:#e8eef7;color:#3b5b8c;">🔗 needs match</span>'
-       :               '<span class="rca-pill" style="background:#dcfce7;color:#15803d;">✅ OK</span>';
+  return f==='alert' ? '<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;">🔴 Short</span>'
+       : f==='warn'  ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;">🟡 Surplus</span>'
+       : f==='nodata'? '<span class="rca-pill" style="background:#e8eef9;color:#3b5b8c;">🔗 needs match</span>'
+       :               '<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">✅ OK</span>';
 }
 // Signed money: + surplus (amber) / − short (red) / within ±20 (green).
 function _rcSigned(v){
-  if(v==null) return '<span style="color:#9ca3af">—</span>';
-  const c = v>20?'#b45309' : v<-20?'#dc2626' : '#15803d';
+  if(v==null) return '<span style="color:#b6bdcf">—</span>';
+  const c = v>20?'#b45309' : v<-20?'#DF1A35' : '#0f8c43';
   const sign = v>0?'+' : v<0?'−' : '';
-  return `<b style="color:${c};">${sign}${_php(Math.abs(v))}</b>`;
+  return `<b style="color:${c};font-variant-numeric:tabular-nums;">${sign}${_php(Math.abs(v))}</b>`;
 }
 function _rcSumHtml(rows){
   const s=_rcStats(rows);
@@ -2343,51 +2411,51 @@ function _rcSumHtml(rows){
   const word = Math.abs(net)<=20 ? '' : net>0 ? ' surplus' : ' short';
   return `<span>Coins: <b>${_php(s.coins)}</b></span><span>TG: <b>${_php(s.tg)}</b></span>`
     + (s.cloud?`<span style="color:#028867;">Cloud: <b>${_php(s.cloud)}</b></span>`:'')
-    + `<span>Net: ${_rcSigned(net)}<span style="color:#6b7280;">${word}</span></span>`
+    + `<span>Net: ${_rcSigned(net)}<span style="color:#8a93a9;">${word}</span></span>`
     + (s.unmatchedN?`<span style="color:#4338ca;" title="Coins from harvests with no TG match — not counted above">+${_php(s.unmatchedCoins)} no TG</span>`:'');
 }
 function _rcCountPills(rows){
   const s=_rcStats(rows);
-  return (s.deficitN?`<span class="rca-pill" style="background:#fee2e2;color:#dc2626;">${s.deficitN} DEFICIT</span>`:'')
-       + (s.surplusN?`<span class="rca-pill" style="background:#fef9c3;color:#b45309;">${s.surplusN} SURPLUS</span>`:'')
-       + (s.unmatchedN?`<span class="rca-pill" style="background:#e0e7ff;color:#4338ca;">${s.unmatchedN} NO TG</span>`:'')
-       + `<span class="rca-pill" style="background:${s.confirmed===s.count?'#dcfce7':'#f1f5f9'};color:${s.confirmed===s.count?'#15803d':'#64748b'};">☑ ${s.confirmed}/${s.count}</span>`;
+  return (s.deficitN?`<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;">${s.deficitN} DEFICIT</span>`:'')
+       + (s.surplusN?`<span class="rca-pill" style="background:#fef3c7;color:#b45309;">${s.surplusN} SURPLUS</span>`:'')
+       + (s.unmatchedN?`<span class="rca-pill" style="background:#e4e9fb;color:#4338ca;">${s.unmatchedN} NO TG</span>`:'')
+       + `<span class="rca-pill" style="background:${s.confirmed===s.count?'#d9f7e4':'#eef1f8'};color:${s.confirmed===s.count?'#0f8c43':'#64748b'};">☑ ${s.confirmed}/${s.count}</span>`;
 }
 
 function _rcRowHtml(h, showCloud, flat){
   const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
   const done = h.reconcile_status==='ok';
   const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
-  const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 5px;margin-left:4px;">no TG</span>' : '';
+  const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 6px;margin-left:5px;">no TG</span>' : '';
   const unlinkKey = h.sheet_name||h.tg_name;
   const tgLine = h.tg_name
-    ? `<div style="font-size:9px;color:#15803d;margin-top:2px;line-height:1.25;">🔗 ${_rcEsc(h.tg_name)}${unlinkKey?`<span class="rca-link" style="color:#b91c1c;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
-    : `<div style="font-size:9px;color:#b45309;margin-top:2px;line-height:1.25;">⚠ no TG linked${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>`:''}</div>`;
+    ? `<div style="font-size:9px;color:#0f8c43;margin-top:2px;line-height:1.3;">🔗 ${_rcEsc(h.tg_name)}${unlinkKey?`<span class="rca-link" style="color:#DF1A35;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
+    : `<div style="font-size:9px;color:#b45309;margin-top:2px;line-height:1.3;">⚠ no TG linked${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>`:''}</div>`;
   const time = h.rpc_submitted_at ? String(h.rpc_submitted_at).split(' ').slice(1).join(' ') : '';
   const ws = h.rpc_window_start || h.harvest_window_start || '—';
   const we = h.rpc_submitted_at || h.harvest_date || '—';
   const days = _rcDays(h);
   const sv = _rcSurplus(h);
-  const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#6b7280;margin-top:1px;">${_php(Math.abs(sv)/days)}/day</div>` : '';
-  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:700;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>' : '';
+  const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#8a93a9;margin-top:1px;font-variant-numeric:tabular-nums;">${_php(Math.abs(sv)/days)}/day</div>` : '';
+  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>' : '';
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
-    <td style="min-width:150px;">
-      <div style="display:flex;align-items:center;gap:4px;"><span style="font-weight:700;">${name}</span>${noTg}
-        <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;" title="View / edit names and harvest window">🔗</button></div>
+    <td style="min-width:152px;">
+      <div style="display:flex;align-items:center;gap:5px;"><span style="font-weight:800;color:#1a2250;">${name}</span>${noTg}
+        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button></div>
       ${tgLine}
     </td>
-    <td>${_rcEsc(h.area||'—')}</td>
-    <td style="white-space:nowrap;"><b>${_rcEsc(h.harvest_date||'—')}</b>${time?`<div style="font-size:9px;color:#6b7280;">🕒 ${_rcEsc(time)}</div>`:''}${flat?`<div style="font-size:9px;color:#1565c0;font-family:monospace;">${_rcEsc(h.route_code||'')}</div>`:''}</td>
-    <td style="font-size:10px;color:#6b7280;line-height:1.3;">${_rcEsc(ws)}<br>→ ${_rcEsc(we)}${days?`<div style="font-weight:700;color:#475569;">${days} day${days===1?'':'s'}</div>`:''}</td>
-    <td class="r">${_php(h.coins_total)}</td>
-    <td class="r">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
-    ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d1d5db;">—</span>'}</td>
-    <td class="r" style="font-weight:600;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d1d5db;">—</span>'}</td>`:''}
+    <td style="color:#44506b;">${_rcEsc(h.area||'—')}</td>
+    <td style="white-space:nowrap;"><b style="color:#1a2250;">${_rcEsc(h.harvest_date||'—')}</b>${time?`<div style="font-size:9px;color:#8a93a9;">🕒 ${_rcEsc(time)}</div>`:''}${flat?`<div style="font-size:9px;color:#025AC6;font-family:monospace;font-weight:700;">${_rcEsc(h.route_code||'')}</div>`:''}</td>
+    <td style="font-size:10px;color:#8a93a9;line-height:1.35;">${_rcEsc(ws)}<br>→ ${_rcEsc(we)}${days?`<div style="font-weight:800;color:#44506b;">${days} day${days===1?'':'s'}</div>`:''}</td>
+    <td class="r" style="font-weight:700;color:#1a2250;">${_php(h.coins_total)}</td>
+    <td class="r" style="color:#44506b;">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
+    ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>
+    <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
     <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
-    <td style="min-width:170px;">
+    <td style="min-width:172px;">
       ${done
-        ? `<span class="rca-pill" style="background:#dcfce7;color:#15803d;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
+        ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
         : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>`}
       <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
@@ -2416,21 +2484,21 @@ function _rcRenderHead(d, collector){
   const pct = s.count ? Math.round(s.confirmed/s.count*100) : 0;
   const head=document.getElementById('rca-head'); if(!head) return;
   head.innerHTML=`
-    <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;">${_rcEsc((collector||'?').trim().charAt(0).toUpperCase())}</div>
-    <div style="min-width:150px;">
-      <div style="font-size:18px;font-weight:800;">${_rcEsc(collector)}</div>
-      <div style="font-size:11px;opacity:.9;">${s.count} harvests · ☑ ${s.confirmed} confirmed (${pct}%)</div>
-      <div style="height:4px;background:rgba(255,255,255,.25);border-radius:99px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#4ade80;"></div></div>
+    <div class="rca-avatar">${_rcEsc((collector||'?').trim().charAt(0).toUpperCase())}</div>
+    <div style="min-width:160px;position:relative;">
+      <div style="font-size:19px;font-weight:900;letter-spacing:-.01em;">${_rcEsc(collector)}</div>
+      <div style="font-size:11px;opacity:.9;margin-top:1px;">${s.count} harvests · ☑ ${s.confirmed} confirmed (${pct}%)</div>
+      <div class="rca-prog"><div style="width:${pct}%;"></div></div>
     </div>
-    <div style="margin-left:auto;display:flex;gap:10px;text-align:right;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-      <div><div style="font-size:10px;opacity:.75;">Coins</div><div style="font-size:14px;font-weight:700;">${_php(s.coins)}</div></div>
-      <div><div style="font-size:10px;opacity:.75;">TG Income</div><div style="font-size:14px;font-weight:700;">${_php(s.tg)}</div></div>
-      ${s.cloud?`<div><div style="font-size:10px;opacity:.75;">☁ Cloud</div><div style="font-size:14px;font-weight:700;">${_php(s.cloud)}</div></div>`:''}
-      <div class="rca-stat" onclick="rcSetView('filter','exact')" title="Show exact rows"><div style="font-size:10px;opacity:.75;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${s.exactN}</div></div>
-      <div class="rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div style="font-size:10px;opacity:.75;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
-      <div class="rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div style="font-size:10px;opacity:.75;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
-      <button id="rc-modal-refresh" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:32px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
-      <button onclick="rcCloseCollector()" title="Close (Esc)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;position:relative;">
+      <div class="rca-glass"><div class="l">Coins</div><div class="v">${_php(s.coins)}</div></div>
+      <div class="rca-glass"><div class="l">TG Income</div><div class="v">${_php(s.tg)}</div></div>
+      ${s.cloud?`<div class="rca-glass"><div class="l">☁ Cloud</div><div class="v">${_php(s.cloud)}</div></div>`:''}
+      <div class="rca-glass rca-stat" onclick="rcSetView('filter','exact')" title="Show exact rows"><div class="l">✅ Exact</div><div class="v">${s.exactN}</div></div>
+      <div class="rca-glass rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div class="l">🟡 Surplus</div><div class="v">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
+      <div class="rca-glass rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div class="l">🔴 Deficit</div><div class="v">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
+      <button id="rc-modal-refresh" class="rca-hbtn" style="padding:0 13px;" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name">↻ Refresh</button>
+      <button class="rca-hbtn" style="width:34px;font-size:16px;" onclick="rcCloseCollector()" title="Close (Esc)">✕</button>
     </div>`;
 }
 
@@ -2450,7 +2518,7 @@ function _rcRenderBody(d){
   const rows=_rcVisibleRows(d.rows);
   const showCloud=d.rows.some(r=>r.cloud_income!=null);
   if(!rows.length){
-    body.innerHTML=`<div style="padding:40px;text-align:center;color:#6b7280;">Nothing here for this filter.${_rcView.filter!=='all'||_rcView.q?` <a href="#" onclick="rcSetView('reset');return false;" style="color:#1e3cb8;font-weight:700;">Show all</a>`:''}</div>`;
+    body.innerHTML=`<div class="rca-empty">🎉 Nothing here for this filter.${_rcView.filter!=='all'||_rcView.q?` <a href="#" onclick="rcSetView('reset');return false;">Show all</a>`:''}</div>`;
     return;
   }
   if(_rcView.sort==='gap'){
@@ -2459,27 +2527,27 @@ function _rcRenderBody(d){
       const av=a.gap==null?-1:Math.abs(a.gap), bv=b.gap==null?-1:Math.abs(b.gap);
       return bv-av;
     });
-    body.innerHTML=`<div style="padding:10px 12px;"><div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff;">${_rcTable(sorted,showCloud,true)}</div></div>`;
+    body.innerHTML=`<div style="padding:12px 14px;"><div class="rca-day" style="margin-top:0;">${_rcTable(sorted,showCloud,true)}</div></div>`;
     return;
   }
   // By date → route
   const byDate={};
   rows.forEach(r=>{ const dt=r.harvest_date||'unknown'; (byDate[dt]=byDate[dt]||[]).push(r); });
-  let html='<div style="padding:0 12px 12px;">';
+  let html='<div style="padding:0 14px 14px;">';
   Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(dt=>{
     const dRows=byDate[dt];
     const byRoute={};
     dRows.forEach(r=>{ const rc=r.route_code||'ADMIN'; (byRoute[rc]=byRoute[rc]||[]).push(r); });
-    html+=`<div style="margin-top:12px;border:1px solid #e0e7ff;border-radius:8px;background:#fff;">
-      <div class="rca-date"><span style="font-size:12px;font-weight:800;color:#3730a3;">📅 ${_rcEsc(dt)}</span>
-        <span style="font-size:11px;color:#6b7280;">${dRows.length} vendo${dRows.length===1?'':'s'}</span>${_rcCountPills(dRows)}
+    html+=`<div class="rca-day">
+      <div class="rca-date"><span style="font-size:12.5px;font-weight:900;color:#311A8E;">📅 ${_rcEsc(dt)}</span>
+        <span style="font-size:11px;color:#8a93a9;">${dRows.length} vendo${dRows.length===1?'':'s'}</span>${_rcCountPills(dRows)}
         <div class="rca-sum">${_rcSumHtml(dRows)}</div></div>`;
     Object.keys(byRoute).sort().forEach(rc=>{
       const rRows=byRoute[rc];
       const isAdmin=rRows[0]&&rRows[0].is_admin;
-      html+=`<div class="rca-route"><span style="font-family:monospace;font-size:12px;font-weight:700;color:#1565c0;">🧾 ${_rcEsc(rc)}</span>
-        ${isAdmin?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;">🔧 Admin</span>':'<span class="rca-pill" style="background:#eff6ff;color:#1d4ed8;font-size:9px;">📱 PWA</span>'}
-        <span style="font-size:11px;color:#6b7280;">${rRows.length} vendo${rRows.length===1?'':'s'}</span>
+      html+=`<div class="rca-route"><span style="font-family:monospace;font-size:12px;font-weight:800;color:#025AC6;">🧾 ${_rcEsc(rc)}</span>
+        ${isAdmin?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;">🔧 Admin</span>':'<span class="rca-pill" style="background:#e7f1ff;color:#025AC6;font-size:9px;">📱 PWA</span>'}
+        <span style="font-size:11px;color:#8a93a9;">${rRows.length} vendo${rRows.length===1?'':'s'}</span>
         <div class="rca-sum">${_rcSumHtml(rRows)}</div></div>
         ${_rcTable(rRows,showCloud,false)}`;
     });
@@ -2503,7 +2571,7 @@ function rcRenderModal(opts){
   const d=(window._rcDetail||{})[collector];
   if(!d){
     const body=document.getElementById('rca-body');
-    if(body) body.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;">No rows for this collector in the current date / area filter.</div>';
+    if(body) body.innerHTML='<div class="rca-empty">No rows for this collector in the current date / area filter.</div>';
     return;
   }
   const body=document.getElementById('rca-body');
@@ -2545,21 +2613,20 @@ function rcShowCollector(collector){
   const old=document.getElementById('rc-modal'); if(old) old.remove();
   const ov=document.createElement('div');
   ov.id='rc-modal';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:1120px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
-    <div id="rca-head" style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 18px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;"></div>
-    <div style="flex-shrink:0;padding:9px 14px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;">
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  ov.innerHTML=`<div class="rca-modal" style="background:#fff;border-radius:20px;max-width:1120px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(13,8,55,.5);overflow:hidden;">
+    <div id="rca-head" class="rca-headwrap" style="display:flex;align-items:center;gap:13px;flex-wrap:wrap;"></div>
+    <div class="rca-tools">
       <div id="rca-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
-      <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
-        <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)"
-          style="padding:5px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;width:190px;">
-        <select id="rca-sort" onchange="rcSetView('sort',this.value)" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;background:#fff;">
+      <div style="margin-left:auto;display:flex;gap:7px;align-items:center;">
+        <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)">
+        <select id="rca-sort" onchange="rcSetView('sort',this.value)">
           <option value="date">By date → route</option>
           <option value="gap">Biggest difference first</option>
         </select>
       </div>
     </div>
-    <div id="rca-body" style="overflow-y:auto;flex:1;background:#fbfcff;"></div>
+    <div id="rca-body"></div>
   </div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
   document.body.appendChild(ov);
