@@ -1280,47 +1280,69 @@ function lfConnect(){
 /* ── RECONCILIATION ── */
 
 // ── RECONCILIATION CONFIRM / NOTES ───────────────────────────────
-async function rcConfirmRow(id, btn) {
-  btn.disabled = true;
-  btn.textContent = '…';
-  try {
-    const r = await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
-      method: 'PATCH',
-      headers: {..._HDR, 'Prefer': 'return=minimal'},
-      body: JSON.stringify({ reconcile_status: 'ok' })
-    });
-    if (r.ok) {
-      const row = rcAllRows.find(r=>r.id===id);
-      if (row) row.reconcile_status = 'ok';
-      // Re-render just this cell
-      const cell = btn.closest('td');
-      cell.innerHTML = `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ Confirmed</span>
-        <button onclick="rcClearConfirm(${id})" style="margin-left:4px;border:none;background:none;cursor:pointer;font-size:10px;color:#9ca3af;">✕</button>
-        <div style="margin-top:4px;"><input id="rcnote-${id}" placeholder="Add note…" value=""
-          style="width:100%;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:10px;font-family:inherit;"
-          onblur="rcSaveNote(${id},this.value)"></div>`;
-    } else { btn.disabled=false; btn.textContent='✅ OK'; }
-  } catch(e) { btn.disabled=false; btn.textContent='✅ OK'; }
-}
-async function rcClearConfirm(id) {
-  await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
-    method: 'PATCH', headers: {..._HDR, 'Prefer': 'return=minimal'},
-    body: JSON.stringify({ reconcile_status: null })
+// Fixes vs the old version:
+//  • ✅ OK used to rebuild its cell with an EMPTY note box — tabbing out of it
+//    then saved "" and erased the note that was already there. Now the row is
+//    re-rendered from data, so the note stays.
+//  • ✕ undo changed the database but the popup never redrew — looked dead.
+//  • Every failed save now says so (red toast) instead of silently "working".
+//  • Notes only save when the text actually changed (no write on every blur).
+function _rcRow(id){ return (rcAllRows||[]).find(r=>r.id===id); }
+async function _rcPatchHarvest(id, body){
+  const r = await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
+    method:'PATCH',
+    headers:{..._HDR, 'Content-Type':'application/json', 'Prefer':'return=minimal'},
+    body:JSON.stringify(body)
   });
-  const row = rcAllRows.find(r=>r.id===id);
-  if (row) row.reconcile_status = null;
-  rcFilter();
+  if(!r.ok){ let t=''; try{ t=await r.text(); }catch(e){} throw new Error('HTTP '+r.status+(t?' '+t.slice(0,60):'')); }
 }
-async function rcSaveNote(id, val) {
-  await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
-    method: 'PATCH', headers: {..._HDR, 'Prefer': 'return=minimal'},
-    body: JSON.stringify({ admin_notes: val||null })
-  });
-  const row = rcAllRows.find(r=>r.id===id);
-  if (row) row.admin_notes = val||null;
-  // Flash saved
-  const inp = document.getElementById('rcnote-'+id);
-  if (inp) { inp.style.borderColor='#16a34a'; setTimeout(()=>{ if(inp) inp.style.borderColor='#e5e7eb'; }, 1000); }
+function _rcAfterRowChange(){
+  if(document.getElementById('rc-modal')) rcRenderModal();
+  else if(typeof rcFilter==='function') rcFilter();
+}
+async function rcConfirmRow(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    await _rcPatchHarvest(id, { reconcile_status:'ok' });
+    const row=_rcRow(id); if(row) row.reconcile_status='ok';
+    _rcAfterRowChange();
+  }catch(e){
+    toast('❌ Confirm not saved: '+e.message);
+    if(btn){ btn.disabled=false; btn.textContent='✅ OK'; }
+  }
+}
+async function rcClearConfirm(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    await _rcPatchHarvest(id, { reconcile_status:null });
+    const row=_rcRow(id); if(row) row.reconcile_status=null;
+    _rcAfterRowChange();
+  }catch(e){
+    toast('❌ Undo not saved: '+e.message);
+    if(btn){ btn.disabled=false; btn.textContent='✕ undo'; }
+  }
+}
+async function rcSaveNote(id, val, inp){
+  inp = inp || document.getElementById('rcnote-'+id);
+  const row=_rcRow(id);
+  const next=(val||'').trim();
+  const prev=((row&&row.admin_notes)||'').trim();
+  if(next===prev){
+    if(_rcRerenderPending) rcRenderModal();
+    return;
+  }
+  if(inp) inp.style.borderColor='#f59e0b';
+  try{
+    await _rcPatchHarvest(id, { admin_notes: next||null });
+    if(row) row.admin_notes = next||null;
+    const box=document.getElementById('rcnote-'+id);
+    if(box){ box.style.borderColor='#16a34a'; setTimeout(()=>{ if(box) box.style.borderColor='#e5e7eb'; }, 1200); }
+  }catch(e){
+    const box=document.getElementById('rcnote-'+id);
+    if(box) box.style.borderColor='#dc2626';
+    toast('❌ Note not saved: '+e.message);
+  }
+  if(_rcRerenderPending) rcRenderModal();
 }
 
 let rcAllRows = [];
@@ -1589,6 +1611,7 @@ async function rcRun(){
     const rc=row.route_code||'ADMIN';
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
     return {...row,
+      _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg,tg_income:tgInc,cloud_income:cloudInc,total_income:totalInc,gap,gap_pct:gapPct,flag,
       rpc_audited:rpcAudited,
@@ -1601,7 +1624,12 @@ async function rcRun(){
 
   // Render immediately, then save tg_income/gap/flag to DB in the BACKGROUND
   rcFilter();
-  const toSave = rcAllRows.filter(r=>r.tg_income!=null);
+  // Write back ONLY rows whose figures changed. The old code PATCHed every
+  // matched row on every live read — hundreds of writes per Refresh click,
+  // which is what made Refresh slow and the DB busy.
+  const _num=v=>v==null?null:Math.round(Number(v)*100)/100;
+  const toSave = rcAllRows.filter(r=>r.tg_income!=null && (
+    _num(r.tg_income)!==_num(r._saved_tg) || _num(r.gap)!==_num(r._saved_gap) || (r.flag||null)!==(r._saved_flag||null)));
   if(toSave.length){
     (async()=>{
       for(let i=0;i<toSave.length;i+=50){
@@ -1829,6 +1857,15 @@ async function rcnSaveNames(vendoName){
             body:JSON.stringify(hu)});
         }catch(e){ console.error('harvests tg_name sync failed:',e); }
       }
+      // Three-table rule — the collector PWA reads harvest_group_items. Without
+      // this the TG name "un-does" itself in the PWA (same as rcnQuickLink).
+      if(tg){
+        try{
+          await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${id}`,{method:'PATCH',
+            headers:{..._HDR,'Content-Type':'application/json',Prefer:'return=minimal'},
+            body:JSON.stringify({tg_name:tg})});
+        }catch(e){ console.error('harvest_group_items tg_name sync failed:',e); }
+      }
       toast('✅ Names saved!');
       htAllRows=[];
       // update local cache row so reopening shows fresh values
@@ -1879,8 +1916,14 @@ async function rcnSaveHarvestWindow(){
       Object.assign(row,u);
       const cacheRow=(rcAllRows||[]).find(x=>x.id===row.id);
       if(cacheRow) Object.assign(cacheRow,u);
-      toast('✅ Harvest window updated!');
+      toast('✅ Harvest window updated — recalculating…');
       if(msg){msg.textContent='Saved';msg.style.color='#15803d';}
+      // TG income depends on the window — re-read so the gap is not stale.
+      if(typeof rcRun==='function'){
+        try{ rcBypassCache=true; await rcRun(); }
+        catch(e){ if(typeof rcFilter==='function') rcFilter(); }
+        finally{ rcBypassCache=false; }
+      }
     }else{
       const errText=await r.text();
       if(msg){msg.textContent='Failed: '+errText.slice(0,40);msg.style.color='#dc2626';}
@@ -2147,173 +2190,18 @@ function rcFilter(){
   window._rcDetail = {};  // collector -> full detail HTML for popup
   const cardData = [];
   Object.entries(byCollector).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([collector,cd])=>{
-    // MATCHED ROWS ONLY. This card compares coins against TG income, so it must
-    // only count harvests that HAVE TG income. Previously colCoins summed every
-    // row while colTG summed only rows with tg_income — so unmatched vendos
-    // (no TG link, no bot in the GC) contributed coins with nothing on the TG
-    // side, and the difference was reported as a deficit. For Gilbert that was
-    // 54 harvests holding ₱135,135 in coins, inflating the deficit to ₱82,322
-    // when the real figure is ~₱6,020. Unmatched is NOT missing money — it is
-    // a naming gap, and it belongs in "needs match", not in DEFICIT.
-    const matched = cd.rows.filter(r=>r.tg_income!=null);
-    const unmatchedN = cd.rows.length - matched.length;
-    const unmatchedCoins = cd.rows.filter(r=>r.tg_income==null)
-                                  .reduce((s,r)=>s+Number(r.coins_total||0),0);
-    const colCoins=matched.reduce((s,r)=>s+Number(r.coins_total||0),0);
-    const colTG=matched.reduce((s,r)=>s+Number(r.tg_income||0),0);
-    const colGap=matched.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
-    const colAlerts=cd.rows.filter(r=>r.flag==='alert').length;
-    const colWarns=cd.rows.filter(r=>r.flag==='warn').length;
-    const colConfirmed=cd.rows.filter(r=>r.reconcile_status==='ok').length;
-    const colGapColor=colGap>500?'#dc2626':colGap>100?'#d97706':'#15803d';
-
-    // ---- per-vendo reconciliation breakdown ----
-    // Direction rule (owner): coins > TG income = SURPLUS, coins < TG = DEFICIT.
-    //
-    // THRESHOLD: ±20, matching the table and the spawn_tg_recon RPC. This card
-    // used ±100 while the rows behind it used ±20, so the card's EXACT/SURPLUS/
-    // DEFICIT counts could never reconcile with the list you see when you tap in.
-    //
-    // SOURCE: live tg_income only. The old code fell back to the saved
-    // recon_gap column, which is written by a background job and goes stale the
-    // moment a TG name is linked or unlinked.
-    const surplusVal=r=>{
-      if(r.tg_income==null) return null;   // unmatched — not a money discrepancy
-      return Number(r.coins_total||0)-Number(r.tg_income);   // + = surplus, - = deficit
-    };
-    const rcRows=matched.filter(r=>surplusVal(r)!=null);
-    let exactN=0, surplusN=0, deficitN=0, surplusAmt=0, deficitAmt=0;
-    rcRows.forEach(r=>{
-      const s=Number(surplusVal(r));
-      if(Math.abs(s)<=20){ exactN++; }
-      else if(s>0){ surplusN++; surplusAmt+=s; }
-      else { deficitN++; deficitAmt+=Math.abs(s); }
-    });
-
-    // ---- build the FULL detail (dates→routes→vendos) into a string for the popup ----
-    let detail=`<div style="padding:10px 12px;display:flex;flex-direction:column;gap:10px;">`;
-
-    Object.entries(cd.dates).sort((a,b)=>b[0].localeCompare(a[0])).forEach(([dt,dd])=>{
-      const dtCoins=dd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
-      const dtTG=dd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
-      const dtGap=dd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
-      const dtAlerts=dd.rows.filter(r=>r.flag==='alert').length;
-      const dtWarns=dd.rows.filter(r=>r.flag==='warn').length;
-      const dtGapColor=dtGap>500?'#dc2626':dtGap>100?'#d97706':'#15803d';
-
-      detail+=`<div style="border:1px solid #e0e7ff;border-radius:8px;overflow:hidden;">
-        <div style="background:#eef2ff;padding:7px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #e0e7ff;">
-          <span style="font-size:12px;font-weight:700;color:#3730a3;">📅 ${dt}</span>
-          <span style="font-size:11px;color:#6b7280;">${dd.rows.length} vendos</span>
-          ${dtAlerts?`<span style="background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${dtAlerts} DEFICIT</span>`:''}
-          ${dtWarns?`<span style="background:#fef9c3;color:#b45309;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${dtWarns} SURPLUS</span>`:''}
-          <div style="margin-left:auto;font-size:11px;display:flex;gap:10px;">
-            <span>Coins: <b>${fmtP(dtCoins)}</b></span>
-            <span>TG: <b>${fmtP(dtTG)}</b></span>
-            <span>Gap: <b style="color:${dtGapColor};">${fmtP(Math.abs(dtGap))}</b></span>
-          </div>
-        </div>
-        <div style="padding:6px 8px;display:flex;flex-direction:column;gap:6px;">`;
-
-    Object.entries(dd.routes).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([rc,rd])=>{
-      const rcCoins=rd.rows.reduce((s,r)=>s+Number(r.coins_total||0),0);
-      const rcTG=rd.rows.filter(r=>r.tg_income!=null).reduce((s,r)=>s+r.tg_income,0);
-      const rcGap=rd.rows.filter(r=>r.gap!=null).reduce((s,r)=>s+r.gap,0);
-      const rcAlerts=rd.rows.filter(r=>r.flag==='alert').length;
-      const rcWarns=rd.rows.filter(r=>r.flag==='warn').length;
-      const rcGapColor=rcGap>500?'#dc2626':rcGap>100?'#d97706':'#15803d';
-      const srcBadge=rd.is_admin
-        ?'<span style="background:#fef3c7;color:#b45309;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">🔧 Admin</span>'
-        :'<span style="background:#eff6ff;color:#1d4ed8;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">📱 PWA</span>';
-
-      detail+=`<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-        <!-- Route header -->
-        <div style="background:#f8faff;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e5e7eb;">
-          <span style="font-family:monospace;font-size:12px;font-weight:700;color:#1565c0;">🧾 ${rc}</span>
-          ${srcBadge}
-          <span style="font-size:11px;color:var(--mu);">${rd.rows.length} vendos</span>
-          ${rcAlerts?`<span style="background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${rcAlerts} DEFICIT</span>`:''}
-          ${rcWarns?`<span style="background:#fef9c3;color:#b45309;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;">${rcWarns} SURPLUS</span>`:''}
-          <div style="margin-left:auto;display:flex;gap:12px;font-size:11px;">
-            <span>Coins: <b>${fmtP(rcCoins)}</b></span>
-            <span>TG: <b>${fmtP(rcTG)}</b></span>
-            <span>Gap: <b style="color:${rcGapColor};">${fmtP(Math.abs(rcGap))}</b></span>
-          </div>
-        </div>
-        <!-- Vendo table -->
-        <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:11px;">
-          <thead><tr style="background:#f9fafb;">
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Vendo</th>
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Area</th>
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Last Harvest</th>
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Window</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Coins</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">TG Income</th>
-            <th style="padding:5px 8px;text-align:right;color:#028867;font-weight:600;border-bottom:1px solid #f3f4f6;">&#9729; Cloud</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Total Income</th>
-            <th style="padding:5px 8px;text-align:right;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">True Gap</th>
-            <th style="padding:5px 8px;text-align:center;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Flag</th>
-            <th style="padding:5px 8px;text-align:left;color:var(--mu);font-weight:600;border-bottom:1px solid #f3f4f6;">Confirm / Note</th>
-          </tr></thead>
-          <tbody>
-          ${rd.rows.map(h=>{
-            const rowBg=h.flag==='alert'?'background:#fef2f2;':h.flag==='warn'?'background:#fefce8;':h.flag==='nodata'?'background:#f3f6fb;':'';
-            const tgStr=h.tg_income!=null?fmtP(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>';
-            const noTgBadge=!h.tg_name?'<span style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 4px;border-radius:3px;margin-left:4px;">no TG</span>':'';
-            return `<tr style="${rowBg}">
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">
-                <div style="display:flex;align-items:center;gap:4px;">
-                  <span style="font-weight:600;">${h.sheet_name||`<span style="color:#9ca3af;font-style:italic;font-size:9px;">unmatched</span>`}${noTgBadge}</span>
-                  <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;" title="View/Edit TG Name">🔗</button>
-                </div>
-                ${h.tg_name
-                  ? `<div style="font-size:9px;color:#15803d;margin-top:1px;line-height:1.2;">🔗 ${h.tg_name}
-                       <span onclick='rcnUnlink(${klArg(h.sheet_name||h.tg_name)})' style="color:#b91c1c;cursor:pointer;font-weight:700;margin-left:5px;" title="Unlink this TG name">✕ unlink</span>
-                     </div>`
-                  : `<div style="font-size:9px;color:#b45309;margin-top:1px;line-height:1.2;">⚠ no TG linked
-                       <span onclick='rcnUnlink(${klArg(h.sheet_name||h.tg_name)},{noTg:true})' style="color:#6b7280;cursor:pointer;font-weight:700;margin-left:5px;" title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>
-                     </div>`}
-              </td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;">${h.area||'—'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;font-weight:500;">${h.harvest_date||'—'}${h.rpc_submitted_at?`<br><span style="font-weight:400;color:var(--mu);font-size:9px;">\ud83d\udd52 ${h.rpc_submitted_at.split(' ').slice(1).join(' ')}</span>`:''}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;color:var(--mu);font-size:10px;">${(h.rpc_window_start && h.rpc_submitted_at) ? `${h.rpc_window_start}<br>\u2192 ${h.rpc_submitted_at}` : `${h.harvest_window_start||'—'} \u2192 ${h.harvest_date||'—'}`}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${fmtP(h.coins_total)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${tgStr}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;color:#028867;font-weight:${h.cloud_income?600:400};">${h.cloud_income!=null?fmtP(h.cloud_income):'<span style="color:#d1d5db;">&#8212;</span>'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:600;">${h.total_income!=null?fmtP(h.total_income):'<span style="color:#d1d5db;">&#8212;</span>'}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:right;">${diffStr(h.gap,h.gap_pct)}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;text-align:center;">${flagBadge(h.flag,h.window_estimated)}${h.window_estimated?`<div style="font-size:8px;color:#9ca3af;margin-top:2px;line-height:1.1;" title="First harvest for this vendo — no previous submission to chain from, so the window is a 30-day estimate. Reconciles exactly once it has a second harvest.">\u26a0 est. window</div>`:''}</td>
-              <td style="padding:5px 8px;border-bottom:1px solid #f3f4f6;min-width:180px;">
-                ${h.reconcile_status==='ok'
-                  ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">✅ Confirmed</span>
-                     <button onclick="rcClearConfirm(${h.id})" style="margin-left:4px;border:none;background:none;cursor:pointer;font-size:10px;color:#9ca3af;">✕</button>`
-                  : `<button onclick="rcConfirmRow(${h.id},this)" style="padding:2px 8px;border-radius:6px;border:1px solid #16a34a;background:#f0fdf4;color:#15803d;font-size:10px;font-weight:600;cursor:pointer;">✅ OK</button>`}
-                <div style="margin-top:4px;">
-                  <input id="rcnote-${h.id}" placeholder="Add note…" value="${(h.admin_notes||'').replace(/"/g,'&quot;')}"
-                    style="width:100%;padding:2px 6px;border:1px solid #e5e7eb;border-radius:4px;font-size:10px;font-family:inherit;"
-                    onblur="rcSaveNote(${h.id},this.value)">
-                </div>
-              </td>
-            </tr>`;
-          }).join('')}
-          </tbody>
-        </table>
-        </div>
-      </div>`;
-    });
-
-        detail+='</div></div>'; // end route wrapper, end date block inner
-      }); // end dates loop
-    detail+='</div>'; // close detail container
-
-    // stash the detail HTML for the popup
-    window._rcDetail[collector] = {
-      html: detail,
-      coins: colCoins, tg: colTG, gap: colGap,
-      exactN, surplusN, deficitN, surplusAmt, deficitAmt,
-      count: cd.rows.length, alerts: colAlerts, warns: colWarns, confirmed: colConfirmed
-    };
+    // One counting rule for card, popup header, chips and row flags (_rcStats).
+    // Unmatched (no TG/Cloud income) is a naming gap, NOT missing money — it is
+    // shown as "NO TG" and kept out of the coins/TG/deficit totals.
+    const st=_rcStats(cd.rows);
+    const colCoins=st.coins, colTG=st.tg, colGap=st.gap;
+    const unmatchedN=st.unmatchedN, unmatchedCoins=st.unmatchedCoins;
+    const exactN=st.exactN, surplusN=st.surplusN, deficitN=st.deficitN;
+    const surplusAmt=st.surplusAmt, deficitAmt=st.deficitAmt;
+    const colConfirmed=st.confirmed;
+    // The popup is built on demand when opened (rcShowCollector) — not for
+    // every collector on every filter change. That was the slow part.
+    window._rcDetail[collector] = { rows: cd.rows, ...st };
 
     // build the collapsed card
     const initial=(collector||'?').trim().charAt(0).toUpperCase();
@@ -2348,74 +2236,378 @@ function rcFilter(){
 
   el.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">'
     + cardData.map(c=>c.html).join('') + '</div>';
+  // Keep an open popup in step with the data (confirm, undo, link, unlink,
+  // window edit, background cache refresh all land here).
+  if(_rcOpenCollector && document.getElementById('rc-modal')) rcRenderModal();
 }
 
-// Recon detail popup — full dates/routes/vendos with working confirm+note buttons
-// Which collector the drill-down popup is currently showing. Needed so an
-// unlink performed inside the popup knows which popup to rebuild.
+// ══════════════════════════════════════════════════════════
+// RECON POPUP — AUDIT MODE
+// ══════════════════════════════════════════════════════════
+// Built ON DEMAND for the one collector you open. The old code pre-built the
+// full HTML for EVERY collector inside rcFilter() on every filter/refresh, then
+// showed a frozen copy of it — so confirm/undo/link/refresh changed the
+// database but the popup kept showing the old snapshot ("button did nothing").
+// Now the popup always renders from the live rows in rcAllRows and re-renders
+// itself after every action.
+//
+// MONEY SAFETY: nothing here writes money. Counting rules are unchanged:
+//   gap = income − coins   (income = TG + Cloud)
+//   |gap| ≤ 20 → EXACT · gap > 20 → DEFICIT (short) · gap < −20 → SURPLUS
+// Header counts, chip counts and row flags all use that one rule.
 let _rcOpenCollector = null;
+let _rcView = { filter:'all', sort:'date', q:'' };
+let _rcRerenderPending = false;
+let _rcSearchT = null;
+
+function _rcEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// coins − income:  + = surplus (extra coins), − = short. null = no income match.
+function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
+// TG name is linked but the bot reported ₱0 for the whole window while coins
+// came in. Usually a dead bot / renamed hotspot / wrong link — not real surplus.
+function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
+function _rcDays(r){
+  const a=String(r.rpc_window_start||r.harvest_window_start||'').slice(0,10);
+  const b=String(r.rpc_submitted_at||r.harvest_date||'').slice(0,10);
+  if(!/^\d{4}-\d\d-\d\d$/.test(a)||!/^\d{4}-\d\d-\d\d$/.test(b)) return null;
+  const d=Math.round((Date.parse(b)-Date.parse(a))/86400000);
+  return d>0?d:1;
+}
+function _rcStats(rows){
+  const s={count:rows.length, coins:0, tg:0, cloud:0, gap:0, exactN:0, surplusN:0, deficitN:0,
+           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0};
+  rows.forEach(r=>{
+    if(r.reconcile_status==='ok') s.confirmed++;
+    if(_rcIsZeroTg(r)) s.zeroN++;
+    if(r.gap==null){ s.unmatchedN++; s.unmatchedCoins+=Number(r.coins_total||0); return; }
+    s.coins+=Number(r.coins_total||0);
+    s.tg+=Number(r.tg_income||0);
+    s.cloud+=Number(r.cloud_income||0);
+    s.gap+=Number(r.gap);
+    const v=-Number(r.gap);
+    if(Math.abs(v)<=20) s.exactN++;
+    else if(v>0){ s.surplusN++; s.surplusAmt+=v; }
+    else { s.deficitN++; s.deficitAmt+=-v; }
+  });
+  return s;
+}
+const _RC_FILTERS = [
+  ['all',     'All',           r=>true],
+  ['deficit', '🔴 Deficit',    r=>r.flag==='alert'],
+  ['surplus', '🟡 Surplus',    r=>r.flag==='warn'],
+  ['exact',   '✅ Exact',      r=>r.flag==='ok'],
+  ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
+  ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
+  ['todo',    '⏳ Not confirmed', r=>r.reconcile_status!=='ok'],
+  ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'],
+];
+function _rcSearchHit(r,q){
+  if(!q) return true;
+  return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes].some(x=>x&&String(x).toLowerCase().includes(q));
+}
+
+function _rcEnsureCss(){
+  if(document.getElementById('rca-css')) return;
+  const st=document.createElement('style');
+  st.id='rca-css';
+  st.textContent=`
+  #rc-modal .rca-chip{border:1.5px solid #dbe3f4;background:#fff;color:#374151;border-radius:99px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  #rc-modal .rca-chip b{margin-left:4px;}
+  #rc-modal .rca-chip.on{background:#1e3cb8;border-color:#1e3cb8;color:#fff;}
+  #rc-modal .rca-chip:disabled{opacity:.4;cursor:default;}
+  #rc-modal table.rca{width:100%;border-collapse:collapse;font-size:11px;}
+  #rc-modal table.rca th{padding:5px 8px;text-align:left;color:#6b7280;font-weight:600;border-bottom:1px solid #eef0f4;background:#f9fafb;white-space:nowrap;}
+  #rc-modal table.rca td{padding:6px 8px;border-bottom:1px solid #f1f3f7;vertical-align:middle;}
+  #rc-modal table.rca .r{text-align:right;}
+  #rc-modal table.rca .c{text-align:center;}
+  #rc-modal tr.f-alert{background:#fef2f2;} #rc-modal tr.f-warn{background:#fffbeb;} #rc-modal tr.f-nodata{background:#f3f6fb;}
+  #rc-modal tr.is-done td{opacity:.62;} #rc-modal tr.is-done td:last-child{opacity:1;}
+  #rc-modal .rca-pill{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;display:inline-block;}
+  #rc-modal .rca-ok{border:1px solid #16a34a;background:#f0fdf4;color:#15803d;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+  #rc-modal .rca-ok:disabled{opacity:.5;cursor:wait;}
+  #rc-modal .rca-undo{border:none;background:none;cursor:pointer;font-size:11px;color:#9ca3af;padding:2px 4px;}
+  #rc-modal .rca-note{width:100%;box-sizing:border-box;padding:3px 6px;border:1px solid #e5e7eb;border-radius:5px;font-size:10px;font-family:inherit;margin-top:4px;}
+  #rc-modal .rca-date{position:sticky;top:0;z-index:2;background:#eef2ff;padding:7px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #e0e7ff;}
+  #rc-modal .rca-route{background:#f8faff;padding:6px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #eef0f4;}
+  #rc-modal .rca-sum{margin-left:auto;font-size:11px;display:flex;gap:10px;flex-wrap:wrap;}
+  #rc-modal .rca-link{cursor:pointer;font-weight:700;margin-left:5px;}
+  #rc-modal .rca-stat{cursor:pointer;border-radius:8px;padding:2px 6px;}
+  #rc-modal .rca-stat:hover{background:rgba(255,255,255,.15);}
+  `;
+  document.head.appendChild(st);
+}
+
+function _rcFlagPill(f){
+  return f==='alert' ? '<span class="rca-pill" style="background:#fee2e2;color:#dc2626;">🔴 Short</span>'
+       : f==='warn'  ? '<span class="rca-pill" style="background:#fef9c3;color:#b45309;">🟡 Surplus</span>'
+       : f==='nodata'? '<span class="rca-pill" style="background:#e8eef7;color:#3b5b8c;">🔗 needs match</span>'
+       :               '<span class="rca-pill" style="background:#dcfce7;color:#15803d;">✅ OK</span>';
+}
+// Signed money: + surplus (amber) / − short (red) / within ±20 (green).
+function _rcSigned(v){
+  if(v==null) return '<span style="color:#9ca3af">—</span>';
+  const c = v>20?'#b45309' : v<-20?'#dc2626' : '#15803d';
+  const sign = v>0?'+' : v<0?'−' : '';
+  return `<b style="color:${c};">${sign}${_php(Math.abs(v))}</b>`;
+}
+function _rcSumHtml(rows){
+  const s=_rcStats(rows);
+  const net=-s.gap;
+  const word = Math.abs(net)<=20 ? '' : net>0 ? ' surplus' : ' short';
+  return `<span>Coins: <b>${_php(s.coins)}</b></span><span>TG: <b>${_php(s.tg)}</b></span>`
+    + (s.cloud?`<span style="color:#028867;">Cloud: <b>${_php(s.cloud)}</b></span>`:'')
+    + `<span>Net: ${_rcSigned(net)}<span style="color:#6b7280;">${word}</span></span>`
+    + (s.unmatchedN?`<span style="color:#4338ca;" title="Coins from harvests with no TG match — not counted above">+${_php(s.unmatchedCoins)} no TG</span>`:'');
+}
+function _rcCountPills(rows){
+  const s=_rcStats(rows);
+  return (s.deficitN?`<span class="rca-pill" style="background:#fee2e2;color:#dc2626;">${s.deficitN} DEFICIT</span>`:'')
+       + (s.surplusN?`<span class="rca-pill" style="background:#fef9c3;color:#b45309;">${s.surplusN} SURPLUS</span>`:'')
+       + (s.unmatchedN?`<span class="rca-pill" style="background:#e0e7ff;color:#4338ca;">${s.unmatchedN} NO TG</span>`:'')
+       + `<span class="rca-pill" style="background:${s.confirmed===s.count?'#dcfce7':'#f1f5f9'};color:${s.confirmed===s.count?'#15803d':'#64748b'};">☑ ${s.confirmed}/${s.count}</span>`;
+}
+
+function _rcRowHtml(h, showCloud, flat){
+  const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
+  const done = h.reconcile_status==='ok';
+  const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
+  const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 5px;margin-left:4px;">no TG</span>' : '';
+  const unlinkKey = h.sheet_name||h.tg_name;
+  const tgLine = h.tg_name
+    ? `<div style="font-size:9px;color:#15803d;margin-top:2px;line-height:1.25;">🔗 ${_rcEsc(h.tg_name)}${unlinkKey?`<span class="rca-link" style="color:#b91c1c;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
+    : `<div style="font-size:9px;color:#b45309;margin-top:2px;line-height:1.25;">⚠ no TG linked${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>`:''}</div>`;
+  const time = h.rpc_submitted_at ? String(h.rpc_submitted_at).split(' ').slice(1).join(' ') : '';
+  const ws = h.rpc_window_start || h.harvest_window_start || '—';
+  const we = h.rpc_submitted_at || h.harvest_date || '—';
+  const days = _rcDays(h);
+  const sv = _rcSurplus(h);
+  const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#6b7280;margin-top:1px;">${_php(Math.abs(sv)/days)}/day</div>` : '';
+  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:700;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>' : '';
+  return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
+    <td style="min-width:150px;">
+      <div style="display:flex;align-items:center;gap:4px;"><span style="font-weight:700;">${name}</span>${noTg}
+        <button onclick="rcShowNamesById(${h.id})" style="border:none;background:none;cursor:pointer;font-size:11px;padding:0 2px;" title="View / edit names and harvest window">🔗</button></div>
+      ${tgLine}
+    </td>
+    <td>${_rcEsc(h.area||'—')}</td>
+    <td style="white-space:nowrap;"><b>${_rcEsc(h.harvest_date||'—')}</b>${time?`<div style="font-size:9px;color:#6b7280;">🕒 ${_rcEsc(time)}</div>`:''}${flat?`<div style="font-size:9px;color:#1565c0;font-family:monospace;">${_rcEsc(h.route_code||'')}</div>`:''}</td>
+    <td style="font-size:10px;color:#6b7280;line-height:1.3;">${_rcEsc(ws)}<br>→ ${_rcEsc(we)}${days?`<div style="font-weight:700;color:#475569;">${days} day${days===1?'':'s'}</div>`:''}</td>
+    <td class="r">${_php(h.coins_total)}</td>
+    <td class="r">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
+    ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d1d5db;">—</span>'}</td>
+    <td class="r" style="font-weight:600;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d1d5db;">—</span>'}</td>`:''}
+    <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
+    <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
+    <td style="min-width:170px;">
+      ${done
+        ? `<span class="rca-pill" style="background:#dcfce7;color:#15803d;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
+        : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>`}
+      <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
+    </td>
+  </tr>`;
+}
+
+function _rcTable(rows, showCloud, flat){
+  return `<div style="overflow-x:auto;"><table class="rca"><thead><tr>
+    <th>Vendo</th><th>Area</th><th>Harvested</th><th>Window</th>
+    <th class="r">Coins</th><th class="r">TG Income</th>
+    ${showCloud?'<th class="r" style="color:#028867;">☁ Cloud</th><th class="r">Total Income</th>':''}
+    <th class="r" title="Coins minus income. + = extra coins (surplus), − = coins short">Coins − Income</th>
+    <th class="c">Flag</th><th>Confirm / Note</th>
+  </tr></thead><tbody>${rows.map(h=>_rcRowHtml(h,showCloud,flat)).join('')}</tbody></table></div>`;
+}
+
+function _rcVisibleRows(all){
+  const f=(_RC_FILTERS.find(x=>x[0]===_rcView.filter)||_RC_FILTERS[0])[2];
+  const q=(_rcView.q||'').trim().toLowerCase();
+  return all.filter(r=>f(r) && _rcSearchHit(r,q));
+}
+
+function _rcRenderHead(d, collector){
+  const s=_rcStats(d.rows);
+  const pct = s.count ? Math.round(s.confirmed/s.count*100) : 0;
+  const head=document.getElementById('rca-head'); if(!head) return;
+  head.innerHTML=`
+    <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;">${_rcEsc((collector||'?').trim().charAt(0).toUpperCase())}</div>
+    <div style="min-width:150px;">
+      <div style="font-size:18px;font-weight:800;">${_rcEsc(collector)}</div>
+      <div style="font-size:11px;opacity:.9;">${s.count} harvests · ☑ ${s.confirmed} confirmed (${pct}%)</div>
+      <div style="height:4px;background:rgba(255,255,255,.25);border-radius:99px;margin-top:4px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:#4ade80;"></div></div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:10px;text-align:right;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+      <div><div style="font-size:10px;opacity:.75;">Coins</div><div style="font-size:14px;font-weight:700;">${_php(s.coins)}</div></div>
+      <div><div style="font-size:10px;opacity:.75;">TG Income</div><div style="font-size:14px;font-weight:700;">${_php(s.tg)}</div></div>
+      ${s.cloud?`<div><div style="font-size:10px;opacity:.75;">☁ Cloud</div><div style="font-size:14px;font-weight:700;">${_php(s.cloud)}</div></div>`:''}
+      <div class="rca-stat" onclick="rcSetView('filter','exact')" title="Show exact rows"><div style="font-size:10px;opacity:.75;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${s.exactN}</div></div>
+      <div class="rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div style="font-size:10px;opacity:.75;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
+      <div class="rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div style="font-size:10px;opacity:.75;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
+      <button id="rc-modal-refresh" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:32px;padding:0 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
+      <button onclick="rcCloseCollector()" title="Close (Esc)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+    </div>`;
+}
+
+function _rcRenderChips(d){
+  const box=document.getElementById('rca-chips'); if(!box) return;
+  const q=(_rcView.q||'').trim().toLowerCase();
+  const base=d.rows.filter(r=>_rcSearchHit(r,q));
+  box.innerHTML=_RC_FILTERS.map(([k,label,fn])=>{
+    const n=base.filter(fn).length;
+    const on=_rcView.filter===k;
+    return `<button class="rca-chip${on?' on':''}" ${(!n&&!on&&k!=='all')?'disabled':''} onclick="rcSetView('filter','${k}')">${label}<b>${n}</b></button>`;
+  }).join('');
+}
+
+function _rcRenderBody(d){
+  const body=document.getElementById('rca-body'); if(!body) return;
+  const rows=_rcVisibleRows(d.rows);
+  const showCloud=d.rows.some(r=>r.cloud_income!=null);
+  if(!rows.length){
+    body.innerHTML=`<div style="padding:40px;text-align:center;color:#6b7280;">Nothing here for this filter.${_rcView.filter!=='all'||_rcView.q?` <a href="#" onclick="rcSetView('reset');return false;" style="color:#1e3cb8;font-weight:700;">Show all</a>`:''}</div>`;
+    return;
+  }
+  if(_rcView.sort==='gap'){
+    // Flat audit list: biggest money difference first, unmatched last.
+    const sorted=rows.slice().sort((a,b)=>{
+      const av=a.gap==null?-1:Math.abs(a.gap), bv=b.gap==null?-1:Math.abs(b.gap);
+      return bv-av;
+    });
+    body.innerHTML=`<div style="padding:10px 12px;"><div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#fff;">${_rcTable(sorted,showCloud,true)}</div></div>`;
+    return;
+  }
+  // By date → route
+  const byDate={};
+  rows.forEach(r=>{ const dt=r.harvest_date||'unknown'; (byDate[dt]=byDate[dt]||[]).push(r); });
+  let html='<div style="padding:0 12px 12px;">';
+  Object.keys(byDate).sort((a,b)=>b.localeCompare(a)).forEach(dt=>{
+    const dRows=byDate[dt];
+    const byRoute={};
+    dRows.forEach(r=>{ const rc=r.route_code||'ADMIN'; (byRoute[rc]=byRoute[rc]||[]).push(r); });
+    html+=`<div style="margin-top:12px;border:1px solid #e0e7ff;border-radius:8px;background:#fff;">
+      <div class="rca-date"><span style="font-size:12px;font-weight:800;color:#3730a3;">📅 ${_rcEsc(dt)}</span>
+        <span style="font-size:11px;color:#6b7280;">${dRows.length} vendo${dRows.length===1?'':'s'}</span>${_rcCountPills(dRows)}
+        <div class="rca-sum">${_rcSumHtml(dRows)}</div></div>`;
+    Object.keys(byRoute).sort().forEach(rc=>{
+      const rRows=byRoute[rc];
+      const isAdmin=rRows[0]&&rRows[0].is_admin;
+      html+=`<div class="rca-route"><span style="font-family:monospace;font-size:12px;font-weight:700;color:#1565c0;">🧾 ${_rcEsc(rc)}</span>
+        ${isAdmin?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;">🔧 Admin</span>':'<span class="rca-pill" style="background:#eff6ff;color:#1d4ed8;font-size:9px;">📱 PWA</span>'}
+        <span style="font-size:11px;color:#6b7280;">${rRows.length} vendo${rRows.length===1?'':'s'}</span>
+        <div class="rca-sum">${_rcSumHtml(rRows)}</div></div>
+        ${_rcTable(rRows,showCloud,false)}`;
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  body.innerHTML=html;
+}
+
+// Re-render the open popup from live rows. Keeps scroll position. If you are
+// typing a note, waits until you leave the box so your typing is never lost.
+function rcRenderModal(opts){
+  opts=opts||{};
+  const collector=_rcOpenCollector;
+  if(!collector || !document.getElementById('rc-modal')) return;
+  const ae=document.activeElement;
+  if(!opts.force && ae && ae.classList && ae.classList.contains('rca-note') && document.getElementById('rc-modal').contains(ae)){
+    _rcRerenderPending=true; return;
+  }
+  _rcRerenderPending=false;
+  const d=(window._rcDetail||{})[collector];
+  if(!d){
+    const body=document.getElementById('rca-body');
+    if(body) body.innerHTML='<div style="padding:40px;text-align:center;color:#6b7280;">No rows for this collector in the current date / area filter.</div>';
+    return;
+  }
+  const body=document.getElementById('rca-body');
+  const top=body?body.scrollTop:0;
+  _rcRenderHead(d, collector);
+  _rcRenderChips(d);
+  _rcRenderBody(d);
+  if(body && opts.keepScroll!==false) body.scrollTop=top;
+}
+
+function rcSetView(key,val){
+  if(key==='reset'){ _rcView.filter='all'; _rcView.q=''; const s=document.getElementById('rca-q'); if(s) s.value=''; }
+  else if(key==='q'){
+    _rcView.q=val||'';
+    clearTimeout(_rcSearchT);
+    _rcSearchT=setTimeout(()=>{ const d=(window._rcDetail||{})[_rcOpenCollector]; if(d){ _rcRenderChips(d); _rcRenderBody(d); } },150);
+    return;
+  }
+  else _rcView[key]=val;
+  const sortSel=document.getElementById('rca-sort'); if(sortSel) sortSel.value=_rcView.sort;
+  rcRenderModal({force:true, keepScroll:false});
+  const body=document.getElementById('rca-body'); if(body) body.scrollTop=0;
+}
+
+function _rcEscKey(e){
+  if(e.key!=='Escape' || !document.getElementById('rc-modal')) return;
+  // Let the dialogs that sit on top of the popup handle their own Esc.
+  if(document.getElementById('rc-names-overlay') || document.getElementById('spawn-pw-modal') || document.querySelector('[data-pick]')) return;
+  if(e.target && e.target.id==='rca-q' && e.target.value){ e.target.value=''; rcSetView('q',''); return; }
+  rcCloseCollector();
+}
 
 function rcShowCollector(collector){
   const d=(window._rcDetail||{})[collector];
   if(!d) return;
+  if(_rcOpenCollector!==collector) _rcView={ filter:'all', sort:_rcView.sort||'date', q:'' };
   _rcOpenCollector = collector;
+  _rcEnsureCss();
   const old=document.getElementById('rc-modal'); if(old) old.remove();
   const ov=document.createElement('div');
   ov.id='rc-modal';
   ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.55);backdrop-filter:blur(3px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
-  const initial=(collector||'?').trim().charAt(0).toUpperCase();
-  const gapTxt=_php(Math.abs(d.gap));
-  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:980px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
-    <div style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:16px 20px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-      <div style="width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">${initial}</div>
-      <div><div style="font-size:18px;font-weight:800;">${collector}</div><div style="font-size:11px;opacity:.85;">${d.count} harvests${d.confirmed?` · ${d.confirmed} confirmed`:''}</div></div>
-      <div style="margin-left:auto;display:flex;gap:14px;text-align:right;align-items:center;">
-        <div><div style="font-size:10px;opacity:.7;">Coins</div><div style="font-size:14px;font-weight:700;">${_php(d.coins)}</div></div>
-        <div><div style="font-size:10px;opacity:.7;">TG Income</div><div style="font-size:14px;font-weight:700;">${_php(d.tg)}</div></div>
-        <div><div style="font-size:10px;opacity:.7;">✅ Exact</div><div style="font-size:14px;font-weight:700;">${d.exactN??0}</div></div>
-        <div><div style="font-size:10px;opacity:.7;">🟡 Surplus</div><div style="font-size:14px;font-weight:700;">${d.surplusN??0}${d.surplusN?` · ${_php(d.surplusAmt)}`:''}</div></div>
-        <div><div style="font-size:10px;opacity:.7;">🔴 Deficit</div><div style="font-size:14px;font-weight:700;">${d.deficitN??0}${d.deficitN?` · ${_php(d.deficitAmt)}`:''}</div></div>
-        <button id="rc-modal-refresh" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database and rebuild this popup — use after linking or unlinking a TG name" style="background:rgba(255,255,255,.2);border:none;color:#fff;height:30px;padding:0 11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">↻ Refresh</button>
-        <button onclick="rcCloseCollector()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;">✕</button>
+  ov.innerHTML=`<div style="background:#fff;border-radius:16px;max-width:1120px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4);overflow:hidden;">
+    <div id="rca-head" style="background:linear-gradient(135deg,#1e3cb8,#1565c0);color:#fff;padding:14px 18px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;"></div>
+    <div style="flex-shrink:0;padding:9px 14px;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;">
+      <div id="rca-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+        <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)"
+          style="padding:5px 9px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;width:190px;">
+        <select id="rca-sort" onchange="rcSetView('sort',this.value)" style="padding:5px 8px;border:1px solid #d1d5db;border-radius:7px;font-size:12px;font-family:inherit;background:#fff;">
+          <option value="date">By date → route</option>
+          <option value="gap">Biggest difference first</option>
+        </select>
       </div>
     </div>
-    <div style="overflow-y:auto;flex:1;background:#fbfcff;">${d.html}</div>
+    <div id="rca-body" style="overflow-y:auto;flex:1;background:#fbfcff;"></div>
   </div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
   document.body.appendChild(ov);
+  document.removeEventListener('keydown',_rcEscKey);
+  document.addEventListener('keydown',_rcEscKey);
+  const sortSel=document.getElementById('rca-sort'); if(sortSel) sortSel.value=_rcView.sort;
+  rcRenderModal({force:true, keepScroll:false});
 }
-function rcCloseCollector(){ const o=document.getElementById('rc-modal'); if(o) o.remove(); _rcOpenCollector = null; }
+function rcCloseCollector(){
+  const o=document.getElementById('rc-modal'); if(o) o.remove();
+  _rcOpenCollector = null;
+  document.removeEventListener('keydown',_rcEscKey);
+}
 
-// Refresh this popup's contents from live data.
-//
-// WHY IT ISN'T JUST A RE-RENDER: the popup reads window._rcDetail, a snapshot
-// built when the table last rendered. Unlinking a TG name inside the popup
-// changes the database but NOT that snapshot — so the row keeps showing the old
-// link until the whole table is rebuilt. Re-rendering alone would just redraw
-// the same stale snapshot. So: force a live read (bypassing recon_cache.json),
-// let rcFilter() rebuild _rcDetail, then reopen this same collector.
+// Live re-read for the open popup. rcRun() → rcFilter() rebuilds the rows and
+// rcFilter() re-renders this popup in place, keeping your filter and scroll.
 async function rcRefreshCollector(collector){
   const btn = document.getElementById('rc-modal-refresh');
-  if(btn){ btn.disabled = true; btn.textContent = '⏳ …'; }
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Reading…'; }
+  _rcOpenCollector = collector || _rcOpenCollector;
   try{
     rcBypassCache = true;
     rcAllRows = [];
-    await rcRun();               // live read + rcFilter() rebuilds _rcDetail
+    await rcRun();
+    if(document.getElementById('rc-modal')){
+      rcRenderModal({force:true});
+      if(!(window._rcDetail||{})[_rcOpenCollector]) toast('No rows for '+_rcOpenCollector+' in the current filter');
+      else toast('✅ Refreshed');
+    }
   }catch(e){
     toast('Refresh failed: '+e.message);
-    if(btn){ btn.disabled = false; btn.textContent = '↻ Refresh'; }
-    return;
   }finally{
     rcBypassCache = false;
-  }
-  // Reopen on the rebuilt snapshot. If this collector no longer has rows in
-  // the current filter, say so rather than silently showing an empty popup.
-  const d = (window._rcDetail||{})[collector];
-  if(d){
-    rcShowCollector(collector);
-  }else{
-    rcCloseCollector();
-    toast('No rows for '+collector+' in the current filter');
+    const b2=document.getElementById('rc-modal-refresh');
+    if(b2){ b2.disabled=false; b2.textContent='↻ Refresh'; }
   }
 }
 
