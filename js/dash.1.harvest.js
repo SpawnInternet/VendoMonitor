@@ -2974,6 +2974,169 @@ async function rcTxUnskip(ids, names){
   }catch(e){ toast('❌ Undo failed: '+e.message); }
 }
 
+// ══════════════════════════════════════════════════════════
+// 🩺 LINK DOCTOR — approve TG-feed ↔ vendo links, one tap each
+// ══════════════════════════════════════════════════════════
+// Server builds suggestions every 15 min (spawn_link_doctor_refresh, ~40s —
+// too slow for a phone) and this popup reads the cached result instantly
+// (spawn_link_doctor_get). NOTHING is auto-applied: every link is the owner's
+// tap, server-side, history-aware (old harvests keep the old feed name),
+// logged, and undoable. Password asked once per popup session.
+let _ldData=null, _ldView='high', _ldPw=null;
+async function rcLinkDoctor(){
+  _rcEnsureCss();
+  const old=document.getElementById('ld-modal'); if(old) old.remove();
+  _ldPw=null; _ldView='high';
+  const ov=document.createElement('div');
+  ov.id='ld-modal'; ov.className='spw-rc';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  ov.innerHTML=`<div class="rca-modal" style="background:#fff;border-radius:20px;max-width:980px;width:100%;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(13,8,55,.5);">
+    <div class="rca-headwrap" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="rca-avatar" style="font-size:22px;">🩺</div>
+      <div style="position:relative;min-width:200px;">
+        <div style="font-size:18px;font-weight:900;">Link Doctor</div>
+        <div id="ld-sub" style="font-size:11px;opacity:.9;margin-top:1px;">Loading…</div>
+      </div>
+      <div id="ld-stats" style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;position:relative;"></div>
+      <button class="rca-hbtn" style="width:34px;font-size:16px;position:relative;" onclick="document.getElementById('ld-modal').remove()" title="Close">✕</button>
+    </div>
+    <div class="rca-tools"><div id="ld-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <span style="margin-left:auto;font-size:10.5px;color:#8a93a9;">Nothing links until you tap ✅ — every link can be undone</span></div>
+    <div id="ld-body" style="overflow-y:auto;flex:1;background:linear-gradient(180deg,#f3f6fd,#eef2fb);padding:12px 14px;"></div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  await ldLoad();
+}
+async function ldLoad(){
+  try{
+    const r=await fetch(`${_SB}/rest/v1/rpc/spawn_link_doctor_get`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:'{}'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _ldData=await r.json();
+  }catch(e){
+    const b=document.getElementById('ld-body'); if(b) b.innerHTML='<div class="rca-empty" style="color:#DF1A35;">Could not load: '+_rcEsc(e.message)+'</div>';
+    return;
+  }
+  ldRender();
+}
+function ldRender(){
+  const d=_ldData||{}; const items=d.items||[]; const st=d.stats||{};
+  const sub=document.getElementById('ld-sub');
+  if(sub) sub.textContent=`Scanned ${d.age_min!=null?d.age_min+' min ago':'—'} · rescans every 15 min`;
+  const stats=document.getElementById('ld-stats');
+  if(stats) stats.innerHTML=
+    `<div class="rca-glass"><div class="l">Unlinked feeds</div><div class="v">${st.orphan_feeds??'—'}</div></div>`+
+    `<div class="rca-glass"><div class="l">Invisible income · 30d</div><div class="v">${st.orphan_amt!=null?_php(st.orphan_amt):'—'}</div></div>`+
+    `<div class="rca-glass"><div class="l">Linked this week</div><div class="v">${(d.log||[]).length}</div></div>`;
+  const cnt=k=>items.filter(i=>i.confidence===k).length;
+  const chips=[['high','✅ Strong match',cnt('high')],['medium','🔍 Check',cnt('medium')],['conflict','⚠ Conflict',cnt('conflict')],['done','↩ Linked',(d.log||[]).length]];
+  const ch=document.getElementById('ld-chips');
+  if(ch) ch.innerHTML=chips.map(([k,l,n])=>`<button class="rca-chip${_ldView===k?' on':''}" onclick="_ldView='${k}';ldRender()">${l}<b>${n}</b></button>`).join('');
+  const body=document.getElementById('ld-body'); if(!body) return;
+  if(_ldView==='done'){
+    const log=d.log||[];
+    body.innerHTML=log.length? log.map(l=>`<div class="rca-day" style="margin-top:8px;padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <b style="color:#1a2250;">${_rcEsc(l.label)}</b>
+        <span style="font-size:11px;color:#8a93a9;">${l.old_tg?`<s>${_rcEsc(l.old_tg)}</s> → `:''}<b style="color:#0f8c43;">${_rcEsc(l.new_tg)}</b></span>
+        <span style="font-size:10px;color:#8a93a9;">${_rcEsc(l.applied_at)}</span>
+        <button class="rca-undo" style="margin-left:auto;font-size:11px;" onclick="ldUndo(${l.id},this)">↩ undo</button></div>`).join('')
+      : '<div class="rca-empty">No links applied yet.</div>';
+    return;
+  }
+  const list=items.filter(i=>i.confidence===_ldView);
+  if(!list.length){ body.innerHTML='<div class="rca-empty">🎉 Nothing here.</div>'; return; }
+  // how many vendos each feed is suggested for (competing suggestions)
+  const perFeed={}; items.forEach(i=>{ (perFeed[i.tg]=perFeed[i.tg]||[]).push(i.label); });
+  body.innerHTML=list.map(i=>ldCard(i, perFeed[i.tg])).join('');
+}
+function ldCard(i, rivals){
+  const pill = i.confidence==='high' ? '<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">✅ Strong</span>'
+             : i.confidence==='medium' ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;">🔍 Check</span>'
+             : '<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;">⚠ Conflict</span>';
+  // fit bar: feed income in the vendo's last harvest window vs its coins
+  let fit='';
+  if(i.fit_ratio!=null && i.last_coins){
+    const pct=Math.min(100, Math.round(Number(i.fit_ratio)*100));
+    const good=Number(i.fit_ratio)>=0.8 && Number(i.fit_ratio)<=1.25;
+    fit=`<div style="margin-top:8px;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#8a93a9;"><span>Last harvest ${_rcEsc(i.last_harvest||'')}${i.last_collector?' · '+_rcEsc(i.last_collector):''}</span>
+        <span>feed <b style="color:#1a2250;">${_php(i.fit_income)}</b> vs coins <b style="color:#1a2250;">${_php(i.last_coins)}</b> · <b style="color:${good?'#0f8c43':'#b45309'};">${Math.round(Number(i.fit_ratio)*100)}%</b></span></div>
+      <div style="height:6px;background:#eef1f8;border-radius:99px;overflow:hidden;margin-top:3px;"><div style="height:100%;width:${pct}%;background:${good?'linear-gradient(90deg,#19b355,#0f8c43)':'linear-gradient(90deg,#FFB725,#f59e0b)'};"></div></div></div>`;
+  }
+  const why=(i.why||[]).map(w=>`<div style="font-size:10.5px;color:#44506b;margin-top:3px;">• ${_rcEsc(w)}</div>`).join('');
+  const rival=(rivals&&rivals.length>1)?`<div style="font-size:10.5px;color:#9d174d;font-weight:700;margin-top:4px;">🔀 This feed is also suggested for: ${_rcEsc(rivals.filter(x=>x!==i.label).join(', '))} — link only the right one</div>`:'';
+  const key=encodeURIComponent(JSON.stringify([i.vendo_id,i.tg]));
+  return `<div class="rca-day" style="margin-top:10px;padding:13px 15px;" data-ld="${key}">
+    <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:240px;">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+          <b style="font-size:14px;color:#1a2250;">${_rcEsc(i.label)}</b>
+          <span style="font-size:10.5px;color:#8a93a9;">${_rcEsc(i.area||'')}${i.n_harvests?` · ${i.n_harvests} harvests`:''}</span>${pill}</div>
+        <div style="font-size:11.5px;margin-top:5px;line-height:1.5;">
+          ${i.old_tg?`<span style="color:#9aa3b8;"><s>${_rcEsc(i.old_tg)}</s> <span style="font-size:10px;">silent since ${_rcEsc(i.old_last||'?')}</span></span><br>`:'<span style="color:#b45309;font-size:10.5px;">no TG name linked yet</span><br>'}
+          → <b style="color:#025AC6;">${_rcEsc(i.tg)}</b>
+          <span style="font-size:10.5px;color:#8a93a9;">· ${_php(i.feed_per_day)}/day · active since ${_rcEsc(i.new_first||'?')}</span>
+        </div>
+        ${why}${rival}${fit}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:120px;">
+        <button class="rca-ok" onclick="ldApply('${key}',this)">✅ Link</button>
+        <button class="rca-undo" style="border:1.5px solid #e2e8f6;border-radius:9px;padding:5px 8px;" onclick="ldReject('${key}',this)">✕ Not this one</button>
+      </div>
+    </div></div>`;
+}
+async function ldGetPw(){
+  if(_ldPw) return _ldPw;
+  const pw=await askAdminPw('Admin password — asked once for this Link Doctor session.');
+  if(pw===null) return null;
+  _ldPw=pw; return pw;
+}
+async function ldApply(key, btn){
+  const [vid,tg]=JSON.parse(decodeURIComponent(key));
+  const pw=await ldGetPw(); if(pw===null) return;
+  btn.disabled=true; btn.textContent='Linking…';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/rpc/spawn_link_apply`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},
+      body:JSON.stringify({p_vendo_id:vid,p_tg:tg,p_pw:pw})});
+    const j=await r.json();
+    if(!r.ok){
+      const msg=(j&&(j.message||j.hint))||('HTTP '+r.status);
+      if(/password/i.test(msg)){ _ldPw=null; if(typeof markAdminPwWrong==='function') markAdminPwWrong(); }
+      throw new Error(msg);
+    }
+    toast(`✅ Linked · ${j.resynced} harvest row${j.resynced===1?'':'s'} recalculated`+(j.old_tg?` · history before ${j.split_at} kept on the old feed`:''));
+    _rcPingCache();
+    await ldLoad();
+    // refresh the recon view behind the popup so the new numbers show
+    if(document.getElementById('rc-content')){ rcBypassCache=true; try{ await rcRun(); }catch(e){} rcBypassCache=false; }
+  }catch(e){
+    toast('❌ Not linked: '+e.message);
+    btn.disabled=false; btn.textContent='✅ Link';
+  }
+}
+async function ldReject(key, btn){
+  const [vid,tg]=JSON.parse(decodeURIComponent(key));
+  btn.disabled=true;
+  try{
+    await fetch(`${_SB}/rest/v1/rpc/spawn_link_reject`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_vendo_id:vid,p_tg:tg})});
+    // remove locally — no need to wait for a reload
+    _ldData.items=(_ldData.items||[]).filter(i=>!(i.vendo_id===vid&&i.tg===tg));
+    ldRender();
+  }catch(e){ toast('❌ '+e.message); btn.disabled=false; }
+}
+async function ldUndo(id, btn){
+  const pw=await ldGetPw(); if(pw===null) return;
+  btn.disabled=true; btn.textContent='…';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/rpc/spawn_link_undo`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_log_id:id,p_pw:pw})});
+    const j=await r.json();
+    if(!r.ok) throw new Error((j&&j.message)||('HTTP '+r.status));
+    toast('↩ Link undone · '+j.resynced+' rows restored');
+    _rcPingCache();
+    await ldLoad();
+  }catch(e){ toast('❌ Undo failed: '+e.message); btn.disabled=false; btn.textContent='↩ undo'; }
+}
+
 // Live re-read for the open popup. rcRun() → rcFilter() rebuilds the rows and
 // rcFilter() re-renders this popup in place, keeping your filter and scroll.
 async function rcRefreshCollector(collector){
