@@ -2850,6 +2850,115 @@ function rcCloseCollector(){
   document.removeEventListener('keydown',_rcEscKey);
 }
 
+// ══════════════════════════════════════════════════════════
+// SUSPICIOUS TRANSACTIONS REVIEW — mid-size (₱1k–₱10k) "coins"
+// ══════════════════════════════════════════════════════════
+// A piso vendo takes ₱1–₱20 coins. A ₱7,300 "coin" is a mis-parsed bot
+// message, and it inflates TG income → a FALSE SHORT on some collector.
+// This popup lists every live mid-size transaction with evidence (how many
+// other vendos share the exact same amount), lets the owner skip them one by
+// one or by identical-amount group, then re-syncs the affected harvests'
+// saved figures server-side (derived columns only — spawn_resync_recon).
+// Everything is reversible: skip is a flag, and ↩ undo un-skips.
+async function rcReviewTx(){
+  _rcEnsureCss();
+  const old=document.getElementById('rctx-modal'); if(old) old.remove();
+  const ov=document.createElement('div');
+  ov.id='rctx-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+  ov.innerHTML=`<div class="rca-modal" style="background:#fff;border-radius:20px;max-width:900px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(13,8,55,.5);">
+    <div class="rca-headwrap">
+      <div style="font-size:16px;font-weight:900;position:relative;">🧾 Suspicious transactions — ₱1,000 to ₱10,000</div>
+      <div style="font-size:11px;opacity:.88;margin-top:2px;position:relative;">A coin vendo takes ₱1–₱20. Big "coins" are mis-parsed bot messages that create FALSE SHORTS. Skipping is reversible.</div>
+    </div>
+    <div id="rctx-body" style="overflow-y:auto;flex:1;background:#f6f8fd;padding:12px;">
+      <div style="padding:30px;text-align:center;color:#8a93a9;">Loading…</div>
+    </div>
+    <div style="padding:10px 14px;border-top:1px solid #e7ebf6;display:flex;gap:8px;background:#fff;">
+      <span id="rctx-note" style="font-size:11px;color:#8a93a9;align-self:center;"></span>
+      <span style="flex:1"></span>
+      <button onclick="document.getElementById('rctx-modal').remove()" style="padding:8px 16px;border:1.5px solid #e2e8f6;background:#fff;border-radius:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;color:#6b7280;">Close</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+  await rcTxLoad();
+}
+let _rctxRows=[];
+async function rcTxLoad(){
+  const body=document.getElementById('rctx-body'); if(!body) return;
+  try{
+    const r=await fetch(`${_SB}/rest/v1/transactions?is_skipped=eq.false&amount=gt.1000&amount=lte.10000&select=id,vendo,date,time,amount&order=amount.desc,date.desc&limit=400`,{headers:_HDR});
+    _rctxRows=await r.json();
+    if(!Array.isArray(_rctxRows)) throw new Error('bad response');
+  }catch(e){ body.innerHTML='<div style="padding:30px;text-align:center;color:#DF1A35;">Could not load: '+_rcEsc(e.message)+'</div>'; return; }
+  // evidence: identical amount across how many different vendos?
+  const byAmt={};
+  _rctxRows.forEach(t=>{ (byAmt[t.amount]=byAmt[t.amount]||new Set()).add(t.vendo); });
+  if(!_rctxRows.length){ body.innerHTML='<div style="padding:40px;text-align:center;color:#0f8c43;font-weight:700;">🎉 Clean — no live mid-size transactions left.</div>'; return; }
+  // group rows by amount when that amount is shared by 3+ vendos (parser signature)
+  const groups={}; const singles=[];
+  _rctxRows.forEach(t=>{ if(byAmt[t.amount].size>=3) (groups[t.amount]=groups[t.amount]||[]).push(t); else singles.push(t); });
+  let html='';
+  Object.keys(groups).sort((a,b)=>b-a).forEach(amt=>{
+    const g=groups[amt];
+    html+=`<div class="rca-day" style="margin-top:10px;">
+      <div class="rca-date"><span style="font-weight:900;color:#9d174d;">🚩 ${_php(amt)} × ${g.length}</span>
+        <span style="font-size:11px;color:#8a93a9;">same exact amount on ${byAmt[amt].size} different vendos — parser signature, almost surely NOT coins</span>
+        <span style="margin-left:auto;"><button class="rca-ok" style="background:linear-gradient(135deg,#be123c,#9d174d);box-shadow:0 3px 10px rgba(157,23,77,.3);" onclick="rcTxSkip([${g.map(t=>t.id).join(',')}],this)">🚫 Skip all ${g.length}</button></span></div>
+      ${_rcTxTable(g)}</div>`;
+  });
+  if(singles.length){
+    html+=`<div class="rca-day" style="margin-top:10px;">
+      <div class="rca-date"><span style="font-weight:900;color:#1a2250;">Review one by one</span>
+        <span style="font-size:11px;color:#8a93a9;">unique amounts — could be real (GCash / e-load) or junk; your call per row</span></div>
+      ${_rcTxTable(singles)}</div>`;
+  }
+  body.innerHTML=html;
+  const note=document.getElementById('rctx-note');
+  if(note) note.textContent=_rctxRows.length+' live transactions · skipping re-syncs the affected harvests automatically';
+}
+function _rcTxTable(rows){
+  return `<div style="overflow-x:auto;"><table class="rca"><thead><tr><th>Vendo (TG name)</th><th>Date</th><th>Time</th><th class="r">Amount</th><th></th></tr></thead><tbody>`
+    + rows.map(t=>`<tr data-txid="${t.id}"><td style="font-weight:700;color:#1a2250;">${_rcEsc(t.vendo)}</td><td>${_rcEsc(t.date)}</td><td style="color:#8a93a9;">${_rcEsc(t.time)}</td><td class="r" style="font-weight:800;">${_php(t.amount)}</td>
+      <td class="c"><button class="rca-acct" onclick="rcTxSkip([${t.id}],this)">🚫 Skip</button></td></tr>`).join('')
+    + '</tbody></table></div>';
+}
+async function rcTxSkip(ids, btn){
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    const names=[...new Set(_rctxRows.filter(t=>ids.includes(t.id)).map(t=>t.vendo))];
+    const r=await fetch(`${_SB}/rest/v1/rpc/spawn_skip_tx`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_ids:ids,p_skip:true})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const n=await r.json();
+    // re-sync the harvests those names feed (derived columns only, server-side)
+    let synced=0;
+    try{
+      const r2=await fetch(`${_SB}/rest/v1/rpc/spawn_resync_recon`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_names:names})});
+      if(r2.ok) synced=await r2.json();
+    }catch(e){}
+    toast(`🚫 ${n} skipped · ${synced} harvest row${synced===1?'':'s'} re-synced`+` — ↩ undo available`);
+    _rcPingCache();
+    await rcTxLoad();
+    // offer one-shot undo in the footer (AFTER reload, so the reload can't wipe it)
+    const note=document.getElementById('rctx-note');
+    if(note) note.innerHTML=`<button class="rca-undo" style="font-size:11px;" onclick='rcTxUnskip(${JSON.stringify(ids)},${JSON.stringify(names)})'>↩ undo last skip (${ids.length})</button>`;
+    if(typeof rcRunFresh==='function' && document.getElementById('rc-content')){ rcBypassCache=true; try{ await rcRun(); }catch(e){} rcBypassCache=false; }
+  }catch(e){
+    toast('❌ Skip failed: '+e.message);
+    if(btn){ btn.disabled=false; btn.textContent='🚫 Skip'; }
+  }
+}
+async function rcTxUnskip(ids, names){
+  try{
+    await fetch(`${_SB}/rest/v1/rpc/spawn_skip_tx`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_ids:ids,p_skip:false})});
+    try{ await fetch(`${_SB}/rest/v1/rpc/spawn_resync_recon`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_names:names})}); }catch(e){}
+    toast('↩ restored '+ids.length+' transaction(s)');
+    _rcPingCache();
+    await rcTxLoad();
+  }catch(e){ toast('❌ Undo failed: '+e.message); }
+}
+
 // Live re-read for the open popup. rcRun() → rcFilter() rebuilds the rows and
 // rcFilter() re-renders this popup in place, keeping your filter and scroll.
 async function rcRefreshCollector(collector){
