@@ -342,14 +342,13 @@ window.ensureHarvest = function(){
   }
 })();
 
-/* ── GLOBAL MODAL PRETTIFIER ─────────────────────────────────────────────
+/* ── GLOBAL MODAL PRETTIFIER v2 ──────────────────────────────────────────
    One design language for EVERY popup on the dashboard, old and new, without
-   editing the dozens of places that build them. A MutationObserver watches
-   <body>: whenever a full-screen dark overlay is appended, it upgrades the
-   overlay (blurred scrim + fade-in), its white card (20px radius + deep
-   shadow + pop-in) and its gradient header (brand purple→blue), by writing
-   the same inline styles the popups already use — so it wins over their
-   older inline values and needs zero changes at the call sites.
+   editing the dozens of places that build them. Covers three ways popups
+   exist: appended to <body> at open time, appended anywhere in the tree, and
+   static modals baked into dashboard.html that are shown by toggling
+   display (hd-modal, hv-verify-pop, vn-bulk-overlay, ...). Dark scrims of
+   any shade count (black, navy, slate). Cards may be #fff or var(--card).
    STRICTLY COSMETIC: no handlers, ids, structure or text are touched. */
 (function(){
   if(window.__spawnPrettyModals) return; window.__spawnPrettyModals = true;
@@ -364,61 +363,105 @@ window.ensureHarvest = function(){
       '[data-spw-ov] *::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;}';
     document.head.appendChild(css);
 
+    var SEL = '[style*="position:fixed"],[style*="position: fixed"]';
+    // brand blues in both author (#hex) and serialized (rgb()) forms
+    var _SPW_BRAND = ['#1e3cb8','#1565c0','#025ac6','#311a8e','#0f1f6e','#2563eb',
+      'rgb(30,60,184)','rgb(21,101,192)','rgb(2,90,198)','rgb(49,26,142)','rgb(15,31,110)','rgb(37,99,235)'];
+    function _spwBrandSolid(bg){
+      for(var i=0;i<_SPW_BRAND.length;i++) if(bg===_SPW_BRAND[i]) return true;
+      return false;
+    }
+
     function isOverlay(el){
-      if(el.nodeType!==1) return false;
+      if(!el || el.nodeType!==1 || !el.style) return false;
       var s = el.style;
       if(s.position!=='fixed') return false;
       var covers = (s.inset==='0px'||s.inset==='0') ||
                    ((s.top==='0px'||s.top==='0')&&(s.left==='0px'||s.left==='0')&&
                     ((s.right==='0px'||s.right==='0')||s.width==='100%'||s.width==='100vw'));
       if(!covers) return false;
-      var bg = (s.background||s.backgroundColor||'');
-      return /rgba\(\s*(0|17)\s*,/.test(bg);   // dark translucent scrim only
+      // dark translucent scrim of ANY shade: black, navy, slate…
+      var m = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(0?\.\d+|1(\.0+)?)\s*\)/.exec(s.background||s.backgroundColor||'');
+      if(!m) return false;
+      var r=+m[1], g=+m[2], b=+m[3], a=+m[4];
+      return r<=80 && g<=80 && b<=80 && a>=0.25 && a<=0.95;
+    }
+    function isCardBg(bg){
+      return /#fff|white|rgb\(255|var\(--card|var\(--bg\b/i.test(bg||'');
     }
     function findCard(ov){
-      // the white box: usually a direct child; sometimes one wrapper deeper
-      var kids=[].slice.call(ov.children), i, j, c, g;
-      for(i=0;i<kids.length;i++){
-        c=kids[i]; if(c.nodeType!==1) continue;
-        if(/#fff|white|rgb\(255/i.test(c.style.background||c.style.backgroundColor||'')) return c;
-        var gk=[].slice.call(c.children);
-        for(j=0;j<gk.length;j++){ g=gk[j]; if(g.nodeType===1 && /#fff|white|rgb\(255/i.test(g.style.background||g.style.backgroundColor||'')) return g; }
+      // BFS up to 3 levels for the content box
+      var q=[].slice.call(ov.children), depth=0, next;
+      while(q.length && depth<3){
+        next=[];
+        for(var i=0;i<q.length;i++){
+          var c=q[i]; if(c.nodeType!==1) continue;
+          if(isCardBg(c.style.background||c.style.backgroundColor)) return c;
+          next=next.concat([].slice.call(c.children));
+        }
+        q=next; depth++;
       }
       return null;
     }
     function prettify(el){
-      if(!isOverlay(el) || el.dataset.spwOv) return;
-      el.dataset.spwOv='1';
-      // scrim
-      el.style.background='rgba(17,10,60,.6)';
-      el.style.backdropFilter='blur(5px)';
-      el.style.webkitBackdropFilter='blur(5px)';
-      if(!el.style.animation) el.style.animation='spwFade .16s ease';
-      // card
-      var card=findCard(el);
-      if(card){
-        var r=parseInt(card.style.borderRadius||'0',10);
-        if(!r || r<20) card.style.borderRadius='20px';
-        card.style.boxShadow='0 30px 80px rgba(13,8,55,.5)';
-        if(!card.style.animation) card.style.animation='spwPop .22s cubic-bezier(.2,.9,.3,1.1)';
-        // header: first gradient bar inside the card → brand gradient
-        var hdr=null, kids=[].slice.call(card.children), i;
-        for(i=0;i<kids.length && !hdr;i++){
-          var k=kids[i]; if(k.nodeType!==1) continue;
-          if(/linear-gradient/i.test(k.style.background||'')) hdr=k;
-          else { var gk=[].slice.call(k.children||[]); for(var j=0;j<gk.length;j++){ if(gk[j].nodeType===1 && /linear-gradient/i.test(gk[j].style.background||'')){ hdr=gk[j]; break; } } }
+      try{
+        if(!isOverlay(el) || el.dataset.spwOv) return;
+        el.dataset.spwOv='1';
+        el.style.background='rgba(17,10,60,.6)';
+        el.style.backdropFilter='blur(5px)';
+        el.style.webkitBackdropFilter='blur(5px)';
+        if(!el.style.animation) el.style.animation='spwFade .16s ease';
+        var card=findCard(el);
+        if(card){
+          var r=parseInt(card.style.borderRadius||'0',10);
+          if(!r || r<20) card.style.borderRadius='20px';
+          card.style.boxShadow='0 30px 80px rgba(13,8,55,.5)';
+          if(!card.style.animation) card.style.animation='spwPop .22s cubic-bezier(.2,.9,.3,1.1)';
+          // first blue-family gradient bar inside the card → brand gradient;
+          // other colors (green finance, red alerts…) keep their meaning
+          var hdr=null, q=[].slice.call(card.children), depth=0, next;
+          while(q.length && depth<2 && !hdr){
+            next=[];
+            for(var i=0;i<q.length;i++){
+              var k=q[i]; if(k.nodeType!==1) continue;
+              var kb=((k.style.background||k.style.backgroundColor||'')+'').toLowerCase().replace(/\s+/g,'');
+              // gradient header, or a SOLID brand-blue bar (e.g. hd-modal #1565c0).
+              // Browsers serialize hex to rgb(), so match both forms.
+              if(/linear-gradient/.test(kb) || _spwBrandSolid(kb)){ hdr=k; break; }
+              next=next.concat([].slice.call(k.children));
+            }
+            q=next; depth++;
+          }
+          if(hdr){
+            var hb=((hdr.style.background||hdr.style.backgroundColor||'')+'').toLowerCase().replace(/\s+/g,'');
+            if(/#1e3cb8|#1565c0|#025ac6|#311a8e|#0f1f6e|#2563eb/.test(hb) || _spwBrandSolid(hb) || /rgb\(30,60,184\)|rgb\(21,101,192\)|rgb\(2,90,198\)/.test(hb)){
+              hdr.style.background='linear-gradient(130deg,#311A8E 0%,#1e3cb8 45%,#025AC6 100%)';
+              // keep the top corners in step with the 20px card
+              if(/0(px)?\s+0(px)?\s*$/.test(hdr.style.borderRadius||'')) hdr.style.borderRadius='20px 20px 0 0';
+            }
+          }
         }
-        if(hdr && /#1e3cb8|#1565c0|#025AC6|#311A8E/i.test(hdr.style.background))
-          hdr.style.background='linear-gradient(130deg,#311A8E 0%,#1e3cb8 45%,#025AC6 100%)';
+      }catch(e){}
+    }
+    function scan(root){
+      if(!root || root.nodeType!==1) return;
+      prettify(root);
+      if(root.querySelectorAll){
+        var list=root.querySelectorAll(SEL);
+        for(var i=0;i<list.length;i++) prettify(list[i]);
       }
     }
     new MutationObserver(function(muts){
       for(var m=0;m<muts.length;m++){
         var add=muts[m].addedNodes;
-        for(var n=0;n<add.length;n++){ try{ prettify(add[n]); }catch(e){} }
+        for(var n=0;n<add.length;n++) scan(add[n]);
       }
-    }).observe(document.body||document.documentElement, {childList:true});
-    // anything already open when this loads
-    try{ [].slice.call((document.body||{}).children||[]).forEach(prettify); }catch(e){}
+    }).observe(document.body||document.documentElement, {childList:true, subtree:true});
+    // everything already in the page, including the static display:none
+    // modals baked into dashboard.html — styled now, so they are already
+    // pretty the moment their display flips to flex
+    function initial(){ try{ scan(document.body); }catch(e){} }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initial);
+    else initial();
   }catch(e){ console.warn('pretty-modals init failed', e); }
 })();
