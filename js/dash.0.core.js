@@ -341,3 +341,84 @@ window.ensureHarvest = function(){
     window.addEventListener('load', function(){ setTimeout(warm, 2500); });
   }
 })();
+
+/* ── GLOBAL MODAL PRETTIFIER ─────────────────────────────────────────────
+   One design language for EVERY popup on the dashboard, old and new, without
+   editing the dozens of places that build them. A MutationObserver watches
+   <body>: whenever a full-screen dark overlay is appended, it upgrades the
+   overlay (blurred scrim + fade-in), its white card (20px radius + deep
+   shadow + pop-in) and its gradient header (brand purple→blue), by writing
+   the same inline styles the popups already use — so it wins over their
+   older inline values and needs zero changes at the call sites.
+   STRICTLY COSMETIC: no handlers, ids, structure or text are touched. */
+(function(){
+  if(window.__spawnPrettyModals) return; window.__spawnPrettyModals = true;
+  try{
+    var css = document.createElement('style');
+    css.id = 'spawn-pretty-modals';
+    css.textContent =
+      '@keyframes spwFade{from{opacity:0}to{opacity:1}}' +
+      '@keyframes spwPop{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}' +
+      '[data-spw-ov] *{scrollbar-width:thin;scrollbar-color:#c3cdeb transparent;}' +
+      '[data-spw-ov] *::-webkit-scrollbar{width:9px;height:9px;}' +
+      '[data-spw-ov] *::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;}';
+    document.head.appendChild(css);
+
+    function isOverlay(el){
+      if(el.nodeType!==1) return false;
+      var s = el.style;
+      if(s.position!=='fixed') return false;
+      var covers = (s.inset==='0px'||s.inset==='0') ||
+                   ((s.top==='0px'||s.top==='0')&&(s.left==='0px'||s.left==='0')&&
+                    ((s.right==='0px'||s.right==='0')||s.width==='100%'||s.width==='100vw'));
+      if(!covers) return false;
+      var bg = (s.background||s.backgroundColor||'');
+      return /rgba\(\s*(0|17)\s*,/.test(bg);   // dark translucent scrim only
+    }
+    function findCard(ov){
+      // the white box: usually a direct child; sometimes one wrapper deeper
+      var kids=[].slice.call(ov.children), i, j, c, g;
+      for(i=0;i<kids.length;i++){
+        c=kids[i]; if(c.nodeType!==1) continue;
+        if(/#fff|white|rgb\(255/i.test(c.style.background||c.style.backgroundColor||'')) return c;
+        var gk=[].slice.call(c.children);
+        for(j=0;j<gk.length;j++){ g=gk[j]; if(g.nodeType===1 && /#fff|white|rgb\(255/i.test(g.style.background||g.style.backgroundColor||'')) return g; }
+      }
+      return null;
+    }
+    function prettify(el){
+      if(!isOverlay(el) || el.dataset.spwOv) return;
+      el.dataset.spwOv='1';
+      // scrim
+      el.style.background='rgba(17,10,60,.6)';
+      el.style.backdropFilter='blur(5px)';
+      el.style.webkitBackdropFilter='blur(5px)';
+      if(!el.style.animation) el.style.animation='spwFade .16s ease';
+      // card
+      var card=findCard(el);
+      if(card){
+        var r=parseInt(card.style.borderRadius||'0',10);
+        if(!r || r<20) card.style.borderRadius='20px';
+        card.style.boxShadow='0 30px 80px rgba(13,8,55,.5)';
+        if(!card.style.animation) card.style.animation='spwPop .22s cubic-bezier(.2,.9,.3,1.1)';
+        // header: first gradient bar inside the card → brand gradient
+        var hdr=null, kids=[].slice.call(card.children), i;
+        for(i=0;i<kids.length && !hdr;i++){
+          var k=kids[i]; if(k.nodeType!==1) continue;
+          if(/linear-gradient/i.test(k.style.background||'')) hdr=k;
+          else { var gk=[].slice.call(k.children||[]); for(var j=0;j<gk.length;j++){ if(gk[j].nodeType===1 && /linear-gradient/i.test(gk[j].style.background||'')){ hdr=gk[j]; break; } } }
+        }
+        if(hdr && /#1e3cb8|#1565c0|#025AC6|#311A8E/i.test(hdr.style.background))
+          hdr.style.background='linear-gradient(130deg,#311A8E 0%,#1e3cb8 45%,#025AC6 100%)';
+      }
+    }
+    new MutationObserver(function(muts){
+      for(var m=0;m<muts.length;m++){
+        var add=muts[m].addedNodes;
+        for(var n=0;n<add.length;n++){ try{ prettify(add[n]); }catch(e){} }
+      }
+    }).observe(document.body||document.documentElement, {childList:true});
+    // anything already open when this loads
+    try{ [].slice.call((document.body||{}).children||[]).forEach(prettify); }catch(e){}
+  }catch(e){ console.warn('pretty-modals init failed', e); }
+})();
