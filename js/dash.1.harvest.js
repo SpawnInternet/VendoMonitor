@@ -2243,6 +2243,7 @@ async function rcnUnlink(vendoName, opts){
 
 function rcFilter(){
   _rcEnsureCss();
+  _rcComputeSharedFeeds(rcAllRows);
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
   const rows=rcAllRows.filter(r=>{
@@ -2386,6 +2387,22 @@ function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
 function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
 // One coin vendo cannot take >₱2,000/day. A value like that means a bad
 // transaction in the feed (a parsed "total" message) or a wrong link.
+// One TG name feeding MORE THAN ONE machine: every machine on that name
+// claims the same income, so their gaps are double-counted and meaningless
+// until the wrong one is relinked. Computed over the loaded rows.
+let _rcSharedFeeds = {};
+function _rcComputeSharedFeeds(rows){
+  const byName={};
+  (rows||[]).forEach(r=>{
+    if(!r.tg_name) return;
+    const key=r.vendo_id!=null?('v'+r.vendo_id):('s'+(r.sheet_name||''));
+    (byName[r.tg_name]=byName[r.tg_name]||new Set()).add(key);
+  });
+  _rcSharedFeeds={};
+  Object.keys(byName).forEach(n=>{ if(byName[n].size>1) _rcSharedFeeds[n]=byName[n].size; });
+}
+function _rcIsSharedFeed(r){ return !!(r.tg_name && _rcSharedFeeds[r.tg_name]); }
+
 // A SHORT row whose window spans more than 45 days usually means a missed /
 // undigitized harvest inside the window (paper era) — the TG income covers
 // months while the coins are only the latest box. Not proven utang.
@@ -2444,6 +2461,7 @@ const _RC_FILTERS = [
   ['exact',   '✅ Exact',      r=>r.flag==='ok'],
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
   ['longwin', '⏳ Long window', r=>_rcLongWindowShort(r)],
+  ['shared',  '🔀 Shared feed', r=>_rcIsSharedFeed(r)],
   ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
   ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
   ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
@@ -2619,7 +2637,8 @@ function _rcRowHtml(h, showCloud, flat){
   const days = _rcDays(h);
   const sv = _rcSurplus(h);
   const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#8a93a9;margin-top:1px;font-variant-numeric:tabular-nums;">${_php(Math.abs(sv)/days)}/day</div>` : '';
-  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>'
+  const zero = _rcIsSharedFeed(h) ? `<div style="font-size:9px;color:#9d174d;font-weight:800;margin-top:3px;" title="The TG name '${_rcEsc(h.tg_name)}' is linked to ${_rcSharedFeeds[h.tg_name]} different machines — each one is claiming the SAME income, so this gap is double-counted and not real. Open 🔗 and relink the wrong machine first.">🔀 shared feed — ${_rcSharedFeeds[h.tg_name]} machines</div>`
+    : _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>'
     : _rcImpossible(h) ? '<div style="font-size:9px;color:#DF1A35;font-weight:800;margin-top:3px;" title="This income is more than ₱2,000 per day — impossible for one coin vendo. Usually one bad transaction in the TG feed (a parsed total message) or a wrong link. Do not treat this gap as real money before checking.">🚫 impossible income — check feed</div>'
     : _rcLongWindowShort(h) ? `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-top:3px;" title="This short covers a ${_rcDays(h)}-day window. A window that long usually hides a missed or undigitized harvest in between — the TG income spans months but the coins are only the latest box. Check the paper ledger or fix the window (🔗 button) BEFORE charging this to anyone's account.">⏳ ${_rcDays(h)}-day window — history gap?</div>` : '';
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
