@@ -1363,12 +1363,48 @@ async function rcSaveNote(id, val, inp){
 let rcAllRows = [];
 let rcDatesInited = false;
 
+// Date helpers — Manila dates, not UTC (toISOString flips the day before 8am).
+function _rcDstr(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function _rcMarkRange(preset){
+  document.querySelectorAll('.rc-rangebtn').forEach(b=>{
+    const on=b.dataset.r===preset;
+    b.style.background=on?'linear-gradient(135deg,#1e3cb8,#025AC6)':'#fff';
+    b.style.color=on?'#fff':'#44506b';
+    b.style.borderColor=on?'transparent':'#e2e8f6';
+  });
+}
 function rcInitDates(){
-  const to = new Date(), from = new Date();
-  from.setDate(from.getDate()-7); // default to last 7 days for recent view
-  document.getElementById('rc-to').value   = to.toISOString().slice(0,10);
-  document.getElementById('rc-from').value = from.toISOString().slice(0,10);
+  // Default = last 30 days, matching the one-fetch snapshot window, so every
+  // collector's recent harvests show without extra fetching.
+  const to=new Date(), from=new Date();
+  from.setDate(from.getDate()-30);
+  document.getElementById('rc-to').value   = _rcDstr(to);
+  document.getElementById('rc-from').value = _rcDstr(from);
+  _rcMarkRange('30');
   rcDatesInited = true;
+}
+// Quick ranges: 7D / 30D / This month / All (All = everything since the
+// 2026-03-01 system epoch — outside the snapshot, so it reads live, paginated).
+function rcSetRange(preset){
+  const to=new Date(); let from=new Date();
+  if(preset==='7') from.setDate(to.getDate()-7);
+  else if(preset==='30') from.setDate(to.getDate()-30);
+  else if(preset==='month') from=new Date(to.getFullYear(),to.getMonth(),1);
+  else if(preset==='all') from=new Date(2026,2,1);
+  document.getElementById('rc-from').value=_rcDstr(from);
+  document.getElementById('rc-to').value=_rcDstr(to);
+  _rcMarkRange(preset);
+  rcDatesInited=true;
+  rcRun();
+}
+// Typed a custom date → clear the preset highlight and reload.
+function rcCustomRange(){
+  const f=document.getElementById('rc-from').value, t=document.getElementById('rc-to').value;
+  if(!f||!t) return;
+  _rcMarkRange('none');
+  rcRun();
 }
 
 async function rcRun(){
