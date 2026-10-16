@@ -1461,8 +1461,9 @@ async function rcRun(){
         // windows and tg_name fills are already in the file. One fetch = the
         // same rows the live path would have built with 4+ requests.
         const mapCached = row=>{
+          // same orphan guard as _rcFromSaved: no TG name → no saved income
           const tgInc = row.tg_income_live!=null ? Number(row.tg_income_live)
-                      : row.tg_income!=null ? Number(row.tg_income) : null;
+                      : (row.tg_income!=null && row.tg_name) ? Number(row.tg_income) : null;
           const cloudInc = row.cloud_income_live!=null ? Number(row.cloud_income_live) : null;
           const totalInc = (tgInc!=null||cloudInc!=null) ? Number(tgInc||0)+Number(cloudInc||0) : null;
           const coins = Number(row.coins_total||0);
@@ -1526,7 +1527,9 @@ async function rcRun(){
   // immediately — no spinner, no waiting on TG. Phase 2 below reads live
   // income in the background and swaps the figures in when it lands.
   const _rcFromSaved = row=>{
-    const tgInc=(row.tg_income!=null)?Number(row.tg_income):null;
+    // ORPHAN GUARD: a saved tg_income with no TG name behind it is leftover
+    // garbage from an old run (the ₱454k "Valles" case) — never display it.
+    const tgInc=(row.tg_income!=null && row.tg_name)?Number(row.tg_income):null;
     const coins=Number(row.coins_total||0);
     const gap=tgInc!=null?tgInc-coins:(row.recon_gap!=null?Number(row.recon_gap):null);
     const gap_pct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
@@ -1655,7 +1658,8 @@ async function rcRun(){
       rpcHasChain=byId.has_chain;
     } else if(tg && rpcTgByName[tg]!==undefined){
       tgInc=rpcTgByName[tg];
-    } else if(row.tg_income!=null){
+    } else if(row.tg_income!=null && tg){
+      // saved fallback only when a TG name actually stands behind the value
       tgInc=Number(row.tg_income);
     }
     const coins=Number(row.coins_total||0);
@@ -2380,6 +2384,13 @@ function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
 // TG name is linked but the bot reported ₱0 for the whole window while coins
 // came in. Usually a dead bot / renamed hotspot / wrong link — not real surplus.
 function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
+// One coin vendo cannot take >₱2,000/day. A value like that means a bad
+// transaction in the feed (a parsed "total" message) or a wrong link.
+function _rcImpossible(r){
+  if(r.total_income==null) return false;
+  const d=_rcDays(r)||1;
+  return Number(r.total_income)/d > 2000;
+}
 function _rcDays(r){
   const a=String(r.rpc_window_start||r.harvest_window_start||'').slice(0,10);
   const b=String(r.rpc_submitted_at||r.harvest_date||'').slice(0,10);
@@ -2599,7 +2610,8 @@ function _rcRowHtml(h, showCloud, flat){
   const days = _rcDays(h);
   const sv = _rcSurplus(h);
   const perDay = (sv!=null && days && Math.abs(sv)>20) ? `<div style="font-size:9px;color:#8a93a9;margin-top:1px;font-variant-numeric:tabular-nums;">${_php(Math.abs(sv)/days)}/day</div>` : '';
-  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>' : '';
+  const zero = _rcIsZeroTg(h) ? '<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="TG name is linked but the bot reported ₱0 for this whole window. Check the TG link / bot before treating this as surplus.">⚠ TG ₱0 — check link</div>'
+    : _rcImpossible(h) ? '<div style="font-size:9px;color:#DF1A35;font-weight:800;margin-top:3px;" title="This income is more than ₱2,000 per day — impossible for one coin vendo. Usually one bad transaction in the TG feed (a parsed total message) or a wrong link. Do not treat this gap as real money before checking.">🚫 impossible income — check feed</div>' : '';
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
     <td style="min-width:152px;">
       <div style="display:flex;align-items:center;gap:5px;"><span style="font-weight:800;color:#1a2250;">${name}</span>${noTg}
