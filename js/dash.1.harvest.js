@@ -1325,6 +1325,26 @@ async function rcConfirmRow(id, btn){
     if(btn){ btn.disabled=false; btn.textContent='✅ OK'; }
   }
 }
+// Charge a SHORT row to the collector's account (utang). Snapshot the amount
+// now — later TG re-matching must not silently change what was charged.
+// Status-only + the new recon_account column: no existing money field is ever
+// written. Fully reversible with ✕ undo.
+async function rcAccountRow(id, btn){
+  const row=_rcRow(id);
+  const sv=row?_rcSurplus(row):null;
+  if(sv==null||sv>=-20){ toast('This row is not short'); return; }
+  const amt=Math.round(Math.abs(sv)*100)/100;
+  if(!confirm('Charge to '+((row&&row.collector)||'collector')+"'s account:\n\n  "+((row&&row.sheet_name)||'')+'\n  Short: '+_php(amt)+'\n\nThis records the shortage as utang. You can undo it anytime.')) return;
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    await _rcPatchHarvest(id, { reconcile_status:'account', recon_account:amt });
+    if(row){ row.reconcile_status='account'; row.recon_account=amt; }
+    _rcAfterRowChange(); _rcPingCache();
+  }catch(e){
+    toast('❌ Account not saved: '+e.message);
+    if(btn){ btn.disabled=false; btn.textContent='💳 Account'; }
+  }
+}
 async function rcClearConfirm(id, btn){
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
@@ -1333,9 +1353,10 @@ async function rcClearConfirm(id, btn){
     // never be re-marked behind your back. Undoing a manual OK goes back to
     // NULL (and may be auto-marked later if it qualifies — it was clean).
     const row=_rcRow(id);
+    const wasAccount = row && row.reconcile_status==='account';
     const next = (row && row.reconcile_status==='auto') ? 'unauto' : null;
-    await _rcPatchHarvest(id, { reconcile_status: next });
-    if(row) row.reconcile_status=next;
+    await _rcPatchHarvest(id, wasAccount ? { reconcile_status:null, recon_account:null } : { reconcile_status: next });
+    if(row){ row.reconcile_status = wasAccount?null:next; if(wasAccount) row.recon_account=null; }
     _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Undo not saved: '+e.message);
@@ -1484,7 +1505,7 @@ async function rcRun(){
   while(true){
     const r=await fetch(
       `${_SB}/rest/v1/harvests?harvest_date=gte.${from}&harvest_date=lte.${to}`+
-      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code,admin_notes,reconcile_status,tg_income,recon_gap,recon_flag,recon_at`+
+      `&select=id,vendo_id,tg_name,sheet_name,area,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,harvested_at,harvest_date,collector,harvest_window_start,route_code,admin_notes,reconcile_status,recon_account,tg_income,recon_gap,recon_flag,recon_at`+
       `&order=harvest_date.desc&limit=1000&offset=${offset}`,
       {headers:_HDR}
     );
@@ -2312,6 +2333,7 @@ function rcFilter(){
           <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
             ${deficitN?`<span class="rcg-pill" style="background:#fee2e2;color:#DF1A35;">${deficitN} DEFICIT</span>`:''}
             ${surplusN?`<span class="rcg-pill" style="background:#fef3c7;color:#b45309;">${surplusN} SURPLUS</span>`:''}
+            ${st.accountN?`<span class="rcg-pill" title="Shortages charged to this collector's account in this date range" style="background:#fde8e8;color:#DF1A35;border:1px dashed #fca5a5;">💳 ${st.accountN} · ${fmtP(st.accountAmt)}</span>`:''}
             ${unmatchedN?`<span class="rcg-pill" title="${unmatchedN} harvests have no TG name linked, holding ${fmtP(unmatchedCoins)} in coins. Not counted as deficit — they need a TG match first." style="background:#e4e9fb;color:#4338ca;">🔗 ${unmatchedN} NO TG</span>`:''}
             ${(!deficitN&&!surplusN)?`<span class="rcg-pill" style="background:#d9f7e4;color:#0f8c43;">✅ OK</span>`:''}
           </div>
@@ -2367,12 +2389,15 @@ function _rcDays(r){
 }
 function _rcStats(rows){
   const s={count:rows.length, coins:0, tg:0, cloud:0, gap:0, exactN:0, surplusN:0, deficitN:0,
-           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0};
+           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0, accountN:0, accountAmt:0};
   rows.forEach(r=>{
     // 'auto' counts as confirmed work done — but stays its own kind, and is
     // always reversible (undo, unlink, window edit all clear it).
-    if(r.reconcile_status==='ok'||r.reconcile_status==='auto') s.confirmed++;
+    // 'account' = shortage charged to the collector's utang: handled, counted
+    // separately so the amount owed is always visible.
+    if(r.reconcile_status==='ok'||r.reconcile_status==='auto'||r.reconcile_status==='account') s.confirmed++;
     if(r.reconcile_status==='auto') s.autoN++;
+    if(r.reconcile_status==='account'){ s.accountN++; s.accountAmt+=Number(r.recon_account!=null?r.recon_account:Math.max(0,Number(r.gap||0))); }
     if(_rcIsZeroTg(r)) s.zeroN++;
     if(r.gap==null){ s.unmatchedN++; s.unmatchedCoins+=Number(r.coins_total||0); return; }
     s.coins+=Number(r.coins_total||0);
@@ -2402,9 +2427,10 @@ const _RC_FILTERS = [
   ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
   ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
   ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
-  ['todo',    '⏳ Needs me',    r=>r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'],
+  ['todo',    '⏳ Needs me',    r=>r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'&&r.reconcile_status!=='account'],
   ['auto',    '⚡ Auto-OK',     r=>r.reconcile_status==='auto'],
-  ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'||r.reconcile_status==='auto'],
+  ['account', '💳 On account', r=>r.reconcile_status==='account'],
+  ['done',    '☑ Confirmed',   r=>r.reconcile_status==='ok'||r.reconcile_status==='auto'||r.reconcile_status==='account'],
 ];
 function _rcSearchHit(r,q){
   if(!q) return true;
@@ -2484,6 +2510,9 @@ function _rcEnsureCss(){
   #rc-modal .rca-ok{border:none;background:linear-gradient(135deg,#19b355,#0f8c43);color:#fff;padding:5px 13px;border-radius:9px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 3px 10px rgba(16,140,67,.3), inset 0 1px 0 rgba(255,255,255,.25);transition:.14s;}
   #rc-modal .rca-ok:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(16,140,67,.4), inset 0 1px 0 rgba(255,255,255,.25);}
   #rc-modal .rca-ok:disabled{opacity:.55;cursor:wait;transform:none;}
+  #rc-modal .rca-acct{border:1.5px solid #fca5a5;background:#fff5f5;color:#DF1A35;padding:4px 10px;border-radius:9px;font-size:10.5px;font-weight:800;cursor:pointer;font-family:inherit;margin-left:5px;transition:.14s;}
+  #rc-modal .rca-acct:hover{background:#DF1A35;color:#fff;transform:translateY(-1px);box-shadow:0 4px 12px rgba(223,26,53,.3);}
+  #rc-modal .rca-acct:disabled{opacity:.55;cursor:wait;transform:none;}
   #rc-modal .rca-undo{border:none;background:none;cursor:pointer;font-size:10.5px;color:#9aa3b8;padding:2px 5px;font-family:inherit;border-radius:6px;transition:.12s;}
   #rc-modal .rca-undo:hover{color:#DF1A35;background:#fee2e2;}
   #rc-modal .rca-note{width:100%;box-sizing:border-box;padding:4px 8px;border:1.5px solid #e9edf6;border-radius:8px;font-size:10.5px;font-family:inherit;margin-top:5px;background:#fafbff;transition:.14s;outline:none;}
@@ -2557,7 +2586,7 @@ function _rcBookCell(h){
 }
 function _rcRowHtml(h, showCloud, flat){
   const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
-  const done = h.reconcile_status==='ok' || h.reconcile_status==='auto';
+  const done = h.reconcile_status==='ok' || h.reconcile_status==='auto' || h.reconcile_status==='account';
   const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
   const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 6px;margin-left:5px;">no TG</span>' : '';
   const unlinkKey = h.sheet_name||h.tg_name;
@@ -2592,7 +2621,9 @@ function _rcRowHtml(h, showCloud, flat){
         ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
         : h.reconcile_status==='auto'
         ? `<span class="rca-pill" style="background:#e0f2fe;color:#0369a1;" title="Auto-confirmed by the system: real TG chain, gap within ±₱20, BASHANG book agrees or absent. You can still unlink the TG name or edit the window — doing so removes this mark.">⚡ Auto-OK</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove auto-OK — the row goes back to ⏳ Needs me and will NOT be auto-marked again">✕ undo</button>`
-        : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>`}
+        : h.reconcile_status==='account'
+        ? `<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;" title="Shortage charged to ${_rcEsc(h.collector||'the collector')}'s account${h.bashang_date?'':''}">💳 On account · ${_php(h.recon_account!=null?h.recon_account:Math.max(0,Number(h.gap||0)))}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove from account — the row goes back to ⏳ Needs me">✕ undo</button>`
+        : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>${(_rcSurplus(h)!=null&&_rcSurplus(h)<-20)?`<button class="rca-acct" onclick="rcAccountRow(${h.id},this)" title="Charge this shortage to ${_rcEsc(h.collector||'the collector')}'s account (utang) — the amount is fixed at today's figure and can be undone">💳 Account</button>`:''}`}
       <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
     </td>
@@ -2633,6 +2664,7 @@ function _rcRenderHead(d, collector){
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','exact')" title="Show exact rows"><div class="l">✅ Exact</div><div class="v">${s.exactN}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div class="l">🟡 Surplus</div><div class="v">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div class="l">🔴 Deficit</div><div class="v">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
+      ${s.accountN?`<div class="rca-glass rca-stat" onclick="rcSetView('filter','account')" title="Shortages charged to this collector's account in this date range"><div class="l">💳 Account</div><div class="v">${s.accountN} · ${_php(s.accountAmt)}</div></div>`:''}
       <button id="rc-modal-refresh" class="rca-hbtn" style="padding:0 13px;" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name">↻ Refresh</button>
       <button class="rca-hbtn" style="width:34px;font-size:16px;" onclick="rcCloseCollector()" title="Close (Esc)">✕</button>
     </div>`;
