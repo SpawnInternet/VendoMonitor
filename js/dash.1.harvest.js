@@ -2616,6 +2616,11 @@ function _rcEnsureCss(){
   .spw-rc #rca-body::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;border:2px solid #f3f6fd;}
   .spw-rc .rca-day{margin-top:14px;border:1px solid #e3e9f8;border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 1px 3px rgba(26,34,78,.05), 0 8px 24px -18px rgba(26,34,78,.25);}
   .spw-rc .rca-date{position:sticky;top:0;z-index:2;background:linear-gradient(90deg,#eef2ff,#f6f8ff);padding:9px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #e3e9f8;backdrop-filter:blur(4px);}
+  .spw-rc tr.rca-cur td{background:#fffbe6 !important;box-shadow:inset 3px 0 0 #311A8E;}
+  .spw-rc tr.rca-cur td:first-child{box-shadow:inset 4px 0 0 #311A8E;}
+  .spw-rc .rca-keys{font-size:9.5px;color:#8a93a9;white-space:nowrap;}
+  .spw-rc .rca-keys b{color:#311A8E;background:#eef2ff;border:1px solid #c7d2fe;border-radius:4px;padding:0 4px;font-weight:800;}
+  @media (max-width:900px){ .spw-rc .rca-keys{display:none;} }
   .spw-rc .rca-vl-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 4px 2px;}
   .spw-rc .rca-vl-head{cursor:pointer;user-select:none;}
   .spw-rc .rca-vl-head:hover{background:linear-gradient(90deg,#e4e9fb,#eef2ff);}
@@ -2808,6 +2813,8 @@ function _rcRenderHead(d, collector){
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div class="l">🟡 Surplus</div><div class="v">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div class="l">🔴 Deficit</div><div class="v">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
       ${s.accountN?`<div class="rca-glass rca-stat" onclick="rcSetView('filter','account')" title="Shortages charged to this collector's account in this date range"><div class="l">💳 Account</div><div class="v">${s.accountN} · ${_php(s.accountAmt)}</div></div>`:''}
+      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(-1)" title="Previous collector (←)">‹</button>
+      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(1)" title="Next collector (→)">›</button>
       <button id="rc-modal-refresh" class="rca-hbtn" style="padding:0 13px;" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name">↻ Refresh</button>
       <button class="rca-hbtn" style="width:34px;font-size:16px;" onclick="rcCloseCollector()" title="Close (Esc)">✕</button>
     </div>`;
@@ -2975,6 +2982,7 @@ function rcRenderModal(opts){
   _rcRenderChips(d);
   _rcRenderBody(d);
   if(body && opts.keepScroll!==false) body.scrollTop=top;
+  if(_rcCurId!=null) _rcHighlight(_rcCurId, false);
 }
 
 function rcSetView(key,val){
@@ -2991,18 +2999,67 @@ function rcSetView(key,val){
   const body=document.getElementById('rca-body'); if(body) body.scrollTop=0;
 }
 
+// ── Keyboard driving of the popup ─────────────────────────────────────
+// ↑ ↓  move between vendo rows        ← →  previous / next collector
+// Enter / O  ✅ OK the current row     A  💳 account (if short)
+// U  undo     L  open 🔗 names        N  focus the note      Esc  close
+let _rcCurId = null;
+function _rcRowEls(){ return [...document.querySelectorAll('#rca-body tr[data-id]')]; }
+function _rcHighlight(id, scroll){
+  _rcCurId = id;
+  _rcRowEls().forEach(tr=>tr.classList.toggle('rca-cur', Number(tr.dataset.id)===Number(id)));
+  if(scroll!==false){ const tr=document.querySelector('#rca-body tr.rca-cur'); if(tr) tr.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+function _rcMoveRow(delta){
+  const els=_rcRowEls(); if(!els.length) return;
+  let i=els.findIndex(tr=>Number(tr.dataset.id)===Number(_rcCurId));
+  i = i<0 ? (delta>0?0:els.length-1) : Math.max(0, Math.min(els.length-1, i+delta));
+  _rcHighlight(Number(els[i].dataset.id));
+}
+function _rcCollectorList(){ return Object.keys(window._rcDetail||{}).sort((a,b)=>a.localeCompare(b)); }
+function rcNextCollector(delta){
+  const list=_rcCollectorList(); if(!list.length) return;
+  let i=list.indexOf(_rcOpenCollector); if(i<0) i=0;
+  const next=list[(i+delta+list.length)%list.length];
+  const keep={filter:_rcView.filter, sort:_rcView.sort, q:_rcView.q};
+  rcShowCollector(next);
+  // keep the same chip / sort / search so the audit continues where it was
+  _rcView={..._rcView, ...keep};
+  const q=document.getElementById('rca-q'); if(q) q.value=keep.q||'';
+  rcRenderModal({force:true, keepScroll:false});
+  _rcMoveRow(1);
+}
 function _rcEscKey(e){
-  if(e.key!=='Escape' || !document.getElementById('rc-modal')) return;
-  // Let the dialogs that sit on top of the popup handle their own Esc.
-  if(document.getElementById('rc-names-overlay') || document.getElementById('spawn-pw-modal') || document.querySelector('[data-pick]')) return;
-  if(e.target && e.target.id==='rca-q' && e.target.value){ e.target.value=''; rcSetView('q',''); return; }
-  rcCloseCollector();
+  if(!document.getElementById('rc-modal')) return;
+  // Let the dialogs that sit on top of the popup handle their own keys.
+  if(document.getElementById('rc-names-overlay') || document.getElementById('spawn-pw-modal') || document.getElementById('spawn-confirm-modal') || document.querySelector('[data-pick]')) return;
+  const inInput = e.target && (e.target.tagName==='INPUT' || e.target.tagName==='SELECT' || e.target.tagName==='TEXTAREA');
+  if(e.key==='Escape'){
+    if(e.target && e.target.id==='rca-q' && e.target.value){ e.target.value=''; rcSetView('q',''); return; }
+    if(inInput && e.target.classList && e.target.classList.contains('rca-note')){ e.target.blur(); return; }
+    rcCloseCollector(); return;
+  }
+  if(inInput) return;                       // typing in search / note — leave keys alone
+  if(e.altKey||e.ctrlKey||e.metaKey) return;
+  const cur = _rcCurId!=null ? document.querySelector('#rca-body tr[data-id="'+_rcCurId+'"]') : null;
+  const k=e.key;
+  if(k==='ArrowDown'||k==='j'){ e.preventDefault(); _rcMoveRow(1); return; }
+  if(k==='ArrowUp'||k==='k'){ e.preventDefault(); _rcMoveRow(-1); return; }
+  if(k==='ArrowRight'){ e.preventDefault(); rcNextCollector(1); return; }
+  if(k==='ArrowLeft'){ e.preventDefault(); rcNextCollector(-1); return; }
+  if(!cur) { if(['Enter','o','O','a','A','u','U','l','L','n','N'].includes(k)){ e.preventDefault(); _rcMoveRow(1); } return; }
+  const id=Number(cur.dataset.id);
+  if(k==='Enter'||k==='o'||k==='O'){ e.preventDefault(); const b=cur.querySelector('.rca-ok'); if(b){ b.click(); setTimeout(()=>_rcMoveRow(1),250); } else toast('Already confirmed — U to undo'); return; }
+  if(k==='a'||k==='A'){ e.preventDefault(); const b=cur.querySelector('.rca-acct'); if(b) b.click(); else toast('This row is not short'); return; }
+  if(k==='u'||k==='U'){ e.preventDefault(); const b=cur.querySelector('.rca-undo'); if(b) b.click(); else toast('Nothing to undo on this row'); return; }
+  if(k==='l'||k==='L'){ e.preventDefault(); rcShowNamesById(id); return; }
+  if(k==='n'||k==='N'){ e.preventDefault(); const n=cur.querySelector('.rca-note'); if(n){ n.focus(); n.select&&n.select(); } return; }
 }
 
 function rcShowCollector(collector){
   const d=(window._rcDetail||{})[collector];
   if(!d) return;
-  if(_rcOpenCollector!==collector) _rcView={ filter:'all', sort:_rcView.sort||'date', q:'' };
+  if(_rcOpenCollector!==collector){ _rcView={ filter:'all', sort:_rcView.sort||'date', q:'' }; _rcCurId=null; }
   _rcOpenCollector = collector;
   _rcEnsureCss();
   const old=document.getElementById('rc-modal'); if(old) old.remove();
@@ -3016,6 +3073,7 @@ function rcShowCollector(collector){
       <div id="rca-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
       <div style="margin-left:auto;display:flex;gap:7px;align-items:center;">
         <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)">
+        <span class="rca-keys" title="Keyboard: ↑↓ rows · ←→ collector · Enter OK · A account · U undo · L link · N note · Esc close">⌨ <b>↑↓</b> rows <b>←→</b> collector <b>↵</b> OK <b>A</b> acct <b>U</b> undo <b>L</b> link <b>N</b> note</span>
         <select id="rca-sort" onchange="rcSetView('sort',this.value)">
           <option value="date">By date → route</option>
           <option value="vendo">📒 Vendo ledger</option>
@@ -3026,6 +3084,7 @@ function rcShowCollector(collector){
     <div id="rca-body"></div>
   </div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
+  ov.addEventListener('click',e=>{ const tr=e.target.closest&&e.target.closest('#rca-body tr[data-id]'); if(tr) _rcHighlight(Number(tr.dataset.id), false); });
   document.body.appendChild(ov);
   document.removeEventListener('keydown',_rcEscKey);
   document.addEventListener('keydown',_rcEscKey);
