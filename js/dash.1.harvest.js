@@ -2813,8 +2813,8 @@ function _rcRenderHead(d, collector){
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div class="l">🟡 Surplus</div><div class="v">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div class="l">🔴 Deficit</div><div class="v">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
       ${s.accountN?`<div class="rca-glass rca-stat" onclick="rcSetView('filter','account')" title="Shortages charged to this collector's account in this date range"><div class="l">💳 Account</div><div class="v">${s.accountN} · ${_php(s.accountAmt)}</div></div>`:''}
-      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(-1)" title="Previous collector (←)">‹</button>
-      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(1)" title="Next collector (→)">›</button>
+      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(-1)" title="Previous collector (Shift+← or [)">‹</button>
+      <button class="rca-hbtn" style="width:34px;" onclick="rcNextCollector(1)" title="Next collector (Shift+→ or ])">›</button>
       <button id="rc-modal-refresh" class="rca-hbtn" style="padding:0 13px;" onclick='rcRefreshCollector(${klArg(collector)})' title="Re-read live from the database — use after linking or unlinking a TG name">↻ Refresh</button>
       <button class="rca-hbtn" style="width:34px;font-size:16px;" onclick="rcCloseCollector()" title="Close (Esc)">✕</button>
     </div>`;
@@ -3043,10 +3043,12 @@ function _rcEscKey(e){
   if(e.altKey||e.ctrlKey||e.metaKey) return;
   const cur = _rcCurId!=null ? document.querySelector('#rca-body tr[data-id="'+_rcCurId+'"]') : null;
   const k=e.key;
-  if(k==='ArrowDown'||k==='j'){ e.preventDefault(); _rcMoveRow(1); return; }
-  if(k==='ArrowUp'||k==='k'){ e.preventDefault(); _rcMoveRow(-1); return; }
-  if(k==='ArrowRight'){ e.preventDefault(); rcNextCollector(1); return; }
-  if(k==='ArrowLeft'){ e.preventDefault(); rcNextCollector(-1); return; }
+  // Shift+→ / Shift+← (or ] / [ , PageDown / PageUp) switch collector;
+  // plain arrows always stay on the SAME collector and walk the harvests.
+  if((k==='ArrowRight'&&e.shiftKey)||k===']'||k==='PageDown'){ e.preventDefault(); rcNextCollector(1); return; }
+  if((k==='ArrowLeft'&&e.shiftKey)||k==='['||k==='PageUp'){ e.preventDefault(); rcNextCollector(-1); return; }
+  if(k==='ArrowDown'||k==='ArrowRight'||k==='j'){ e.preventDefault(); _rcMoveRow(1); return; }
+  if(k==='ArrowUp'||k==='ArrowLeft'||k==='k'){ e.preventDefault(); _rcMoveRow(-1); return; }
   if(!cur) { if(['Enter','o','O','a','A','u','U','l','L','n','N'].includes(k)){ e.preventDefault(); _rcMoveRow(1); } return; }
   const id=Number(cur.dataset.id);
   if(k==='Enter'||k==='o'||k==='O'){ e.preventDefault(); const b=cur.querySelector('.rca-ok'); if(b){ b.click(); setTimeout(()=>_rcMoveRow(1),250); } else toast('Already confirmed — U to undo'); return; }
@@ -3073,7 +3075,7 @@ function rcShowCollector(collector){
       <div id="rca-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
       <div style="margin-left:auto;display:flex;gap:7px;align-items:center;">
         <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)">
-        <span class="rca-keys" title="Keyboard: ↑↓ rows · ←→ collector · Enter OK · A account · U undo · L link · N note · Esc close">⌨ <b>↑↓</b> rows <b>←→</b> collector <b>↵</b> OK <b>A</b> acct <b>U</b> undo <b>L</b> link <b>N</b> note</span>
+        <span class="rca-keys" title="Keyboard: ← → ↑ ↓ move between this collector's harvests · Shift+← / Shift+→ (or [ ]) previous / next collector · Enter OK · A account · U undo · L link · N note · Esc close">⌨ <b>←→↑↓</b> harvests <b>⇧←→</b> collector <b>↵</b> OK <b>A</b> acct <b>U</b> undo <b>L</b> link <b>N</b> note</span>
         <select id="rca-sort" onchange="rcSetView('sort',this.value)">
           <option value="date">By date → route</option>
           <option value="vendo">📒 Vendo ledger</option>
