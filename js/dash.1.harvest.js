@@ -2616,6 +2616,13 @@ function _rcEnsureCss(){
   .spw-rc #rca-body::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;border:2px solid #f3f6fd;}
   .spw-rc .rca-day{margin-top:14px;border:1px solid #e3e9f8;border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 1px 3px rgba(26,34,78,.05), 0 8px 24px -18px rgba(26,34,78,.25);}
   .spw-rc .rca-date{position:sticky;top:0;z-index:2;background:linear-gradient(90deg,#eef2ff,#f6f8ff);padding:9px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #e3e9f8;backdrop-filter:blur(4px);}
+  .spw-rc .rca-audit{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #e3e9f8;background:linear-gradient(90deg,#f6f8ff,#fff);box-shadow:0 -8px 20px -16px rgba(26,34,78,.4);}
+  .spw-rc .rca-ab-mid{flex:1;min-width:0;line-height:1.3;}
+  .spw-rc .rca-ab-btn{height:36px;padding:0 13px;border:1.5px solid #c7d2fe;border-radius:10px;background:#fff;color:#311A8E;font-size:12px;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .spw-rc .rca-ab-btn:disabled{opacity:.35;cursor:default;}
+  .spw-rc .rca-ab-btn.ok{background:linear-gradient(135deg,#028867,#10b981);color:#fff;border-color:transparent;}
+  .spw-rc .rca-ab-btn.acct{background:#fee2e2;color:#DF1A35;border-color:#fecaca;}
+  .spw-rc .rca-ab-btn.next{background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;border-color:transparent;padding:0 16px;}
   .spw-rc tr.rca-cur td{background:#fffbe6 !important;box-shadow:inset 3px 0 0 #311A8E;}
   .spw-rc tr.rca-cur td:first-child{box-shadow:inset 4px 0 0 #311A8E;}
   .spw-rc .rca-keys{font-size:9.5px;color:#8a93a9;white-space:nowrap;}
@@ -2982,7 +2989,7 @@ function rcRenderModal(opts){
   _rcRenderChips(d);
   _rcRenderBody(d);
   if(body && opts.keepScroll!==false) body.scrollTop=top;
-  if(_rcCurId!=null) _rcHighlight(_rcCurId, false);
+  if(_rcCurId!=null) _rcHighlight(_rcCurId, false); else _rcRenderAuditBar();
 }
 
 function rcSetView(key,val){
@@ -3009,6 +3016,39 @@ function _rcHighlight(id, scroll){
   _rcCurId = id;
   _rcRowEls().forEach(tr=>tr.classList.toggle('rca-cur', Number(tr.dataset.id)===Number(id)));
   if(scroll!==false){ const tr=document.querySelector('#rca-body tr.rca-cur'); if(tr) tr.scrollIntoView({block:'center',behavior:'smooth'}); }
+  _rcRenderAuditBar();
+}
+// First row that still needs work (else the first row) — where an audit starts.
+function _rcFirstTodoId(){
+  const els=_rcRowEls(); if(!els.length) return null;
+  const todo=els.find(tr=>!tr.classList.contains('is-done'));
+  return Number((todo||els[0]).dataset.id);
+}
+// ── Audit bar: sticky footer with the current vendo + Prev / OK / Next ──
+// Lets the owner step through every harvest of one collector, vendo by vendo,
+// without hunting for the row or leaving the popup. Mirrors the row buttons.
+function _rcRenderAuditBar(){
+  const bar=document.getElementById('rca-audit'); if(!bar) return;
+  const els=_rcRowEls();
+  const i=els.findIndex(tr=>Number(tr.dataset.id)===Number(_rcCurId));
+  const h=_rcCurId!=null?_rcRow(_rcCurId):null;
+  if(i<0||!h){ bar.innerHTML=`<div class="rca-ab-mid" style="color:#8a93a9;">${els.length?'Press → or tap a row to start stepping through '+_rcEsc(_rcOpenCollector||'')+'\'s harvests':'No rows for this filter'}</div><button class="rca-ab-btn" onclick="_rcMoveRow(1)">Start ›</button>`; return; }
+  const sv=_rcSurplus(h);
+  const done=h.reconcile_status==='ok'||h.reconcile_status==='auto'||h.reconcile_status==='account';
+  const gapTxt = sv==null?'<span style="color:#4338ca;">no TG</span>':Math.abs(sv)<=20?'<span style="color:#0f8c43;">exact</span>':sv>0?`<span style="color:#b45309;">+${_php(sv)} surplus</span>`:`<span style="color:#DF1A35;">−${_php(-sv)} short</span>`;
+  const todoLeft=els.filter(tr=>!tr.classList.contains('is-done')).length;
+  bar.innerHTML=`
+    <button class="rca-ab-btn" onclick="_rcMoveRow(-1)" ${i===0?'disabled':''} title="Previous harvest (←)">‹ Prev</button>
+    <div class="rca-ab-mid">
+      <div style="font-size:10px;color:#8a93a9;font-weight:800;letter-spacing:.05em;">${i+1} / ${els.length} · ${todoLeft} left${h.harvest_date?' · '+_rcEsc(h.harvest_date):''}${h.route_code?' · <span style="font-family:monospace;color:#025AC6;">'+_rcEsc(h.route_code)+'</span>':''}</div>
+      <div style="font-size:13px;font-weight:900;color:#1a2250;">${_rcEsc(h.sheet_name||'unmatched')} <span style="font-weight:600;color:#44506b;">· ${_rcEsc(h.area||'')}</span></div>
+      <div style="font-size:11px;color:#44506b;">Coins <b>${_php(h.coins_total)}</b> · TG <b>${h.total_income!=null?_php(h.total_income):'—'}</b> · ${gapTxt}${_rcBookState(h)==='none'?' · <span style="color:#b45309;">not in book</span>':''}${done?' · <b style="color:#0f8c43;">☑ '+(h.reconcile_status==='account'?'on account':'confirmed')+'</b>':''}</div>
+    </div>
+    <button class="rca-ab-btn" onclick="rcShowNamesById(${h.id})" title="Names / window / alias (L)">🔗</button>
+    ${done
+      ? `<button class="rca-ab-btn" onclick="rcClearConfirm(${h.id});" title="Undo (U)">✕ undo</button>`
+      : `<button class="rca-ab-btn ok" onclick="rcConfirmRow(${h.id});setTimeout(()=>_rcMoveRow(1),250)" title="OK and go to next (Enter)">✅ OK ›</button>${(sv!=null&&sv<-20)?`<button class="rca-ab-btn acct" onclick="rcAccountRow(${h.id})" title="Charge to account (A)">💳</button>`:''}`}
+    <button class="rca-ab-btn next" onclick="_rcMoveRow(1)" ${i>=els.length-1?'disabled':''} title="Next harvest (→)">Next ›</button>`;
 }
 function _rcMoveRow(delta){
   const els=_rcRowEls(); if(!els.length) return;
@@ -3027,7 +3067,7 @@ function rcNextCollector(delta){
   _rcView={..._rcView, ...keep};
   const q=document.getElementById('rca-q'); if(q) q.value=keep.q||'';
   rcRenderModal({force:true, keepScroll:false});
-  _rcMoveRow(1);
+  const f=_rcFirstTodoId(); if(f!=null) _rcHighlight(f);
 }
 function _rcEscKey(e){
   if(!document.getElementById('rc-modal')) return;
@@ -3084,6 +3124,7 @@ function rcShowCollector(collector){
       </div>
     </div>
     <div id="rca-body"></div>
+    <div id="rca-audit" class="rca-audit"></div>
   </div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) rcCloseCollector(); });
   ov.addEventListener('click',e=>{ const tr=e.target.closest&&e.target.closest('#rca-body tr[data-id]'); if(tr) _rcHighlight(Number(tr.dataset.id), false); });
@@ -3092,6 +3133,7 @@ function rcShowCollector(collector){
   document.addEventListener('keydown',_rcEscKey);
   const sortSel=document.getElementById('rca-sort'); if(sortSel) sortSel.value=_rcView.sort;
   rcRenderModal({force:true, keepScroll:false});
+  if(_rcCurId==null){ const f=_rcFirstTodoId(); if(f!=null) _rcHighlight(f, false); }
 }
 function rcCloseCollector(){
   const o=document.getElementById('rc-modal'); if(o) o.remove();
@@ -3265,8 +3307,9 @@ function _stDayRows(line){
 function rcShowCollectorOnDate(collector,date){
   rcShowCollector(collector);
   const q=document.getElementById('rca-q'); if(q) q.value=date;
-  _rcView.q=date; _rcView.filter='all';
+  _rcView.q=date; _rcView.filter='all'; _rcCurId=null;
   rcRenderModal({force:true, keepScroll:false});
+  const f=_rcFirstTodoId(); if(f!=null) _rcHighlight(f, false);
 }
 // Plain-text statement for Messenger / notes.
 function rcStCopy(){
