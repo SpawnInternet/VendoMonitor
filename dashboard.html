@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="preconnect" href="https://cviraqfhphhsonjmrtvu.supabase.co" crossorigin>
-<link rel="preload" href="js/dash.4.map.js?v=split132" as="script">
+<link rel="preload" href="js/dash.4.map.js?v=stmt-10173" as="script">
 <script defer src="js/vendor/chart.umd.min.js" onerror="var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';s.defer=true;document.head.appendChild(s);"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1080,6 +1080,10 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
       style="padding:10px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#6b7280;margin-bottom:-2px;">
       📅 History
     </button>
+    <button id="rc-mode-statement" onclick="rcSetMode('statement')"
+      style="padding:10px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#6b7280;margin-bottom:-2px;">
+      📊 Statement
+    </button>
   </div>
 
   <!-- RECENT MODE -->
@@ -1120,6 +1124,22 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
   <div id="rc-panel-history" style="display:none;padding:12px;">
     <div style="font-size:13px;color:#6b7280;margin-bottom:14px;">Select a past harvest date to view its reconciliation.</div>
     <div id="rc-history-list"><div style="padding:20px;text-align:center;color:#6b7280;">Loading past harvests…</div></div>
+  </div>
+
+  <!-- STATEMENT MODE — collector overview: Coins vs TG vs Bashang vs Spawn Count -->
+  <div id="rc-panel-statement" style="display:none;padding:12px;">
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="font-size:13px;font-weight:900;color:#311A8E;margin-right:6px;">📊 Collector Statement</span>
+      <button class="st-range" data-strange="week" onclick="rcStSetRange('week')">This week</button>
+      <button class="st-range" data-strange="month" onclick="rcStSetRange('month')">This month</button>
+      <button class="st-range" data-strange="lastmonth" onclick="rcStSetRange('lastmonth')">Last month</button>
+      <button class="st-range" data-strange="30" onclick="rcStSetRange('30')">30 days</button>
+      <input type="date" id="st-from" onchange="_stRange='custom';rcStApplyDates()" style="padding:4px 7px;border:1.5px solid #e2e8f6;border-radius:8px;font-size:11px;font-family:inherit;height:30px;box-sizing:border-box;background:#fff;color:#44506b;margin-left:6px;">
+      <span style="color:#8a93a9;font-size:11px;">→</span>
+      <input type="date" id="st-to" onchange="_stRange='custom';rcStApplyDates()" style="padding:4px 7px;border:1.5px solid #e2e8f6;border-radius:8px;font-size:11px;font-family:inherit;height:30px;box-sizing:border-box;background:#fff;color:#44506b;">
+      <button onclick="_stPacks=null;rcForceFresh()" title="Re-read live from the database" style="margin-left:auto;padding:3px 10px;border:1px solid var(--bd);border-radius:7px;font-size:11px;background:#fff;cursor:pointer;color:var(--blue);font-family:inherit;">↻ Refresh live</button>
+    </div>
+    <div id="st-content"><div style="padding:30px;text-align:center;color:#8a93a9;">⏳ Loading…</div></div>
   </div>
 
 </div>
@@ -3785,7 +3805,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 <!-- dash.4.map.js also defines showP() and apiLoad(), which the whole dashboard
      depends on, so it must load eagerly. Do not lazy-load until those are
      extracted into dash.0.core.js. -->
-<script defer src="js/dash.4.map.js?v=split132"></script>
+<script defer src="js/dash.4.map.js?v=stmt-10173"></script>
 <script defer src="js/dash.6.overview.js?v=split133"></script>
 
 <!-- ── HARVEST TAB SUMMARY (from tabs/harvest.js) ── -->
@@ -3808,7 +3828,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
     if (typeof window.ensureHarvest === 'function') return window.ensureHarvest();
     if (window.__hvLoaded) return; window.__hvLoaded = 1;   // fallback: core failed to load
     var s = document.createElement("script");
-    s.src = "js/dash.1.harvest.js?v=ledger-10171"; s.async = false;
+    s.src = "js/dash.1.harvest.js?v=stmt-10173"; s.async = false;
     document.head.appendChild(s);
   };
   if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}
