@@ -1591,19 +1591,24 @@ async function rcRun(){
   const noTgIds=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&r.vendo_id).map(r=>r.vendo_id))];
   const noTgNames=[...new Set(harvestRows.filter(r=>!tgMap[r.id]&&!r.vendo_id&&r.sheet_name).map(r=>r.sheet_name))];
   const jobs=[];
-  jobs.push((async()=>{
+  // spawn_tg_recon works one month at a time (p_month). Ask it for EVERY month
+  // the loaded harvests fall in, so a harvest from last month gets its own
+  // window's income — not a same-name figure borrowed from this month.
+  const rpcMonths=[...new Set(harvestRows.map(r=>String(r.harvest_date||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort().slice(-4);
+  const rpcCovered=new Set();
+  rpcMonths.forEach(m=>jobs.push((async()=>{
     try{
-      const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({})});
+      const rr=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_recon`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({p_month:m})});
       let rj=await rr.json();
       // RETURNS jsonb → PostgREST wraps the array: [[{...}]]. Unwrap before use.
       if(Array.isArray(rj) && rj.length===1 && Array.isArray(rj[0])) rj = rj[0];
       else if(rj && !Array.isArray(rj) && Array.isArray(rj.spawn_tg_recon)) rj = rj.spawn_tg_recon;
-      if(Array.isArray(rj)) rj.forEach(o=>{
+      if(Array.isArray(rj)){ rpcCovered.add(m); rj.forEach(o=>{
         if(o && o.harvest_id!=null) rpcById[o.harvest_id]={tg_income:Number(o.tg_income||0),audited:!!o.audited,submitted_at:o.submitted_at||null,window_start:o.window_start||null,has_chain:!!o.has_chain};
         if(o && o.tg_name && rpcTgByName[o.tg_name]===undefined) rpcTgByName[o.tg_name]=Number(o.tg_income||0);
-      });
-    }catch(e){ console.warn('[rcRun] time-aware RPC failed',e); }
-  })());
+      }); }
+    }catch(e){ console.warn('[rcRun] time-aware RPC failed',m,e); }
+  })()));
   jobs.push((async()=>{
     try{
       const cr=await fetch(`${_SB}/rest/v1/rpc/spawn_cloud_recon_income`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({})});
@@ -1672,8 +1677,9 @@ async function rcRun(){
       tgInc=byId.tg_income; rpcAudited=byId.audited;
       rpcWinStart=byId.window_start; rpcSubmit=byId.submitted_at;
       rpcHasChain=byId.has_chain;
-    } else if(tg && rpcTgByName[tg]!==undefined){
-      tgInc=rpcTgByName[tg];
+    } else if(tg && rpcCovered.has(String(row.harvest_date||'').slice(0,7))){
+      // month was recomputed and this harvest has no transactions in its window → honest ₱0
+      tgInc=0;
     } else if(row.tg_income!=null && tg){
       // saved fallback only when a TG name actually stands behind the value
       tgInc=Number(row.tg_income);
