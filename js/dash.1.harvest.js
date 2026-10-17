@@ -1467,6 +1467,7 @@ async function rcRun(){
       const d = await rc.json();
       window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
       if(Array.isArray(d.aliases)) _rcSetAliases(d.aliases);
+      if(d.feed && d.feed.names) window._rcFeed = d.feed;
       if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
       // Cache hit if cache window COVERS requested window (superset) — filter client-side
       const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
@@ -2534,6 +2535,18 @@ function _rcEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
 // TG name is linked but the bot reported ₱0 for the whole window while coins
 // came in. Usually a dead bot / renamed hotspot / wrong link — not real surplus.
+// 📡 Feed silent: the vendo IS linked, but its bot name has not reported since
+// before this harvest's window started — the Telegram feed for it is dead, so
+// "no match" / "TG ₱0" here is not a money finding. Needs the snapshot feed map.
+function _rcFeedLast(name){ const f=window._rcFeed; return (f && f.names && name) ? (f.names[name]||null) : null; }
+function _rcFeedSilent(r){
+  if(!r.tg_name || !window._rcFeed) return false;
+  if(Number(r.tg_income)>0 || Number(r.cloud_income)>0) return false;
+  const last=_rcFeedLast(r.tg_name);
+  const ws=String(r.rpc_window_start||r.harvest_window_start||r.window_start||'').slice(0,10);
+  if(!last) return true;                 // not seen in the last 120 days at all
+  return !!ws && last < ws;              // last report is before this window began
+}
 function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
 // One coin vendo cannot take >₱2,000/day. A value like that means a bad
 // transaction in the feed (a parsed "total" message) or a wrong link.
@@ -2612,7 +2625,8 @@ const _RC_FILTERS = [
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
   ['longwin', '⏳ Long window', r=>_rcLongWindowShort(r)],
   ['shared',  '🔀 Shared feed', r=>_rcIsSharedFeed(r)],
-  ['nomatch', '🔗 No TG',      r=>r.flag==='nodata'],
+  ['nomatch', '🔗 No TG',      r=>r.flag==='nodata' && !_rcFeedSilent(r)],
+  ['feed',    '📡 Feed silent', r=>_rcFeedSilent(r)],
   ['book',    '📒 Not in book', r=>_rcBookState(r)==='none'],
   ['bookdiff','📒 Book differs', r=>_rcBookState(r)==='diff'],
   ['todo',    '⏳ Needs me',    r=>r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'&&r.reconcile_status!=='account'],
@@ -2832,7 +2846,9 @@ function _rcRowHtml(h, showCloud, flat){
     <td class="rca-win" title="${_rcEsc(ws)} → ${_rcEsc(we)}">${days?`<b>${days}d</b> `:''}<span>${_rcEsc(String(ws).slice(5,10))} → ${_rcEsc(String(we).slice(5,10))}</span></td>
     <td class="r" style="font-weight:700;color:#1a2250;">${_php(h.coins_total)}</td>
     <td class="r">${_rcBookCell(h)}</td>
-    <td class="r" style="color:#44506b;">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
+    <td class="r" style="color:#44506b;">${_rcFeedSilent(h)
+      ? `<span class="rca-pill" style="background:#fdf2f8;color:#9d174d;font-size:9px;" title="This bot name last reported ${_rcEsc(_rcFeedLast(h.tg_name)||'never (120d)')} — nothing inside this harvest's window. The Telegram feed is down for it; not a money finding.">📡 silent${_rcFeedLast(h.tg_name)?' since '+_rcEsc(String(_rcFeedLast(h.tg_name)).slice(5)):''}</span>`
+      : h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
     ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>
     <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
@@ -3324,6 +3340,7 @@ function _stBuild(rows){
     o.impossibleN=rs.filter(r=>_rcImpossible(r)).length;
     o.longwinN=rs.filter(r=>_rcLongWindowShort(r)).length;
     o.zeroTgN=rs.filter(r=>_rcIsZeroTg(r)).length;
+    o.feedSilentN=rs.filter(r=>_rcFeedSilent(r)).length;
     o.warnN=o.sharedN+o.impossibleN+o.longwinN+o.zeroTgN;
     o.vsBook=o.bookN?o.book-o.bookShare:null;
     o.vsCash=o.countedN?(o.counted+o.bugi-o.countShare):null;
@@ -3428,8 +3445,20 @@ function rcStRender(){
   const covBar=(label,p,col,sub)=>`<div class="st-cov"><div class="st-cov-l"><span>${label}</span><b style="color:${p>=90?'#0f8c43':p>=60?'#b45309':'#DF1A35'};">${p}%</b></div><div class="st-cov-bar"><div style="width:${p}%;background:${col};"></div></div><div class="st-cov-s">${sub}</div></div>`;
   const snapAge = window._rcSnap&&window._rcSnap.generated_at ? Math.round((Date.now()-new Date(window._rcSnap.generated_at).getTime())/60000) : null;
   const totWarn = tot.warnN;
-  let html=`<div class="st-covwrap">
-      ${covBar('🔗 TG linked',covTg,'#025AC6',tot.noTgN?`${tot.noTgN} harvests cannot be checked against income`:'every harvest has a TG name')}
+  const feed=window._rcFeed;
+  let feedStrip='';
+  if(feed && Array.isArray(feed.areas) && feed.areas.length){
+    feedStrip='<div class="st-feed"><span class="st-feed-l">📡 Telegram feed · bot names reporting in the last 3 days / seen in 120 days</span>'+feed.areas.map(a=>{
+      // baseline = names seen in 120 days, so a feed that died weeks ago still reads DOWN
+      const base=Number(a.names_120d||0), now=Number(a.active_3d||0);
+      const p=base?Math.round(now/base*100):0;
+      const dead=base>=10 && now<=base*0.25;
+      const col=dead?'#DF1A35':p>=60?'#0f8c43':'#b45309';
+      return `<span class="st-feed-a" style="border-color:${col};" title="${_rcEsc(a.area)}: ${now} bot names reported in the last 3 days · ${a.active_30d} in 30 days · ${base} seen in 120 days">${_rcEsc(a.area)} <b style="color:${col};">${now}/${base}</b>${dead?' <span style="color:#DF1A35;font-weight:900;">DOWN</span>':''}</span>`;
+    }).join('')+'</div>';
+  }
+  let html=feedStrip+`<div class="st-covwrap">
+      ${covBar('🔗 TG linked',covTg,'#025AC6',(tot.feedSilentN?`📡 ${tot.feedSilentN} linked but feed silent · `:'')+(tot.noTgN?`${tot.noTgN} cannot be checked against income`:'every harvest has a TG name'))}
       ${covBar('📒 In Bashang',covBook,'#b45309',tot.notInBookN?`${tot.notInBookN} not found in the office book (±3 days)`:'every harvest is in the book')}
       ${covBar('🧮 Counted',covCount,'#028867',_stPacks?(tot.notCountedN?`${tot.notCountedN} not yet counted by the office`:'every harvest counted'):'loading…')}
       ${covBar('☑ Confirmed',covConf,'#311A8E',tot.pendingN?`${tot.pendingN} still need confirmation`:'all confirmed')}
@@ -3464,7 +3493,7 @@ function rcStRender(){
       <td class="r">${l.days}${l.closedDays?`<div style="font-size:9px;color:#8a93a9;">${l.closedDays} closed</div>`:''}</td>
       <td class="r">${l.n}</td>
       <td class="r" style="font-weight:700;color:#1a2250;">${_php(l.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(l.share)}</div></td>
-      <td class="r">${_php(l.income)}${l.noTgN?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${l.noTgN} no TG</div>`:''}</td>
+      <td class="r">${_php(l.income)}${l.feedSilentN?`<div style="font-size:9px;color:#9d174d;font-weight:700;">📡 ${l.feedSilentN} feed silent</div>`:''}${(l.noTgN-l.feedSilentN)>0?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${l.noTgN-l.feedSilentN} no TG</div>`:''}</td>
       <td class="r">${l.bookN?_php(l.book):'<span style="color:#b6bdcf;">—</span>'}${l.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${l.notInBookN} not in book</div>`:''}</td>
       <td class="r">${!_stPacks?'<span style="color:#b6bdcf;">…</span>':l.countedN?_php(l.counted)+(l.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(l.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${_stPacks&&l.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${l.notCountedN} not counted</div>`:''}</td>
       ${_stGapCell(l.vsTg, l.n-l.noTgN, (l.deficitN?`<b style="color:#DF1A35;">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:''))}
@@ -3504,6 +3533,9 @@ function _stEnsureCss(){
   #rc-panel-statement .st-row.st-check td:first-child{box-shadow:inset 4px 0 0 #FFB725;}
   #rc-panel-statement .st-row.st-clean{opacity:.75;}
   #rc-panel-statement .st-av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;font-weight:900;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+  #rc-panel-statement .st-feed{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:#fff;border:1px solid #e3e9f8;border-radius:12px;padding:8px 11px;margin-bottom:8px;font-size:11px;}
+  #rc-panel-statement .st-feed-l{color:#8a93a9;font-size:10px;font-weight:800;margin-right:4px;}
+  #rc-panel-statement .st-feed-a{border:1.5px solid #e3e9f8;border-radius:999px;padding:2px 9px;font-weight:700;color:#1a2250;white-space:nowrap;}
   #rc-panel-statement .st-covwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px;}
   #rc-panel-statement .st-cov{background:#fff;border:1px solid #e3e9f8;border-radius:12px;padding:8px 11px;display:flex;flex-direction:column;}
   #rc-panel-statement .st-cov-l{display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#1a2250;}
