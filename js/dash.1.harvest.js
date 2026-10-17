@@ -1339,7 +1339,14 @@ async function rcAccountRow(id, btn){
   const sv=row?_rcSurplus(row):null;
   if(sv==null||sv>=-20){ toast('This row is not short'); return; }
   const amt=Math.round(Math.abs(sv)*100)/100;
-  if(!confirm('Charge to '+((row&&row.collector)||'collector')+"'s account:\n\n  "+((row&&row.sheet_name)||'')+'\n  Short: '+_php(amt)+'\n\nThis records the shortage as utang. You can undo it anytime.')) return;
+  const _go=await askConfirm({
+    title:'💳 Charge to '+_rcEsc((row&&row.collector)||'collector')+"'s account",
+    body:'<div style="background:#fff1f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">'
+        +'<div><div style="font-size:13px;font-weight:900;color:#1a2250;">'+_rcEsc((row&&row.sheet_name)||'')+'</div><div style="font-size:10px;color:#8a93a9;">'+_rcEsc((row&&row.harvest_date)||'')+'</div></div>'
+        +'<div style="font-size:18px;font-weight:900;color:#DF1A35;">−'+_php(amt)+'</div></div>'
+        +'This records the shortage as <b>utang</b> on the collector\'s account. <span style="color:#8a93a9;">You can undo it anytime.</span>',
+    ok:'Charge '+_php(amt), danger:true });
+  if(!_go) return;
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
     await _rcPatchHarvest(id, { reconcile_status:'account', recon_account:amt });
@@ -1820,7 +1827,7 @@ async function rcnAliasAdd(vendoId){
   const primary=(document.getElementById('rcn-tg')?.value||'').trim();
   if(name.toLowerCase()===primary.toLowerCase()){ if(msg) msg.textContent='That is already the primary TG name.'; return; }
   const other=(rcAllRows||[]).find(r=>r.tg_name===name && r.vendo_id!=null && r.vendo_id!==vendoId);
-  if(other && !confirm(`"${name}" is the primary TG name of another vendo (${other.sheet_name||'?'}).\n\nAdding it here means BOTH vendos claim its income. Continue?`)) return;
+  if(other && !(await askConfirm({title:'⚠ Name already in use',body:`<b>${_rcEsc(name)}</b> is the primary TG name of another vendo (<b>${_rcEsc(other.sheet_name||'?')}</b>).<br><br>Adding it here means <b>both vendos claim its income</b>.`,ok:'Add anyway',danger:true}))) return;
   if(msg) msg.textContent='Saving…';
   try{
     const r=await fetch(`${_SB}/rest/v1/vendo_tg_aliases`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({vendo_id:vendoId,tg_name:name,created_by:window.__ADMIN_USER||'admin'})});
@@ -1833,7 +1840,7 @@ async function rcnAliasAdd(vendoId){
   }catch(e){ if(msg) msg.textContent='❌ '+e.message; }
 }
 async function rcnAliasRemove(id,vendoId){
-  if(!confirm('Remove this extra TG name? Its income will no longer count for this vendo.')) return;
+  if(!(await askConfirm({title:'Remove extra TG name',body:'Its income will no longer count for this vendo.',ok:'Remove',danger:true}))) return;
   try{
     const r=await fetch(`${_SB}/rest/v1/vendo_tg_aliases?id=eq.${id}`,{method:'DELETE',headers:_HDR});
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -2248,9 +2255,16 @@ async function rcnUnlink(vendoName, opts){
     }
     const chosen = rows.find(x=>x.id===id) || {};
     const label = markNoTg ? 'mark as NO TG NAME' : 'unlink the TG name';
-    if(!confirm('This will '+label+' for:\n\n  #'+id+'  '+(chosen.sheet_name||vendoName)
-      + (chosen.tg_name?'\n  TG: '+chosen.tg_name:'')
-      + '\n\nMoney figures are not touched — only the name link.\n\nContinue?')) return;
+    const _go=await askConfirm({
+      title: markNoTg?'🚫 Mark as NO TG name':'✕ Unlink TG name',
+      body: '<div style="background:#f6f8ff;border:1px solid #e3e9f8;border-radius:10px;padding:10px 12px;margin-bottom:10px;">'
+          + '<div style="font-size:10px;color:#8a93a9;font-weight:800;letter-spacing:.06em;">VENDO #'+id+'</div>'
+          + '<div style="font-size:14px;font-weight:900;color:#1a2250;">'+_rcEsc(chosen.sheet_name||vendoName)+'</div>'
+          + (chosen.tg_name?'<div style="font-size:11px;color:#0f8c43;margin-top:2px;">🔗 '+_rcEsc(chosen.tg_name)+'</div>':'')
+          + '</div>'
+          + 'This will <b>'+label+'</b> for this vendo.<br><span style="color:#8a93a9;">Money figures are not touched — only the name link.</span>',
+      ok: markNoTg?'Mark NO TG':'Unlink', danger:true });
+    if(!_go) return;
     const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
     if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
 
