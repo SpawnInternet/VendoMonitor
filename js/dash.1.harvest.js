@@ -2640,9 +2640,18 @@ function _rcEnsureCss(){
   .spw-rc .rca-sum b{font-variant-numeric:tabular-nums;}
 
   /* table */
-  .spw-rc table.rca{width:100%;border-collapse:collapse;font-size:11.5px;}
-  .spw-rc table.rca th{padding:7px 10px;text-align:left;color:#8a93a9;font-weight:800;font-size:9px;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid #edf0f8;background:#fafbff;white-space:nowrap;}
-  .spw-rc table.rca td{padding:8px 10px;border-bottom:1px solid #f2f4fa;vertical-align:middle;}
+  .spw-rc table.rca{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:auto;}
+  .spw-rc table.rca th{padding:6px 8px;text-align:left;color:#8a93a9;font-weight:800;font-size:9px;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid #edf0f8;background:#fafbff;white-space:nowrap;}
+  .spw-rc table.rca td{padding:6px 8px;border-bottom:1px solid #f2f4fa;vertical-align:middle;white-space:nowrap;}
+  .spw-rc table.rca td.rca-vcell{white-space:normal;min-width:150px;max-width:220px;}
+  .spw-rc .rca-ell{display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;}
+  .spw-rc .rca-tgline{font-size:9px;margin-top:1px;line-height:1.3;display:flex;align-items:center;gap:4px;min-width:0;}
+  .spw-rc .rca-tgline .rca-ell{max-width:150px;}
+  .spw-rc .rca-win{font-size:10px;color:#8a93a9;white-space:nowrap;}
+  .spw-rc .rca-win b{color:#44506b;font-weight:800;}
+  .spw-rc td.rca-ccell{white-space:normal;min-width:150px;}
+  .spw-rc td.rca-ccell .rca-note{width:100%;max-width:150px;margin-top:3px;display:block;}
+  @media (max-width:1200px){ .spw-rc .rca-ell{max-width:120px;} .spw-rc table.rca{font-size:11px;} .spw-rc table.rca td,.spw-rc table.rca th{padding:5px 6px;} }
   .spw-rc table.rca tbody tr{transition:background .12s;animation:rcaRow .18s ease both;}
   .spw-rc table.rca tbody tr:hover{background:#f3f7ff;}
   .spw-rc table.rca .r{text-align:right;font-variant-numeric:tabular-nums;}
@@ -2743,8 +2752,8 @@ function _rcRowHtml(h, showCloud, flat){
   const _al=_rcAliasesOf(h.vendo_id);
   const aliasChip=_al.length?`<span class="rca-pill" style="background:#ede9fe;color:#5b21b6;font-size:8.5px;padding:0 5px;margin-left:4px;" title="Income also counted from: ${_rcEsc(_al.map(a=>a.tg_name).join(', '))}">+${_al.length} alias</span>`:'';
   const tgLine = h.tg_name
-    ? `<div style="font-size:9px;color:#0f8c43;margin-top:2px;line-height:1.3;">🔗 ${_rcEsc(h.tg_name)}${aliasChip}${unlinkKey?`<span class="rca-link" style="color:#DF1A35;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
-    : `<div style="font-size:9px;color:#b45309;margin-top:2px;line-height:1.3;">⚠ no TG linked${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>`:''}</div>`;
+    ? `<div class="rca-tgline" style="color:#0f8c43;"><span class="rca-ell" title="${_rcEsc(h.tg_name)}">🔗 ${_rcEsc(h.tg_name)}</span>${aliasChip}${unlinkKey?`<span class="rca-link" style="color:#DF1A35;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕</span>`:''}</div>`
+    : `<div class="rca-tgline" style="color:#b45309;"><span class="rca-ell">⚠ no TG linked</span>${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 none yet</span>`:''}</div>`;
   const time = h.rpc_submitted_at ? String(h.rpc_submitted_at).split(' ').slice(1).join(' ') : '';
   const ws = h.rpc_window_start || h.harvest_window_start || '—';
   const we = h.rpc_submitted_at || h.harvest_date || '—';
@@ -2756,14 +2765,14 @@ function _rcRowHtml(h, showCloud, flat){
     : _rcImpossible(h) ? '<div style="font-size:9px;color:#DF1A35;font-weight:800;margin-top:3px;" title="This income is more than ₱2,000 per day — impossible for one coin vendo. Usually one bad transaction in the TG feed (a parsed total message) or a wrong link. Do not treat this gap as real money before checking.">🚫 impossible income — check feed</div>'
     : _rcLongWindowShort(h) ? `<div style="font-size:9px;color:#4338ca;font-weight:800;margin-top:3px;" title="This short covers a ${_rcDays(h)}-day window. A window that long usually hides a missed or undigitized harvest in between — the TG income spans months but the coins are only the latest box. Check the paper ledger or fix the window (🔗 button) BEFORE charging this to anyone's account.">⏳ ${_rcDays(h)}-day window — history gap?</div>` : '';
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
-    <td style="min-width:152px;">
-      <div style="display:flex;align-items:center;gap:5px;"><span style="font-weight:800;color:#1a2250;">${name}</span>${noTg}
+    <td class="rca-vcell">
+      <div style="display:flex;align-items:center;gap:5px;min-width:0;"><span class="rca-ell" style="font-weight:800;color:#1a2250;" title="${_rcEsc(h.sheet_name||'')}">${name}</span>${noTg}
         <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button></div>
       ${tgLine}
     </td>
     <td style="color:#44506b;">${_rcEsc(h.area||'—')}</td>
     <td style="white-space:nowrap;"><b style="color:#1a2250;">${_rcEsc(h.harvest_date||'—')}</b>${time?`<div style="font-size:9px;color:#8a93a9;">🕒 ${_rcEsc(time)}</div>`:''}${flat?`<div style="font-size:9px;color:#025AC6;font-family:monospace;font-weight:700;">${_rcEsc(h.route_code||'')}</div>`:''}</td>
-    <td style="font-size:10px;color:#8a93a9;line-height:1.35;">${_rcEsc(ws)}<br>→ ${_rcEsc(we)}${days?`<div style="font-weight:800;color:#44506b;">${days} day${days===1?'':'s'}</div>`:''}</td>
+    <td class="rca-win" title="${_rcEsc(ws)} → ${_rcEsc(we)}">${days?`<b>${days}d</b> `:''}<span>${_rcEsc(String(ws).slice(5,10))} → ${_rcEsc(String(we).slice(5,10))}</span></td>
     <td class="r" style="font-weight:700;color:#1a2250;">${_php(h.coins_total)}</td>
     <td class="r">${_rcBookCell(h)}</td>
     <td class="r" style="color:#44506b;">${h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
@@ -2771,7 +2780,7 @@ function _rcRowHtml(h, showCloud, flat){
     <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
     <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
-    <td style="min-width:172px;">
+    <td class="rca-ccell">
       ${h.reconcile_status==='ok'
         ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;" title="${h.recon_by?'Confirmed by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">☑ Confirmed${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
         : h.reconcile_status==='auto'
@@ -2779,7 +2788,7 @@ function _rcRowHtml(h, showCloud, flat){
         : h.reconcile_status==='account'
         ? `<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;" title="Shortage charged to ${_rcEsc(h.collector||'the collector')}'s account${h.recon_by?' by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">💳 On account · ${_php(h.recon_account!=null?h.recon_account:Math.max(0,Number(h.gap||0)))}${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove from account — the row goes back to ⏳ Needs me">✕ undo</button>`
         : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>${(_rcSurplus(h)!=null&&_rcSurplus(h)<-20)?`<button class="rca-acct" onclick="rcAccountRow(${h.id},this)" title="Charge this shortage to ${_rcEsc(h.collector||'the collector')}'s account (utang) — the amount is fixed at today's figure and can be undone">💳 Account</button>`:''}`}
-      <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
+      <input id="rcnote-${h.id}" class="rca-note" placeholder="note…" value="${_rcEsc(h.admin_notes)}"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
     </td>
   </tr>`;
@@ -3109,7 +3118,7 @@ function rcShowCollector(collector){
   ov.id='rc-modal';
   ov.className='spw-rc';
   ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:99997;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
-  ov.innerHTML=`<div class="rca-modal" style="background:#fff;border-radius:20px;max-width:1120px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(13,8,55,.5);overflow:hidden;">
+  ov.innerHTML=`<div class="rca-modal" style="background:#fff;border-radius:20px;max-width:1340px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(13,8,55,.5);overflow:hidden;">
     <div id="rca-head" class="rca-headwrap" style="display:flex;align-items:center;gap:13px;flex-wrap:wrap;"></div>
     <div class="rca-tools">
       <div id="rca-chips" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
