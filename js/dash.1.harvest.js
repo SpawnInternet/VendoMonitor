@@ -1302,7 +1302,12 @@ function _rcPingCache(){
     }catch(e){}
   },8000);
 }
+function _rcWho(){ return (window.__ADMIN_USER||'').trim()||'admin'; }
 async function _rcPatchHarvest(id, body){
+  // Audit trail: any reconcile_status change records who pressed it and when.
+  if(body && Object.prototype.hasOwnProperty.call(body,'reconcile_status')){
+    body={...body, recon_by:_rcWho(), recon_marked_at:new Date().toISOString()};
+  }
   const r = await fetch(`${_SB}/rest/v1/harvests?id=eq.${id}`, {
     method:'PATCH',
     headers:{..._HDR, 'Content-Type':'application/json', 'Prefer':'return=minimal'},
@@ -1318,7 +1323,7 @@ async function rcConfirmRow(id, btn){
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
     await _rcPatchHarvest(id, { reconcile_status:'ok' });
-    const row=_rcRow(id); if(row) row.reconcile_status='ok';
+    const row=_rcRow(id); if(row){ row.reconcile_status='ok'; row.recon_by=_rcWho(); row.recon_marked_at=new Date().toISOString(); }
     _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Confirm not saved: '+e.message);
@@ -1338,7 +1343,7 @@ async function rcAccountRow(id, btn){
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
     await _rcPatchHarvest(id, { reconcile_status:'account', recon_account:amt });
-    if(row){ row.reconcile_status='account'; row.recon_account=amt; }
+    if(row){ row.reconcile_status='account'; row.recon_by=_rcWho(); row.recon_marked_at=new Date().toISOString(); row.recon_account=amt; }
     _rcAfterRowChange(); _rcPingCache();
   }catch(e){
     toast('❌ Account not saved: '+e.message);
@@ -1454,6 +1459,7 @@ async function rcRun(){
     if (rc.ok) {
       const d = await rc.json();
       window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
+      if(Array.isArray(d.aliases)) _rcSetAliases(d.aliases);
       if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
       // Cache hit if cache window COVERS requested window (superset) — filter client-side
       const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
@@ -1742,6 +1748,7 @@ async function rcRun(){
 
 let rcBypassCache = false;
 async function rcRunFresh(from,to,fromISO,toISO,el){ 
+  if(!window._rcSnap || !Array.isArray(window._rcSnap.aliases)) _rcLoadAliasesLive();   // live path: aliases not in snapshot yet
   rcBypassCache = true;
   rcAllRows = [];
   await rcRun();
@@ -1768,6 +1775,72 @@ async function rcForceFresh(){
     rcBypassCache = false;
     if(btn){ btn.disabled = false; btn.textContent = '↻ Refresh live'; }
   }
+}
+
+// ── Extra Telegram names on one vendo (SIM change, 2nd router on one box) ──
+// spawn_tg_recon sums income under the primary name AND every alias, so the
+// vendo is checked once instead of showing two half-vendos / a shared feed.
+let _rcAliases = {};          // vendo_id -> [{id,tg_name,note,created_by,created_at}]
+function _rcSetAliases(list){
+  _rcAliases={};
+  (list||[]).forEach(a=>{ (_rcAliases[a.vendo_id]=_rcAliases[a.vendo_id]||[]).push(a); });
+}
+function _rcAliasesOf(vendoId){ return vendoId!=null ? (_rcAliases[vendoId]||[]) : []; }
+async function _rcLoadAliasesLive(){
+  try{
+    const r=await fetch(`${_SB}/rest/v1/vendo_tg_aliases?select=id,vendo_id,tg_name,note,created_by,created_at&order=created_at.asc&limit=2000`,{headers:_HDR});
+    const d=await r.json(); if(Array.isArray(d)) _rcSetAliases(d);
+  }catch(e){}
+}
+function _rcAliasSectionHtml(vendoId){
+  const list=_rcAliasesOf(vendoId);
+  if(vendoId==null) return '';
+  return `<div id="rcn-alias-box" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:14px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:600;color:#5b21b6;margin-bottom:4px;">🔗 Extra TG names (same vendo)</div>
+    <div style="font-size:11px;color:#6d28d9;margin-bottom:8px;">Use when one box reports under two Telegram names (SIM / router change). Income under every name here is <b>added together</b> for this vendo's window.</div>
+    <div id="rcn-alias-list">${list.length?list.map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border:1px solid #ddd6fe;border-radius:6px;margin-bottom:6px;">
+        <div><b style="color:#1e293b;">${_rcEsc(a.tg_name)}</b>${a.note?`<div style="font-size:10px;color:#6b7280;">${_rcEsc(a.note)}</div>`:''}<div style="font-size:9px;color:#9ca3af;">${a.created_by?'added by '+_rcEsc(a.created_by):''}${a.created_at?' · '+String(a.created_at).slice(0,10):''}</div></div>
+        <button onclick="rcnAliasRemove(${a.id},${vendoId})" style="height:26px;padding:0 10px;background:#fff;color:#DF1A35;border:1px solid #fecaca;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">✕ remove</button>
+      </div>`).join(''):'<div style="font-size:11px;color:#9ca3af;margin-bottom:6px;">No extra names yet.</div>'}</div>
+    <div style="display:flex;gap:6px;margin-top:4px;">
+      <input id="rcn-alias-new" placeholder="Second TG name exactly as the bot reports it" autocomplete="off" style="flex:1;height:32px;padding:0 8px;border:1px solid #ddd6fe;border-radius:6px;font-size:13px;box-sizing:border-box;" onkeydown="if(event.key==='Enter'){event.preventDefault();rcnAliasAdd(${vendoId});}">
+      <button onclick="rcnAliasAdd(${vendoId})" style="height:32px;padding:0 14px;background:#6d28d9;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">+ Add</button>
+    </div>
+    <span id="rcn-alias-msg" style="font-size:11px;"></span>
+  </div>`;
+}
+function _rcAliasRefreshBox(vendoId){
+  const box=document.getElementById('rcn-alias-box'); if(!box) return;
+  box.outerHTML=_rcAliasSectionHtml(vendoId);
+}
+async function rcnAliasAdd(vendoId){
+  const inp=document.getElementById('rcn-alias-new'); const msg=document.getElementById('rcn-alias-msg');
+  const name=(inp?inp.value:'').trim();
+  if(!name){ if(msg) msg.textContent='Type the second TG name first.'; return; }
+  const primary=(document.getElementById('rcn-tg')?.value||'').trim();
+  if(name.toLowerCase()===primary.toLowerCase()){ if(msg) msg.textContent='That is already the primary TG name.'; return; }
+  const other=(rcAllRows||[]).find(r=>r.tg_name===name && r.vendo_id!=null && r.vendo_id!==vendoId);
+  if(other && !confirm(`"${name}" is the primary TG name of another vendo (${other.sheet_name||'?'}).\n\nAdding it here means BOTH vendos claim its income. Continue?`)) return;
+  if(msg) msg.textContent='Saving…';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/vendo_tg_aliases`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({vendo_id:vendoId,tg_name:name,created_by:window.__ADMIN_USER||'admin'})});
+    if(!r.ok){ const t=await r.text(); throw new Error(/duplicate|unique/i.test(t)?'That name is already an alias of a vendo':'HTTP '+r.status); }
+    const d=await r.json(); const a=Array.isArray(d)?d[0]:d;
+    (_rcAliases[vendoId]=_rcAliases[vendoId]||[]).push(a||{id:null,vendo_id:vendoId,tg_name:name});
+    _rcAliasRefreshBox(vendoId);
+    toast('🔗 Alias added — income will include "'+name+'" on the next refresh');
+    _rcPingCache(); _rcAfterRowChange();
+  }catch(e){ if(msg) msg.textContent='❌ '+e.message; }
+}
+async function rcnAliasRemove(id,vendoId){
+  if(!confirm('Remove this extra TG name? Its income will no longer count for this vendo.')) return;
+  try{
+    const r=await fetch(`${_SB}/rest/v1/vendo_tg_aliases?id=eq.${id}`,{method:'DELETE',headers:_HDR});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    _rcAliases[vendoId]=(_rcAliases[vendoId]||[]).filter(a=>a.id!==id);
+    _rcAliasRefreshBox(vendoId);
+    toast('Alias removed'); _rcPingCache(); _rcAfterRowChange();
+  }catch(e){ toast('❌ Could not remove: '+e.message); }
 }
 
 function rcShowNamesById(harvestId){
@@ -1833,6 +1906,7 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
         <button onclick="rcnSaveNames(${JSON.stringify(vendoName).replace(/"/g,'&quot;')})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
         <span id="rcn-msg" style="margin-left:10px;font-size:11px;"></span>
       </div>
+      ${_rcAliasSectionHtml(harvestRow?harvestRow.vendo_id:null)}
       <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:12px;">
         <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:6px;">🗓 Harvest Window</div>
         <div style="font-size:11px;color:#92400e;margin-bottom:10px;">Changes reconciliation window — TG income is fetched between window start and harvest date.</div>
@@ -2640,8 +2714,10 @@ function _rcRowHtml(h, showCloud, flat){
   const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
   const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 6px;margin-left:5px;">no TG</span>' : '';
   const unlinkKey = h.sheet_name||h.tg_name;
+  const _al=_rcAliasesOf(h.vendo_id);
+  const aliasChip=_al.length?`<span class="rca-pill" style="background:#ede9fe;color:#5b21b6;font-size:8.5px;padding:0 5px;margin-left:4px;" title="Income also counted from: ${_rcEsc(_al.map(a=>a.tg_name).join(', '))}">+${_al.length} alias</span>`:'';
   const tgLine = h.tg_name
-    ? `<div style="font-size:9px;color:#0f8c43;margin-top:2px;line-height:1.3;">🔗 ${_rcEsc(h.tg_name)}${unlinkKey?`<span class="rca-link" style="color:#DF1A35;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
+    ? `<div style="font-size:9px;color:#0f8c43;margin-top:2px;line-height:1.3;">🔗 ${_rcEsc(h.tg_name)}${aliasChip}${unlinkKey?`<span class="rca-link" style="color:#DF1A35;" onclick='rcnUnlink(${klArg(unlinkKey)})' title="Unlink this TG name">✕ unlink</span>`:''}</div>`
     : `<div style="font-size:9px;color:#b45309;margin-top:2px;line-height:1.3;">⚠ no TG linked${unlinkKey?`<span class="rca-link" style="color:#6b7280;" onclick='rcnUnlink(${klArg(unlinkKey)},{noTg:true})' title="Mark this vendo as having no TG name yet">🚫 no TG yet</span>`:''}</div>`;
   const time = h.rpc_submitted_at ? String(h.rpc_submitted_at).split(' ').slice(1).join(' ') : '';
   const ws = h.rpc_window_start || h.harvest_window_start || '—';
@@ -2671,11 +2747,11 @@ function _rcRowHtml(h, showCloud, flat){
     <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
     <td style="min-width:172px;">
       ${h.reconcile_status==='ok'
-        ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;">☑ Confirmed</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
+        ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;" title="${h.recon_by?'Confirmed by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">☑ Confirmed${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
         : h.reconcile_status==='auto'
         ? `<span class="rca-pill" style="background:#e0f2fe;color:#0369a1;" title="Auto-confirmed by the system: real TG chain, gap within ±₱20, BASHANG book agrees or absent. You can still unlink the TG name or edit the window — doing so removes this mark.">⚡ Auto-OK</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove auto-OK — the row goes back to ⏳ Needs me and will NOT be auto-marked again">✕ undo</button>`
         : h.reconcile_status==='account'
-        ? `<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;" title="Shortage charged to ${_rcEsc(h.collector||'the collector')}'s account${h.bashang_date?'':''}">💳 On account · ${_php(h.recon_account!=null?h.recon_account:Math.max(0,Number(h.gap||0)))}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove from account — the row goes back to ⏳ Needs me">✕ undo</button>`
+        ? `<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;" title="Shortage charged to ${_rcEsc(h.collector||'the collector')}'s account${h.recon_by?' by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">💳 On account · ${_php(h.recon_account!=null?h.recon_account:Math.max(0,Number(h.gap||0)))}${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Remove from account — the row goes back to ⏳ Needs me">✕ undo</button>`
         : `<button class="rca-ok" onclick="rcConfirmRow(${h.id},this)">✅ OK</button>${(_rcSurplus(h)!=null&&_rcSurplus(h)<-20)?`<button class="rca-acct" onclick="rcAccountRow(${h.id},this)" title="Charge this shortage to ${_rcEsc(h.collector||'the collector')}'s account (utang) — the amount is fixed at today's figure and can be undone">💳 Account</button>`:''}`}
       <input id="rcnote-${h.id}" class="rca-note" placeholder="Add note… (Enter to save)" value="${_rcEsc(h.admin_notes)}"
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" onblur="rcSaveNote(${h.id},this.value,this)">
