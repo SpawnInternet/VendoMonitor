@@ -1453,6 +1453,8 @@ async function rcRun(){
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
       const d = await rc.json();
+      window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
+      if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
       // Cache hit if cache window COVERS requested window (superset) — filter client-side
       const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
       if (cacheCovers) {
@@ -2245,6 +2247,7 @@ async function rcnUnlink(vendoName, opts){
 function rcFilter(){
   _rcEnsureCss();
   _rcComputeSharedFeeds(rcAllRows);
+  if(typeof rcMode!=='undefined' && rcMode==='statement' && typeof rcStRender==='function') rcStRender();
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
   const rows=rcAllRows.filter(r=>{
@@ -2474,7 +2477,7 @@ const _RC_FILTERS = [
 ];
 function _rcSearchHit(r,q){
   if(!q) return true;
-  return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes].some(x=>x&&String(x).toLowerCase().includes(q));
+  return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes,r.harvest_date].some(x=>x&&String(x).toLowerCase().includes(q));
 }
 
 // ── DESIGN SYSTEM (scoped: #rc-modal …, global: .rcg-… collector cards) ──
@@ -2943,6 +2946,316 @@ function rcCloseCollector(){
   const o=document.getElementById('rc-modal'); if(o) o.remove();
   _rcOpenCollector = null;
   document.removeEventListener('keydown',_rcEscKey);
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 📊 COLLECTOR STATEMENT — one row per collector, four sources across.
+//   Coins   = Spawn Harvest PWA (what the collector declared)
+//   Income  = Telegram bot (+ Cloud) for each harvest window
+//   Bashang = office book (records the SPAWN SHARE, ±₱20 vs share)
+//   Count   = Spawn Count office hand-in count (packs vs SPAWN SHARE)
+// Rows reuse the same recon rows (rcAllRows / snapshot); only the Spawn Count
+// packs are fetched here, for the same date range. Sorted worst-first so the
+// collectors that need an audit are at the top.
+// ══════════════════════════════════════════════════════════
+let _stPacks = null;        // harvest_id -> {counted, bugi}
+let _stPackRange = '';      // "from..to" the packs were fetched for
+let _stRecons = null;       // "collector|date" -> confirmed_at
+let _stLoading = false;
+let _stRange = 'month';
+
+function _stDstr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function rcStSetRange(preset){
+  _stRange=preset;
+  const to=new Date(); let from=new Date();
+  if(preset==='week'){ const dow=(to.getDay()+6)%7; from.setDate(to.getDate()-dow); }      // Monday
+  else if(preset==='month') from=new Date(to.getFullYear(),to.getMonth(),1);
+  else if(preset==='lastmonth'){ from=new Date(to.getFullYear(),to.getMonth()-1,1); to.setDate(0); }
+  else if(preset==='30') from.setDate(to.getDate()-30);
+  const f=document.getElementById('st-from'), t=document.getElementById('st-to');
+  if(f) f.value=_stDstr(from); if(t) t.value=_stDstr(to);
+  rcStApplyDates();
+}
+function rcStApplyDates(){
+  const f=document.getElementById('st-from')?.value, t=document.getElementById('st-to')?.value;
+  if(!f||!t) return;
+  // The statement shares the recon rows: push the range into the recon date
+  // inputs and let rcRun do its one-fetch snapshot / live read as usual.
+  const rf=document.getElementById('rc-from'), rt=document.getElementById('rc-to');
+  if(rf) rf.value=f; if(rt) rt.value=t;
+  if(typeof _rcMarkRange==='function') _rcMarkRange('none');
+  rcDatesInited=true;
+  _stMarkRange();
+  rcStRender();            // shows "loading…" immediately from whatever is there
+  rcRun();                 // → rcFilter → rcStRender when rows arrive
+}
+function _stMarkRange(){
+  document.querySelectorAll('#rc-panel-statement [data-strange]').forEach(b=>{
+    const on=b.dataset.strange===_stRange;
+    b.style.background=on?'#311A8E':'#fff'; b.style.color=on?'#fff':'#311A8E'; b.style.borderColor=on?'#311A8E':'#c7d2fe';
+  });
+}
+function rcStInit(){
+  const f=document.getElementById('st-from');
+  if(f && !f.value) rcStSetRange('month'); else rcStApplyDates();
+}
+// Spawn Count packs for the range. counted = all packs except bugi (old /
+// damaged coins, Spawn absorbs them), kept separately so the office's
+// "(counted + bugi) − share" rule is reproduced exactly as in office.html.
+// v19 snapshot carries ALL office packs + day closures → no live reads.
+function rcStUseSnapshot(d){
+  if(!d || !d.packs) return;
+  const packs={}; Object.keys(d.packs).forEach(k=>{ packs[k]={counted:Number(d.packs[k].c||0),bugi:Number(d.packs[k].b||0)}; });
+  const recons={}; (d.recons||[]).forEach(x=>{ recons[x.collector+'|'+x.recon_date]=x; });
+  _stPacks=packs; _stRecons=recons; _stPackRange='*'; _stLoading=false;
+}
+async function _stLoadPacks(from,to){
+  const key=from+'..'+to;
+  if(_stPacks && (_stPackRange===key || _stPackRange==='*')) return;
+  _stLoading=true;
+  try{
+    const packs={}, recons={};
+    for(let off=0; off<=20000; off+=1000){
+      const r=await fetch(`${_SB}/rest/v1/harvest_pack_items?harvest_date=gte.${from}&harvest_date=lte.${to}&saved_by=eq.office&select=harvest_id,pack_type,amount&limit=1000&offset=${off}`,{headers:_HDR});
+      const d=await r.json(); if(!Array.isArray(d)) break;
+      d.forEach(p=>{ const o=(packs[p.harvest_id]=packs[p.harvest_id]||{counted:0,bugi:0}); if(p.pack_type==='bugi') o.bugi+=Number(p.amount||0); else o.counted+=Number(p.amount||0); });
+      if(d.length<1000) break;
+    }
+    try{
+      const r=await fetch(`${_SB}/rest/v1/harvest_reconciliations?recon_date=gte.${from}&recon_date=lte.${to}&select=collector,recon_date,confirmed_at&limit=2000`,{headers:_HDR});
+      const d=await r.json(); if(Array.isArray(d)) d.forEach(x=>{ recons[x.collector+'|'+x.recon_date]=x.confirmed_at||true; });
+    }catch(e){}
+    _stPacks=packs; _stRecons=recons; _stPackRange=key;
+  }catch(e){ console.error('statement packs',e); _stPacks=_stPacks||{}; _stRecons=_stRecons||{}; }
+  _stLoading=false;
+}
+// Build one statement line per collector from the recon rows.
+function _stBuild(rows){
+  const by={};
+  rows.forEach(r=>{ const c=r.collector||'Unknown'; (by[c]=by[c]||[]).push(r); });
+  const packs=_stPacks||{}, recons=_stRecons||{};
+  const out=Object.keys(by).map(c=>{
+    const rs=by[c], st=_rcStats(rs);
+    const o={collector:c, rows:rs, n:rs.length, st,
+      days:new Set(rs.map(r=>r.harvest_date)).size,
+      coins:0, share:0,
+      incCoins:st.coins, income:st.tg+st.cloud, vsTg:-st.gap, deficitN:st.deficitN, deficitAmt:st.deficitAmt, surplusN:st.surplusN, surplusAmt:st.surplusAmt, noTgN:st.unmatchedN,
+      book:0, bookShare:0, bookN:0, bookDiffN:0, bookDiffAmt:0, notInBookN:0,
+      counted:0, bugi:0, countShare:0, countedN:0, notCountedN:0, notCountedShare:0, cashShortN:0, cashShortAmt:0, cashOverN:0,
+      closedDays:0, pendingN:0};
+    const dayset=new Set();
+    rs.forEach(r=>{
+      o.coins+=Number(r.coins_total||0); o.share+=Number(r.spawn_share||0);
+      if(r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'&&r.reconcile_status!=='account') o.pendingN++;
+      const bs=_rcBookState(r);
+      if(bs==='none') o.notInBookN++;
+      else { o.bookN++; o.book+=Number(r.bashang_amount||0); o.bookShare+=Number(r.spawn_share||0); if(bs==='diff'){ o.bookDiffN++; o.bookDiffAmt+=Number(r.bashang_amount||0)-Number(r.spawn_share||0); } }
+      const p=packs[r.id];
+      if(p && (p.counted>0||p.bugi>0)){
+        o.countedN++; o.counted+=p.counted; o.bugi+=p.bugi; o.countShare+=Number(r.spawn_share||0);
+        const g=Math.round((p.counted+p.bugi-Number(r.spawn_share||0))*100)/100;
+        if(g<-20){ o.cashShortN++; o.cashShortAmt+=-g; } else if(g>20) o.cashOverN++;
+      } else { o.notCountedN++; o.notCountedShare+=Number(r.spawn_share||0); }
+      if(r.harvest_date && recons[c+'|'+r.harvest_date] && !dayset.has(r.harvest_date)){ dayset.add(r.harvest_date); }
+    });
+    o.closedDays=dayset.size;
+    // data-quality warnings that make a verdict unreliable until fixed
+    o.sharedN=rs.filter(r=>_rcIsSharedFeed(r)).length;
+    o.impossibleN=rs.filter(r=>_rcImpossible(r)).length;
+    o.longwinN=rs.filter(r=>_rcLongWindowShort(r)).length;
+    o.zeroTgN=rs.filter(r=>_rcIsZeroTg(r)).length;
+    o.warnN=o.sharedN+o.impossibleN+o.longwinN+o.zeroTgN;
+    o.vsBook=o.bookN?o.book-o.bookShare:null;
+    o.vsCash=o.countedN?(o.counted+o.bugi-o.countShare):null;
+    // verdict
+    const audit = o.deficitN>0 || o.cashShortN>0 || (o.vsCash!=null && o.vsCash<-20);
+    const check = o.surplusN>0 || o.bookDiffN>0 || o.notCountedN>0 || o.noTgN>0 || o.notInBookN>0;
+    o.status = audit?'audit':check?'check':'clean';
+    o.severity = (audit?1e9:check?1e6:0) + o.deficitAmt + o.cashShortAmt + Math.abs(o.bookDiffAmt) + o.surplusAmt*0.1;
+    return o;
+  });
+  out.sort((a,b)=>b.severity-a.severity || a.collector.localeCompare(b.collector));
+  return out;
+}
+// Day-by-day lines for one collector (same rules as the collector line).
+function _stDays(line){
+  const by={};
+  line.rows.forEach(r=>{ const d=r.harvest_date||'?'; (by[d]=by[d]||[]).push(r); });
+  return Object.keys(by).sort((a,b)=>b.localeCompare(a)).map(d=>{
+    const l=_stBuild(by[d].map(r=>({...r,collector:line.collector})))[0];
+    l.date=d; l.routes=[...new Set(by[d].map(r=>r.route_code||'ADMIN'))];
+    const rc=(_stRecons||{})[line.collector+'|'+d];
+    l.closed=rc&&typeof rc==='object'?rc:null;
+    return l;
+  });
+}
+let _stOpen={};
+function rcStToggle(collector){ _stOpen[collector]=!_stOpen[collector]; rcStRender(); }
+function _stDayRows(line){
+  const days=_stDays(line);
+  return days.map(d=>`<tr class="st-day" onclick="event.stopPropagation();document.getElementById('rc-from').value='${d.date}';document.getElementById('rc-to').value='${d.date}';rcShowCollectorOnDate(${klArg(line.collector)},'${d.date}')" title="Open ${_rcEsc(line.collector)} on ${d.date}">
+      <td style="padding-left:44px;"><b style="color:#311A8E;">📅 ${d.date}</b><div style="font-size:9px;color:#025AC6;font-family:monospace;font-weight:700;">${_rcEsc(d.routes.join(' · '))}</div></td>
+      <td class="r">${d.closed?`<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;font-size:9px;" title="Office closed this hand-in in Spawn Count${d.closed.confirmed_by?' — '+_rcEsc(d.closed.confirmed_by):''}">closed</span>`:'<span style="font-size:9px;color:#b45309;">open</span>'}</td>
+      <td class="r">${d.n}</td>
+      <td class="r" style="font-weight:700;color:#1a2250;">${_php(d.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(d.share)}</div></td>
+      <td class="r">${_php(d.income)}${d.noTgN?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${d.noTgN} no TG</div>`:''}</td>
+      <td class="r">${d.bookN?_php(d.book):'<span style="color:#b6bdcf;">—</span>'}${d.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${d.notInBookN} not in book</div>`:''}</td>
+      <td class="r">${d.countedN?_php(d.counted)+(d.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(d.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${d.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${d.notCountedN} not counted</div>`:''}</td>
+      ${_stGapCell(d.vsTg, d.n-d.noTgN, d.deficitN?`<b style="color:#DF1A35;">${d.deficitN} deficit</b>`:(d.surplusN?`${d.surplusN} surplus`:''))}
+      ${_stGapCell(d.vsBook, d.bookN, d.bookDiffN?`<b style="color:#b45309;">${d.bookDiffN} differ</b>`:'')}
+      ${_stGapCell(d.vsCash, d.countedN, d.cashShortN?`<b style="color:#DF1A35;">${d.cashShortN} short</b>`:(d.cashOverN?`${d.cashOverN} over`:''))}
+      <td class="c">${d.warnN?`<span title="shared feed ${d.sharedN} · impossible ${d.impossibleN} · long window ${d.longwinN} · TG ₱0 ${d.zeroTgN}" style="color:#9d174d;font-weight:800;">⚠ ${d.warnN}</span>`:''}</td>
+      <td class="c">${d.status==='audit'?'🔎':d.status==='check'?'👀':'✅'}</td>
+      <td class="r">${d.pendingN?`<b style="color:#4338ca;">⏳ ${d.pendingN}</b>`:'☑'}</td>
+    </tr>`).join('');
+}
+// Open the collector popup limited to one hand-in day (used by day lines).
+function rcShowCollectorOnDate(collector,date){
+  rcShowCollector(collector);
+  const q=document.getElementById('rca-q'); if(q) q.value=date;
+  _rcView.q=date; _rcView.filter='all';
+  rcRenderModal({force:true, keepScroll:false});
+}
+// Plain-text statement for Messenger / notes.
+function rcStCopy(){
+  const from=document.getElementById('st-from')?.value, to=document.getElementById('st-to')?.value;
+  const rows=(rcAllRows||[]).filter(r=>(r.harvest_date||'')>=from && (r.harvest_date||'')<=to);
+  const lines=_stBuild(rows);
+  const f=v=>v==null?'—':(Math.abs(v)<=20?'ok':(v>0?'+':'-')+'₱'+Math.round(Math.abs(v)).toLocaleString());
+  let t=`SPAWN COLLECTOR STATEMENT ${from} → ${to}\n`;
+  lines.forEach(l=>{
+    t+=`\n${l.status==='audit'?'🔎':l.status==='check'?'👀':'✅'} ${l.collector} — ${l.n} harvests / ${l.days} days\n`;
+    t+=`  Coins ₱${Math.round(l.coins).toLocaleString()} · TG ₱${Math.round(l.income).toLocaleString()} · Book ₱${Math.round(l.book).toLocaleString()} · Count ₱${Math.round(l.counted).toLocaleString()}\n`;
+    t+=`  vs TG ${f(l.vsTg)}${l.deficitN?` (${l.deficitN} deficit)`:''} · vs Book ${f(l.vsBook)}${l.bookDiffN?` (${l.bookDiffN} differ)`:''} · vs Cash ${f(l.vsCash)}${l.cashShortN?` (${l.cashShortN} short)`:''}\n`;
+    const miss=[l.noTgN?`${l.noTgN} no TG`:'',l.notInBookN?`${l.notInBookN} not in book`:'',l.notCountedN?`${l.notCountedN} not counted`:'',l.pendingN?`${l.pendingN} needs confirm`:'',l.warnN?`${l.warnN} data warnings`:''].filter(Boolean);
+    if(miss.length) t+=`  Gaps: ${miss.join(', ')}\n`;
+  });
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{ if(typeof toast==='function') toast('📋 Statement copied'); }).catch(()=>{ window.prompt('Copy the statement:',t); });
+}
+function _stGapCell(v, n, sub, opts){
+  opts=opts||{};
+  if(v==null||!n) return `<td class="r" style="color:#b6bdcf;font-size:10px;">—${sub?`<div style="font-size:9px;">${sub}</div>`:''}</td>`;
+  const bad = v<-20, warn = v>20;
+  const col = bad?'#DF1A35':warn?'#b45309':'#0f8c43', bg = bad?'#fee2e2':warn?'#fef3c7':'#d9f7e4';
+  const icon = bad?'🔴':warn?'🟡':'✅';
+  const txt = Math.abs(v)<=20 ? 'match' : (v>0?'+':'−')+_php(Math.abs(v));
+  return `<td class="r"><span style="display:inline-block;background:${bg};color:${col};font-weight:800;padding:2px 8px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;">${icon} ${txt}</span>${sub?`<div style="font-size:9px;color:#8a93a9;margin-top:2px;">${sub}</div>`:''}</td>`;
+}
+function rcStRender(){
+  const el=document.getElementById('st-content'); if(!el) return;
+  const from=document.getElementById('st-from')?.value, to=document.getElementById('st-to')?.value;
+  const rows=(rcAllRows||[]).filter(r=>(r.harvest_date||'')>=from && (r.harvest_date||'')<=to);
+  if(!rows.length){
+    el.innerHTML=`<div style="padding:30px;text-align:center;color:#8a93a9;">${_stLoading||!rcAllRows||!rcAllRows.length?'⏳ Loading harvests…':'No harvests in this period.'}</div>`;
+    return;
+  }
+  if(!_stPacks || (_stPackRange!=='*' && _stPackRange!==from+'..'+to)){
+    if(!_stLoading) _stLoadPacks(from,to).then(()=>rcStRender());
+  }
+  _rcComputeSharedFeeds(rows);
+  const lines=_stBuild(rows);
+  const tot=_stBuild(rows.map(r=>({...r,collector:'ALL'})))[0];
+  const nAudit=lines.filter(l=>l.status==='audit').length, nCheck=lines.filter(l=>l.status==='check').length, nClean=lines.length-nAudit-nCheck;
+  const pill=(s)=> s==='audit'?'<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;font-size:10px;">🔎 Audit</span>'
+                  : s==='check'?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:10px;">👀 Check</span>'
+                  : '<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;font-size:10px;">✅ Clean</span>';
+  const packsNote = _stLoading || !_stPacks ? '<span style="color:#b45309;">⏳ loading Spawn Count…</span>' : '';
+  // Coverage = how much of the period each source actually covers. A verdict
+  // is only as reliable as its coverage, so it is shown before the table.
+  const pct=(a,b)=>b?Math.round(a/b*100):0;
+  const covTg=pct(tot.n-tot.noTgN,tot.n), covBook=pct(tot.bookN,tot.n), covCount=pct(tot.countedN,tot.n), covConf=pct(tot.n-tot.pendingN,tot.n);
+  const covBar=(label,p,col,sub)=>`<div class="st-cov"><div class="st-cov-l"><span>${label}</span><b style="color:${p>=90?'#0f8c43':p>=60?'#b45309':'#DF1A35'};">${p}%</b></div><div class="st-cov-bar"><div style="width:${p}%;background:${col};"></div></div><div class="st-cov-s">${sub}</div></div>`;
+  const snapAge = window._rcSnap&&window._rcSnap.generated_at ? Math.round((Date.now()-new Date(window._rcSnap.generated_at).getTime())/60000) : null;
+  const totWarn = tot.warnN;
+  let html=`<div class="st-covwrap">
+      ${covBar('🔗 TG linked',covTg,'#025AC6',tot.noTgN?`${tot.noTgN} harvests cannot be checked against income`:'every harvest has a TG name')}
+      ${covBar('📒 In Bashang',covBook,'#b45309',tot.notInBookN?`${tot.notInBookN} not found in the office book (±3 days)`:'every harvest is in the book')}
+      ${covBar('🧮 Counted',covCount,'#028867',_stPacks?(tot.notCountedN?`${tot.notCountedN} not yet counted by the office`:'every harvest counted'):'loading…')}
+      ${covBar('☑ Confirmed',covConf,'#311A8E',tot.pendingN?`${tot.pendingN} still need confirmation`:'all confirmed')}
+      <div class="st-cov" style="justify-content:center;gap:6px;">
+        <button onclick="rcStCopy()" class="st-range" style="width:100%;">📋 Copy statement</button>
+        <div class="st-cov-s" style="text-align:center;">${snapAge!=null?`⚡ snapshot ${snapAge} min ago`:'live read'}${totWarn?` · <b style="color:#9d174d;">⚠ ${totWarn} data warnings</b>`:''}</div>
+      </div>
+    </div>
+    <div class="st-summary">
+      <div class="st-card"><div class="l">Collectors</div><div class="v">${lines.length}</div><div class="s">${nAudit?`<b style="color:#DF1A35;">${nAudit} audit</b> · `:''}${nCheck?`<b style="color:#b45309;">${nCheck} check</b> · `:''}<b style="color:#0f8c43;">${nClean} clean</b></div></div>
+      <div class="st-card"><div class="l">Coins (PWA)</div><div class="v">${_php(tot.coins)}</div><div class="s">${tot.n} harvests · share ${_php(tot.share)}</div></div>
+      <div class="st-card"><div class="l">TG + Cloud income</div><div class="v">${_php(tot.income)}</div><div class="s">${tot.noTgN?`${tot.noTgN} no TG`:'all matched'}</div></div>
+      <div class="st-card"><div class="l">📒 Bashang</div><div class="v">${_php(tot.book)}</div><div class="s">${tot.notInBookN?`${tot.notInBookN} not in book`:'all in book'}</div></div>
+      <div class="st-card"><div class="l">🧮 Spawn Count</div><div class="v">${_stPacks?_php(tot.counted):'…'}</div><div class="s">${packsNote||(tot.notCountedN?`${tot.notCountedN} not counted${tot.bugi?` · bugi ${_php(tot.bugi)}`:''}`:`all counted${tot.bugi?` · bugi ${_php(tot.bugi)}`:''}`)}</div></div>
+    </div>
+    <div style="overflow-x:auto;"><table class="rca st-table"><thead><tr>
+      <th>Collector</th><th class="r">Days</th><th class="r">Harvests</th>
+      <th class="r" title="Coins declared in Spawn Harvest">Coins</th>
+      <th class="r" title="Telegram + Cloud income for the matched harvests">TG income</th>
+      <th class="r" title="BASHANG office book (spawn share)">📒 Bashang</th>
+      <th class="r" title="Spawn Count office hand-in (packs incl. bugi)">🧮 Count</th>
+      <th class="r" title="Coins − income on matched harvests. − = short">vs TG</th>
+      <th class="r" title="Bashang − spawn share on harvests that are in the book">vs Book</th>
+      <th class="r" title="(Counted + bugi) − spawn share on harvests the office has counted. − = cash short">vs Cash</th>
+      <th class="c" title="Data-quality warnings: shared TG feed, impossible income, long window, TG ₱0 — fix these before trusting the verdict">⚠</th>
+      <th class="c">Status</th><th class="r">To do</th>
+    </tr></thead><tbody>`;
+  lines.forEach(l=>{
+    const open=!!_stOpen[l.collector];
+    html+=`<tr class="st-row st-${l.status}${open?' open':''}" onclick='rcStToggle(${klArg(l.collector)})' title="${open?'Hide':'Show'} day-by-day">
+      <td><div style="display:flex;align-items:center;gap:8px;"><span style="width:10px;color:#311A8E;font-weight:900;">${open?'▾':'▸'}</span><span class="st-av">${_rcEsc(l.collector.trim().charAt(0).toUpperCase())}</span><b style="color:#1a2250;">${_rcEsc(l.collector)}</b><button class="rca-iconbtn" onclick='event.stopPropagation();rcShowCollector(${klArg(l.collector)})' title="Open full reconciliation popup">↗</button></div></td>
+      <td class="r">${l.days}${l.closedDays?`<div style="font-size:9px;color:#8a93a9;">${l.closedDays} closed</div>`:''}</td>
+      <td class="r">${l.n}</td>
+      <td class="r" style="font-weight:700;color:#1a2250;">${_php(l.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(l.share)}</div></td>
+      <td class="r">${_php(l.income)}${l.noTgN?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${l.noTgN} no TG</div>`:''}</td>
+      <td class="r">${l.bookN?_php(l.book):'<span style="color:#b6bdcf;">—</span>'}${l.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${l.notInBookN} not in book</div>`:''}</td>
+      <td class="r">${!_stPacks?'<span style="color:#b6bdcf;">…</span>':l.countedN?_php(l.counted)+(l.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(l.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${_stPacks&&l.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${l.notCountedN} not counted</div>`:''}</td>
+      ${_stGapCell(l.vsTg, l.n-l.noTgN, (l.deficitN?`<b style="color:#DF1A35;">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:''))}
+      ${_stGapCell(l.vsBook, l.bookN, l.bookDiffN?`<b style="color:#b45309;">${l.bookDiffN} differ</b>`:'')}
+      ${_stPacks?_stGapCell(l.vsCash, l.countedN, (l.cashShortN?`<b style="color:#DF1A35;">${l.cashShortN} short</b>`:'')+(l.cashShortN&&l.cashOverN?' · ':'')+(l.cashOverN?`${l.cashOverN} over`:'')):'<td class="r" style="color:#b6bdcf;">…</td>'}
+      <td class="c">${l.warnN?`<span title="shared feed ${l.sharedN} · impossible income ${l.impossibleN} · long window ${l.longwinN} · TG ₱0 ${l.zeroTgN}" style="color:#9d174d;font-weight:800;">⚠ ${l.warnN}</span>`:''}</td>
+      <td class="c">${pill(l.status)}</td>
+      <td class="r">${l.pendingN?`<b style="color:#4338ca;">⏳ ${l.pendingN}</b>`:'<span style="color:#0f8c43;">☑ all</span>'}</td>
+    </tr>`;
+    if(open) html+=_stDayRows(l);
+  });
+  html+=`</tbody></table></div>
+    <div style="font-size:10.5px;color:#8a93a9;padding:10px 4px 0;line-height:1.5;">
+      <b>vs TG</b> = coins − Telegram/Cloud income (matched harvests only) · <b>vs Book</b> = Bashang − spawn share · <b>vs Cash</b> = Spawn Count (counted + bugi) − spawn share.
+      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = any deficit or cash short · <b>Check</b> = surplus, book differs, not counted, or no TG.
+      Click a collector for day-by-day; click a day to open those vendos; ↗ opens the full popup. <b>⚠</b> = data warnings (shared feed, impossible income, long window, TG ₱0) — fix those links first, the verdict is not reliable until they are cleared.
+    </div>`;
+  el.innerHTML=html;
+}
+function _stEnsureCss(){
+  if(document.getElementById('st-css')) return;
+  const s=document.createElement('style'); s.id='st-css';
+  s.textContent=`
+  #rc-panel-statement .st-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px;}
+  #rc-panel-statement .st-card{background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 8px 20px -14px rgba(49,26,142,.6);}
+  #rc-panel-statement .st-card .l{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.8;}
+  #rc-panel-statement .st-card .v{font-size:18px;font-weight:900;margin-top:2px;font-variant-numeric:tabular-nums;}
+  #rc-panel-statement .st-card .s{font-size:10px;opacity:.9;margin-top:1px;}
+  #rc-panel-statement .st-card .s b{color:#fff;}
+  #rc-panel-statement .st-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;}
+  #rc-panel-statement .st-table th{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#8a93a9;padding:8px 9px;border-bottom:1px solid #e3e9f8;white-space:nowrap;text-align:left;background:#fbfcff;position:sticky;top:0;}
+  #rc-panel-statement .st-table td{padding:9px 9px;border-bottom:1px solid #eef1f9;vertical-align:middle;font-variant-numeric:tabular-nums;}
+  #rc-panel-statement .st-table .r{text-align:right;} #rc-panel-statement .st-table .c{text-align:center;}
+  #rc-panel-statement .st-row{cursor:pointer;transition:background .12s;}
+  #rc-panel-statement .st-row:hover{background:#f3f6ff;}
+  #rc-panel-statement .st-row.st-audit td:first-child{box-shadow:inset 4px 0 0 #DF1A35;}
+  #rc-panel-statement .st-row.st-check td:first-child{box-shadow:inset 4px 0 0 #FFB725;}
+  #rc-panel-statement .st-row.st-clean{opacity:.75;}
+  #rc-panel-statement .st-av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;font-weight:900;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+  #rc-panel-statement .st-covwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px;}
+  #rc-panel-statement .st-cov{background:#fff;border:1px solid #e3e9f8;border-radius:12px;padding:8px 11px;display:flex;flex-direction:column;}
+  #rc-panel-statement .st-cov-l{display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#1a2250;}
+  #rc-panel-statement .st-cov-bar{height:6px;background:#eef1f9;border-radius:999px;margin:5px 0 4px;overflow:hidden;}
+  #rc-panel-statement .st-cov-bar div{height:100%;border-radius:999px;}
+  #rc-panel-statement .st-cov-s{font-size:9.5px;color:#8a93a9;line-height:1.3;}
+  #rc-panel-statement .st-row.open td{background:#f3f6ff;}
+  #rc-panel-statement .st-day{cursor:pointer;background:#fbfcff;font-size:11px;}
+  #rc-panel-statement .st-day:hover{background:#eef2ff;}
+  #rc-panel-statement .st-day td{padding:6px 9px;border-bottom:1px dashed #e3e9f8;}
+  #rc-panel-statement .st-range{padding:5px 11px;border:1.5px solid #c7d2fe;border-radius:999px;background:#fff;color:#311A8E;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;}`;
+  document.head.appendChild(s);
 }
 
 // ══════════════════════════════════════════════════════════
