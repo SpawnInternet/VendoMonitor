@@ -2245,6 +2245,7 @@ async function rcnUnlink(vendoName, opts){
 function rcFilter(){
   _rcEnsureCss();
   _rcComputeSharedFeeds(rcAllRows);
+  if(typeof rcMode!=='undefined' && rcMode==='statement' && typeof rcStRender==='function') rcStRender();
   const area=document.getElementById('rc-area').value;
   const col =document.getElementById('rc-collector').value;
   const rows=rcAllRows.filter(r=>{
@@ -2943,6 +2944,216 @@ function rcCloseCollector(){
   const o=document.getElementById('rc-modal'); if(o) o.remove();
   _rcOpenCollector = null;
   document.removeEventListener('keydown',_rcEscKey);
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 📊 COLLECTOR STATEMENT — one row per collector, four sources across.
+//   Coins   = Spawn Harvest PWA (what the collector declared)
+//   Income  = Telegram bot (+ Cloud) for each harvest window
+//   Bashang = office book (records the SPAWN SHARE, ±₱20 vs share)
+//   Count   = Spawn Count office hand-in count (packs vs SPAWN SHARE)
+// Rows reuse the same recon rows (rcAllRows / snapshot); only the Spawn Count
+// packs are fetched here, for the same date range. Sorted worst-first so the
+// collectors that need an audit are at the top.
+// ══════════════════════════════════════════════════════════
+let _stPacks = null;        // harvest_id -> {counted, bugi}
+let _stPackRange = '';      // "from..to" the packs were fetched for
+let _stRecons = null;       // "collector|date" -> confirmed_at
+let _stLoading = false;
+let _stRange = 'month';
+
+function _stDstr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function rcStSetRange(preset){
+  _stRange=preset;
+  const to=new Date(); let from=new Date();
+  if(preset==='week'){ const dow=(to.getDay()+6)%7; from.setDate(to.getDate()-dow); }      // Monday
+  else if(preset==='month') from=new Date(to.getFullYear(),to.getMonth(),1);
+  else if(preset==='lastmonth'){ from=new Date(to.getFullYear(),to.getMonth()-1,1); to.setDate(0); }
+  else if(preset==='30') from.setDate(to.getDate()-30);
+  const f=document.getElementById('st-from'), t=document.getElementById('st-to');
+  if(f) f.value=_stDstr(from); if(t) t.value=_stDstr(to);
+  rcStApplyDates();
+}
+function rcStApplyDates(){
+  const f=document.getElementById('st-from')?.value, t=document.getElementById('st-to')?.value;
+  if(!f||!t) return;
+  // The statement shares the recon rows: push the range into the recon date
+  // inputs and let rcRun do its one-fetch snapshot / live read as usual.
+  const rf=document.getElementById('rc-from'), rt=document.getElementById('rc-to');
+  if(rf) rf.value=f; if(rt) rt.value=t;
+  if(typeof _rcMarkRange==='function') _rcMarkRange('none');
+  rcDatesInited=true;
+  _stMarkRange();
+  rcStRender();            // shows "loading…" immediately from whatever is there
+  rcRun();                 // → rcFilter → rcStRender when rows arrive
+}
+function _stMarkRange(){
+  document.querySelectorAll('#rc-panel-statement [data-strange]').forEach(b=>{
+    const on=b.dataset.strange===_stRange;
+    b.style.background=on?'#311A8E':'#fff'; b.style.color=on?'#fff':'#311A8E'; b.style.borderColor=on?'#311A8E':'#c7d2fe';
+  });
+}
+function rcStInit(){
+  const f=document.getElementById('st-from');
+  if(f && !f.value) rcStSetRange('month'); else rcStApplyDates();
+}
+// Spawn Count packs for the range. counted = all packs except bugi (old /
+// damaged coins, Spawn absorbs them), kept separately so the office's
+// "(counted + bugi) − share" rule is reproduced exactly as in office.html.
+async function _stLoadPacks(from,to){
+  const key=from+'..'+to;
+  if(_stPacks && _stPackRange===key) return;
+  _stLoading=true;
+  try{
+    const packs={}, recons={};
+    for(let off=0; off<=20000; off+=1000){
+      const r=await fetch(`${_SB}/rest/v1/harvest_pack_items?harvest_date=gte.${from}&harvest_date=lte.${to}&saved_by=eq.office&select=harvest_id,pack_type,amount&limit=1000&offset=${off}`,{headers:_HDR});
+      const d=await r.json(); if(!Array.isArray(d)) break;
+      d.forEach(p=>{ const o=(packs[p.harvest_id]=packs[p.harvest_id]||{counted:0,bugi:0}); if(p.pack_type==='bugi') o.bugi+=Number(p.amount||0); else o.counted+=Number(p.amount||0); });
+      if(d.length<1000) break;
+    }
+    try{
+      const r=await fetch(`${_SB}/rest/v1/harvest_reconciliations?recon_date=gte.${from}&recon_date=lte.${to}&select=collector,recon_date,confirmed_at&limit=2000`,{headers:_HDR});
+      const d=await r.json(); if(Array.isArray(d)) d.forEach(x=>{ recons[x.collector+'|'+x.recon_date]=x.confirmed_at||true; });
+    }catch(e){}
+    _stPacks=packs; _stRecons=recons; _stPackRange=key;
+  }catch(e){ console.error('statement packs',e); _stPacks=_stPacks||{}; _stRecons=_stRecons||{}; }
+  _stLoading=false;
+}
+// Build one statement line per collector from the recon rows.
+function _stBuild(rows){
+  const by={};
+  rows.forEach(r=>{ const c=r.collector||'Unknown'; (by[c]=by[c]||[]).push(r); });
+  const packs=_stPacks||{}, recons=_stRecons||{};
+  const out=Object.keys(by).map(c=>{
+    const rs=by[c], st=_rcStats(rs);
+    const o={collector:c, rows:rs, n:rs.length, st,
+      days:new Set(rs.map(r=>r.harvest_date)).size,
+      coins:0, share:0,
+      incCoins:st.coins, income:st.tg+st.cloud, vsTg:-st.gap, deficitN:st.deficitN, deficitAmt:st.deficitAmt, surplusN:st.surplusN, surplusAmt:st.surplusAmt, noTgN:st.unmatchedN,
+      book:0, bookShare:0, bookN:0, bookDiffN:0, bookDiffAmt:0, notInBookN:0,
+      counted:0, bugi:0, countShare:0, countedN:0, notCountedN:0, notCountedShare:0, cashShortN:0, cashShortAmt:0, cashOverN:0,
+      closedDays:0, pendingN:0};
+    const dayset=new Set();
+    rs.forEach(r=>{
+      o.coins+=Number(r.coins_total||0); o.share+=Number(r.spawn_share||0);
+      if(r.reconcile_status!=='ok'&&r.reconcile_status!=='auto'&&r.reconcile_status!=='account') o.pendingN++;
+      const bs=_rcBookState(r);
+      if(bs==='none') o.notInBookN++;
+      else { o.bookN++; o.book+=Number(r.bashang_amount||0); o.bookShare+=Number(r.spawn_share||0); if(bs==='diff'){ o.bookDiffN++; o.bookDiffAmt+=Number(r.bashang_amount||0)-Number(r.spawn_share||0); } }
+      const p=packs[r.id];
+      if(p && (p.counted>0||p.bugi>0)){
+        o.countedN++; o.counted+=p.counted; o.bugi+=p.bugi; o.countShare+=Number(r.spawn_share||0);
+        const g=Math.round((p.counted+p.bugi-Number(r.spawn_share||0))*100)/100;
+        if(g<-20){ o.cashShortN++; o.cashShortAmt+=-g; } else if(g>20) o.cashOverN++;
+      } else { o.notCountedN++; o.notCountedShare+=Number(r.spawn_share||0); }
+      if(r.harvest_date && recons[c+'|'+r.harvest_date] && !dayset.has(r.harvest_date)){ dayset.add(r.harvest_date); }
+    });
+    o.closedDays=dayset.size;
+    o.vsBook=o.bookN?o.book-o.bookShare:null;
+    o.vsCash=o.countedN?(o.counted+o.bugi-o.countShare):null;
+    // verdict
+    const audit = o.deficitN>0 || o.cashShortN>0 || (o.vsCash!=null && o.vsCash<-20);
+    const check = o.surplusN>0 || o.bookDiffN>0 || o.notCountedN>0 || o.noTgN>0 || o.notInBookN>0;
+    o.status = audit?'audit':check?'check':'clean';
+    o.severity = (audit?1e9:check?1e6:0) + o.deficitAmt + o.cashShortAmt + Math.abs(o.bookDiffAmt) + o.surplusAmt*0.1;
+    return o;
+  });
+  out.sort((a,b)=>b.severity-a.severity || a.collector.localeCompare(b.collector));
+  return out;
+}
+function _stGapCell(v, n, sub, opts){
+  opts=opts||{};
+  if(v==null||!n) return `<td class="r" style="color:#b6bdcf;font-size:10px;">—${sub?`<div style="font-size:9px;">${sub}</div>`:''}</td>`;
+  const bad = v<-20, warn = v>20;
+  const col = bad?'#DF1A35':warn?'#b45309':'#0f8c43', bg = bad?'#fee2e2':warn?'#fef3c7':'#d9f7e4';
+  const icon = bad?'🔴':warn?'🟡':'✅';
+  const txt = Math.abs(v)<=20 ? 'match' : (v>0?'+':'−')+_php(Math.abs(v));
+  return `<td class="r"><span style="display:inline-block;background:${bg};color:${col};font-weight:800;padding:2px 8px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;">${icon} ${txt}</span>${sub?`<div style="font-size:9px;color:#8a93a9;margin-top:2px;">${sub}</div>`:''}</td>`;
+}
+function rcStRender(){
+  const el=document.getElementById('st-content'); if(!el) return;
+  const from=document.getElementById('st-from')?.value, to=document.getElementById('st-to')?.value;
+  const rows=(rcAllRows||[]).filter(r=>(r.harvest_date||'')>=from && (r.harvest_date||'')<=to);
+  if(!rows.length){
+    el.innerHTML=`<div style="padding:30px;text-align:center;color:#8a93a9;">${_stLoading||!rcAllRows||!rcAllRows.length?'⏳ Loading harvests…':'No harvests in this period.'}</div>`;
+    return;
+  }
+  if(!_stPacks || _stPackRange!==from+'..'+to){
+    if(!_stLoading) _stLoadPacks(from,to).then(()=>rcStRender());
+  }
+  _rcComputeSharedFeeds(rows);
+  const lines=_stBuild(rows);
+  const tot=_stBuild(rows.map(r=>({...r,collector:'ALL'})))[0];
+  const nAudit=lines.filter(l=>l.status==='audit').length, nCheck=lines.filter(l=>l.status==='check').length, nClean=lines.length-nAudit-nCheck;
+  const pill=(s)=> s==='audit'?'<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;font-size:10px;">🔎 Audit</span>'
+                  : s==='check'?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:10px;">👀 Check</span>'
+                  : '<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;font-size:10px;">✅ Clean</span>';
+  const packsNote = _stLoading || !_stPacks ? '<span style="color:#b45309;">⏳ loading Spawn Count…</span>' : '';
+  let html=`<div class="st-summary">
+      <div class="st-card"><div class="l">Collectors</div><div class="v">${lines.length}</div><div class="s">${nAudit?`<b style="color:#DF1A35;">${nAudit} audit</b> · `:''}${nCheck?`<b style="color:#b45309;">${nCheck} check</b> · `:''}<b style="color:#0f8c43;">${nClean} clean</b></div></div>
+      <div class="st-card"><div class="l">Coins (PWA)</div><div class="v">${_php(tot.coins)}</div><div class="s">${tot.n} harvests · share ${_php(tot.share)}</div></div>
+      <div class="st-card"><div class="l">TG + Cloud income</div><div class="v">${_php(tot.income)}</div><div class="s">${tot.noTgN?`${tot.noTgN} no TG`:'all matched'}</div></div>
+      <div class="st-card"><div class="l">📒 Bashang</div><div class="v">${_php(tot.book)}</div><div class="s">${tot.notInBookN?`${tot.notInBookN} not in book`:'all in book'}</div></div>
+      <div class="st-card"><div class="l">🧮 Spawn Count</div><div class="v">${_stPacks?_php(tot.counted):'…'}</div><div class="s">${packsNote||(tot.notCountedN?`${tot.notCountedN} not counted${tot.bugi?` · bugi ${_php(tot.bugi)}`:''}`:`all counted${tot.bugi?` · bugi ${_php(tot.bugi)}`:''}`)}</div></div>
+    </div>
+    <div style="overflow-x:auto;"><table class="rca st-table"><thead><tr>
+      <th>Collector</th><th class="r">Days</th><th class="r">Harvests</th>
+      <th class="r" title="Coins declared in Spawn Harvest">Coins</th>
+      <th class="r" title="Telegram + Cloud income for the matched harvests">TG income</th>
+      <th class="r" title="BASHANG office book (spawn share)">📒 Bashang</th>
+      <th class="r" title="Spawn Count office hand-in (packs incl. bugi)">🧮 Count</th>
+      <th class="r" title="Coins − income on matched harvests. − = short">vs TG</th>
+      <th class="r" title="Bashang − spawn share on harvests that are in the book">vs Book</th>
+      <th class="r" title="(Counted + bugi) − spawn share on harvests the office has counted. − = cash short">vs Cash</th>
+      <th class="c">Status</th><th class="r">To do</th>
+    </tr></thead><tbody>`;
+  lines.forEach(l=>{
+    html+=`<tr class="st-row st-${l.status}" onclick='rcShowCollector(${klArg(l.collector)})' title="Open ${_rcEsc(l.collector)}'s reconciliation">
+      <td><div style="display:flex;align-items:center;gap:8px;"><span class="st-av">${_rcEsc(l.collector.trim().charAt(0).toUpperCase())}</span><b style="color:#1a2250;">${_rcEsc(l.collector)}</b></div></td>
+      <td class="r">${l.days}${l.closedDays?`<div style="font-size:9px;color:#8a93a9;">${l.closedDays} closed</div>`:''}</td>
+      <td class="r">${l.n}</td>
+      <td class="r" style="font-weight:700;color:#1a2250;">${_php(l.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(l.share)}</div></td>
+      <td class="r">${_php(l.income)}${l.noTgN?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${l.noTgN} no TG</div>`:''}</td>
+      <td class="r">${l.bookN?_php(l.book):'<span style="color:#b6bdcf;">—</span>'}${l.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${l.notInBookN} not in book</div>`:''}</td>
+      <td class="r">${!_stPacks?'<span style="color:#b6bdcf;">…</span>':l.countedN?_php(l.counted)+(l.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(l.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${_stPacks&&l.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${l.notCountedN} not counted</div>`:''}</td>
+      ${_stGapCell(l.vsTg, l.n-l.noTgN, (l.deficitN?`<b style="color:#DF1A35;">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:''))}
+      ${_stGapCell(l.vsBook, l.bookN, l.bookDiffN?`<b style="color:#b45309;">${l.bookDiffN} differ</b>`:'')}
+      ${_stPacks?_stGapCell(l.vsCash, l.countedN, (l.cashShortN?`<b style="color:#DF1A35;">${l.cashShortN} short</b>`:'')+(l.cashShortN&&l.cashOverN?' · ':'')+(l.cashOverN?`${l.cashOverN} over`:'')):'<td class="r" style="color:#b6bdcf;">…</td>'}
+      <td class="c">${pill(l.status)}</td>
+      <td class="r">${l.pendingN?`<b style="color:#4338ca;">⏳ ${l.pendingN}</b>`:'<span style="color:#0f8c43;">☑ all</span>'}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>
+    <div style="font-size:10.5px;color:#8a93a9;padding:10px 4px 0;line-height:1.5;">
+      <b>vs TG</b> = coins − Telegram/Cloud income (matched harvests only) · <b>vs Book</b> = Bashang − spawn share · <b>vs Cash</b> = Spawn Count (counted + bugi) − spawn share.
+      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = any deficit or cash short · <b>Check</b> = surplus, book differs, not counted, or no TG · click a row to open that collector.
+    </div>`;
+  el.innerHTML=html;
+}
+function _stEnsureCss(){
+  if(document.getElementById('st-css')) return;
+  const s=document.createElement('style'); s.id='st-css';
+  s.textContent=`
+  #rc-panel-statement .st-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px;}
+  #rc-panel-statement .st-card{background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;border-radius:14px;padding:10px 12px;box-shadow:0 8px 20px -14px rgba(49,26,142,.6);}
+  #rc-panel-statement .st-card .l{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.8;}
+  #rc-panel-statement .st-card .v{font-size:18px;font-weight:900;margin-top:2px;font-variant-numeric:tabular-nums;}
+  #rc-panel-statement .st-card .s{font-size:10px;opacity:.9;margin-top:1px;}
+  #rc-panel-statement .st-card .s b{color:#fff;}
+  #rc-panel-statement .st-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px;}
+  #rc-panel-statement .st-table th{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:#8a93a9;padding:8px 9px;border-bottom:1px solid #e3e9f8;white-space:nowrap;text-align:left;background:#fbfcff;position:sticky;top:0;}
+  #rc-panel-statement .st-table td{padding:9px 9px;border-bottom:1px solid #eef1f9;vertical-align:middle;font-variant-numeric:tabular-nums;}
+  #rc-panel-statement .st-table .r{text-align:right;} #rc-panel-statement .st-table .c{text-align:center;}
+  #rc-panel-statement .st-row{cursor:pointer;transition:background .12s;}
+  #rc-panel-statement .st-row:hover{background:#f3f6ff;}
+  #rc-panel-statement .st-row.st-audit td:first-child{box-shadow:inset 4px 0 0 #DF1A35;}
+  #rc-panel-statement .st-row.st-check td:first-child{box-shadow:inset 4px 0 0 #FFB725;}
+  #rc-panel-statement .st-row.st-clean{opacity:.75;}
+  #rc-panel-statement .st-av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;font-weight:900;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+  #rc-panel-statement .st-range{padding:5px 11px;border:1.5px solid #c7d2fe;border-radius:999px;background:#fff;color:#311A8E;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;}`;
+  document.head.appendChild(s);
 }
 
 // ══════════════════════════════════════════════════════════
