@@ -4626,6 +4626,30 @@ async function rcLoadHistory(){
   if(!el) return;
   el.innerHTML = '<div style="padding:20px;text-align:center;color:#6b7280;">Loading…</div>';
   try {
+    // v19 snapshot carries a per-date history index for the WHOLE table →
+    // render instantly from the bucket; the live query is only the fallback.
+    let snap = window._rcSnap;
+    if(!snap || !snap.history){
+      try{ const rc=await fetch('https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json?t='+Math.floor(Date.now()/120000)); if(rc.ok){ snap=await rc.json(); window._rcSnap=snap; if(snap.packs&&typeof rcStUseSnapshot==='function') rcStUseSnapshot(snap); } }catch(e){}
+    }
+    if(snap && Array.isArray(snap.history) && snap.history.length){
+      const age=Math.round((Date.now()-new Date(snap.generated_at||0).getTime())/60000);
+      el.innerHTML = `<div style="font-size:10px;color:#6b7280;padding:0 16px 8px;">⚡ snapshot ${age} min ago · ${snap.history.length} harvest dates</div>` + snap.history.map(d=>{
+        const flagColor = d.alerts>0?'#dc2626':d.warns>0?'#d97706':'#15803d';
+        const flagLabel = d.alerts>0?`🔴 ${d.alerts} alerts`:d.warns>0?`🟡 ${d.warns} warnings`:'✅ OK';
+        const conf = d.confirmed===d.count?'☑ all confirmed':`☑ ${d.confirmed}/${d.count}`;
+        return `<div onclick="document.getElementById('rc-from').value='${d.date}';document.getElementById('rc-to').value='${d.date}';rcSetMode('recent');rcRun();"
+          style="padding:12px 16px;border-bottom:1px solid #f3f4f6;cursor:pointer;display:flex;align-items:center;gap:12px;"
+          onmouseover="this.style.background='#f8faff'" onmouseout="this.style.background=''">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:#1e293b;">${d.date}</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">${d.count} vendos · ${(d.collectors||[]).join(', ')} · ₱${Math.round(d.coins).toLocaleString()} coins</div>
+          </div>
+          <div style="text-align:right;font-size:12px;color:${flagColor};font-weight:600;">${flagLabel}<div style="font-size:10px;color:#6b7280;font-weight:500;">${conf}</div></div>
+        </div>`;
+      }).join('');
+      return;
+    }
     const r = await fetch(`${_SB}/rest/v1/harvests?select=harvest_date,sheet_name,collector,coins_total,tg_income,recon_gap,recon_flag&order=harvest_date.desc&limit=1000`,{headers:_HDR});
     const rows = await r.json();
     const byDate = {};
