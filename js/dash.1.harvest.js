@@ -1485,7 +1485,10 @@ async function rcRun(){
           const coins = Number(row.coins_total||0);
           const gap = totalInc!=null ? totalInc-coins : (row.recon_gap!=null?Number(row.recon_gap):null);
           const gap_pct = (coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-          const flag = gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+          // Rule 1/2: a BASHANG harvest inside this window that is not in the app
+          // means the window really ended earlier → TG check paused, not a verdict.
+          const paused = Array.isArray(row.book_inside) && row.book_inside.length>0 && gap!=null;
+          const flag = paused ? 'paused' : gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
           return {...row,
             _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
             collector:row.collector||'Unknown',
@@ -2547,6 +2550,9 @@ function _rcFeedSilent(r){
   if(!last) return true;                 // not seen in the last 120 days at all
   return !!ws && last < ws;              // last report is before this window began
 }
+// Rule 7: short this round AND short the round before, both with a clean window.
+function _rcIsRepeatShort(r){ return r.flag==='alert' && !!(r.prev_harvest && r.prev_harvest.short) && !_rcFeedSilent(r) && !_rcIsSharedFeed(r); }
+function _rcIsPaused(r){ return r.flag==='paused'; }
 function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
 // One coin vendo cannot take >₱2,000/day. A value like that means a bad
 // transaction in the feed (a parsed "total" message) or a wrong link.
@@ -2588,7 +2594,7 @@ function _rcDays(r){
 }
 function _rcStats(rows){
   const s={count:rows.length, coins:0, tg:0, cloud:0, gap:0, exactN:0, surplusN:0, deficitN:0,
-           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0, accountN:0, accountAmt:0};
+           surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0, accountN:0, accountAmt:0, pausedN:0, repeatN:0, repeatAmt:0};
   rows.forEach(r=>{
     // 'auto' counts as confirmed work done — but stays its own kind, and is
     // always reversible (undo, unlink, window edit all clear it).
@@ -2598,7 +2604,9 @@ function _rcStats(rows){
     if(r.reconcile_status==='auto') s.autoN++;
     if(r.reconcile_status==='account'){ s.accountN++; s.accountAmt+=Number(r.recon_account!=null?r.recon_account:Math.max(0,Number(r.gap||0))); }
     if(_rcIsZeroTg(r)) s.zeroN++;
+    if(r.flag==='paused'){ s.pausedN++; return; }
     if(r.gap==null){ s.unmatchedN++; s.unmatchedCoins+=Number(r.coins_total||0); return; }
+    if(_rcIsRepeatShort(r)){ s.repeatN++; s.repeatAmt+=Number(r.gap); }
     s.coins+=Number(r.coins_total||0);
     s.tg+=Number(r.tg_income||0);
     s.cloud+=Number(r.cloud_income||0);
@@ -2620,6 +2628,8 @@ function _rcBookState(r){
 const _RC_FILTERS = [
   ['all',     'All',           r=>true],
   ['deficit', '🔴 Deficit',    r=>r.flag==='alert'],
+  ['repeat',  '🔁 Repeat short', r=>_rcIsRepeatShort(r)],
+  ['paused',  '📱 Not in app',  r=>_rcIsPaused(r)],
   ['surplus', '🟡 Surplus',    r=>r.flag==='warn'],
   ['exact',   '✅ Exact',      r=>r.flag==='ok'],
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
@@ -2727,6 +2737,7 @@ function _rcEnsureCss(){
   .spw-rc table.rca tbody tr:hover{background:#f3f7ff;}
   .spw-rc table.rca .r{text-align:right;font-variant-numeric:tabular-nums;}
   .spw-rc table.rca .c{text-align:center;}
+  .spw-rc tr.f-paused{background:#faf8ff;box-shadow:inset 3px 0 0 #8b5cf6;}
   .spw-rc tr.f-alert{background:#fff6f6;box-shadow:inset 3px 0 0 #DF1A35;}
   .spw-rc tr.f-alert:hover{background:#ffefef;}
   .spw-rc tr.f-warn{background:#fffcf0;box-shadow:inset 3px 0 0 #FFB725;}
@@ -2767,7 +2778,13 @@ function _rcEnsureCss(){
   document.head.appendChild(st);
 }
 
-function _rcFlagPill(f){
+function _rcFlagPill(f, h){
+  if(f==='paused'){
+    const bi=(h&&Array.isArray(h.book_inside))?h.book_inside:[];
+    const t=bi.map(b=>String(b.date).slice(5)+' ₱'+Math.round(b.amount)).join(', ');
+    return `<span class="rca-pill" style="background:#ede9fe;color:#5b21b6;" title="BASHANG shows a harvest on ${_rcEsc(t)} that is not in the app. The income window really ends there, so coins vs TG is not comparable until the collector enters it in the app.">📱 book ${_rcEsc(t)} not in app</span>`;
+  }
+  if(f==='alert' && h && _rcIsRepeatShort(h)) return '<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;" title="Short this round and the round before (both clean windows)">🔴 Short · 🔁 repeat</span>';
   return f==='alert' ? '<span class="rca-pill" style="background:#fee2e2;color:#DF1A35;">🔴 Short</span>'
        : f==='warn'  ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;">🟡 Surplus</span>'
        : f==='nodata'? '<span class="rca-pill" style="background:#e8eef9;color:#3b5b8c;">🔗 needs match</span>'
@@ -2815,7 +2832,7 @@ function _rcBookCell(h){
     <div style="font-size:8.5px;color:#b45309;font-weight:800;">Δ ${d>0?'+':'−'}${_php(Math.abs(d))} vs share ${_php(share)}</div>${dateNote}`;
 }
 function _rcRowHtml(h, showCloud, flat){
-  const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':'';
+  const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':h.flag==='paused'?'f-paused':'';
   const done = h.reconcile_status==='ok' || h.reconcile_status==='auto' || h.reconcile_status==='account';
   const name = h.sheet_name ? _rcEsc(h.sheet_name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
   const noTg = !h.tg_name ? '<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:9px;padding:0 6px;margin-left:5px;">no TG</span>' : '';
@@ -2852,7 +2869,7 @@ function _rcRowHtml(h, showCloud, flat){
     ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>
     <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
-    <td class="c">${_rcFlagPill(h.flag)}${zero}</td>
+    <td class="c">${_rcFlagPill(h.flag,h)}${zero}</td>
     <td class="rca-ccell">
       ${h.reconcile_status==='ok'
         ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;" title="${h.recon_by?'Confirmed by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">☑ Confirmed${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
@@ -3117,7 +3134,7 @@ function _rcRenderAuditBar(){
   if(i<0||!h){ bar.innerHTML=`<div class="rca-ab-mid" style="color:#8a93a9;">${els.length?'Press → or tap a row to start stepping through '+_rcEsc(_rcOpenCollector||'')+'\'s harvests':'No rows for this filter'}</div><button class="rca-ab-btn" onclick="_rcMoveRow(1)">Start ›</button>`; return; }
   const sv=_rcSurplus(h);
   const done=h.reconcile_status==='ok'||h.reconcile_status==='auto'||h.reconcile_status==='account';
-  const gapTxt = sv==null?'<span style="color:#4338ca;">no TG</span>':Math.abs(sv)<=20?'<span style="color:#0f8c43;">exact</span>':sv>0?`<span style="color:#b45309;">+${_php(sv)} surplus</span>`:`<span style="color:#DF1A35;">−${_php(-sv)} short</span>`;
+  const gapTxt = h.flag==='paused'?'<span style="color:#5b21b6;">📱 book harvest inside window, not in app — paused</span>':sv==null?'<span style="color:#4338ca;">no TG</span>':Math.abs(sv)<=20?'<span style="color:#0f8c43;">exact</span>':sv>0?`<span style="color:#b45309;">+${_php(sv)} surplus</span>`:`<span style="color:#DF1A35;">−${_php(-sv)} short</span>${_rcIsRepeatShort(h)?' <b style="color:#DF1A35;">🔁 repeat</b>':''}`;
   const todoLeft=els.filter(tr=>!tr.classList.contains('is-done')).length;
   bar.innerHTML=`
     <button class="rca-ab-btn" onclick="_rcMoveRow(-1)" ${i===0?'disabled':''} title="Previous harvest (←)">‹ Prev</button>
@@ -3307,6 +3324,7 @@ async function _stLoadPacks(from,to){
 }
 // Build one statement line per collector from the recon rows.
 function _stBuild(rows){
+  const from=document.getElementById('st-from')?.value||'0000', to=document.getElementById('st-to')?.value||'9999';
   const by={};
   rows.forEach(r=>{ const c=r.collector||'Unknown'; (by[c]=by[c]||[]).push(r); });
   const packs=_stPacks||{}, recons=_stRecons||{};
@@ -3341,14 +3359,20 @@ function _stBuild(rows){
     o.longwinN=rs.filter(r=>_rcLongWindowShort(r)).length;
     o.zeroTgN=rs.filter(r=>_rcIsZeroTg(r)).length;
     o.feedSilentN=rs.filter(r=>_rcFeedSilent(r)).length;
+    o.pausedN=st.pausedN; o.repeatN=st.repeatN; o.repeatAmt=st.repeatAmt;
+    // book-only harvests (in BASHANG, not in the app) guessed to this collector
+    const gh=((window._rcSnap&&window._rcSnap.ghosts)||[]).filter(g=>g.collector_guess===c && g.record_date>=from && g.record_date<=to);
+    o.ghostN=gh.length; o.ghostAmt=gh.reduce((a,g)=>a+Number(g.amount||0),0); o.ghosts=gh;
     o.warnN=o.sharedN+o.impossibleN+o.longwinN+o.zeroTgN;
     o.vsBook=o.bookN?o.book-o.bookShare:null;
     o.vsCash=o.countedN?(o.counted+o.bugi-o.countShare):null;
     // verdict
-    const audit = o.deficitN>0 || o.cashShortN>0 || (o.vsCash!=null && o.vsCash<-20);
-    const check = o.surplusN>0 || o.bookDiffN>0 || o.notCountedN>0 || o.noTgN>0 || o.notInBookN>0;
+    // Audit = a short that repeated on a clean window, or cash short at the office.
+    // A first-time short is only a Check until the next round confirms it.
+    const audit = o.repeatN>0 || o.cashShortN>0 || (o.vsCash!=null && o.vsCash<-20);
+    const check = o.deficitN>0 || o.surplusN>0 || o.bookDiffN>0 || o.notCountedN>0 || o.noTgN>0 || o.notInBookN>0 || o.pausedN>0 || o.ghostN>0;
     o.status = audit?'audit':check?'check':'clean';
-    o.severity = (audit?1e9:check?1e6:0) + o.deficitAmt + o.cashShortAmt + Math.abs(o.bookDiffAmt) + o.surplusAmt*0.1;
+    o.severity = (audit?1e9:check?1e6:0) + o.repeatAmt*2 + o.deficitAmt + o.cashShortAmt + Math.abs(o.bookDiffAmt) + o.surplusAmt*0.1;
     return o;
   });
   out.sort((a,b)=>b.severity-a.severity || a.collector.localeCompare(b.collector));
@@ -3496,19 +3520,22 @@ function rcStRender(){
       <td class="r">${_php(l.income)}${l.feedSilentN?`<div style="font-size:9px;color:#9d174d;font-weight:700;">📡 ${l.feedSilentN} feed silent</div>`:''}${(l.noTgN-l.feedSilentN)>0?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${l.noTgN-l.feedSilentN} no TG</div>`:''}</td>
       <td class="r">${l.bookN?_php(l.book):'<span style="color:#b6bdcf;">—</span>'}${l.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${l.notInBookN} not in book</div>`:''}</td>
       <td class="r">${!_stPacks?'<span style="color:#b6bdcf;">…</span>':l.countedN?_php(l.counted)+(l.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(l.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${_stPacks&&l.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${l.notCountedN} not counted</div>`:''}</td>
-      ${_stGapCell(l.vsTg, l.n-l.noTgN, (l.deficitN?`<b style="color:#DF1A35;">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:''))}
+      ${_stGapCell(l.vsTg, l.n-l.noTgN-l.pausedN, (l.repeatN?`<b style="color:#DF1A35;">🔁 ${l.repeatN} repeat short</b> · `:'')+(l.deficitN?`<b style="color:${l.repeatN?'#b45309':'#DF1A35'};">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:'')+(l.pausedN?` · <b style="color:#5b21b6;">📱 ${l.pausedN} paused</b>`:''))}
       ${_stGapCell(l.vsBook, l.bookN, l.bookDiffN?`<b style="color:#b45309;">${l.bookDiffN} differ</b>`:'')}
       ${_stPacks?_stGapCell(l.vsCash, l.countedN, (l.cashShortN?`<b style="color:#DF1A35;">${l.cashShortN} short</b>`:'')+(l.cashShortN&&l.cashOverN?' · ':'')+(l.cashOverN?`${l.cashOverN} over`:'')):'<td class="r" style="color:#b6bdcf;">…</td>'}
       <td class="c">${l.warnN?`<span title="shared feed ${l.sharedN} · impossible income ${l.impossibleN} · long window ${l.longwinN} · TG ₱0 ${l.zeroTgN}" style="color:#9d174d;font-weight:800;">⚠ ${l.warnN}</span>`:''}</td>
       <td class="c">${pill(l.status)}</td>
-      <td class="r">${l.pendingN?`<b style="color:#4338ca;">⏳ ${l.pendingN}</b>`:'<span style="color:#0f8c43;">☑ all</span>'}</td>
+      <td class="r">${l.pendingN?`<b style="color:#4338ca;">⏳ ${l.pendingN}</b>`:'<span style="color:#0f8c43;">☑ all</span>'}${l.ghostN?`<div style="font-size:9px;color:#5b21b6;font-weight:700;" title="In BASHANG, not entered in the app yet">📱 ${l.ghostN} not in app</div>`:''}</td>
     </tr>`;
-    if(open) html+=_stDayRows(l);
+    if(open){
+      html+=_stDayRows(l);
+      if(l.ghostN) html+=`<tr class="st-day"><td colspan="12" style="padding-left:44px;color:#5b21b6;font-size:11px;"><b>📱 In BASHANG, not in the app</b> (${l.ghostN} · share ${_php(l.ghostAmt)}): ${l.ghosts.map(g=>`${_rcEsc(String(g.record_date).slice(5))} ${_rcEsc(g.raw_name||'')} ₱${Math.round(g.amount)}`).join(' · ')}</td></tr>`;
+    }
   });
   html+=`</tbody></table></div>
     <div style="font-size:10.5px;color:#8a93a9;padding:10px 4px 0;line-height:1.5;">
       <b>vs TG</b> = coins − Telegram/Cloud income (matched harvests only) · <b>vs Book</b> = Bashang − spawn share · <b>vs Cash</b> = Spawn Count (counted + bugi) − spawn share.
-      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = any deficit or cash short · <b>Check</b> = surplus, book differs, not counted, or no TG.
+      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = 🔁 short two rounds in a row (clean window) or cash short at the office · <b>Check</b> = first-time deficit, surplus, book differs, not counted, no TG, or 📱 paused (book harvest not yet in the app).
       Click a collector for day-by-day; click a day to open those vendos; ↗ opens the full popup. <b>⚠</b> = data warnings (shared feed, impossible income, long window, TG ₱0) — fix those links first, the verdict is not reliable until they are cleared.
     </div>`;
   el.innerHTML=html;
