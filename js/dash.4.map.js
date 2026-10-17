@@ -4608,16 +4608,17 @@ let rcMode = 'recent';
 
 function rcSetMode(mode){
   rcMode = mode;
-  const isRecent = mode==='recent';
-  const rp = document.getElementById('rc-panel-recent');
-  const hp = document.getElementById('rc-panel-history');
-  if(rp) rp.style.display = isRecent?'':'none';
-  if(hp) hp.style.display = isRecent?'none':'';
-  const br = document.getElementById('rc-mode-recent');
-  const bh = document.getElementById('rc-mode-history');
-  if(br){ br.style.borderBottomColor=isRecent?'#1565c0':'transparent'; br.style.color=isRecent?'#1565c0':'#6b7280'; }
-  if(bh){ bh.style.borderBottomColor=isRecent?'transparent':'#1565c0'; bh.style.color=isRecent?'#6b7280':'#1565c0'; }
+  ['recent','history','statement'].forEach(k=>{
+    const p=document.getElementById('rc-panel-'+k); if(p) p.style.display = (k===mode)?'':'none';
+    const b=document.getElementById('rc-mode-'+k);
+    if(b){ b.style.borderBottomColor = (k===mode)?'#1565c0':'transparent'; b.style.color = (k===mode)?'#1565c0':'#6b7280'; }
+  });
   if(mode==='history') rcLoadHistory();
+  if(mode==='statement'){
+    const go=()=>{ if(typeof _stEnsureCss==='function') _stEnsureCss(); if(typeof rcStInit==='function') rcStInit(); };
+    if(typeof rcStInit==='function') go();
+    else if(typeof ensureHarvest==='function') ensureHarvest().then(go);
+  }
 }
 
 async function rcLoadHistory(){
