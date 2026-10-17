@@ -1453,6 +1453,8 @@ async function rcRun(){
     const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
     if (rc.ok) {
       const d = await rc.json();
+      window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
+      if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
       // Cache hit if cache window COVERS requested window (superset) — filter client-side
       const cacheCovers = d.rows && d.rows.length && d.from && d.to && d.from <= from && d.to >= to;
       if (cacheCovers) {
@@ -2475,7 +2477,7 @@ const _RC_FILTERS = [
 ];
 function _rcSearchHit(r,q){
   if(!q) return true;
-  return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes].some(x=>x&&String(x).toLowerCase().includes(q));
+  return [r.sheet_name,r.tg_name,r.area,r.route_code,r.admin_notes,r.harvest_date].some(x=>x&&String(x).toLowerCase().includes(q));
 }
 
 // ── DESIGN SYSTEM (scoped: #rc-modal …, global: .rcg-… collector cards) ──
@@ -3001,9 +3003,16 @@ function rcStInit(){
 // Spawn Count packs for the range. counted = all packs except bugi (old /
 // damaged coins, Spawn absorbs them), kept separately so the office's
 // "(counted + bugi) − share" rule is reproduced exactly as in office.html.
+// v19 snapshot carries ALL office packs + day closures → no live reads.
+function rcStUseSnapshot(d){
+  if(!d || !d.packs) return;
+  const packs={}; Object.keys(d.packs).forEach(k=>{ packs[k]={counted:Number(d.packs[k].c||0),bugi:Number(d.packs[k].b||0)}; });
+  const recons={}; (d.recons||[]).forEach(x=>{ recons[x.collector+'|'+x.recon_date]=x; });
+  _stPacks=packs; _stRecons=recons; _stPackRange='*'; _stLoading=false;
+}
 async function _stLoadPacks(from,to){
   const key=from+'..'+to;
-  if(_stPacks && _stPackRange===key) return;
+  if(_stPacks && (_stPackRange===key || _stPackRange==='*')) return;
   _stLoading=true;
   try{
     const packs={}, recons={};
@@ -3051,6 +3060,12 @@ function _stBuild(rows){
       if(r.harvest_date && recons[c+'|'+r.harvest_date] && !dayset.has(r.harvest_date)){ dayset.add(r.harvest_date); }
     });
     o.closedDays=dayset.size;
+    // data-quality warnings that make a verdict unreliable until fixed
+    o.sharedN=rs.filter(r=>_rcIsSharedFeed(r)).length;
+    o.impossibleN=rs.filter(r=>_rcImpossible(r)).length;
+    o.longwinN=rs.filter(r=>_rcLongWindowShort(r)).length;
+    o.zeroTgN=rs.filter(r=>_rcIsZeroTg(r)).length;
+    o.warnN=o.sharedN+o.impossibleN+o.longwinN+o.zeroTgN;
     o.vsBook=o.bookN?o.book-o.bookShare:null;
     o.vsCash=o.countedN?(o.counted+o.bugi-o.countShare):null;
     // verdict
@@ -3062,6 +3077,61 @@ function _stBuild(rows){
   });
   out.sort((a,b)=>b.severity-a.severity || a.collector.localeCompare(b.collector));
   return out;
+}
+// Day-by-day lines for one collector (same rules as the collector line).
+function _stDays(line){
+  const by={};
+  line.rows.forEach(r=>{ const d=r.harvest_date||'?'; (by[d]=by[d]||[]).push(r); });
+  return Object.keys(by).sort((a,b)=>b.localeCompare(a)).map(d=>{
+    const l=_stBuild(by[d].map(r=>({...r,collector:line.collector})))[0];
+    l.date=d; l.routes=[...new Set(by[d].map(r=>r.route_code||'ADMIN'))];
+    const rc=(_stRecons||{})[line.collector+'|'+d];
+    l.closed=rc&&typeof rc==='object'?rc:null;
+    return l;
+  });
+}
+let _stOpen={};
+function rcStToggle(collector){ _stOpen[collector]=!_stOpen[collector]; rcStRender(); }
+function _stDayRows(line){
+  const days=_stDays(line);
+  return days.map(d=>`<tr class="st-day" onclick="event.stopPropagation();document.getElementById('rc-from').value='${d.date}';document.getElementById('rc-to').value='${d.date}';rcShowCollectorOnDate(${klArg(line.collector)},'${d.date}')" title="Open ${_rcEsc(line.collector)} on ${d.date}">
+      <td style="padding-left:44px;"><b style="color:#311A8E;">📅 ${d.date}</b><div style="font-size:9px;color:#025AC6;font-family:monospace;font-weight:700;">${_rcEsc(d.routes.join(' · '))}</div></td>
+      <td class="r">${d.closed?`<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;font-size:9px;" title="Office closed this hand-in in Spawn Count${d.closed.confirmed_by?' — '+_rcEsc(d.closed.confirmed_by):''}">closed</span>`:'<span style="font-size:9px;color:#b45309;">open</span>'}</td>
+      <td class="r">${d.n}</td>
+      <td class="r" style="font-weight:700;color:#1a2250;">${_php(d.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(d.share)}</div></td>
+      <td class="r">${_php(d.income)}${d.noTgN?`<div style="font-size:9px;color:#4338ca;font-weight:700;">${d.noTgN} no TG</div>`:''}</td>
+      <td class="r">${d.bookN?_php(d.book):'<span style="color:#b6bdcf;">—</span>'}${d.notInBookN?`<div style="font-size:9px;color:#b45309;font-weight:700;">${d.notInBookN} not in book</div>`:''}</td>
+      <td class="r">${d.countedN?_php(d.counted)+(d.bugi?`<div style="font-size:9px;color:#b45309;">+ bugi ${_php(d.bugi)}</div>`:''):'<span style="color:#b6bdcf;">—</span>'}${d.notCountedN?`<div style="font-size:9px;color:#6b7280;font-weight:700;">${d.notCountedN} not counted</div>`:''}</td>
+      ${_stGapCell(d.vsTg, d.n-d.noTgN, d.deficitN?`<b style="color:#DF1A35;">${d.deficitN} deficit</b>`:(d.surplusN?`${d.surplusN} surplus`:''))}
+      ${_stGapCell(d.vsBook, d.bookN, d.bookDiffN?`<b style="color:#b45309;">${d.bookDiffN} differ</b>`:'')}
+      ${_stGapCell(d.vsCash, d.countedN, d.cashShortN?`<b style="color:#DF1A35;">${d.cashShortN} short</b>`:(d.cashOverN?`${d.cashOverN} over`:''))}
+      <td class="c">${d.warnN?`<span title="shared feed ${d.sharedN} · impossible ${d.impossibleN} · long window ${d.longwinN} · TG ₱0 ${d.zeroTgN}" style="color:#9d174d;font-weight:800;">⚠ ${d.warnN}</span>`:''}</td>
+      <td class="c">${d.status==='audit'?'🔎':d.status==='check'?'👀':'✅'}</td>
+      <td class="r">${d.pendingN?`<b style="color:#4338ca;">⏳ ${d.pendingN}</b>`:'☑'}</td>
+    </tr>`).join('');
+}
+// Open the collector popup limited to one hand-in day (used by day lines).
+function rcShowCollectorOnDate(collector,date){
+  rcShowCollector(collector);
+  const q=document.getElementById('rca-q'); if(q) q.value=date;
+  _rcView.q=date; _rcView.filter='all';
+  rcRenderModal({force:true, keepScroll:false});
+}
+// Plain-text statement for Messenger / notes.
+function rcStCopy(){
+  const from=document.getElementById('st-from')?.value, to=document.getElementById('st-to')?.value;
+  const rows=(rcAllRows||[]).filter(r=>(r.harvest_date||'')>=from && (r.harvest_date||'')<=to);
+  const lines=_stBuild(rows);
+  const f=v=>v==null?'—':(Math.abs(v)<=20?'ok':(v>0?'+':'-')+'₱'+Math.round(Math.abs(v)).toLocaleString());
+  let t=`SPAWN COLLECTOR STATEMENT ${from} → ${to}\n`;
+  lines.forEach(l=>{
+    t+=`\n${l.status==='audit'?'🔎':l.status==='check'?'👀':'✅'} ${l.collector} — ${l.n} harvests / ${l.days} days\n`;
+    t+=`  Coins ₱${Math.round(l.coins).toLocaleString()} · TG ₱${Math.round(l.income).toLocaleString()} · Book ₱${Math.round(l.book).toLocaleString()} · Count ₱${Math.round(l.counted).toLocaleString()}\n`;
+    t+=`  vs TG ${f(l.vsTg)}${l.deficitN?` (${l.deficitN} deficit)`:''} · vs Book ${f(l.vsBook)}${l.bookDiffN?` (${l.bookDiffN} differ)`:''} · vs Cash ${f(l.vsCash)}${l.cashShortN?` (${l.cashShortN} short)`:''}\n`;
+    const miss=[l.noTgN?`${l.noTgN} no TG`:'',l.notInBookN?`${l.notInBookN} not in book`:'',l.notCountedN?`${l.notCountedN} not counted`:'',l.pendingN?`${l.pendingN} needs confirm`:'',l.warnN?`${l.warnN} data warnings`:''].filter(Boolean);
+    if(miss.length) t+=`  Gaps: ${miss.join(', ')}\n`;
+  });
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{ if(typeof toast==='function') toast('📋 Statement copied'); }).catch(()=>{ window.prompt('Copy the statement:',t); });
 }
 function _stGapCell(v, n, sub, opts){
   opts=opts||{};
@@ -3080,7 +3150,7 @@ function rcStRender(){
     el.innerHTML=`<div style="padding:30px;text-align:center;color:#8a93a9;">${_stLoading||!rcAllRows||!rcAllRows.length?'⏳ Loading harvests…':'No harvests in this period.'}</div>`;
     return;
   }
-  if(!_stPacks || _stPackRange!==from+'..'+to){
+  if(!_stPacks || (_stPackRange!=='*' && _stPackRange!==from+'..'+to)){
     if(!_stLoading) _stLoadPacks(from,to).then(()=>rcStRender());
   }
   _rcComputeSharedFeeds(rows);
@@ -3091,7 +3161,24 @@ function rcStRender(){
                   : s==='check'?'<span class="rca-pill" style="background:#fef3c7;color:#b45309;font-size:10px;">👀 Check</span>'
                   : '<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;font-size:10px;">✅ Clean</span>';
   const packsNote = _stLoading || !_stPacks ? '<span style="color:#b45309;">⏳ loading Spawn Count…</span>' : '';
-  let html=`<div class="st-summary">
+  // Coverage = how much of the period each source actually covers. A verdict
+  // is only as reliable as its coverage, so it is shown before the table.
+  const pct=(a,b)=>b?Math.round(a/b*100):0;
+  const covTg=pct(tot.n-tot.noTgN,tot.n), covBook=pct(tot.bookN,tot.n), covCount=pct(tot.countedN,tot.n), covConf=pct(tot.n-tot.pendingN,tot.n);
+  const covBar=(label,p,col,sub)=>`<div class="st-cov"><div class="st-cov-l"><span>${label}</span><b style="color:${p>=90?'#0f8c43':p>=60?'#b45309':'#DF1A35'};">${p}%</b></div><div class="st-cov-bar"><div style="width:${p}%;background:${col};"></div></div><div class="st-cov-s">${sub}</div></div>`;
+  const snapAge = window._rcSnap&&window._rcSnap.generated_at ? Math.round((Date.now()-new Date(window._rcSnap.generated_at).getTime())/60000) : null;
+  const totWarn = tot.warnN;
+  let html=`<div class="st-covwrap">
+      ${covBar('🔗 TG linked',covTg,'#025AC6',tot.noTgN?`${tot.noTgN} harvests cannot be checked against income`:'every harvest has a TG name')}
+      ${covBar('📒 In Bashang',covBook,'#b45309',tot.notInBookN?`${tot.notInBookN} not found in the office book (±3 days)`:'every harvest is in the book')}
+      ${covBar('🧮 Counted',covCount,'#028867',_stPacks?(tot.notCountedN?`${tot.notCountedN} not yet counted by the office`:'every harvest counted'):'loading…')}
+      ${covBar('☑ Confirmed',covConf,'#311A8E',tot.pendingN?`${tot.pendingN} still need confirmation`:'all confirmed')}
+      <div class="st-cov" style="justify-content:center;gap:6px;">
+        <button onclick="rcStCopy()" class="st-range" style="width:100%;">📋 Copy statement</button>
+        <div class="st-cov-s" style="text-align:center;">${snapAge!=null?`⚡ snapshot ${snapAge} min ago`:'live read'}${totWarn?` · <b style="color:#9d174d;">⚠ ${totWarn} data warnings</b>`:''}</div>
+      </div>
+    </div>
+    <div class="st-summary">
       <div class="st-card"><div class="l">Collectors</div><div class="v">${lines.length}</div><div class="s">${nAudit?`<b style="color:#DF1A35;">${nAudit} audit</b> · `:''}${nCheck?`<b style="color:#b45309;">${nCheck} check</b> · `:''}<b style="color:#0f8c43;">${nClean} clean</b></div></div>
       <div class="st-card"><div class="l">Coins (PWA)</div><div class="v">${_php(tot.coins)}</div><div class="s">${tot.n} harvests · share ${_php(tot.share)}</div></div>
       <div class="st-card"><div class="l">TG + Cloud income</div><div class="v">${_php(tot.income)}</div><div class="s">${tot.noTgN?`${tot.noTgN} no TG`:'all matched'}</div></div>
@@ -3107,11 +3194,13 @@ function rcStRender(){
       <th class="r" title="Coins − income on matched harvests. − = short">vs TG</th>
       <th class="r" title="Bashang − spawn share on harvests that are in the book">vs Book</th>
       <th class="r" title="(Counted + bugi) − spawn share on harvests the office has counted. − = cash short">vs Cash</th>
+      <th class="c" title="Data-quality warnings: shared TG feed, impossible income, long window, TG ₱0 — fix these before trusting the verdict">⚠</th>
       <th class="c">Status</th><th class="r">To do</th>
     </tr></thead><tbody>`;
   lines.forEach(l=>{
-    html+=`<tr class="st-row st-${l.status}" onclick='rcShowCollector(${klArg(l.collector)})' title="Open ${_rcEsc(l.collector)}'s reconciliation">
-      <td><div style="display:flex;align-items:center;gap:8px;"><span class="st-av">${_rcEsc(l.collector.trim().charAt(0).toUpperCase())}</span><b style="color:#1a2250;">${_rcEsc(l.collector)}</b></div></td>
+    const open=!!_stOpen[l.collector];
+    html+=`<tr class="st-row st-${l.status}${open?' open':''}" onclick='rcStToggle(${klArg(l.collector)})' title="${open?'Hide':'Show'} day-by-day">
+      <td><div style="display:flex;align-items:center;gap:8px;"><span style="width:10px;color:#311A8E;font-weight:900;">${open?'▾':'▸'}</span><span class="st-av">${_rcEsc(l.collector.trim().charAt(0).toUpperCase())}</span><b style="color:#1a2250;">${_rcEsc(l.collector)}</b><button class="rca-iconbtn" onclick='event.stopPropagation();rcShowCollector(${klArg(l.collector)})' title="Open full reconciliation popup">↗</button></div></td>
       <td class="r">${l.days}${l.closedDays?`<div style="font-size:9px;color:#8a93a9;">${l.closedDays} closed</div>`:''}</td>
       <td class="r">${l.n}</td>
       <td class="r" style="font-weight:700;color:#1a2250;">${_php(l.coins)}<div style="font-size:9px;color:#8a93a9;">share ${_php(l.share)}</div></td>
@@ -3121,14 +3210,17 @@ function rcStRender(){
       ${_stGapCell(l.vsTg, l.n-l.noTgN, (l.deficitN?`<b style="color:#DF1A35;">${l.deficitN} deficit</b>`:'')+(l.deficitN&&l.surplusN?' · ':'')+(l.surplusN?`${l.surplusN} surplus`:''))}
       ${_stGapCell(l.vsBook, l.bookN, l.bookDiffN?`<b style="color:#b45309;">${l.bookDiffN} differ</b>`:'')}
       ${_stPacks?_stGapCell(l.vsCash, l.countedN, (l.cashShortN?`<b style="color:#DF1A35;">${l.cashShortN} short</b>`:'')+(l.cashShortN&&l.cashOverN?' · ':'')+(l.cashOverN?`${l.cashOverN} over`:'')):'<td class="r" style="color:#b6bdcf;">…</td>'}
+      <td class="c">${l.warnN?`<span title="shared feed ${l.sharedN} · impossible income ${l.impossibleN} · long window ${l.longwinN} · TG ₱0 ${l.zeroTgN}" style="color:#9d174d;font-weight:800;">⚠ ${l.warnN}</span>`:''}</td>
       <td class="c">${pill(l.status)}</td>
       <td class="r">${l.pendingN?`<b style="color:#4338ca;">⏳ ${l.pendingN}</b>`:'<span style="color:#0f8c43;">☑ all</span>'}</td>
     </tr>`;
+    if(open) html+=_stDayRows(l);
   });
   html+=`</tbody></table></div>
     <div style="font-size:10.5px;color:#8a93a9;padding:10px 4px 0;line-height:1.5;">
       <b>vs TG</b> = coins − Telegram/Cloud income (matched harvests only) · <b>vs Book</b> = Bashang − spawn share · <b>vs Cash</b> = Spawn Count (counted + bugi) − spawn share.
-      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = any deficit or cash short · <b>Check</b> = surplus, book differs, not counted, or no TG · click a row to open that collector.
+      Gaps outside ±₱20 are red (short) or amber (over). <b>Audit</b> = any deficit or cash short · <b>Check</b> = surplus, book differs, not counted, or no TG.
+      Click a collector for day-by-day; click a day to open those vendos; ↗ opens the full popup. <b>⚠</b> = data warnings (shared feed, impossible income, long window, TG ₱0) — fix those links first, the verdict is not reliable until they are cleared.
     </div>`;
   el.innerHTML=html;
 }
@@ -3152,6 +3244,16 @@ function _stEnsureCss(){
   #rc-panel-statement .st-row.st-check td:first-child{box-shadow:inset 4px 0 0 #FFB725;}
   #rc-panel-statement .st-row.st-clean{opacity:.75;}
   #rc-panel-statement .st-av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;font-weight:900;font-size:12px;display:inline-flex;align-items:center;justify-content:center;}
+  #rc-panel-statement .st-covwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-bottom:10px;}
+  #rc-panel-statement .st-cov{background:#fff;border:1px solid #e3e9f8;border-radius:12px;padding:8px 11px;display:flex;flex-direction:column;}
+  #rc-panel-statement .st-cov-l{display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:#1a2250;}
+  #rc-panel-statement .st-cov-bar{height:6px;background:#eef1f9;border-radius:999px;margin:5px 0 4px;overflow:hidden;}
+  #rc-panel-statement .st-cov-bar div{height:100%;border-radius:999px;}
+  #rc-panel-statement .st-cov-s{font-size:9.5px;color:#8a93a9;line-height:1.3;}
+  #rc-panel-statement .st-row.open td{background:#f3f6ff;}
+  #rc-panel-statement .st-day{cursor:pointer;background:#fbfcff;font-size:11px;}
+  #rc-panel-statement .st-day:hover{background:#eef2ff;}
+  #rc-panel-statement .st-day td{padding:6px 9px;border-bottom:1px dashed #e3e9f8;}
   #rc-panel-statement .st-range{padding:5px 11px;border:1.5px solid #c7d2fe;border-radius:999px;background:#fff;color:#311A8E;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;}`;
   document.head.appendChild(s);
 }
