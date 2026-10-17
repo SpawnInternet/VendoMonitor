@@ -45,6 +45,35 @@ window.askAdminPw = function(message){
     setTimeout(function(){ input.focus(); }, 60);
   });
 };
+// Pretty confirm — replaces the browser's native confirm() box.
+// askConfirm({title, body, ok, danger}) → Promise<boolean>. body is HTML.
+window.askConfirm = function(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    var old=document.getElementById('spawn-confirm-modal'); if(old) old.remove();
+    var ov=document.createElement('div');
+    ov.id='spawn-confirm-modal';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(17,10,60,.6);backdrop-filter:blur(5px);z-index:100011;display:flex;align-items:center;justify-content:center;padding:20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+    var grad = opts.danger ? 'linear-gradient(130deg,#C01176 0%,#DF1A35 100%)' : 'linear-gradient(130deg,#311A8E 0%,#1e3cb8 45%,#025AC6 100%)';
+    var okBg = opts.danger ? 'linear-gradient(135deg,#DF1A35,#C01176)' : 'linear-gradient(135deg,#1e3cb8,#025AC6)';
+    ov.innerHTML='<div style="background:#fff;border-radius:20px;max-width:420px;width:100%;box-shadow:0 30px 80px rgba(13,8,55,.5);overflow:hidden;">'
+      +'<div style="background:'+grad+';padding:16px 22px;color:#fff;font-size:16px;font-weight:900;display:flex;align-items:center;gap:9px;">'+(opts.title||'Please confirm')+'</div>'
+      +'<div style="padding:18px 22px;">'
+      +'<div style="font-size:13px;color:#374151;line-height:1.55;">'+(opts.body||'')+'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:18px;">'
+      +'<button id="spawn-confirm-cancel" style="flex:1;padding:11px;background:#fff;color:#6b7280;border:1.5px solid #e2e8f6;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">'+(opts.cancel||'Cancel')+'</button>'
+      +'<button id="spawn-confirm-ok" style="flex:2;padding:11px;background:'+okBg+';color:#fff;border:none;border-radius:11px;font-size:13px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 8px 18px -8px rgba(30,60,184,.6);">'+(opts.ok||'Continue')+'</button>'
+      +'</div></div></div>';
+    document.body.appendChild(ov);
+    function close(v){ ov.remove(); document.removeEventListener('keydown',key); resolve(v); }
+    function key(e){ if(e.key==='Escape') close(false); if(e.key==='Enter') close(true); }
+    document.getElementById('spawn-confirm-cancel').onclick=function(){ close(false); };
+    document.getElementById('spawn-confirm-ok').onclick=function(){ close(true); };
+    ov.addEventListener('click',function(e){ if(e.target===ov) close(false); });
+    document.addEventListener('keydown',key);
+    setTimeout(function(){ var b=document.getElementById('spawn-confirm-ok'); if(b) b.focus(); }, 60);
+  });
+};
 // Show the "wrong password" state on the open modal (call after a failed check)
 window.markAdminPwWrong = function(){
   var err=document.getElementById('spawn-pw-err'); if(err) err.style.display='block';
@@ -327,7 +356,7 @@ window.ensureHarvest = function(){
   if (window.__harvestPromise) return window.__harvestPromise;
   window.__harvestPromise = new Promise(function(resolve, reject){
     var s = document.createElement('script');
-    s.src = 'js/dash.1.harvest.js?v=audit-10174';
+    s.src = 'js/dash.1.harvest.js?v=audit-10175';
     s.async = false;
     s.onload = function(){ resolve(true); };
     s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
