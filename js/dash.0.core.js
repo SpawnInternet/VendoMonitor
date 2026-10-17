@@ -201,6 +201,7 @@ window.markAdminPwWrong = function(){
       const s=JSON.parse(localStorage.getItem(SL_KEY)||'null');
       if(s && s.ok && s.token && Date.now()-s.ts < SL_TTL){
         window.__ADMIN_GW_TOKEN = s.token;
+        window.__ADMIN_USER = s.user || '';
         reveal();
         return;
       }
@@ -223,7 +224,8 @@ window.markAdminPwWrong = function(){
       const d = await r.json().catch(()=>({}));
       if(r.ok && d.ok && d.token){
         window.__ADMIN_GW_TOKEN = d.token;
-        localStorage.setItem(SL_KEY, JSON.stringify({ ok:true, token:d.token, ts:Date.now() }));
+        window.__ADMIN_USER = u;
+        localStorage.setItem(SL_KEY, JSON.stringify({ ok:true, token:d.token, ts:Date.now(), user:u }));
         if(err) err.classList.remove('show');
         reveal();
         setTimeout(()=>{ try{ location.reload(); }catch(_){} }, 100);
@@ -325,7 +327,7 @@ window.ensureHarvest = function(){
   if (window.__harvestPromise) return window.__harvestPromise;
   window.__harvestPromise = new Promise(function(resolve, reject){
     var s = document.createElement('script');
-    s.src = 'js/dash.1.harvest.js?v=stmt-10173';
+    s.src = 'js/dash.1.harvest.js?v=audit-10174';
     s.async = false;
     s.onload = function(){ resolve(true); };
     s.onerror = function(e){ window.__harvestPromise = null; reject(e); };
