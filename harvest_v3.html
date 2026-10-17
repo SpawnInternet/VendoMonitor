@@ -367,6 +367,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .rcpt-zigzag{height:12px;background:repeating-linear-gradient(90deg,#f0f4f8 0,#f0f4f8 8px,transparent 8px,transparent 16px);margin:0 -1px}
 /* Sticky bottom bar for receipt screen */
 .rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
+  .hrv{border-radius:12px;padding:10px 12px;}
 </style>
 </head>
 <body>
@@ -1541,7 +1542,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v13.8';
+const APP_VERSION = 'v13.9';
 /* The badge used to be a hardcoded literal in the markup and had drifted to
    v13.7 while APP_VERSION said v12.9 — so the number on screen told you
    nothing about which build was actually running. Driven from APP_VERSION
@@ -4184,6 +4185,7 @@ async function submitHarvest(){
           if(_bJson && _bJson.ok){
             _bOk = true;
             _submitted = true;
+            window._lastHarvest = { id:_bJson.harvest_id||_bJson.id||null, vendo_id:currentItem.vendo_id||null, date:harvestRecord.harvest_date, online:true };
             window._pendingPackItems=[];
             if(currentGroupRun){
               currentGroupRun.harvested_count++;
@@ -4207,6 +4209,7 @@ async function submitHarvest(){
       // NOTE: do NOT throw — the outer catch just toasts and drops the harvest.
       // Falling through with _submitted=false queues it for retry instead.
       _submitted = !!(_iResp.ok && _hResp.ok && _hId);
+      window._lastHarvest = { id:_hId, vendo_id:currentItem.vendo_id||null, date:harvestRecord.harvest_date, online:_submitted };
       // Save pack items
       if(_hId && window._pendingPackItems && window._pendingPackItems.length){
         const today2 = harvestRecord.harvest_date;
@@ -5026,6 +5029,53 @@ function showHarvestReceipt(){
   const refNum = 'HRV-' + Date.now().toString(36).toUpperCase().slice(-8);
   const refEl = document.getElementById('hr-ref'); if(refEl) refEl.textContent = 'Ref No. ' + refNum;
   document.getElementById('harvest-receipt-overlay').classList.add('show');
+  hrLoadVerdict();
+}
+
+// ── INSTANT VERDICT ────────────────────────────────────────────────
+// The database computes coins-vs-bot the moment the harvest is saved
+// (spawn_recon_one trigger). Show it here so the collector sees exact / short
+// while still at the box. Polls briefly in case the write lands a second late.
+const HR_VERDICT = {
+  ok:     { bg:'#dcfce7', fg:'#15803d', icon:'✅', title:'Exact' },
+  warn:   { bg:'#fef9c3', fg:'#b45309', icon:'🟡', title:'Surplus' },
+  alert:  { bg:'#fee2e2', fg:'#dc2626', icon:'🔴', title:'Short' },
+  paused: { bg:'#ede9fe', fg:'#5b21b6', icon:'📱', title:'Not comparable yet' },
+  silent: { bg:'#f3f4f6', fg:'#6b7280', icon:'📡', title:'Bot silent' },
+  nodata: { bg:'#e8eef9', fg:'#3b5b8c', icon:'🔗', title:'No TG name' },
+};
+async function hrLoadVerdict(){
+  const box=document.getElementById('hr-verdict'); if(!box) return;
+  const lh=window._lastHarvest;
+  box.style.display='block';
+  if(!lh || !lh.online || !navigator.onLine){
+    box.innerHTML='<div class="hrv" style="background:#f3f4f6;color:#6b7280;">⏳ <b>Bot check</b> — will show once this harvest syncs</div>';
+    return;
+  }
+  box.innerHTML='<div class="hrv" style="background:#f3f4f6;color:#6b7280;">⏳ <b>Checking bot income…</b></div>';
+  const sel='select=id,coins_total,tg_income,recon_gap,recon_flag,recon_reason,recon_repeat,recon_final,harvested_at';
+  const url = lh.id ? `${SB}/rest/v1/harvests?id=eq.${lh.id}&${sel}`
+            : `${SB}/rest/v1/harvests?vendo_id=eq.${lh.vendo_id}&harvest_date=eq.${lh.date}&collector=eq.${encodeURIComponent(selectedCollector||'')}&order=harvested_at.desc&limit=1&${sel}`;
+  const delays=[700,2500,6000,15000];
+  for(let i=0;i<delays.length;i++){
+    await new Promise(r=>setTimeout(r,delays[i]));
+    if(!document.getElementById('harvest-receipt-overlay').classList.contains('show')) return;
+    let row=null;
+    try{ const r=await fetch(url,{headers:HDR}); const d=await r.json(); row=Array.isArray(d)?d[0]:null; }catch(e){}
+    if(row && row.recon_flag){ hrRenderVerdict(row); if(row.recon_final || row.recon_flag!=='ok') return; }
+  }
+}
+function hrRenderVerdict(row){
+  const box=document.getElementById('hr-verdict'); if(!box) return;
+  const v=HR_VERDICT[row.recon_flag]||HR_VERDICT.nodata;
+  const coins=Number(row.coins_total||0), tg=row.tg_income!=null?Number(row.tg_income):null, gap=row.recon_gap!=null?Number(row.recon_gap):null;
+  let line='';
+  if(row.recon_flag==='ok') line=`Coins ₱${fmt(coins)} · Bot ₱${fmt(tg)}`;
+  else if(row.recon_flag==='warn') line=`Coins ₱${fmt(coins)} · Bot ₱${fmt(tg)} · <b>+₱${fmt(coins-tg)}</b> above bot`;
+  else if(row.recon_flag==='alert') line=`Coins ₱${fmt(coins)} · Bot ₱${fmt(tg)} · <b>₱${fmt(gap)} short</b>${row.recon_repeat?' · <b>🔁 second round short</b>':''}<div style="margin-top:6px;font-weight:700;">Please recount the box before leaving.</div>`;
+  else line=row.recon_reason||'';
+  const prov = row.recon_final ? '' : '<div style="font-size:0.72rem;opacity:.75;margin-top:4px;">provisional — bot reports can arrive a few minutes late; final check in 15 min</div>';
+  box.innerHTML=`<div class="hrv" style="background:${v.bg};color:${v.fg};"><div style="font-size:1.05rem;font-weight:800;">${v.icon} ${v.title}</div><div style="font-size:0.85rem;margin-top:3px;line-height:1.4;">${line}</div>${prov}</div>`;
 }
 
 function hrNextVendo(){
@@ -6562,6 +6612,7 @@ async function submitEodSession(){
             <span style="color:#999;font-size:0.82rem;">Owner Share (25%)</span>
             <span id="hr-owner" style="color:#025AC6;font-weight:600;font-size:0.93rem;">₱0</span>
           </div>
+          <div id="hr-verdict" style="padding:10px 0;border-bottom:1px solid #f2f2f2;display:none;"></div>
           <div id="hr-breakdown-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
             <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Pack Breakdown</div>
             <div id="hr-packs" style="color:#333;font-size:0.88rem;line-height:1.6;"></div>
