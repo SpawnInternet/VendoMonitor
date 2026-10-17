@@ -2377,6 +2377,7 @@ function rcFilter(){
 // Header counts, chip counts and row flags all use that one rule.
 let _rcOpenCollector = null;
 let _rcView = { filter:'all', sort:'date', q:'' };
+let _rcLedgerOpen = {};   // vendo key -> true when its ledger card is expanded
 let _rcRerenderPending = false;
 let _rcSearchT = null;
 
@@ -2524,6 +2525,13 @@ function _rcEnsureCss(){
   .spw-rc #rca-body::-webkit-scrollbar-thumb{background:#c3cdeb;border-radius:99px;border:2px solid #f3f6fd;}
   .spw-rc .rca-day{margin-top:14px;border:1px solid #e3e9f8;border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 1px 3px rgba(26,34,78,.05), 0 8px 24px -18px rgba(26,34,78,.25);}
   .spw-rc .rca-date{position:sticky;top:0;z-index:2;background:linear-gradient(90deg,#eef2ff,#f6f8ff);padding:9px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #e3e9f8;backdrop-filter:blur(4px);}
+  .spw-rc .rca-vl-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 4px 2px;}
+  .spw-rc .rca-vl-head{cursor:pointer;user-select:none;}
+  .spw-rc .rca-vl-head:hover{background:linear-gradient(90deg,#e4e9fb,#eef2ff);}
+  .spw-rc .rca-vl-caret{width:14px;color:#311A8E;font-weight:900;}
+  .spw-rc .rca-vl{margin-top:8px;}
+  .spw-rc .rca-vl.done{opacity:.62;}
+  .spw-rc .rca-vl.done:hover,.spw-rc .rca-vl.done.open{opacity:1;}
   .spw-rc .rca-route{background:#fbfcff;padding:7px 14px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-bottom:1px solid #eef1f9;}
   .spw-rc .rca-sum{margin-left:auto;font-size:11px;display:flex;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums;color:#44506b;}
   .spw-rc .rca-sum b{font-variant-numeric:tabular-nums;}
@@ -2725,6 +2733,10 @@ function _rcRenderChips(d){
 
 function _rcRenderBody(d){
   const body=document.getElementById('rca-body'); if(!body) return;
+  const _top=body.scrollTop;
+  try{ _rcRenderBodyInner(d,body); } finally { body.scrollTop=_top; }
+}
+function _rcRenderBodyInner(d,body){
   const rows=_rcVisibleRows(d.rows);
   const showCloud=d.rows.some(r=>r.cloud_income!=null);
   if(!rows.length){
@@ -2738,6 +2750,10 @@ function _rcRenderBody(d){
       return bv-av;
     });
     body.innerHTML=`<div style="padding:12px 14px;"><div class="rca-day" style="margin-top:0;">${_rcTable(sorted,showCloud,true)}</div></div>`;
+    return;
+  }
+  if(_rcView.sort==='vendo'){
+    body.innerHTML=_rcLedgerHtml(rows,showCloud);
     return;
   }
   // By date → route
@@ -2765,6 +2781,82 @@ function _rcRenderBody(d){
   });
   html+='</div>';
   body.innerHTML=html;
+}
+
+
+// ══════════════════════════════════════════════════════════
+// 📒 VENDO LEDGER — one card per vendo, all its harvests inside, passbook
+// style. Same rows / buttons / filters as the date view; only the grouping
+// changes. Vendos with work left sort first; fully confirmed ones sink and
+// grey out. Cards are collapsed unless a filter/search is active.
+// ══════════════════════════════════════════════════════════
+function _rcVendoKey(r){ return r.vendo_id!=null ? 'v'+r.vendo_id : 's'+String(r.sheet_name||'unmatched').toLowerCase(); }
+function _rcLedgerGroups(rows){
+  const by={};
+  rows.forEach(r=>{ const k=_rcVendoKey(r); (by[k]=by[k]||{key:k,rows:[]}).rows.push(r); });
+  const todo=_RC_FILTERS.find(f=>f[0]==='todo')[2];
+  const out=Object.values(by).map(g=>{
+    g.rows.sort((a,b)=>String(b.harvest_date||'').localeCompare(String(a.harvest_date||'')));
+    g.st=_rcStats(g.rows);
+    g.todo=g.rows.filter(todo).length;
+    g.net=-g.st.gap;
+    const last=g.rows[0];
+    g.name=last.sheet_name||'';
+    g.area=last.area||'';
+    g.routes=[...new Set(g.rows.map(r=>r.route_code||'ADMIN'))];
+    g.collectors=[...new Set(g.rows.map(r=>r.collector).filter(Boolean))];
+    g.done=g.st.count>0 && g.st.confirmed===g.st.count;
+    return g;
+  });
+  // work first: most pending rows, then biggest money difference; done last
+  out.sort((a,b)=> (b.todo-a.todo) || (Math.abs(b.net)-Math.abs(a.net)) || a.name.localeCompare(b.name));
+  return out;
+}
+function _rcLedgerHtml(rows, showCloud){
+  const groups=_rcLedgerGroups(rows);
+  const forceOpen = _rcView.filter!=='all' || !!(_rcView.q||'').trim();
+  const pending=groups.filter(g=>!g.done).length;
+  let html=`<div style="padding:0 14px 14px;">
+    <div class="rca-vl-bar">
+      <span style="font-weight:900;color:#311A8E;">📒 ${groups.length} vendo${groups.length===1?'':'s'}</span>
+      <span style="color:#8a93a9;font-size:11px;">${pending} need work · ${groups.length-pending} all confirmed</span>
+      <span style="margin-left:auto;display:flex;gap:6px;">
+        <button class="rca-chip" onclick="rcLedgerAll(true)">Expand all</button>
+        <button class="rca-chip" onclick="rcLedgerAll(false)">Collapse all</button>
+      </span>
+    </div>`;
+  groups.forEach(g=>{
+    const open = forceOpen || !!_rcLedgerOpen[g.key];
+    const s=g.st;
+    const netWord = Math.abs(g.net)<=20 ? '' : g.net>0 ? ' surplus' : ' short';
+    const name = g.name ? _rcEsc(g.name) : '<span style="color:#9ca3af;font-style:italic;">unmatched</span>';
+    html+=`<div class="rca-day rca-vl${g.done?' done':''}${open?' open':''}" data-vkey="${_rcEsc(g.key)}">
+      <div class="rca-date rca-vl-head" onclick="rcLedgerToggle(${klArg(g.key)})" title="${open?'Collapse':'Expand'} this vendo's harvests">
+        <span class="rca-vl-caret">${open?'▾':'▸'}</span>
+        <span style="font-size:12.5px;font-weight:900;color:#1a2250;">${name}</span>
+        <span style="font-size:10.5px;color:#44506b;">${_rcEsc(g.area)}</span>
+        <span style="font-family:monospace;font-size:10px;font-weight:800;color:#025AC6;">${_rcEsc(g.routes.join(' · '))}</span>
+        <span style="font-size:11px;color:#8a93a9;">${s.count} harvest${s.count===1?'':'s'}</span>
+        ${g.todo?`<span class="rca-pill" style="background:#ede9fe;color:#4338ca;">⏳ ${g.todo} needs me</span>`:''}
+        ${_rcCountPills(g.rows)}
+        <div class="rca-sum">${_rcSumHtml(g.rows)}</div>
+      </div>
+      ${open?_rcTable(g.rows,showCloud,true):''}
+    </div>`;
+  });
+  html+='</div>';
+  return html;
+}
+function rcLedgerToggle(key){
+  _rcLedgerOpen[key]=!_rcLedgerOpen[key];
+  const d=(window._rcDetail||{})[_rcOpenCollector]; if(!d) return;
+  _rcRenderBody(d);   // keeps the popup's scroll — only the body re-renders
+}
+function rcLedgerAll(open){
+  const d=(window._rcDetail||{})[_rcOpenCollector]; if(!d) return;
+  _rcLedgerOpen={};
+  if(open) _rcLedgerGroups(_rcVisibleRows(d.rows)).forEach(g=>{ _rcLedgerOpen[g.key]=true; });
+  _rcRenderBody(d);
 }
 
 // Re-render the open popup from live rows. Keeps scroll position. If you are
@@ -2833,6 +2925,7 @@ function rcShowCollector(collector){
         <input id="rca-q" type="search" placeholder="🔍 Find vendo / TG / note" value="${_rcEsc(_rcView.q)}" oninput="rcSetView('q',this.value)">
         <select id="rca-sort" onchange="rcSetView('sort',this.value)">
           <option value="date">By date → route</option>
+          <option value="vendo">📒 Vendo ledger</option>
           <option value="gap">Biggest difference first</option>
         </select>
       </div>
