@@ -1856,6 +1856,49 @@ async function rcnAliasRemove(id,vendoId){
   }catch(e){ toast('❌ Could not remove: '+e.message); }
 }
 
+// 🎯 Candidates by amount: which bot names earned ≈ the coins in this window?
+// Makes a link EXACT instead of guessing a name that stopped reporting.
+async function rcnFindByAmount(){
+  const h=window._rcnHarvestRow; const box=document.getElementById('rcn-cand-list'); if(!h||!box) return;
+  const from=(h.rpc_window_start||h.harvest_window_start||h.window_start||'').slice(0,10) || (()=>{ const d=new Date(h.harvest_date); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10); })();
+  const to=String(h.harvest_date||'').slice(0,10);
+  const coins=Number(h.coins_total||0);
+  box.innerHTML='<div style="font-size:11px;color:#047857;">⏳ Scanning bot income '+from+' → '+to+'…</div>';
+  try{
+    const r=await fetch(`${_SB}/rest/v1/rpc/spawn_tg_candidates`,{method:'POST',headers:{..._HDR,'Content-Type':'application/json'},body:JSON.stringify({p_from:from,p_to:to,p_coins:coins,p_area:h.area||null,p_q:null,p_limit:10})});
+    let d=await r.json();
+    if(Array.isArray(d)&&d.length===1&&Array.isArray(d[0])) d=d[0];
+    if(d&&!Array.isArray(d)&&Array.isArray(d.spawn_tg_candidates)) d=d.spawn_tg_candidates;
+    if(!Array.isArray(d)||!d.length){ box.innerHTML='<div style="font-size:11px;color:#9ca3af;">No bot income found in this window.</div>'; return; }
+    const cur=(document.getElementById('rcn-tg')?.value||'').trim();
+    const curRow=d.find(c=>c.tg_name===cur);
+    let html='';
+    if(cur && !curRow) html+=`<div style="font-size:11px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;margin-bottom:6px;">⚠ The current name <b>${_rcEsc(cur)}</b> reported <b>₱0</b> in this window — it has probably been renamed. Pick the real one below.</div>`;
+    html+='<table style="width:100%;border-collapse:collapse;font-size:11.5px;"><thead><tr style="color:#6b7280;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;"><th style="text-align:left;padding:4px 6px;">TG name</th><th style="text-align:right;padding:4px 6px;">Income</th><th style="text-align:right;padding:4px 6px;">vs coins</th><th style="text-align:right;padding:4px 6px;">Tx</th><th style="text-align:left;padding:4px 6px;">Last</th><th></th></tr></thead><tbody>';
+    d.forEach(c=>{
+      const diff=Number(c.diff||0), ad=Math.abs(diff);
+      const col=ad<=20?'#0f8c43':ad<=150?'#b45309':'#6b7280', bg=ad<=20?'#d9f7e4':ad<=150?'#fef3c7':'#f3f4f6';
+      const usedOther = c.used_by && !(h.vendo_id!=null && String(c.used_by).includes('vendo '+h.vendo_id+' '));
+      html+=`<tr style="border-top:1px solid #d1fae5;${c.tg_name===cur?'background:#fff;':''}">
+        <td style="padding:5px 6px;"><b style="color:#1e293b;">${_rcEsc(c.tg_name)}</b>${c.tg_name===cur?' <span style="font-size:9px;color:#059669;">current</span>':''}${c.area?`<div style="font-size:9px;color:#9ca3af;">${_rcEsc(c.area)}</div>`:''}${usedOther?`<div style="font-size:9px;color:#DF1A35;">⚠ already linked to ${_rcEsc(c.used_by)}</div>`:''}</td>
+        <td style="padding:5px 6px;text-align:right;font-weight:700;">${_php(c.income)}</td>
+        <td style="padding:5px 6px;text-align:right;"><span style="background:${bg};color:${col};font-weight:800;padding:1px 7px;border-radius:999px;">${ad<=20?'✅ exact':(diff>0?'+':'−')+_php(ad)}</span></td>
+        <td style="padding:5px 6px;text-align:right;color:#6b7280;">${c.tx}</td>
+        <td style="padding:5px 6px;color:#6b7280;white-space:nowrap;">${String(c.last_tx||'').slice(5)}</td>
+        <td style="padding:5px 6px;text-align:right;"><button onclick="rcnUseCandidate(${klArg(c.tg_name)})" style="height:26px;padding:0 10px;background:${ad<=20?'#059669':'#1565c0'};color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Use</button></td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    box.innerHTML=html;
+  }catch(e){ box.innerHTML='<div style="font-size:11px;color:#dc2626;">❌ '+_rcEsc(e.message)+'</div>'; }
+}
+function rcnUseCandidate(name){
+  const inp=document.getElementById('rcn-tg'); if(!inp) return;
+  inp.value=name;
+  const res=document.getElementById('rcn-tg-results'); if(res) res.style.display='none';
+  const msg=document.getElementById('rcn-msg'); if(msg){ msg.textContent='Name filled — press 💾 Save Names'; msg.style.color='#059669'; }
+  inp.focus();
+}
 function rcShowNamesById(harvestId){
   const row=(rcAllRows||[]).find(r=>r.id===harvestId);
   if(!row){toast('Row not found');return;}
@@ -1919,6 +1962,14 @@ async function rcShowNames(vendoName, sheetName, tgName, area, harvestRow){
         <button onclick="rcnSaveNames(${JSON.stringify(vendoName).replace(/"/g,'&quot;')})" style="height:32px;padding:0 16px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">💾 Save Names</button>
         <span id="rcn-msg" style="margin-left:10px;font-size:11px;"></span>
       </div>
+      ${harvestRow?`<div id="rcn-cand-box" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="font-size:12px;font-weight:700;color:#065f46;">🎯 Find the TG name by amount</div>
+          <div style="font-size:11px;color:#047857;flex:1;min-width:200px;">Ranks every bot name by its income in <b>this harvest's window</b> vs the <b>${_php(harvestRow.coins_total)}</b> coins — pick the one that matches.</div>
+          <button onclick="rcnFindByAmount()" style="height:30px;padding:0 14px;background:#059669;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Find candidates</button>
+        </div>
+        <div id="rcn-cand-list" style="margin-top:8px;"></div>
+      </div>`:''}
       ${_rcAliasSectionHtml(harvestRow?harvestRow.vendo_id:null)}
       <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:12px;">
         <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:6px;">🗓 Harvest Window</div>
