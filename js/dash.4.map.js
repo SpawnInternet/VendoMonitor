@@ -1140,7 +1140,8 @@ async function openVendoFromSearch(vendo, area) {
   hideBread();
   // Load vendo list only if empty
   if (!allVendos.length) {
-    const v = await sb("summary_by_vendo","order=sales.desc&select=vendo,sheet_name,area,sales,txn_count,today_sales,last_date",2000);
+    // sbAll pages through every row: the API returns at most 1,000 per request.
+    const v = await sbAll("summary_by_vendo","order=sales.desc,vendo.asc&select=vendo,sheet_name,area,sales,txn_count,today_sales,last_date");
     allVendos = v;
   }
   await openVendoDetail(vendo, area);
@@ -2040,7 +2041,8 @@ function filterModalVendos(q) {
 // ══════════════════════════════════════════════════════════
 async function loadVendos() {
   if(!allVendos.length) {
-    const v = await sb("summary_by_vendo","order=sales.desc&select=vendo,sheet_name,area,sales,txn_count,today_sales,last_date",2000);
+    // sbAll pages through every row: the API returns at most 1,000 per request.
+    const v = await sbAll("summary_by_vendo","order=sales.desc,vendo.asc&select=vendo,sheet_name,area,sales,txn_count,today_sales,last_date");
     allVendos = v;
   }
   const totalSales = allVendos.reduce((s,v)=>s+parseFloat(v.sales||0),0);
@@ -3337,32 +3339,47 @@ async function loadSkipped() {
       <div class="stat"><div class="sl">Status</div><div class="sv blue" style="font-size:12px;">⏳ Loading summary...</div></div>`;
   } catch(e) {}
 
-  // Step 2: Use skipped_by_vendo view — one row per vendo, fast
+  // Step 2: Use skipped_by_vendo view — fast summary
   try {
-    const r = await fetch(
-      `${SB_URL}/rest/v1/skipped_by_vendo_mat?select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc&limit=1000`,
-      { headers: HDR, signal: AbortSignal.timeout(10000) }
-    );
-    const vendoRows = r.ok ? await r.json() : [];
+    // sbAll pages through every row: the API returns at most 1,000 per request.
+    const vendoRows = await sbAll("skipped_by_vendo_mat",
+      "select=vendo,area,skipped_count,total_amount,last_date&order=skipped_count.desc,vendo.asc,area.asc");
 
-    // Build skippedByVendo from summary view
+    // The view has one row per vendo name AND area. The detail view and the
+    // "Legitimate" button both act on the name across all areas, so merge the
+    // rows per name: counts then match what those actions really touch.
+    // Some names (e.g. "JuanFi Vendo") are shared by devices in several areas.
     skippedByVendo = {};
     vendoRows.forEach(v => {
-      skippedByVendo[v.vendo] = {
-        vendo: v.vendo,
-        area: v.area || "",
-        rows: Array(parseInt(v.skipped_count||0)).fill({amount:0}), // placeholder for count
-        total: parseFloat(v.total_amount||0),
-        last_date: v.last_date || "—",
-        skipped_count: parseInt(v.skipped_count||0)
-      };
+      const cnt = parseInt(v.skipped_count||0);
+      const amt = parseFloat(v.total_amount||0);
+      const cur = skippedByVendo[v.vendo];
+      if (!cur) {
+        skippedByVendo[v.vendo] = {
+          vendo: v.vendo,
+          areas: v.area ? [v.area] : [],
+          rows: null,
+          total: amt,
+          last_date: v.last_date || "—",
+          skipped_count: cnt
+        };
+      } else {
+        cur.total += amt;
+        cur.skipped_count += cnt;
+        if (v.area && !cur.areas.includes(v.area)) cur.areas.push(v.area);
+        if (v.last_date && (cur.last_date === "—" || v.last_date > cur.last_date)) cur.last_date = v.last_date;
+      }
+    });
+    Object.values(skippedByVendo).forEach(s => {
+      s.area = s.areas.join(", ");
+      s.rows = Array(s.skipped_count).fill({amount:0}); // placeholder for count
     });
 
     const total_amt = vendoRows.reduce((s,v)=>s+parseFloat(v.total_amount||0),0);
     const total_cnt = vendoRows.reduce((s,v)=>s+parseInt(v.skipped_count||0),0);
 
     document.getElementById("skipped-stats").innerHTML=`
-      <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${vendoRows.length.toLocaleString()}</div></div>
+      <div class="stat"><div class="sl">Affected Vendos</div><div class="sv amber">${Object.keys(skippedByVendo).length.toLocaleString()}</div></div>
       <div class="stat"><div class="sl">Total Skipped</div><div class="sv amber">${total_cnt.toLocaleString()}</div></div>
       <div class="stat"><div class="sl">Total Amount</div><div class="sv amber">${fmt(total_amt)}</div></div>
       <div class="stat"><div class="sl">Status</div><div class="sv blue" style="font-size:10px">✅ Dedup active</div></div>
@@ -3378,7 +3395,7 @@ function filterSkipped() {
   const area = document.getElementById("sk-area")?.value||"";
   const vendoList = Object.values(skippedByVendo).filter(v =>
     (!q || v.vendo.toLowerCase().includes(q)) &&
-    (!area || v.area === area)
+    (!area || (v.areas || [v.area]).includes(area))
   );
   renderSkippedTodo(vendoList);
 }
