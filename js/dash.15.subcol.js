@@ -175,10 +175,10 @@
     const by = {cash:0,gcash:0,unknown:0}; rowsL.forEach(p=>{ by[methodOf(p)] += Number(p.amount||0); });
     const top = document.getElementById('cx-top');
     top.innerHTML = `<div class="cx-top">
-      <div class="cx-c" data-k="harvest"><div class="l">🪙 Harvest · Spawn share</div><div class="v" style="color:#15803d">${peso(h)}</div><div class="s">${hrows.length} vendo${hrows.length===1?'':'s'} harvested</div></div>
-      <div class="cx-c" data-k="subs"><div class="l">📶 Subscribers · paid</div><div class="v" style="color:#025AC6">${peso(t)}</div>
+      <div class="cx-c" data-k="harvest" style="border-left:5px solid #15803d"><div class="l">🪙 Harvest · Spawn share</div><div class="v" style="color:#15803d">${peso(h)}</div><div class="s">${hrows.length} vendo${hrows.length===1?'':'s'} harvested</div></div>
+      <div class="cx-c" data-k="subs" style="border-left:5px solid #025AC6"><div class="l">📶 Subscribers · paid</div><div class="v" style="color:#025AC6">${peso(t)}</div>
         <div class="s">${rowsL.length?`${rowsL.length} payment${rowsL.length===1?'':'s'} · cash ${peso(by.cash)} · GCash ${peso(by.gcash)}${by.unknown?' · ? '+peso(by.unknown):''}`:'no payments'}${arows.length?` · <b style="color:#d97706">${arows.length} edit${arows.length===1?'':'s'}/void${arows.length===1?'':'s'}</b>`:''}</div></div>
-      <div class="cx-c tot"><div class="l">Total collected · ${esc(date)}</div><div class="v">${peso(h+t)}</div><div class="s">harvest share + subscribers · all areas</div></div>
+      <div class="cx-c tot"><div class="l">Harvest + Subscribers · ${esc(date)}</div><div class="v">${peso(h+t)}</div><div class="s">harvest share + subscribers · all areas</div></div>
     </div>`;
     top.querySelectorAll('.cx-c[data-k]').forEach(c => c.onclick = () => setSeg(c.dataset.k));
   }
@@ -235,7 +235,7 @@
     const names = Object.keys(per).sort((a,b)=>{ const t=x=>x.harv+x.cash+x.gcash+x.unknown; return t(per[b])-t(per[a]); });
     const tot = names.reduce((a,n)=>{ const x=per[n]; a.h+=x.harv; a.c+=x.cash; a.g+=x.gcash; a.u+=x.unknown; return a; },{h:0,c:0,g:0,u:0});
     document.getElementById('cx-cols').innerHTML = `<div class="cx-card"><div class="cx-head"><b>👥 By collector — harvest + subscribers</b><span style="font-size:11px;color:#6b7280">Cash = to hand in · GCash goes to the GCash account</span></div>
-      <div class="sc-scroll">${names.length?`<table class="sc-tbl"><thead><tr><th>Collector</th><th class="n">🪙 Harvest share</th><th class="n">📶 Subs cash</th><th class="n">📶 Subs GCash</th><th class="n">Method not written</th><th class="n">Total</th></tr></thead><tbody>
+      <div class="sc-scroll">${names.length?`<table class="sc-tbl"><thead><tr><th>Collector</th><th class="n">🪙 Harvest share</th><th class="n">📶 Subs cash</th><th class="n">📶 Subs GCash</th><th class="n">Method not written</th><th class="n">Harvest + Subscribers</th></tr></thead><tbody>
         ${names.map(n=>{ const x=per[n]; return `<tr><td><b>${esc(n)}</b></td><td class="n">${x.harv?peso(x.harv):'—'}</td><td class="n">${x.cash?peso(x.cash):'—'}</td><td class="n">${x.gcash?peso(x.gcash):'—'}</td><td class="n">${x.unknown?peso(x.unknown):'—'}</td><td class="n"><b>${peso(x.harv+x.cash+x.gcash+x.unknown)}</b></td></tr>`; }).join('')}
         <tr class="tot"><td>Total</td><td class="n">${peso(tot.h)}</td><td class="n">${peso(tot.c)}</td><td class="n">${peso(tot.g)}</td><td class="n">${peso(tot.u)}</td><td class="n">${peso(tot.h+tot.c+tot.g+tot.u)}</td></tr></tbody></table>`
         :'<div class="sc-empty">Nothing collected on this date</div>'}</div></div>`;
@@ -358,10 +358,10 @@
           <div class="cx-cols">${lv.length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
       </div>
       <div class="lv-month">
-        <div><span>📅 Today · total collected</span><b>${peso(hT+sT)}</b></div>
+        <div><span>📅 Today · Harvest + Subscribers</span><b>${peso(hT+sT)}</b></div>
         <div><span>🪙 Harvest · ${esc(monthName)} so far</span><b style="color:#15803d">${month?peso(month.harv):'…'}</b></div>
         <div><span>📶 Subscribers · ${esc(monthName)} so far</span><b style="color:#025AC6">${month?peso(month.subs):'…'}</b></div>
-        <div class="tot"><span>💰 Total collected · ${esc(monthName)} so far</span><b>${month?peso(month.harv+month.subs):'…'}</b></div>
+        <div class="tot"><span>💰 Harvest + Subscribers · ${esc(monthName)} so far</span><b>${month?peso(month.harv+month.subs):'…'}</b></div>
         <button type="button" id="sl-r" title="Refresh">↻ ${esc(when)}</button>
       </div>`;
     el.querySelectorAll('.lv-s .cx-col').forEach(c => c.onclick = () => popup(c.dataset.who, d, live));

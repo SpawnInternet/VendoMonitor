@@ -834,13 +834,15 @@ async function sb(table, params="", limit=1000) {
   }
 }
 
-async function sbAll(table, params="") {
+async function sbAll(table, params="", abortSignal=null) {
   let all=[], offset=0;
   while(true) {
+    if (abortSignal && abortSignal.aborted) break;
     try {
+      const timeout = AbortSignal.timeout(10000);
       const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}&limit=1000&offset=${offset}`, {
         headers: HDR,
-        signal: AbortSignal.timeout(10000)
+        signal: (abortSignal && AbortSignal.any) ? AbortSignal.any([abortSignal, timeout]) : timeout
       });
       if (!r.ok) { const err = await r.text(); throw new Error(`HTTP ${r.status}: ${err.slice(0,200)}`); }
       const rows = await r.json();
@@ -850,6 +852,7 @@ async function sbAll(table, params="") {
       if (rows.length < 1000) break;
       offset += 1000;
     } catch(e) {
+      if (abortSignal && abortSignal.aborted) break;   // cancelled on purpose, not a connection problem
       if (!sbOffline) { sbOffline = true; showConnError(e.message); }
       break;
     }
@@ -1001,6 +1004,7 @@ function showP(id, btn) {
   if(!panel) { console.error("Panel not found: panel-"+id); return; }
   panel.classList.add("active");
   if(btn) btn.classList.add("active");
+  if (typeof window.spawnShowFresh === 'function') window.spawnShowFresh(id);
   // Track navigation history
   if (_navHistory[_navHistory.length-1] !== id) _navHistory.push(id);
   if (_navHistory.length > 10) _navHistory.shift();
@@ -1136,7 +1140,7 @@ async function openVendoFromSearch(vendo, area) {
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
   document.getElementById("panel-vendos").classList.add("active");
-  document.querySelector(".nav-bar button:nth-child(2)").classList.add("active");
+  document.querySelector(".nav-bar button[data-panel=\"vendos\"]").classList.add("active");
   hideBread();
   // Load vendo list only if empty
   if (!allVendos.length) {
@@ -1394,7 +1398,7 @@ async function dashSearch(q) {
 function showVendoFromDash(name, area) {
   document.getElementById('dash-search-results').style.display = 'none';
   // Switch to vendos tab and show profile
-  showP('vendos', document.querySelector('.nav-bar button:nth-child(2)'));
+  showP('vendos', document.querySelector('.nav-bar button[data-panel=\"vendos\"]'));
   setTimeout(() => {
     const s = document.getElementById('v-search');
     if (s) { s.value = name; filterVendos(); }
@@ -2114,7 +2118,7 @@ function renderVendos() {
 function vPage(d){vPage_n+=d;renderVendos();}
 
 function showAreaVendos(area) {
-  showP("vendos",document.querySelector(".nav-bar button:nth-child(2)"));
+  showP("vendos",document.querySelector(".nav-bar button[data-panel=\"vendos\"]"));
   document.getElementById("v-area").value=area;
   filterVendos();
 }
@@ -2122,13 +2126,46 @@ function showAreaVendos(area) {
 // ══════════════════════════════════════════════════════════
 // VENDO DETAIL
 // ══════════════════════════════════════════════════════════
+// ── Vendo detail: request guard + real-time sorting (2026-10-20) ──────────
+// Every vendo click gets a new request number. Results that come back for an
+// older number (a vendo that is no longer open) are thrown away, and the old
+// downloads are cancelled. Times are stored as text ("7:29:24 AM"), so rows
+// are sorted by date + parsed time, newest first, and shown in 24-hour form.
+let vtReq   = 0;       // bumps on every vendo click
+let vtAbort = null;    // AbortController for the open vendo's downloads
+let vtFull  = false;   // true once the full history (and exact totals) is loaded
+let vtShown = 100;     // rows on screen; "Load more" adds 100
+
+function vtHtml(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function vtIsCurrent(token, vendo){ return token === vtReq && vendo === currentVendo; }
+function vtTimeParts(t){
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i.exec(String(t || '').trim());
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  if (m[4]) { h = h % 12; if (m[4].toUpperCase() === 'PM') h += 12; }
+  return [h, parseInt(m[2], 10), parseInt(m[3] || '0', 10)];
+}
+function vtTs(r){
+  const d = String(r.date || '').slice(0, 10).split('-').map(Number);
+  if (!d[0]) return 0;
+  const p = vtTimeParts(r.time) || [0, 0, 0];
+  return Date.UTC(d[0], (d[1] || 1) - 1, d[2] || 1, p[0], p[1], p[2]);
+}
+function vt24(t){ const p = vtTimeParts(t); return p ? p.map(n => String(n).padStart(2, '0')).join(':') : (t || ''); }
+function vtSortNewest(rows){ return rows.sort((a, b) => (vtTs(b) - vtTs(a)) || ((b.id || 0) - (a.id || 0))); }
+
 async function openVendoDetail(vendo, area) {
   currentVendo=vendo; vtPage_n=1;
+  // New request: cancel the previous vendo's downloads and wipe its rows at once
+  vtReq++;
+  if (vtAbort) { try { vtAbort.abort(); } catch(e){} }
+  vtAbort = (typeof AbortController === 'function') ? new AbortController() : null;
+  vtxnAll = []; vtFull = false; vtShown = 100;
   // Make sure we're on vendos panel
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
   document.getElementById("panel-vendos").classList.add("active");
-  document.querySelector(".nav-bar button:nth-child(2)").classList.add("active");
+  document.querySelector(".nav-bar button[data-panel=\"vendos\"]").classList.add("active");
   document.getElementById("view-vlist").style.display="none";
   document.getElementById("view-vtxns").style.display="block";
   // Reset to Transactions tab (default)
@@ -2141,6 +2178,11 @@ async function openVendoDetail(vendo, area) {
   document.getElementById("vtxn-title").textContent=vendo;
   document.getElementById("vtxn-sub").textContent=area+" area";
   document.getElementById("vtxn-stats").innerHTML="<div style='color:#9ca3af;font-size:11px;padding:4px 0'>Loading…</div>";
+  document.getElementById("vtxn-rc").innerHTML=`<span><strong>${vtHtml(vendo)}</strong> · loading…</span>`;
+  document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading ${vtHtml(vendo)}…</td></tr>`;
+  const susList = document.getElementById("sus-list"); if (susList) susList.innerHTML = '';
+  const harvestBox = document.getElementById('vt-harvest-content'); if (harvestBox) harvestBox.innerHTML = '';
+  if (vendoChart) { vendoChart.destroy(); vendoChart = null; }
   showBread(`Vendos → ${vendo}`, closeVendo);
 
   // No default date filter — load ALL transactions
@@ -2152,6 +2194,7 @@ async function openVendoDetail(vendo, area) {
 
 async function loadVendoHarvestRecords() {
   const vendo = currentVendo;
+  const token = vtReq;
   const content = document.getElementById('vt-harvest-content');
   if (!vendo) return;
   content.innerHTML = '<div style="padding:20px;text-align:center;color:#9ca3af;font-size:12px;">Loading harvest records...</div>';
@@ -2161,6 +2204,7 @@ async function loadVendoHarvestRecords() {
       headers: HDR
     });
     let rows = await r.json();
+    if (!vtIsCurrent(token, vendo)) return;
 
     // Also try by vendo_name if tg_name returns nothing
     if (!rows.length) {
@@ -2168,6 +2212,7 @@ async function loadVendoHarvestRecords() {
         headers: HDR
       });
       rows = await r2.json();
+      if (!vtIsCurrent(token, vendo)) return;
     }
 
     if (!rows.length) {
@@ -2229,6 +2274,7 @@ async function loadVendoHarvestRecords() {
         </div>`;
       }).join('')}`;
   } catch(e) {
+    if (!vtIsCurrent(token, vendo)) return;
     content.innerHTML = `<div style="padding:20px;text-align:center;color:#dc2626;font-size:12px;">Error: ${e.message}</div>`;
   }
 }
@@ -2236,20 +2282,39 @@ async function loadVendoHarvestRecords() {
 async function loadVendoTxns() {
   const vendo=currentVendo;
   if(!vendo) return;
+  const token=vtReq;
+  const signal=vtAbort ? vtAbort.signal : null;
   const from=document.getElementById("vtxn-from").value;
   const to=document.getElementById("vtxn-to").value;
-  vtPage_n=1;
-  document.getElementById("vtxn-tbody").innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading transactions...</td></tr>';
-  let params=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped,area&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.desc,time.desc`;
-  if(from) params+=`&date=gte.${from}`;
-  if(to)   params+=`&date=lte.${to}`;
+  vtPage_n=1; vtShown=100; vtFull=false; vtxnAll=[];
+  document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">Loading ${vtHtml(vendo)}…</td></tr>`;
+  let base=`select=id,date,time,amount,voucher,ip,mac,total_time,extended,is_skipped,area&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false`;
+  if(from) base+=`&date=gte.${from}`;
+  if(to)   base+=`&date=lte.${to}`;
   try {
-    vtxnAll = await sbAll("transactions", params);
+    // 1) Quick first screen: the newest days only, complete days so no newer row is missing.
+    const r = await fetch(`${SB_URL}/rest/v1/transactions?${base}&order=date.desc,id.desc&limit=300`, { headers: HDR, signal: signal || undefined });
+    let quick = r.ok ? await r.json() : [];
+    if(!vtIsCurrent(token, vendo)) return;
+    if (quick.length === 300) {
+      const edge = quick[quick.length - 1].date;
+      const edgeDay = await sbAll("transactions", `${base}&date=eq.${edge}&order=id.desc`, signal);
+      if(!vtIsCurrent(token, vendo)) return;
+      quick = quick.filter(t => t.date !== edge).concat(edgeDay);
+    }
+    vtxnAll = vtSortNewest(quick);
+    filterVTxns();
+
+    // 2) Full history in the background, so totals and "Load more" cover everything.
+    const all = await sbAll("transactions", `${base}&order=date.desc,id.desc`, signal);
+    if(!vtIsCurrent(token, vendo)) return;
+    vtxnAll = vtSortNewest(all); vtFull = true;
     const hacked=vtxnAll.filter(r=>(r.total_time||"").includes("w")&&r.extended==='1').length;
     document.getElementById("sus-tab-btn").textContent=`⚠️ Suspicious (${hacked})`;
     filterVTxns();
   } catch(e) {
-    document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:red;">Error: ${e.message}</td></tr>`;
+    if(!vtIsCurrent(token, vendo) || (signal && signal.aborted)) return;
+    document.getElementById("vtxn-tbody").innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:red;">Error: ${vtHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -2257,6 +2322,11 @@ function filterVTxns() {
   const q=(document.getElementById("vtxn-q")?.value||"").toLowerCase();
   let filtered=vtxnAll;
   if(q) filtered=filtered.filter(r=>(r.ip||"").includes(q)||(r.mac||"").toLowerCase().includes(q)||(r.voucher||"").toLowerCase().includes(q)||String(r.amount||"").includes(q));
+  if(!vtFull){
+    document.getElementById("vtxn-stats").innerHTML="<div style='color:#9ca3af;font-size:11px;padding:4px 0'>⏳ Totals: loading the full history…</div>";
+    renderVTxns(filtered);
+    return;
+  }
   const total=filtered.filter(r=>!(r.total_time?.includes('w')&&r.extended==='1')).reduce((s,r)=>s+parseFloat(r.amount||0),0);
   const hacked=filtered.filter(r=>(r.total_time||"").includes("w")&&r.extended==='1').length;
   const avg=filtered.length?total/filtered.length:0;
@@ -2274,17 +2344,21 @@ function filterVTxns() {
 }
 
 function renderVTxns(rows) {
-  const PG=100,total=rows.length,start=(vtPage_n-1)*PG,page=rows.slice(start,start+PG);
+  const total=rows.length, shown=Math.min(vtShown,total), page=rows.slice(0,shown);
   const rcTotal = rows.reduce((s,r)=>s+parseFloat(r.amount||0),0);
-  document.getElementById("vtxn-rc").innerHTML=`<span>Showing <strong>${total.toLocaleString()}</strong> transactions &nbsp;|&nbsp; Total Amount: <strong style="color:#1565c0">₱${rcTotal.toLocaleString()}</strong></span>`;
-  document.getElementById("vtp-l").textContent=`Page ${vtPage_n} of ${Math.ceil(total/PG)||1}`;
-  document.getElementById("vtp-p").disabled=vtPage_n===1;
-  document.getElementById("vtp-n").disabled=start+PG>=total;
+  const who = `<strong>${vtHtml(currentVendo)}</strong>`;
+  document.getElementById("vtxn-rc").innerHTML = vtFull
+    ? `<span>${who} · Showing <strong>${shown.toLocaleString()}</strong> of <strong>${total.toLocaleString()}</strong> transactions, newest first &nbsp;|&nbsp; Total Amount: <strong style="color:#1565c0">₱${rcTotal.toLocaleString()}</strong></span>`
+    : `<span>${who} · Showing the newest <strong>${shown.toLocaleString()}</strong> · loading the full history…</span>`;
+  document.getElementById("vtp-l").textContent = `${shown.toLocaleString()} of ${total.toLocaleString()}${vtFull?'':'+'}`;
+  const prev=document.getElementById("vtp-p"), next=document.getElementById("vtp-n");
+  prev.textContent="↑ Newest 100"; prev.disabled = shown<=100;
+  next.textContent="Load more (100) ↓"; next.disabled = shown>=total;
   document.getElementById("vtxn-tbody").innerHTML=page.map((t,i)=>{
     const isHack=(t.total_time||"").includes("w")&&t.extended==='1';
     return `<tr class="${isHack?"txn-row-hack":""}">
-      <td style="color:var(--mu)">${start+i+1}</td>
-      <td>${t.date||""}</td><td style="color:var(--mu)">${t.time||""}</td>
+      <td style="color:var(--mu)">${i+1}</td>
+      <td>${t.date||""}</td><td style="color:var(--mu)" title="${vtHtml(t.time||'')}">${vt24(t.time)}</td>
       <td style="font-weight:700;color:${isHack?"#dc2626":"#1565c0"}">${fmt(t.amount)}</td>
       <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
       <td style="font-family:monospace;font-size:11px;color:var(--mu)">${t.mac||"—"}</td>
@@ -2295,7 +2369,8 @@ function renderVTxns(rows) {
   '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--mu)">No transactions found</td></tr>';
 }
 
-function vtPage(d){vtPage_n+=d;filterVTxns();}
+// "Load more" (+100) and "Newest 100" reuse the old Prev/Next buttons
+function vtPage(d){ vtShown = d > 0 ? vtShown + 100 : 100; filterVTxns(); }
 function clearVFilter(){
   document.getElementById("vtxn-from").value="";
   document.getElementById("vtxn-to").value="";
@@ -2304,8 +2379,11 @@ function clearVFilter(){
 }
 
 async function loadVendoMonthly(vendo) {
+  const token = vtReq;
+  const signal = vtAbort ? vtAbort.signal : null;
   // Full history — gray=2024, blue=2025, green=2026
-  const rows=await sbAll("transactions",`select=date,amount,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`);
+  const rows=await sbAll("transactions",`select=date,amount,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&is_skipped=eq.false&order=date.asc`, signal);
+  if (!vtIsCurrent(token, vendo)) return;
   const cleanRows=rows.filter(r=>!(r.total_time?.includes('w')&&r.extended==='1'));
   const mmap={};
   cleanRows.forEach(r=>{ const m=(r.date||"").slice(0,7); if(m) mmap[m]=(mmap[m]||0)+parseFloat(r.amount||0); });
@@ -2324,8 +2402,11 @@ async function loadVendoMonthly(vendo) {
 }
 
 async function loadVendoSuspicious(vendo) {
+  const token = vtReq;
+  const signal = vtAbort ? vtAbort.signal : null;
   document.getElementById("sus-list").innerHTML='<div style="padding:16px;text-align:center;color:var(--mu)">Loading suspicious transactions...</div>';
-  const rows=await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&is_skipped=eq.false&order=date.desc`);
+  const rows=vtSortNewest(await sbAll("transactions",`select=id,date,time,amount,voucher,ip,mac,total_time,extended&vendo=eq.${encodeURIComponent(vendo)}&total_time=like.*w*&is_skipped=eq.false&order=date.desc`, signal));
+  if (!vtIsCurrent(token, vendo)) return;
   const notes=JSON.parse(localStorage.getItem("hacked_notes_"+vendo)||"{}");
   const done=JSON.parse(localStorage.getItem("hacked_done_"+vendo)||"[]");
   document.getElementById("sus-list").innerHTML=rows.length
@@ -2333,7 +2414,7 @@ async function loadVendoSuspicious(vendo) {
       ${rows.map(t=>{
         const isDone=done.includes(t.id);
         return `<tr class="txn-row-hack${isDone?" done":""}">
-          <td>${t.date}</td><td>${t.time}</td>
+          <td>${t.date}</td><td title="${vtHtml(t.time||'')}">${vt24(t.time)}</td>
           <td style="font-weight:700;color:#dc2626">${fmt(t.amount)}</td>
           <td style="font-family:monospace;font-size:11px">${t.ip||"—"}</td>
           <td style="font-family:monospace;font-size:11px">${t.mac||"—"}</td>

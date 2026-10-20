@@ -221,6 +221,22 @@ window.markAdminPwWrong = function(){
       } catch(e){ console.warn('[ADMIN-GW] intercept fallthrough:', e && e.message); }
       return _origFetch(input, init);
     };
+
+    // ── Freshness (2026-10-20): remember when each panel last received data ──
+    // Attributed to the panel that was open when the request started.
+    // Requests sent with header x-no-fresh (the health strip) are not counted.
+    const _gwFetch = window.fetch;
+    window.fetch = async function(input, init){
+      const url = (typeof input === 'string') ? input : (input && input.url) || '';
+      const hdrs = (init && init.headers) || {};
+      const pid = (document.querySelector('.panel.active') || {}).id || '';
+      const r = await _gwFetch(input, init);
+      try {
+        if (r && r.ok && pid && url.indexOf(SB) === 0 && !hdrs['x-no-fresh'] && typeof window.spawnMarkFresh === 'function')
+          window.spawnMarkFresh(pid);
+      } catch(e){}
+      return r;
+    };
   })();
 
   function reveal(){ const el=document.getElementById('spawn-login-screen'); if(el) el.classList.add('hidden'); }
@@ -495,4 +511,109 @@ window.ensureHarvest = function(){
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initial);
     else initial();
   }catch(e){ console.warn('pretty-modals init failed', e); }
+})();
+
+// ══════════════════════════════════════════════════════════
+// FRESHNESS + HEALTH STRIP (2026-10-20) — read-only
+//   • every panel shows "Updated HH:MM" (24-hour, PH time) for when its data
+//     last loaded; the gateway wrapper above calls spawnMarkFresh(panelId).
+//   • health strip under the tab bar: Telegram reader, sheet bridge,
+//     MikroTik pollers — green / amber / red. All reads go through the admin
+//     gateway (transactions, sheet_sync_state, mikrotik_status are allowed).
+// ══════════════════════════════════════════════════════════
+(function(){
+  const SBURL = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+  const GWH   = { apikey:'gw', 'x-spawn-gw':'1', 'x-no-fresh':'1' };
+  const fresh = {};   // panelId -> Date
+
+  function hhmm(d){
+    try { return new Date(d).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Manila' }); }
+    catch(e){ return '—'; }
+  }
+  function badgeFor(panelId){
+    const panel = document.getElementById(panelId);
+    if (!panel) return null;
+    let b = panel.querySelector(':scope > .upd-badge');
+    if (!b) {
+      b = document.createElement('div');
+      b.className = 'upd-badge';
+      b.style.cssText = 'text-align:right;font-size:10px;color:#64748b;padding:3px 10px 0;font-weight:600;letter-spacing:.02em';
+      panel.insertBefore(b, panel.firstChild);
+    }
+    return b;
+  }
+  window.spawnMarkFresh = function(panelId){
+    fresh[panelId] = new Date();
+    const b = badgeFor(panelId);
+    if (b) b.textContent = 'Updated ' + hhmm(fresh[panelId]);
+  };
+  window.spawnShowFresh = function(id){
+    const panelId = 'panel-' + id;
+    const b = badgeFor(panelId);
+    if (b) b.textContent = fresh[panelId] ? 'Updated ' + hhmm(fresh[panelId]) : 'Updated —';
+  };
+
+  // ── Health strip ──
+  // Thresholds (minutes):
+  //   Telegram reader  newest transaction: green <30, amber <120, red ≥120 (06:00–23:00 PH);
+  //                    at night green <360, else amber (quiet hours are normal).
+  //   Sheet bridge     newest last_run of enabled tabs: green <5, amber <30, red ≥30;
+  //                    red as well if an enabled tab's status mentions error/fail.
+  //   Pollers          newest mikrotik_status.updated_at per server: green <5, amber <15, red ≥15.
+  const COLOR = { green:'#16a34a', amber:'#d97706', red:'#dc2626', grey:'#94a3b8' };
+  function minsAgo(ts){ return ts ? (Date.now() - new Date(ts).getTime()) / 60000 : Infinity; }
+  function phHour(){ return Number(new Date().toLocaleString('en-GB', { hour:'2-digit', hour12:false, timeZone:'Asia/Manila' })); }
+  function level(mins, g, a){ return mins < g ? 'green' : mins < a ? 'amber' : 'red'; }
+  async function gwGet(path){
+    const r = await fetch(SBURL + '/rest/v1/' + path, { headers: GWH });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  function chip(label, lvl, when, tip){
+    const c = COLOR[lvl] || COLOR.grey;
+    return '<span title="' + tip.replace(/"/g, '&quot;') + '" style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap">'
+         + '<span style="width:9px;height:9px;border-radius:50%;background:' + c + ';display:inline-block"></span>'
+         + '<b style="color:#334155">' + label + '</b><span style="color:' + c + ';font-weight:700">' + when + '</span></span>';
+  }
+  let healthBusy = false, healthAt = 0;
+  async function healthLoad(){
+    const strip = document.getElementById('health-strip');
+    if (!strip || healthBusy || !window.__ADMIN_GW_TOKEN) return;
+    healthBusy = true;
+    const parts = [];
+    try {
+      // Telegram reader
+      try {
+        const t = await gwGet('transactions?select=created_at&is_skipped=eq.false&order=created_at.desc&limit=1');
+        const ts = t && t[0] && t[0].created_at, m = minsAgo(ts), h = phHour();
+        const day = h >= 6 && h < 23;
+        const lvl = !ts ? 'red' : day ? level(m, 30, 120) : (m < 360 ? 'green' : 'amber');
+        parts.push(chip('Telegram', lvl, ts ? hhmm(ts) : 'no data', 'Newest Telegram sale saved' + (ts ? ' at ' + hhmm(ts) : '') + '. Day (06–23): green <30 min, amber <2 h, red ≥2 h. Night: amber after 6 h.'));
+      } catch(e){ parts.push(chip('Telegram', 'grey', 'n/a', 'Could not read: ' + e.message)); }
+      // Sheet bridge
+      try {
+        const s = await gwGet('sheet_sync_state?select=source,last_run,status,enabled&enabled=is.true');
+        const runs = (s || []).map(x => x.last_run).filter(Boolean).sort();
+        const ts = runs[runs.length - 1], bad = (s || []).filter(x => /error|fail/i.test(String(x.status || '')));
+        const lvl = bad.length ? 'red' : !ts ? 'red' : level(minsAgo(ts), 5, 30);
+        parts.push(chip('Sheet bridge', lvl, ts ? hhmm(ts) : 'no run', 'Newest sheet-bridge run' + (ts ? ' at ' + hhmm(ts) : '') + (bad.length ? ' · ' + bad.length + ' tab(s) report an error' : '') + '. Green <5 min, amber <30 min, red ≥30 min.'));
+      } catch(e){ parts.push(chip('Sheet bridge', 'grey', 'n/a', 'Could not read: ' + e.message)); }
+      // MikroTik pollers (only these two servers have pollers)
+      for (const srv of ['Dicayas Server', 'Dapitan Server']) {
+        try {
+          const p = await gwGet('mikrotik_status?select=updated_at&server_name=eq.' + encodeURIComponent(srv) + '&order=updated_at.desc&limit=1');
+          const ts = p && p[0] && p[0].updated_at;
+          parts.push(chip(srv.replace(' Server', '') + ' poller', ts ? level(minsAgo(ts), 5, 15) : 'red', ts ? hhmm(ts) : 'no data', 'Last write by the ' + srv + ' poller' + (ts ? ' at ' + hhmm(ts) : '') + '. Green <5 min, amber <15 min, red ≥15 min.'));
+        } catch(e){ parts.push(chip(srv.replace(' Server', '') + ' poller', 'grey', 'n/a', 'Could not read: ' + e.message)); }
+      }
+      parts.push('<span title="These areas have no MikroTik poller, so their online/offline status is not tracked." style="color:#94a3b8;white-space:nowrap">⚪ Sindangan · Polanco · Sinaman: no poller</span>');
+      strip.innerHTML = '<span style="color:#64748b;font-weight:700;white-space:nowrap">Health</span>' + parts.join('<span style="color:#cbd5e1">·</span>')
+                      + '<span style="margin-left:auto;color:#94a3b8;white-space:nowrap">checked ' + hhmm(new Date()) + '</span>';
+      strip.style.display = 'flex';
+      healthAt = Date.now();
+    } finally { healthBusy = false; }
+  }
+  window.healthLoad = healthLoad;
+  // Every 15 s: load once the user is signed in, then refresh every 2 minutes.
+  setInterval(function(){ if (window.__ADMIN_GW_TOKEN && Date.now() - healthAt > 120000) healthLoad(); }, 15000);
 })();

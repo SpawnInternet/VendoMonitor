@@ -196,7 +196,7 @@ function _netCardHtml(ov, mlbl){
       <div class="sl" style="font-weight:800">Net Income &middot; ${mlbl}</div>
       <div class="sv" style="color:${col}">${_php(net)}</div>
       <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">
-        ${_php(ov.harvest_month)} + ${_php(ov.sub_month)} &minus; ${_php(_expTotal(ov))}
+        Harvest + Subscribers &minus; expense: ${_php(ov.harvest_month)} + ${_php(ov.sub_month)} &minus; ${_php(_expTotal(ov))}
       </div>
     </div>`;
 }
@@ -213,16 +213,16 @@ function overviewRender(ov, data) {
       <div class="sv" style="color:${BRAND.blue}">${_php(ov.tg_month)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="anlGoto('harvest')" title="View harvested spawn analytics">
-      <div class="sl">Harvested Spawn &middot; ${_MLBL}</div>
+      <div class="sl">🪙 Harvested Spawn &middot; ${_MLBL}</div>
       <div class="sv" style="color:${BRAND.teal}">${_php(ov.harvest_month)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.gold};cursor:pointer" onclick="anlGoto('tg')" title="View Telegram analytics">
       <div class="sl">Telegram Sales · Today</div>
       <div class="sv" style="color:#B47F00">${_php(ov.tg_today)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.magenta};cursor:pointer" onclick="showTodayHarvestPopup()" title="Today's harvest breakdown">
-      <div class="sl">Harvest Spawn · Today</div>
-      <div class="sv" style="color:${BRAND.magenta}">${_php(ov.harvest_today)}</div>
+    <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="showTodayHarvestPopup()" title="Today's harvest breakdown">
+      <div class="sl">🪙 Harvest Spawn · Today</div>
+      <div class="sv" style="color:${BRAND.teal}">${_php(ov.harvest_today)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.purple};cursor:pointer" onclick="showP('spawncloud')" title="Spawn Cloud coin income this month">
       <div class="sl">Spawn Cloud &middot; ${_MLBL}</div>
@@ -233,9 +233,9 @@ function overviewRender(ov, data) {
       <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
     </div>
-    <div class="stat" style="border-bottom-color:${BRAND.teal};cursor:pointer" onclick="showP('subscribers')" title="Subscriber payments received this month">
-      <div class="sl">Subscriber Collections &middot; ${_MLBL}</div>
-      <div class="sv" style="color:${BRAND.teal}">${_php(ov.sub_month)}</div>
+    <div class="stat" style="border-bottom-color:${BRAND.sky};cursor:pointer" onclick="showP('subscribers')" title="Subscriber payments received this month">
+      <div class="sl">📶 Subscriber Collections &middot; ${_MLBL}</div>
+      <div class="sv" style="color:${BRAND.sky}">${_php(ov.sub_month)}</div>
       <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">${_fmtNum(ov.sub_count_month||0)} payments &middot; ${_php(ov.sub_today)} today</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.magenta};cursor:pointer" onclick="showP('reports')" title="Expenses this month by book">
@@ -641,14 +641,14 @@ function lastMonthRender(ov){
     +   '</div>'
     +   '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:7px;">'
     +     cell('Telegram Sales', _php(ov.prev_tg), BRAND.blue)
-    +     cell('Harvested Spawn', _php(ov.prev_harvest), BRAND.teal)
+    +     cell('🪙 Harvested Spawn', _php(ov.prev_harvest), BRAND.teal)
     +     cell('Spawn Cloud', _php(ov.prev_cloud), BRAND.purple)
-    +     cell('Subscriber Collections', _php(ov.prev_sub), BRAND.teal)
+    +     cell('📶 Subscriber Collections', _php(ov.prev_sub), BRAND.sky)
     +     cell('Suspicious Txns', _fmtNum(ov.prev_sus_cnt), BRAND.red, _php(ov.prev_sus_amt))
     +     cell('Expense', _php(expTot), BRAND.magenta,
              'Daily '+_cpShort(ov.prev_exp_daily)+' \u00B7 Admin '+(Number(ov.prev_exp_admin||0)?_cpShort(ov.prev_exp_admin):'\u2014'))
     +     cell('Net Income', _php(net), net < 0 ? BRAND.red : '#0F6E56',
-             'Harvest + subscriber \u2212 expense')
+             'Harvest + Subscribers \u2212 expense')
     +   '</div>'
     + '</div>';
 }
