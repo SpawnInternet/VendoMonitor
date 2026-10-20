@@ -550,7 +550,15 @@ window.ensureHarvest = function(){
   window.spawnShowFresh = function(id){
     const panelId = 'panel-' + id;
     const b = badgeFor(panelId);
-    if (b) b.textContent = fresh[panelId] ? 'Updated ' + hhmm(fresh[panelId]) : 'Updated —';
+    if (!b) return;
+    // Not Sus is this browser's own saved list — no server data to date.
+    if (id === 'notsus') { b.textContent = 'Saved in this browser (not from the server)'; return; }
+    // Spawn Jobs is an embedded page: show when that page last loaded.
+    if (id === 'spawnjobs') {
+      const fr = document.getElementById('spawnjobs-frame');
+      if (fr && !fr.__freshHooked) { fr.__freshHooked = true; fr.addEventListener('load', function(){ window.spawnMarkFresh(panelId); }); }
+    }
+    b.textContent = fresh[panelId] ? 'Updated ' + hhmm(fresh[panelId]) : 'Updated —';
   };
 
   // ── Health strip ──
