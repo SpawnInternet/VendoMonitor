@@ -284,7 +284,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,
 #screen-login .bottom-nav{display:none}
 .sum-bar{display:none!important}  /* v3.0: the home card shows today's collection; the bottom nav takes this spot */
 .pm{font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px}
-.pm-g{background:#dbeafe;color:#1d4ed8}.pm-c{background:#dcfce7;color:#15803d}.pm-o{background:#ede9fe;color:#6d28d9}.pm-m{background:#e0e7ff;color:#3730a3}.pm-u{background:#f3f4f6;color:#6b7280}
+.pm-g{background:#dbeafe;color:#1d4ed8}.pm-b{background:#fff4d6;color:#8a5a00}
+.pm-c{background:#dcfce7;color:#15803d}.pm-o{background:#ede9fe;color:#6d28d9}.pm-m{background:#e0e7ff;color:#3730a3}.pm-u{background:#f3f4f6;color:#6b7280}
 .askrow{margin-top:6px;font-size:11px;color:var(--muted);display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .askrow button{border:1.5px solid var(--border);background:#fff;border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--blue);font-family:inherit}
 </style>
@@ -340,7 +341,7 @@ body{background:
 .pm-seg button{height:40px;border:0;border-radius:10px;background:transparent;font:700 14px Inter,system-ui,sans-serif;color:#4b5563;cursor:pointer}
 .pm-seg button.on{color:#fff;background:linear-gradient(180deg,#1f74e0 0%,#025ac6 100%);box-shadow:0 4px 10px rgba(2,90,198,.3)}
 /* payment sheet */
-.meth{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.meth{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
 .meth button{height:50px;border-radius:14px;border:1.5px solid #c7d2fe;background:#fff;color:#025ac6;font:800 16px Inter,system-ui,sans-serif;cursor:pointer}
 .meth button.sel{border:0;color:#fff;background:linear-gradient(180deg,#1f74e0 0%,#025ac6 100%);box-shadow:0 6px 14px rgba(2,90,198,.35),inset 0 1px 0 rgba(255,255,255,.35)}
 .paper-box{padding:12px;border-radius:14px;background:#fff;outline:2px solid #c7d2fe;outline-offset:-2px;margin-bottom:12px}
@@ -568,7 +569,7 @@ body.simple-mode #calc-fab{display:none!important}
   <div id="tab-home" style="padding:16px 16px 0">
     <div class="hero">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><div class="hero-k">Today's collection</div><div class="hero-v" id="hm-total">₱0</div><div class="hero-s" id="hm-sub">No receipts yet today</div><div class="hero-chips"><span id="hm-cash">Cash ₱0</span><span id="hm-gcash">GCash ₱0</span></div></div>
+        <div><div class="hero-k">Today's collection</div><div class="hero-v" id="hm-total">₱0</div><div class="hero-s" id="hm-sub">No receipts yet today</div><div class="hero-chips"><span id="hm-cash">Cash ₱0</span><span id="hm-gcash">GCash ₱0</span><span id="hm-bank" style="display:none">Bank ₱0</span></div></div>
         <div style="text-align:right"><div class="hero-k">Collector</div><div style="font-size:15px;font-weight:700;margin-top:2px" id="hm-col">—</div></div>
       </div>
       <div class="hero-bar"><div id="hm-bar"></div></div>
@@ -701,9 +702,10 @@ body.simple-mode #calc-fab{display:none!important}
       <div id="pay-expect"></div>
 
       <div class="clabel sm-hide">How did they pay?</div>
-      <div class="meth" id="pay-meth"><button type="button" data-m="cash" onclick="pickMethod('cash')">Cash</button><button type="button" data-m="gcash" onclick="pickMethod('gcash')">GCash</button></div>
+      <div class="meth" id="pay-meth"><button type="button" data-m="cash" onclick="pickMethod('cash')">Cash</button><button type="button" data-m="gcash" onclick="pickMethod('gcash')">GCash</button><button type="button" data-m="bank" onclick="pickMethod('bank')">Bank</button></div>
       <div class="paper-box" id="pay-paper-wrap"><div class="coin-label">Paper receipt no. <span id="pay-paper-hint">required · same number as the carbon copy</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-paper" placeholder="e.g. 2401" autocomplete="off"></div>
       <div class="paper-box" id="pay-gref-wrap" style="display:none"><div class="coin-label">GCash reference no. <span>required · from their screenshot</span></div><input class="ti mono" type="text" inputmode="numeric" id="pay-gref" placeholder="8–20 digit reference" autocomplete="off"></div>
+      <div class="paper-box" id="pay-bref-wrap" style="display:none"><div class="coin-label">Bank transfer ref no. <span>required · letters and numbers from their transfer slip</span></div><input class="ti mono" type="text" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="40" id="pay-bref" placeholder="e.g. FT26301ABC123" autocomplete="off"></div>
       <div class="clabel adv">Quick amount</div>
       <div class="agrid adv" id="agrid"></div>
 
@@ -797,7 +799,7 @@ body.simple-mode #calc-fab{display:none!important}
     </div>
     <div style="padding:0 16px 16px">
       <div class="card"><div class="clabel">Paper receipts today</div><div id="de-paper"></div></div>
-      <div class="card"><div class="clabel">GCash today · no paper receipt</div><div id="de-gcash"></div></div>
+      <div class="card"><div class="clabel">GCash and bank today · no paper receipt</div><div id="de-gcash"></div></div>
       <button class="btn btn-blue" type="button" onclick="deCopy()">Copy summary for the office</button>
       <button class="btn btn-gray" type="button" onclick="closeDayEnd()" style="margin-top:8px">Close</button>
     </div>
@@ -826,7 +828,7 @@ body.simple-mode #calc-fab{display:none!important}
 </div>
 
 <script>
-const APP_VERSION = 'v4.21';
+const APP_VERSION = 'v4.22';
 const SB='https://cviraqfhphhsonjmrtvu.supabase.co';
 // Public anon key. Every write goes through RLS + column grants + PIN-checked RPCs.
 const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
@@ -1208,11 +1210,13 @@ function renderHome(){
   const el=document.getElementById('hm-total'); if(!el||!_col) return;
   const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col&&!vd(p));
   const tot=tp.reduce((a,p)=>a+Number(p.amount||0),0);
-  const gc=tp.filter(p=>p.pay_method==='gcash').reduce((a,p)=>a+Number(p.amount||0),0), cash=tot-gc;
+  const gc=tp.filter(p=>p.pay_method==='gcash').reduce((a,p)=>a+Number(p.amount||0),0),
+        bk=tp.filter(p=>p.pay_method==='bank').reduce((a,p)=>a+Number(p.amount||0),0), cash=tot-gc-bk;
   el.textContent='₱'+tot.toLocaleString('en-PH');
   document.getElementById('hm-sub').textContent=tp.length?tp.length+' receipt'+(tp.length>1?'s':'')+' today':'No receipts yet today';
   document.getElementById('hm-cash').textContent='Cash ₱'+cash.toLocaleString('en-PH');
   document.getElementById('hm-gcash').textContent='GCash ₱'+gc.toLocaleString('en-PH');
+  { const b=document.getElementById('hm-bank'); if(b){ b.textContent='Bank ₱'+bk.toLocaleString('en-PH'); b.style.display=bk>0?'':'none'; } }
   document.getElementById('hm-col').textContent=_col;
   const act=_subs.filter(s=>s.status!=='cutoff');
   const n={today:0,late:0,soon:0,paid:0};
@@ -1491,7 +1495,7 @@ function renderList(){
       +(hasGPS?'#22c55e':'#f59e0b')+';border:2px solid #fff;font-size:8px;line-height:9px;text-align:center;color:#fff;font-weight:800">'
       +(hasGPS?'':'!')+'</div>';
 
-    const pm=payMode(s), pmPill=pm==='gcash'?'<span class="pm pm-g">GCash</span>':pm==='office'?'<span class="pm pm-o">Office</span>':pm==='cash'?'<span class="pm pm-c">Cash</span>':pm==='mixed'?'<span class="pm pm-m">GCash/Cash</span>':'<span class="pm pm-u">Pays by?</span>';
+    const pm=payMode(s), pmPill=pm==='gcash'?'<span class="pm pm-g">GCash</span>':pm==='office'?'<span class="pm pm-o">Office</span>':pm==='bank'?'<span class="pm pm-b">Bank</span>':pm==='cash'?'<span class="pm pm-c">Cash</span>':pm==='mixed'?'<span class="pm pm-m">GCash/Cash</span>':'<span class="pm pm-u">Pays by?</span>';
     const askRow=pm==='unknown'?'<div class="askrow" onclick="event.stopPropagation()">How do they pay? <button onclick="setMode('+s.id+',\'cash\')">Cash to me</button><button onclick="setMode('+s.id+',\'gcash\')">GCash</button><button onclick="setMode('+s.id+',\'office\')">Office</button></div>':'';
     const gaps=pmPill+(_due==='route'?'':' '+MISS.filter(m=>m.test(s)).map(m=>'<span class="miss">'+m.lbl+'</span>').join(' '));
     let meta='';
@@ -1853,8 +1857,8 @@ function openPay(subId){
   document.getElementById('pay-amt').value=dueLeft(_cur)||_cur.monthly_amount||'';
   document.getElementById('pay-note').value='';
   document.getElementById('pay-overlay').classList.remove('more');
-  const pm=payMode(_cur); _method=(pm==='cash'||pm==='gcash')?pm:null;
-  document.getElementById('pay-paper').value=nextPaper(); document.getElementById('pay-gref').value=''; renderMethod();
+  const pm=payMode(_cur); _method=(pm==='cash'||pm==='gcash'||pm==='bank')?pm:null;
+  document.getElementById('pay-paper').value=nextPaper(); document.getElementById('pay-gref').value=''; document.getElementById('pay-bref').value=''; renderMethod();
   renderExpect(); renderPlanReq(); smPayLabel();
 
   // Warn before collecting from someone who already paid this month.
@@ -1887,8 +1891,9 @@ function nextPaper(){ try{ const l=localStorage.getItem('sc_paper_last_'+_col); 
 function pickMethod(m){ _method=m; renderMethod(); }
 function renderMethod(){
   document.querySelectorAll('#pay-meth button').forEach(b=>b.classList.toggle('sel',b.dataset.m===_method));
-  document.getElementById('pay-paper-wrap').style.display=_method==='gcash'?'none':'block';
+  document.getElementById('pay-paper-wrap').style.display=(_method==='gcash'||_method==='bank')?'none':'block';
   document.getElementById('pay-gref-wrap').style.display=_method==='gcash'?'block':'none';
+  document.getElementById('pay-bref-wrap').style.display=_method==='bank'?'block':'none';
   const l=(()=>{try{return localStorage.getItem('sc_paper_last_'+_col);}catch(e){return null;}})();
   document.getElementById('pay-paper-hint').textContent=l?'required · last used: '+l:'required · same number as the carbon copy';
 }
@@ -2026,7 +2031,7 @@ async function submitPay(){
   const amt=parseFloat(document.getElementById('pay-amt').value);
   if(!(amt>0)){toast('Enter an amount');return;}
   if(amt>100000){toast('That amount looks wrong — check it');return;}
-  if(!_method){toast('Choose Cash or GCash first');return;}
+  if(!_method){toast('Choose Cash, GCash or Bank first');return;}
   const paper=_method==='cash'?document.getElementById('pay-paper').value.replace(/\s/g,''):'';
   const gref=_method==='gcash'?document.getElementById('pay-gref').value.replace(/\s/g,''):'';
   if(paper&&!/^\d{1,10}$/.test(paper)){toast('Paper receipt no. should be numbers only');return;}
@@ -2034,6 +2039,10 @@ async function submitPay(){
   if(_method==='gcash'&&!gref){toast('Type the GCash reference no. from their screenshot — no ref, no proof');document.getElementById('pay-gref').focus();return;}
   if(gref&&!/^\d{8,20}$/.test(gref)){toast('GCash reference no. should be 8–20 numbers');return;}
   if(gref&&_pays.some(p=>!vd(p)&&p.gcash_ref===gref)){toast('That GCash reference was already used');return;}
+  const bref=_method==='bank'?cleanBank(document.getElementById('pay-bref').value):'';
+  if(_method==='bank'&&!bref){toast('Type the bank transfer ref no. from their slip — no ref, no proof');document.getElementById('pay-bref').focus();return;}
+  if(bref&&!/^[0-9A-Z]{6,30}$/.test(bref)){toast('Bank ref no. should be 6–30 letters and numbers');return;}
+  if(bref&&_pays.some(p=>!vd(p)&&p.bank_ref===bref)){toast('That bank ref was already used');return;}
   if(paper&&/^\d+$/.test(paper)){
     const last=(()=>{ try{ return localStorage.getItem('sc_paper_last_'+_col); }catch(e){ return null; } })();
     if(last&&/^\d+$/.test(last)){
@@ -2059,10 +2068,10 @@ async function submitPay(){
   const btn=document.getElementById('pay-btn'); btn.disabled=true; btn.textContent='Saving...';
   const ref=newRef(), noteIn=document.getElementById('pay-note').value.trim(), note=[noteAuto,noteIn].filter(Boolean).join(' · ')||null;
   const rec={p_name:_col,p_sub_id:_cur.id,p_amount:amt,p_date:today(),p_month:start,p_months:_months,p_note:note,p_client_ref:ref,
-    p_method:_method,p_paper_no:paper||null,p_gcash_ref:gref||null};
+    p_method:_method,p_paper_no:paper||null,p_gcash_ref:gref||bref||null};   // bank ref rides in p_gcash_ref (server reads it when p_method='bank')
   const local={_local:true,_pending:true,_ref:ref,subscriber_id:_cur.id,subscriber_name:_cur.name,area:_cur.area,
     amount:amt,payment_date:rec.p_date,month_year:start,months:_months,cover_from:start,cover_to:endM,
-    collector:_col,note:note,invoice_no:null,pay_method:_method,paper_no:paper||null,gcash_ref:gref||null,_at:Date.now(),
+    collector:_col,note:note,invoice_no:null,pay_method:_method,paper_no:paper||null,gcash_ref:gref||null,bank_ref:bref||null,_at:Date.now(),
     covers_label:(()=>{ const cv=coversList(_cur,amt); return cv.length?cv.map(c=>ymLabel(c.ym)+(c.full?'':' (part)')).join(', '):''; })()};
   if(paper){ try{ localStorage.setItem('sc_paper_last_'+_col,paper); }catch(e){} }
   const item={type:'payment',ref,rec,at:Date.now()};
@@ -2077,7 +2086,7 @@ async function submitPay(){
     }catch(e){
       const m=String(e.message||'');
       if(m.includes('bad_pin')) item.err='pin';
-      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/)[0];
+      else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used|bank_ref_required|bad_bank_ref|bank_ref_used/.test(m)) item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used|bank_ref_required|bad_bank_ref|bank_ref_used/)[0];
     }
   }
   _queue=_queue.filter(i=>!i.done); saveQ(); savePays();
@@ -2091,8 +2100,8 @@ async function submitPay(){
 function showReceipt(p,synced,err){
   _rcptRef=p._ref||null;
   const rows=[['Subscriber',p.subscriber_name],['Covers',p.covers_label||coverText(p.cover_from,p.cover_to)],
-              ['Paid by',p.pay_method==='gcash'?'GCash'+(p.gcash_ref?' · ref '+p.gcash_ref:''):'Cash'],
-              ['Paper receipt',p.paper_no||(p.pay_method==='gcash'?'— (GCash)':'none written')],
+              ['Paid by',p.pay_method==='gcash'?'GCash'+(p.gcash_ref?' · ref '+p.gcash_ref:''):p.pay_method==='bank'?'Bank transfer'+(p.bank_ref?' · ref '+p.bank_ref:''):'Cash'],
+              ['Paper receipt',p.paper_no||(p.pay_method==='gcash'?'— (GCash)':p.pay_method==='bank'?'— (Bank)':'none written')],
               ['Date',shortDate(p.payment_date)],['Collector',p.collector]];
   let head, sub;
   if(synced){ head='Payment recorded'; sub='Give this receipt number to the subscriber'; }
@@ -2118,8 +2127,16 @@ function closeRcpt(e){ if(e&&e.target!==document.getElementById('rcpt-overlay'))
    Voids are soft: the row stays greyed with a VOID mark, the money goes back
    as owed, and the OR / GCash ref becomes usable again on the right entry. */
 function vd(p){ return !!(p&&(p.voided_at||p._voided)); }
+/* v4.22 BANK — third way to pay. Proof is the bank transfer ref no. (letters + numbers). */
+function payKind(p){ const m=p&&p.pay_method; return m==='gcash'?'gcash':m==='bank'?'bank':'cash'; }
+function refOf(p){ const k=payKind(p); return k==='gcash'?p.gcash_ref:k==='bank'?p.bank_ref:p.paper_no; }
+function setRef(p,v,k){ k=k||payKind(p); if(k==='gcash')p.gcash_ref=v; else if(k==='bank')p.bank_ref=v; else p.paper_no=v; }
+function cleanBank(v){ return String(v||'').toUpperCase().replace(/[^0-9A-Z]/g,''); }
+function payLabel(p){ const k=payKind(p);
+  return k==='gcash'?'GCash'+(p.gcash_ref?' ref '+p.gcash_ref:''):k==='bank'?'Bank'+(p.bank_ref?' ref '+p.bank_ref:''):'OR '+(p.paper_no||'—'); }
 let _rcptRef=null;
 const FIXMSG={paper_used:'that OR no. is already on another payment',gcash_ref_used:'that GCash ref is already used',
+  bank_ref_used:'that bank ref is already used',bad_bank_ref:'a bank ref is 6–30 letters and numbers',
   already_voided:'it was already voided',already_handed:'the cash was already handed to the office — ask the office to fix it',
   not_yours:'it is not your payment',bad_paper:'the OR no. must be digits only',bad_gcash_ref:'a GCash ref is 8–20 digits',
   same_ref:'the number is the same',reason_required:'a reason is needed',no_payment:'the payment was not found'};
@@ -2138,43 +2155,47 @@ function openFix(p){
   if(!p){ toast('Payment not found on this phone'); return; }
   if(vd(p)){ uiAlert('Already voided','This payment is voided'+(p.void_reason?' — '+p.void_reason:'')+'. It no longer counts.','info'); return; }
   if(p.collector&&p.collector!==_col){ toast('Not your payment'); return; }
-  const isG=p.pay_method==='gcash';
+  const k=payKind(p);
   uiChoose(p.subscriber_name||'Payment',
-    fmt(p.amount)+' · '+(isG?('GCash'+(p.gcash_ref?' ref '+p.gcash_ref:'')):('OR '+(p.paper_no||'—')))+' · '+shortDate(p.payment_date),
-    [{html:'✎ Fix the '+(isG?'GCash ref no.':'receipt (OR) no.'),value:'edit'},
+    fmt(p.amount)+' · '+payLabel(p)+' · '+shortDate(p.payment_date),
+    [{html:'✎ Fix the '+(k==='gcash'?'GCash ref no.':k==='bank'?'bank ref no.':'receipt (OR) no.'),value:'edit'},
      {html:'⌫ Void this payment',value:'void'}])
   .then(v=>{ if(v==='edit')fixEdit(p); if(v==='void')fixVoid(p); });
 }
 async function fixEdit(p){
-  const isG=p.pay_method==='gcash', cur=isG?p.gcash_ref:p.paper_no;
-  const nv=await uiPrompt('Correct '+(isG?'GCash ref no.':'OR no.'),cur?('It is now '+cur+'. Type the right number.'):'Type the right number.',
-    isG?'8–20 digits':'e.g. 1234',cur||'','Save','tel');
+  const k=payKind(p), cur=refOf(p);
+  const what=k==='gcash'?'GCash ref no.':k==='bank'?'bank ref no.':'OR no.';
+  const nv=await uiPrompt('Correct '+what,cur?('It is now '+cur+'. Type the right '+(k==='bank'?'ref':'number')+'.'):'Type the right '+(k==='bank'?'ref':'number')+'.',
+    k==='gcash'?'8–20 digits':k==='bank'?'letters and numbers':'e.g. 1234',cur||'','Save',k==='bank'?'text':'tel');
   if(nv==null) return;
-  const clean=String(nv).replace(/\s/g,'');
-  if(isG?!/^\d{8,20}$/.test(clean):!/^\d{1,10}$/.test(clean)){ toast(isG?'A GCash ref is 8–20 digits':'OR no. must be digits only'); return; }
+  const clean=k==='bank'?cleanBank(nv):String(nv).replace(/\s/g,'');
+  const okFmt=k==='gcash'?/^\d{8,20}$/.test(clean):k==='bank'?/^[0-9A-Z]{6,30}$/.test(clean):/^\d{1,10}$/.test(clean);
+  if(!okFmt){ toast(k==='gcash'?'A GCash ref is 8–20 digits':k==='bank'?'A bank ref is 6–30 letters and numbers':'OR no. must be digits only'); return; }
   if(clean===String(cur||'')){ toast('Same number — nothing to change'); return; }
-  if(isG? _pays.some(x=>x!==p&&!vd(x)&&x.gcash_ref===clean)
+  if(k==='gcash'? _pays.some(x=>x!==p&&!vd(x)&&x.gcash_ref===clean)
+     : k==='bank'? _pays.some(x=>x!==p&&!vd(x)&&x.bank_ref===clean)
         : _pays.some(x=>x!==p&&!vd(x)&&x.collector===_col&&x.paper_no===clean)){ toast('That number is already on another payment'); return; }
   if(!(await fixPinOk())) return;
   if(p._pending){            // never reached the server yet: just fix the queued copy
     _queue=loadQ(); const it=_queue.find(i=>i.ref===p._ref);
-    if(it&&it.rec){ if(isG)it.rec.p_gcash_ref=clean; else it.rec.p_paper_no=clean; saveQ(); }
-    if(isG)p.gcash_ref=clean; else p.paper_no=clean; savePays();
+    if(it&&it.rec){ if(k==='cash')it.rec.p_paper_no=clean; else it.rec.p_gcash_ref=clean; saveQ(); }
+    setRef(p,clean,k); savePays();
     toast('✓ Receipt no. fixed'); rerenderFix(); return;
   }
   if(!p.id){ toast('Still syncing — try again in a moment'); return; }
   const prev=cur||null;
-  if(isG)p.gcash_ref=clean; else p.paper_no=clean; savePays();
+  setRef(p,clean,k); savePays();
+  const qItem=()=>({type:'editRef',id:p.id,val:clean,prev,isG:k==='gcash',kind:k,name:_col,at:Date.now()});
   if(navigator.onLine){
     try{ await rpc('spawn_collect_edit_ref',{p_name:_col,p_pin:_pin,p_id:p.id,p_new:clean}); toast('✓ Receipt no. fixed'); }
-    catch(e){ if(isG)p.gcash_ref=prev; else p.paper_no=prev; savePays();
-      const k=(String(e.message||'').match(/paper_used|gcash_ref_used|already_voided|already_handed|not_yours|bad_paper|bad_gcash_ref|same_ref|no_payment/)||[])[0];
-      if(k)uiAlert('Not saved','The server refused it — '+fixMsg(k)+'.','danger');
-      else{ _queue=loadQ(); _queue.push({type:'editRef',id:p.id,val:clean,prev,isG,name:_col,at:Date.now()}); saveQ();
-        if(isG)p.gcash_ref=clean; else p.paper_no=clean; savePays();
+    catch(e){ setRef(p,prev,k); savePays();
+      const ek=(String(e.message||'').match(/paper_used|gcash_ref_used|bank_ref_used|bad_bank_ref|already_voided|already_handed|not_yours|bad_paper|bad_gcash_ref|same_ref|no_payment/)||[])[0];
+      if(ek)uiAlert('Not saved','The server refused it — '+fixMsg(ek)+'.','danger');
+      else{ _queue=loadQ(); _queue.push(qItem()); saveQ();
+        setRef(p,clean,k); savePays();
         toast('No signal — saved on this phone, sends by itself'); } }
   }else{
-    _queue=loadQ(); _queue.push({type:'editRef',id:p.id,val:clean,prev,isG,name:_col,at:Date.now()}); saveQ();
+    _queue=loadQ(); _queue.push(qItem()); saveQ();
     toast('Saved on this phone — sends when back online');
   }
   rerenderFix();
@@ -2200,7 +2221,7 @@ async function fixVoid(p){
     try{ await rpc('spawn_collect_void',{p_name:_col,p_pin:_pin,p_id:p.id,p_reason:reason});
       p.voided_at=new Date().toISOString(); p.voided_by=_col; savePays();
       toast('✓ Payment voided'); loadArrears(); }
-    catch(e){ const k=(String(e.message||'').match(/paper_used|gcash_ref_used|already_voided|already_handed|not_yours|reason_required|no_payment/)||[])[0];
+    catch(e){ const k=(String(e.message||'').match(/paper_used|gcash_ref_used|bank_ref_used|bad_bank_ref|already_voided|already_handed|not_yours|reason_required|no_payment/)||[])[0];
       if(k){ delete p._voided; delete p.void_reason; savePays(); uiAlert('Not voided','The server refused it — '+fixMsg(k)+'.','danger'); }
       else{ _queue=loadQ(); _queue.push({type:'void',id:p.id,reason,name:_col,at:Date.now()}); saveQ();
         toast('No signal — voided on this phone, sends by itself'); } }
@@ -2215,7 +2236,7 @@ function fixFromHist(i){
   if(r.state==='void'){ uiAlert('Voided','This payment is voided and no longer counts.','info'); return; }
   let p=null;
   if(r.id) p=_pays.find(x=>x.id===r.id)||{id:r.id,subscriber_name:r.name,amount:r.amount,payment_date:r.date,
-    pay_method:r.method,paper_no:r.paper,gcash_ref:r.gref,collector:_col};
+    pay_method:r.method,paper_no:r.paper,gcash_ref:r.method==='bank'?null:r.gref,bank_ref:r.method==='bank'?r.gref:null,collector:_col};
   else if(r.ref) p=_pays.find(x=>x._ref===r.ref);
   openFix(p);
 }
@@ -2352,15 +2373,15 @@ async function flushQ(){
       if(item.type==='payment'){
         const m=String(e.message||'');
         if(m.includes('bad_pin'))item.err='pin';
-        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used/)[0];
+        else if(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used|bank_ref_required|bad_bank_ref|bank_ref_used/.test(m))item.err='rejected:'+m.match(/bad_amount|bad_date|bad_months?|no_subscriber|paper_used|bad_paper|bad_method|paper_required|gcash_ref_required|bad_gcash_ref|gcash_ref_used|bank_ref_required|bad_bank_ref|bank_ref_used/)[0];
         else item.err='net';
       }else if(item.type==='editRef'||item.type==='void'){
         const m=String(e.message||'');
-        const k=(m.match(/paper_used|gcash_ref_used|already_voided|already_handed|not_yours|bad_paper|bad_gcash_ref|same_ref|reason_required|no_payment/)||[])[0];
+        const k=(m.match(/paper_used|gcash_ref_used|bank_ref_used|bad_bank_ref|already_voided|already_handed|not_yours|bad_paper|bad_gcash_ref|same_ref|reason_required|no_payment/)||[])[0];
         if(k){
           const lp=_pays.find(p=>p.id===item.id);
           if(lp){ if(item.type==='void'){delete lp._voided;delete lp.void_reason;}
-                  else if(item.isG)lp.gcash_ref=item.prev; else lp.paper_no=item.prev; }
+                  else setRef(lp,item.prev,item.kind||(item.isG?'gcash':'cash')); }
           item.done=true; savePays();
           uiAlert('Change refused',(item.type==='void'?'The void':'The receipt-no. fix')+' for '+((lp&&lp.subscriber_name)||'a payment')+' was refused by the server ('+fixMsg(k)+').','danger');
         }
@@ -2512,7 +2533,7 @@ function openDayEnd(){
   const tpAll=_pays.filter(p=>p.payment_date===today()&&p.collector===_col);
   const tp=tpAll.filter(p=>!vd(p)), tv=tpAll.filter(p=>vd(p));
   tp.forEach((p,i)=>p._di=i); window._deRows=tp;
-  const cash=tp.filter(p=>p.pay_method!=='gcash'), gc=tp.filter(p=>p.pay_method==='gcash');
+  const cash=tp.filter(p=>payKind(p)==='cash'), gc=tp.filter(p=>payKind(p)!=='cash');   // gc = GCash + Bank (no cash in hand)
   _deCash=cash.reduce((a,p)=>a+Number(p.amount||0),0);
   document.getElementById('de-sub').textContent=_col+' · '+new Date().toLocaleDateString('en-PH',{weekday:'short',month:'short',day:'numeric'});
   document.getElementById('de-cash').textContent=fmt(_deCash);
@@ -2528,10 +2549,10 @@ function openDayEnd(){
   const noNo=cash.filter(p=>!p.paper_no);
   noNo.forEach(p=>{ rows+='<div class="de-row"><span class="de-no de-gap">—</span><span style="flex:1">'+esc(p.subscriber_name||'')+' <small class="de-gap">no paper no.</small></span><b>'+fmt(p.amount)+'</b></div>'; });
   document.getElementById('de-paper').innerHTML=rows||'<div style="color:var(--muted);font-size:13px">No cash payments yet today</div>';
-  document.getElementById('de-gcash').innerHTML=(gc.length?gc.map(p=>'<div class="de-row" style="cursor:pointer" onclick="openFix(window._deRows['+p._di+'])"><span style="flex:1">'+esc(p.subscriber_name||'')+'<br><small style="color:var(--muted)">'+(p.gcash_ref?'ref '+esc(p.gcash_ref):'no ref')+'</small></span><b>'+fmt(p.amount)+'</b></div>').join('')
-    :'<div style="color:var(--muted);font-size:13px">No GCash payments today</div>')
+  document.getElementById('de-gcash').innerHTML=(gc.length?gc.map(p=>'<div class="de-row" style="cursor:pointer" onclick="openFix(window._deRows['+p._di+'])"><span style="flex:1">'+esc(p.subscriber_name||'')+'<br><small style="color:var(--muted)">'+(p.pay_method==='bank'?'Bank · ':'GCash · ')+(refOf(p)?'ref '+esc(refOf(p)):'no ref')+'</small></span><b>'+fmt(p.amount)+'</b></div>').join('')
+    :'<div style="color:var(--muted);font-size:13px">No GCash or bank payments today</div>')
     +(tv.length?'<div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin:12px 0 4px">VOIDED TODAY</div>'
-      +tv.map(p=>'<div class="de-row de-void"><span class="de-no">'+esc(p.paper_no||(p.gcash_ref?'GC':'—'))+'</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.subscriber_name||'')+'</span><b>'+fmt(p.amount)+'</b></div>').join(''):'');
+      +tv.map(p=>'<div class="de-row de-void"><span class="de-no">'+esc(p.paper_no||(p.gcash_ref?'GC':p.bank_ref?'BK':'—'))+'</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.subscriber_name||'')+'</span><b>'+fmt(p.amount)+'</b></div>').join(''):'');
   document.getElementById('de-hand').value=''; deCheck();
   document.getElementById('de-overlay').style.display='flex';
 }
@@ -2545,7 +2566,7 @@ function deCheck(){
 function deCopy(){
   const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col&&!vd(p));
   const lines=['DAY END · '+_col+' · '+today(),'Cash in app: '+fmt(_deCash)+(document.getElementById('de-hand').value?' · in hand: '+fmt(Number(document.getElementById('de-hand').value)):'')]
-    .concat(tp.map(p=>(p.pay_method==='gcash'?'GCash':'OR '+(p.paper_no||'—'))+' · '+(p.subscriber_name||'')+' · '+fmt(p.amount)));
+    .concat(tp.map(p=>(p.pay_method==='gcash'?'GCash':p.pay_method==='bank'?'Bank ref '+(p.bank_ref||'—'):'OR '+(p.paper_no||'—'))+' · '+(p.subscriber_name||'')+' · '+fmt(p.amount)));
   const t=lines.join('\n');
   (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Copied — paste it in Messenger')).catch(()=>{ _dlg({title:'Copy this summary',msg:'Select all, copy, then paste it in Messenger',input:'area',value:t,ok:'Done',tone:'info',icon:'⧉'}); });
 }
@@ -2667,7 +2688,7 @@ function smNote(s,st){
 }
 function smRow(s,st){
   const amt=smAmount(s,st), pm=payMode(s);
-  const how=(_smTab==='all'||_smQ)?(pm==='gcash'?'GCash':pm==='cash'?'Cash':pm==='unknown'?'ask how they pay':pm):'';
+  const how=(_smTab==='all'||_smQ)?(pm==='gcash'?'GCash':pm==='cash'?'Cash':pm==='bank'?'Bank':pm==='unknown'?'ask how they pay':pm):'';
   const cls=st==='late'?'late':(st==='paid'?'paid':'due');
   const ow=(st!=='paid'&&st!=='free')?owedMonths(s):[];
   const i=_info[s.id]||{};
@@ -2696,7 +2717,7 @@ function renderSimple(){
 function smRefresh(){
   const cv=document.getElementById('sm-cv'); if(!cv) return;
   const tp=_pays.filter(p=>p.payment_date===today()&&p.collector===_col&&!vd(p));
-  const cash=tp.filter(p=>p.pay_method!=='gcash').reduce((a,p)=>a+Number(p.amount||0),0);
+  const cash=tp.filter(p=>payKind(p)==='cash').reduce((a,p)=>a+Number(p.amount||0),0);
   cv.textContent=peso0(cash);
   document.getElementById('sm-cs').innerHTML=tp.length+' paid<br>'+_subs.filter(onRoute).length+' to visit';
   // anyone Mark collected from today who still lacks details
