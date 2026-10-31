@@ -320,10 +320,10 @@
         // harvest from the financial pack (app + BASHANG book, each once; cached, refreshed every 15 min)
         const [mp, mt, pk] = await Promise.all([
           allRows('sub_months', `paid_date=gte.${m1}&paid_date=lte.${d}&select=amount`),
-          allRows('sub_months', `paid_date=eq.${d}&select=amount`),
+          allRows('sub_months', `paid_date=eq.${d}&select=amount,received_by,source`),
           fetch(`${_SB}/rest/v1/rpc/spawn_financial_pack`, {method:'POST', headers:Object.assign({}, _HDR, {'Content-Type':'application/json'}), body:JSON.stringify({p_from: m1.slice(0,4)+'-01-01'})}).then(r=>r.json()).catch(()=>null)]);
         const hc = pk && Array.isArray(pk.harvest_check) ? pk.harvest_check.find(h => h.ym === d.slice(0,7)) : null;
-        month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, subsToday: sumF(mt,'amount'), subsTodayN: mt.length,
+        month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, subsToday: sumF(mt,'amount'), subsTodayN: mt.length, todayRows: mt,
                   harv: hc ? Number(hc.spawn_share||0) : 0, harvN: hc ? Number(hc.harvests||0) : 0 }; monthAt = Date.now();
       }
       liveAt = new Date();
@@ -347,6 +347,12 @@
     const bs = {}; lv.forEach(p => { const w = whoOf(p), m = methodOf(p);
       bs[w] = bs[w] || {n:0,total:0,cash:0,gcash:0,unknown:0,areas:new Set()};
       bs[w].n++; bs[w].total += Number(p.amount||0); bs[w][m] += Number(p.amount||0); if (p.area) bs[w].areas.add(p.area); });
+    // when the payment log has nothing yet but BASHANG does, build the per-person chips from the book rows
+    if (!lv.length && month && Array.isArray(month.todayRows) && month.todayRows.length) {
+      month.todayRows.forEach(p => { const w = cap(firstName(p.received_by || 'Office'));
+        bs[w] = bs[w] || {n:0,total:0,cash:null,gcash:0,unknown:0,areas:new Set()};
+        bs[w].n++; bs[w].total += Number(p.amount||0); bs[w].areas.add('BASHANG'); });
+    }
     const logT = sumF(lv,'amount');
     const sT = (month && month.subsToday > logT) ? month.subsToday : logT;   // all sources (BASHANG + log + Spawn Collect)
     const sN = (month && month.subsTodayN > lv.length) ? month.subsTodayN : lv.length;
@@ -358,11 +364,11 @@
     el.innerHTML = `
       <div class="lv-grid">
         <div class="cx-card lv-h"><div class="cx-head"><b style="color:#15803d">🪙 Harvest today</b><span class="lv-amt" style="color:#15803d">${peso(hT)}</span></div>
-          <div class="lv-sub">${liveHarv.length} vendo${liveHarv.length===1?'':'s'} harvested · Spawn share</div>
+          <div class="lv-sub">${liveHarv.length} vendo${liveHarv.length===1?'':'s'} harvested · Spawn share · entered in the app today</div>
           <div class="cx-cols">${liveHarv.length?chipsHtml(bh,'#15803d','vendo'):'<span class="lv-none">No harvest recorded yet today</span>'}</div></div>
         <div class="cx-card lv-s"><div class="cx-head"><b style="color:#025AC6">📶 Subscribers today</b><span class="lv-amt" style="color:#025AC6">${peso(sT)}</span></div>
           <div class="lv-sub">${sN} payment${sN===1?'':'s'}${sN>lv.length?' · '+lv.length+' in the payment log, the rest from BASHANG':''} · cash ${peso(sumF(lv.filter(p=>methodOf(p)==='cash'),'amount'))} · GCash ${peso(sumF(lv.filter(p=>methodOf(p)==='gcash'),'amount'))} · tap a name for the list</div>
-          <div class="cx-cols">${lv.length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
+          <div class="cx-cols">${Object.keys(bs).length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
       </div>
       <div class="lv-month">
         <div><span>📅 Today · Harvest + Subscribers</span><b>${peso(hT+sT)}</b></div>
