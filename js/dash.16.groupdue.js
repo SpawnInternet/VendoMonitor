@@ -228,13 +228,15 @@ function gdSetFilter(f){
 function gdCopyText(){
   const s = _gdSum.find(x => x.id===_gdSel);
   if(!s){ if(typeof toast==='function') toast('Pick a group first'); return; }
-  const due = s.rows.filter(r => r.due);
+  // copy what is on screen: the due list, narrowed by the search box if one is typed
+  const q = ((document.getElementById('gd-search')||{}).value||'').trim().toLowerCase();
+  const due = s.rows.filter(r => r.due && (!q || (r.name+' '+r.code+' '+r.address+' '+(r.vlan||'')).toLowerCase().indexOf(q)>=0));
   const line = (r,i) => (i+1)+'. '+(r.code?r.code+' · ':'')+r.name
     + (r.last ? '\n    last: '+_gdMonDD(r.last)+' ('+r.days+' days ago)' : '\n    last: never')
     + (r.note ? '\n    note: '+r.note : '');
   const section = (t, arr) => arr.length ? '\n\n'+t+' ('+arr.length+')\n\n'+arr.map(line).join('\n\n') : '';
   const txt = s.label.toUpperCase()+' — NOT YET HARVESTED'
-    + '\nAs of '+_gdMonDD(_gdManilaToday())+' · '+due.length+' of '+s.active+' active'
+    + '\nAs of '+_gdMonDD(_gdManilaToday())+' · '+due.length+' of '+s.active+' active'+(q ? ' · filter: "'+q+'"' : '')
     + '\n'+(s.collector ? 'Collector: '+s.collector : '')
     + section('🔴 90+ DAYS',        due.filter(r=>r.last && r.days>90))
     + section('🟠 60–90 DAYS',      due.filter(r=>r.last && r.days>60 && r.days<=90))
