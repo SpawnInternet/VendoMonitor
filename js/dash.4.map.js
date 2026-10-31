@@ -994,7 +994,9 @@ function gUpdateBackBtn(id) {
 
 function showP(id, btn) {
   // Hide all fixed overlays when switching panels
-  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps','hvt-keys'].forEach(function(oid){
+  ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps','hvt-keys',
+   // 2026-10-31: these Harvest sub-panels live outside #panel-harvest, so they stayed visible on other tabs
+   'hvt-overdue','hvt-expected','hvt-receipt','hvt-progress','hvt-names','hvt-ledger','hvt-spawnkeys','hvt-harveststats','hvt-perf'].forEach(function(oid){
     var oel=document.getElementById(oid); if(oel) oel.style.display='none';
   });
   _navHistory = [];
