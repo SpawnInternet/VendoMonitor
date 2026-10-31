@@ -1004,9 +1004,18 @@ function showP(id, btn) {
     if(_leavingHarvest && oid.indexOf('hvt-')===0 && oel.style.display!=='none' && oel.offsetParent!==null) window._hvtKeep = oid;
     oel.style.display='none';
   });
-  if(id==='harvest' && window._hvtKeep){
-    var keep=document.getElementById(window._hvtKeep); if(keep) keep.style.display='block';
-    var kb=document.getElementById('hbtn-'+window._hvtKeep.slice(4)); if(kb) kb.classList.add('on');
+  if(id==='harvest'){
+    var keepKey = window._hvtKeep ? window._hvtKeep.slice(4) : null;
+    if(window._hvtKeep){ var keep=document.getElementById(window._hvtKeep); if(keep) keep.style.display='block'; }
+    // highlight the sub-tab button that is actually showing. The harvest loaders that run after
+    // this clear the 'on' class, so re-apply it a couple of times after they settle.
+    var _hl=function(){
+      var key = keepKey;
+      if(!key){ var vis=['htable','livefeed','recon','perf'].filter(function(k){ var e=document.getElementById('hvt-'+k); return e && e.style.display!=='none' && e.offsetParent!==null; }); key = vis[0] || 'htable'; }
+      var tabs=document.querySelectorAll('#hv-main-tabs .hv-hvtab'); tabs.forEach(function(b){ b.classList.remove('on'); });
+      var kb=document.getElementById('hbtn-'+key); if(kb) kb.classList.add('on');
+    };
+    _hl(); setTimeout(_hl, 400); setTimeout(_hl, 1500);
   }
   _navHistory = [];
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
