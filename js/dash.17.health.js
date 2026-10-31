@@ -17,6 +17,7 @@
 var _dhData = null, _dhTs = 0, _dhBusy = false, _dhPack = null, _dhOpen = {};
 const _dhEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const _dhPeso = n => n==null ? '' : '₱'+Math.round(Number(n)).toLocaleString();
+const _dhManila = ts => { const d = new Date(new Date(ts).getTime() + 8*3600*1000); const p=n=>String(n).padStart(2,'0'); let h=d.getUTCHours(); const ap=h>=12?'PM':'AM'; h=h%12||12; return p(d.getUTCMonth()+1)+'/'+p(d.getUTCDate())+' '+h+':'+p(d.getUTCMinutes())+' '+ap; };
 const _dhMon = ym => { const m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return m[parseInt(ym.slice(5,7),10)-1]+' '+ym.slice(0,4); };
 
 async function _dhRpc(fn, body){
@@ -166,7 +167,7 @@ function dhRender(){
     if(_dhPack){
       const rows = (_dhPack.rows||[]).map(r => { const big = r.pct!=null && Math.abs(r.pct)>=5 && !r.current;
         return `<tr><td><b>${_dhMon(r.ym)}</b>${r.current?' <span class="dh-chip">open</span>':''}</td><td>${_dhPeso(r.cash)}</td><td>${_dhPeso(r.harvest)}</td><td><span class="dh-chip ${big?'r':'g'}">${r.diff>=0?'+':''}${_dhPeso(r.diff)}</span> <span style="color:#6b7280">${r.pct==null?'':r.pct.toFixed(1)+'%'}</span></td></tr>`; });
-      body = `<div class="dh-note">Cash book = Piso WiFi cash the office received (Cash Receipts sheet). Harvests = app + BASHANG, each counted once. Hand-ins land days after the harvest date, so ±3% is normal. The open month is always short until it closes.${_dhPack.cached_at ? ' Figures as of '+_dhEsc(String(_dhPack.cached_at).replace('T',' ').slice(0,16))+' (refreshed every 15 min).' : ''}</div>`+_dhTable(['Month','Cash book','Harvests','Harvests − cash'], rows);
+      body = `<div class="dh-note">Cash book = Piso WiFi cash the office received (Cash Receipts sheet). Harvests = app + BASHANG, each counted once. Hand-ins land days after the harvest date, so ±3% is normal. The open month is always short until it closes.${_dhPack.cached_at ? ' Figures as of '+_dhManila(_dhPack.cached_at)+' (refreshed every 15 min).' : ''}</div>`+_dhTable(['Month','Cash book','Harvests','Harvests − cash'], rows);
     }
     sec = `<div class="dh-sec"><div class="hd"><span class="dh-pill" style="background:${_dhPack?_dhCol(cashBad,true):'#9ca3af'}">${_dhPack?(cashBad||'✓'):'…'}</span><h3>Cash book vs harvests</h3><div class="sub">Months where the two books disagree by 5% or more.</div></div><div class="bd">${body}</div></div>`;
   }
