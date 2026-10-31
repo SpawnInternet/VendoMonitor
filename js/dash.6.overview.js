@@ -203,7 +203,8 @@ function _netCardHtml(ov, mlbl){
 
 function overviewRender(ov, data) {
   const stats = (data && data.stats) || {};
-  const hackedCnt = stats.suspicious_count || 0;
+  // 2026-10-31: during a refresh stats can be empty for a moment — keep the last known count instead of flashing 0
+  const hackedCnt = (stats.suspicious_count != null) ? (window._lastHackedCnt = stats.suspicious_count) : (window._lastHackedCnt || 0);
   const _MLBL = _curMonthLabel();
 
   // ── Stat cards: TG month · Harvest month · TG today · Harvest today · Suspicious ──
@@ -230,7 +231,7 @@ function overviewRender(ov, data) {
       <div style="font-size:9px;color:var(--mu);margin-top:1px;font-weight:600">${_fmtNum(ov.cloud_machines||0)} machines &middot; ${_php(ov.cloud_today)} today</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.red};border-color:rgba(223,26,53,.15);cursor:pointer" onclick="showP('suspicious')">
-      <div class="sl" style="color:${BRAND.red}">Suspicious Txns</div>
+      <div class="sl" style="color:${BRAND.red}">Suspicious Txns · all time</div>
       <div class="sv" style="color:${BRAND.red}">${_fmtNum(hackedCnt)}</div>
     </div>
     <div class="stat" style="border-bottom-color:${BRAND.sky};cursor:pointer" onclick="showP('subscribers')" title="Subscriber payments received this month">
