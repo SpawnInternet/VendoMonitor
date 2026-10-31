@@ -229,15 +229,18 @@ function gdCopyText(){
   const s = _gdSum.find(x => x.id===_gdSel);
   if(!s){ if(typeof toast==='function') toast('Pick a group first'); return; }
   const due = s.rows.filter(r => r.due);
-  const line = r => '- '+(r.code?r.code+' ':'')+r.name+(r.vlan!=null?' (VLAN '+r.vlan+')':'')
-    +(r.last ? ' — last '+_gdMonDD(r.last)+' ('+r.days+' days)' : ' — never harvested')
-    +(r.note ? ' · '+r.note : '');
-  const bucket = (t, arr) => arr.length ? '\n\n'+t+':\n'+arr.map(line).join('\n') : '';
-  const txt = s.label+' — NOT YET HARVESTED as of '+_gdMonDD(_gdManilaToday())+' ('+due.length+' of '+s.active+' active)'
-    + bucket('NEVER HARVESTED', due.filter(r=>!r.last))
-    + bucket('90+ DAYS',        due.filter(r=>r.last && r.days>90))
-    + bucket('60–90 DAYS',      due.filter(r=>r.last && r.days>60 && r.days<=90))
-    + bucket('PAST DUE (30–60 DAYS)', due.filter(r=>r.last && r.days<=60));
+  const line = (r,i) => (i+1)+'. '+(r.code?r.code+' · ':'')+r.name
+    + (r.last ? '\n    last: '+_gdMonDD(r.last)+' ('+r.days+' days ago)' : '\n    last: never')
+    + (r.note ? '\n    note: '+r.note : '');
+  const section = (t, arr) => arr.length ? '\n\n'+t+' ('+arr.length+')\n\n'+arr.map(line).join('\n\n') : '';
+  const txt = s.label.toUpperCase()+' — NOT YET HARVESTED'
+    + '\nAs of '+_gdMonDD(_gdManilaToday())+' · '+due.length+' of '+s.active+' active'
+    + '\n'+(s.collector ? 'Collector: '+s.collector : '')
+    + section('🔴 90+ DAYS',        due.filter(r=>r.last && r.days>90))
+    + section('🟠 60–90 DAYS',      due.filter(r=>r.last && r.days>60 && r.days<=90))
+    + section('🟡 PAST DUE',        due.filter(r=>r.last && r.days<=60))
+    + section('⚫ NEVER HARVESTED', due.filter(r=>!r.last))
+    + '\n\nPlease harvest these first and enter each one in Spawn Harvest.';
   navigator.clipboard.writeText(txt).then(
     () => { if(typeof toast==='function') toast('Copied '+due.length+' vendos for '+s.label); },
     () => { if(typeof toast==='function') toast('Copy blocked by browser'); });
