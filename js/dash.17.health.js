@@ -120,7 +120,7 @@ function dhRender(){
   if(_dhSel==='names'){
     const rows = (nm.items||[]).map(x => `<tr>
       <td><b>${_dhEsc(x.raw_name)}</b><div class="m"><span class="dh-chip">${_dhEsc(x.source_tab)}</span>${x.sheet_area?'<span class="dh-chip">'+_dhEsc(x.sheet_area)+'</span>':''}${x.vlan?'<span class="dh-chip">VLAN '+_dhEsc(x.vlan)+'</span>':''}</div></td>
-      <td><b>${x.rows}</b> <span style="color:#9ca3af">rows</span><div class="m">${_dhPeso(x.amount)}</div></td>
+      <td style="white-space:nowrap;"><b>${x.rows}</b> <span style="color:#9ca3af">rows</span><div class="m">${_dhPeso(x.amount)}</div></td>
       <td style="color:#6b7280;white-space:nowrap;">${_dhEsc(x.first_date)}<div class="m">to ${_dhEsc(x.last_date)}</div></td>
       <td>${x.suggest_id ? `<b>${_dhEsc(x.suggest_name)}</b> <span class="dh-chip">#${x.suggest_id}</span><span class="dh-chip">${_dhEsc(x.suggest_area)}</span><span class="dh-bar" title="name similarity"><i style="width:${Math.round(x.suggest_sim*100)}%"></i></span>` : '<span style="color:#9ca3af;font-size:12px;">No vendo with a name like this — probably a new box that needs a vendo record.</span>'}</td>
       <td style="white-space:nowrap;text-align:right;">${x.suggest_id ? _dhBtn('✓ Link to #'+x.suggest_id, `dhLink(${_dhJ(x.raw_name)}, ${x.suggest_id}, ${_dhJ(x.suggest_name)})`, 'p')+' ' : ''}
