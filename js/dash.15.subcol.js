@@ -316,10 +316,15 @@
       liveHarv = Array.isArray(harv) ? harv : [];
       try { await fillAreas(live); } catch(e){}
       if (!month || Date.now() - monthAt > 300000 || month.m1 !== m1) {          // month totals every 5 minutes
-        const [mp, mh] = await Promise.all([
-          allRows('subscriber_payments', `payment_date=gte.${m1}&payment_date=lte.${d}&voided_at=is.null&select=amount`),
-          allRows('harvests', `harvest_date=gte.${m1}&harvest_date=lte.${d}&select=spawn_share`)]);
-        month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, harv: sumF(mh,'spawn_share'), harvN: mh.length }; monthAt = Date.now();
+        // 2026-10-31: same sources as the Dashboard cards — subscribers from sub_months (BASHANG + payment log + Spawn Collect),
+        // harvest from the financial pack (app + BASHANG book, each once; cached, refreshed every 15 min)
+        const [mp, mt, pk] = await Promise.all([
+          allRows('sub_months', `paid_date=gte.${m1}&paid_date=lte.${d}&select=amount`),
+          allRows('sub_months', `paid_date=eq.${d}&select=amount`),
+          fetch(`${_SB}/rest/v1/rpc/spawn_financial_pack`, {method:'POST', headers:Object.assign({}, _HDR, {'Content-Type':'application/json'}), body:JSON.stringify({p_from: m1.slice(0,4)+'-01-01'})}).then(r=>r.json()).catch(()=>null)]);
+        const hc = pk && Array.isArray(pk.harvest_check) ? pk.harvest_check.find(h => h.ym === d.slice(0,7)) : null;
+        month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, subsToday: sumF(mt,'amount'), subsTodayN: mt.length,
+                  harv: hc ? Number(hc.spawn_share||0) : 0, harvN: hc ? Number(hc.harvests||0) : 0 }; monthAt = Date.now();
       }
       liveAt = new Date();
       if (stTab === 'subs' && book) { bookLoad(true).then(()=>{ if (stTab==='subs') { drawKpis(); drawBookTable(); } }); }
@@ -342,7 +347,9 @@
     const bs = {}; lv.forEach(p => { const w = whoOf(p), m = methodOf(p);
       bs[w] = bs[w] || {n:0,total:0,cash:0,gcash:0,unknown:0,areas:new Set()};
       bs[w].n++; bs[w].total += Number(p.amount||0); bs[w][m] += Number(p.amount||0); if (p.area) bs[w].areas.add(p.area); });
-    const sT = sumF(lv,'amount');
+    const logT = sumF(lv,'amount');
+    const sT = (month && month.subsToday > logT) ? month.subsToday : logT;   // all sources (BASHANG + log + Spawn Collect)
+    const sN = (month && month.subsTodayN > lv.length) ? month.subsTodayN : lv.length;
     // harvest today
     const bh = {}; liveHarv.forEach(r => { const w = cap(firstName(r.collector));
       bh[w] = bh[w] || {n:0,total:0,areas:new Set()}; bh[w].n++; bh[w].total += Number(r.spawn_share||0); if (r.area) bh[w].areas.add(r.area); });
@@ -354,12 +361,12 @@
           <div class="lv-sub">${liveHarv.length} vendo${liveHarv.length===1?'':'s'} harvested · Spawn share</div>
           <div class="cx-cols">${liveHarv.length?chipsHtml(bh,'#15803d','vendo'):'<span class="lv-none">No harvest recorded yet today</span>'}</div></div>
         <div class="cx-card lv-s"><div class="cx-head"><b style="color:#025AC6">📶 Subscribers today</b><span class="lv-amt" style="color:#025AC6">${peso(sT)}</span></div>
-          <div class="lv-sub">${lv.length} payment${lv.length===1?'':'s'} · cash ${peso(sumF(lv.filter(p=>methodOf(p)==='cash'),'amount'))} · GCash ${peso(sumF(lv.filter(p=>methodOf(p)==='gcash'),'amount'))} · tap a name for the list</div>
+          <div class="lv-sub">${sN} payment${sN===1?'':'s'}${sN>lv.length?' · '+lv.length+' in the payment log, the rest from BASHANG':''} · cash ${peso(sumF(lv.filter(p=>methodOf(p)==='cash'),'amount'))} · GCash ${peso(sumF(lv.filter(p=>methodOf(p)==='gcash'),'amount'))} · tap a name for the list</div>
           <div class="cx-cols">${lv.length?chipsHtml(bs,'#025AC6','payment'):'<span class="lv-none">No subscriber payment yet today</span>'}</div></div>
       </div>
       <div class="lv-month">
         <div><span>📅 Today · Harvest + Subscribers</span><b>${peso(hT+sT)}</b></div>
-        <div><span>🪙 Harvest · ${esc(monthName)} so far</span><b style="color:#15803d">${month?peso(month.harv):'…'}</b></div>
+        <div><span>🪙 Harvest · ${esc(monthName)} so far <small style="color:#9ca3af">app + book, 15-min refresh</small></span><b style="color:#15803d">${month?peso(month.harv):'…'}</b></div>
         <div><span>📶 Subscribers · ${esc(monthName)} so far</span><b style="color:#025AC6">${month?peso(month.subs):'…'}</b></div>
         <div class="tot"><span>💰 Harvest + Subscribers · ${esc(monthName)} so far</span><b>${month?peso(month.harv+month.subs):'…'}</b></div>
         <button type="button" id="sl-r" title="Refresh">↻ ${esc(when)}</button>
