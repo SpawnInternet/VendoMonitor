@@ -120,7 +120,7 @@ function dhRender(){
   if(_dhSel==='names'){
     const rows = (nm.items||[]).map(x => `<tr>
       <td><b>${_dhEsc(x.raw_name)}</b><div class="m"><span class="dh-chip">${_dhEsc(x.source_tab)}</span>${x.sheet_area?'<span class="dh-chip">'+_dhEsc(x.sheet_area)+'</span>':''}${x.vlan?'<span class="dh-chip">VLAN '+_dhEsc(x.vlan)+'</span>':''}</div></td>
-      <td style="white-space:nowrap;"><b>${x.rows}</b> <span style="color:#9ca3af">rows</span><div class="m">${_dhPeso(x.amount)}</div></td>
+      <td style="white-space:nowrap;"><b>${x.rows}</b> <span style="color:#9ca3af">${x.rows==1?'row':'rows'}</span><div class="m">${_dhPeso(x.amount)}</div></td>
       <td style="color:#6b7280;white-space:nowrap;">${_dhEsc(x.first_date)}<div class="m">to ${_dhEsc(x.last_date)}</div></td>
       <td>${x.suggest_id ? `<b>${_dhEsc(x.suggest_name)}</b> <span class="dh-chip">#${x.suggest_id}</span><span class="dh-chip">${_dhEsc(x.suggest_area)}</span><span class="dh-bar" title="name similarity"><i style="width:${Math.round(x.suggest_sim*100)}%"></i></span>` : '<span style="color:#9ca3af;font-size:12px;">No vendo with a name like this — probably a new box that needs a vendo record.</span>'}</td>
       <td style="white-space:nowrap;text-align:right;">${x.suggest_id ? _dhBtn('✓ Link to #'+x.suggest_id, `dhLink(${_dhJ(x.raw_name)}, ${x.suggest_id}, ${_dhJ(x.suggest_name)})`, 'p')+' ' : ''}
@@ -166,7 +166,7 @@ function dhRender(){
     if(_dhPack){
       const rows = (_dhPack.rows||[]).map(r => { const big = r.pct!=null && Math.abs(r.pct)>=5 && !r.current;
         return `<tr><td><b>${_dhMon(r.ym)}</b>${r.current?' <span class="dh-chip">open</span>':''}</td><td>${_dhPeso(r.cash)}</td><td>${_dhPeso(r.harvest)}</td><td><span class="dh-chip ${big?'r':'g'}">${r.diff>=0?'+':''}${_dhPeso(r.diff)}</span> <span style="color:#6b7280">${r.pct==null?'':r.pct.toFixed(1)+'%'}</span></td></tr>`; });
-      body = `<div class="dh-note">Cash book = Piso WiFi cash the office received (Cash Receipts sheet). Harvests = app + BASHANG, each counted once. Hand-ins land days after the harvest date, so ±3% is normal. The open month is always short until it closes.</div>`+_dhTable(['Month','Cash book','Harvests','Harvests − cash'], rows);
+      body = `<div class="dh-note">Cash book = Piso WiFi cash the office received (Cash Receipts sheet). Harvests = app + BASHANG, each counted once. Hand-ins land days after the harvest date, so ±3% is normal. The open month is always short until it closes.${_dhPack.cached_at ? ' Figures as of '+_dhEsc(String(_dhPack.cached_at).replace('T',' ').slice(0,16))+' (refreshed every 15 min).' : ''}</div>`+_dhTable(['Month','Cash book','Harvests','Harvests − cash'], rows);
     }
     sec = `<div class="dh-sec"><div class="hd"><span class="dh-pill" style="background:${_dhPack?_dhCol(cashBad,true):'#9ca3af'}">${_dhPack?(cashBad||'✓'):'…'}</span><h3>Cash book vs harvests</h3><div class="sub">Months where the two books disagree by 5% or more.</div></div><div class="bd">${body}</div></div>`;
   }
@@ -186,7 +186,7 @@ async function dhLoadPack(){
   try{
     const p = await _dhRpc('spawn_financial_pack', {p_from: new Date().getUTCFullYear()+'-01-01'});
     const hc = {}; (p.harvest_check||[]).forEach(h => hc[h.ym] = Number(h.spawn_share));
-    _dhPack = { rows: (p.revenue||[]).map(r => { const cash = Number(r.vendo_sales||0), harvest = hc[r.ym]||0, diff = harvest - cash;
+    _dhPack = { cached_at: p.cached_at || null, rows: (p.revenue||[]).map(r => { const cash = Number(r.vendo_sales||0), harvest = hc[r.ym]||0, diff = harvest - cash;
       return {ym:r.ym, cash, harvest, diff, pct: cash ? diff*100/cash : null, current: r.ym === new Date(Date.now()+8*3600*1000).toISOString().slice(0,7)}; }) };
   }catch(e){ _dhPack = {rows:[]}; if(typeof toast==='function') toast('Financial pack: '+e.message); }
   dhRender();
