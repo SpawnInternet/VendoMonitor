@@ -994,11 +994,20 @@ function gUpdateBackBtn(id) {
 
 function showP(id, btn) {
   // Hide all fixed overlays when switching panels
+  var _ph=document.getElementById('panel-harvest'); var _leavingHarvest = !!(_ph && _ph.classList.contains('active'));
+  if(_leavingHarvest) window._hvtKeep = null;   // recompute from what is actually open right now
   ['hv-tab-audited','hv-overlay-recon','hv-overlay-records','hvt-settings','hvt-gps','hvt-keys',
    // 2026-10-31: these Harvest sub-panels live outside #panel-harvest, so they stayed visible on other tabs
    'hvt-overdue','hvt-expected','hvt-receipt','hvt-progress','hvt-names','hvt-ledger','hvt-spawnkeys','hvt-harveststats','hvt-perf'].forEach(function(oid){
-    var oel=document.getElementById(oid); if(oel) oel.style.display='none';
+    var oel=document.getElementById(oid); if(!oel) return;
+    // remember which loose Harvest sub-panel was open, so it comes back when the user returns to Harvest
+    if(_leavingHarvest && oid.indexOf('hvt-')===0 && oel.style.display!=='none' && oel.offsetParent!==null) window._hvtKeep = oid;
+    oel.style.display='none';
   });
+  if(id==='harvest' && window._hvtKeep){
+    var keep=document.getElementById(window._hvtKeep); if(keep) keep.style.display='block';
+    var kb=document.getElementById('hbtn-'+window._hvtKeep.slice(4)); if(kb) kb.classList.add('on');
+  }
   _navHistory = [];
   document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
   document.querySelectorAll(".nav-bar button").forEach(b=>b.classList.remove("active"));
