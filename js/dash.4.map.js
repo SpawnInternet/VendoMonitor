@@ -1023,6 +1023,7 @@ function showP(id, btn) {
   const panel = document.getElementById("panel-"+id);
   if(!panel) { console.error("Panel not found: panel-"+id); return; }
   panel.classList.add("active");
+  if(!btn) btn = document.querySelector('.nav-bar button[data-panel="'+id+'"]');   // 2026-10-31: cards/links that jump to a tab left the nav unlit
   if(btn) btn.classList.add("active");
   if (typeof window.spawnShowFresh === 'function') window.spawnShowFresh(id);
   // Track navigation history
