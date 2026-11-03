@@ -1541,7 +1541,10 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v13.8';
+const APP_VERSION = 'v13.9';
+/* v13.9: Spawn share = net × 75% rounded UP to the next peso (the office notebook rule; e.g. ₱1,874.25 → ₱1,875).
+   The database applies the same rule on save (trg_harvest_share_round_up), this keeps the screen in step with it. */
+function spawnShareOf(net){ const n = Number(net) || 0; return Math.ceil(Math.round(n * 75) / 100); }
 /* The badge used to be a hardcoded literal in the markup and had drifted to
    v13.7 while APP_VERSION said v12.9 — so the number on screen told you
    nothing about which build was actually running. Driven from APP_VERSION
@@ -3851,7 +3854,7 @@ function doneCollectionSheet(){
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const warn = document.getElementById('sheet-match-warning');
   const summaryBox = document.getElementById('pack-summary-box');
   const doneBtn = document.querySelector('#collection-sheet .btn-blue');
@@ -3907,7 +3910,7 @@ function calcNet(){
   const breakdownTotal = net + free + saloy + freeCoins;
   window._lastBreakdownTotal = breakdownTotal;
   window._lastNetCoins = net;
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const customer = net - spawn;
 
   // Write total to hidden field for submitHarvest()
@@ -3940,7 +3943,7 @@ function calcNet(){
   if(ctl) ctl.textContent = '₱'+fmt(net);
   // Show warning if pack total ≠ coin total
   const warn = document.getElementById('sheet-match-warning');
-  if(warn) warn.style.display = (packTotal > 0 && net > 0 && Math.round(packTotal) !== Math.round(net * 0.75)) ? 'block' : 'none';
+  if(warn) warn.style.display = (packTotal > 0 && net > 0 && Math.round(packTotal) !== spawnShareOf(net)) ? 'block' : 'none';
   const so = document.getElementById('sheet-owner');
   if(so) so.textContent = '₱'+fmt(customer);
 
@@ -4074,7 +4077,7 @@ async function submitHarvest(){
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
   if(!net){toast('Enter Net Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
   const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
-  const spawn=Math.round(net*0.75),customer=net-spawn;
+  const spawn=spawnShareOf(net),customer=net-spawn;
   const now=new Date().toISOString();
   // `harvested_at` stays UTC (a true instant). `harvest_date` is a calendar day and
   // MUST be Manila-local: a 6 AM Manila harvest is 22:00 UTC the previous day, so
@@ -4991,7 +4994,7 @@ function showHarvestReceipt(){
   const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
   const total = parseFloat(document.getElementById('coin-total')?.value) || (net + free + saloy + freeCoins);
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const owner = net - spawn;
   const vname = document.getElementById('form-vname')?.textContent || currentItem?.sheet_name || '—';
   const now = new Date();
@@ -5342,7 +5345,7 @@ function resetPackForm(){
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const spawn = Math.round(net * 0.75);
+    const spawn = spawnShareOf(net);
 
     // Get pack total from _packData (set when collection sheet is saved)
     const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
