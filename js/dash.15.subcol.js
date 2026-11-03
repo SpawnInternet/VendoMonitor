@@ -573,6 +573,11 @@
     #sd-page .sd-msg.in .b{background:#f1f5f9;border-radius:10px;padding:8px 10px}#sd-page .sd-msg.out .b{background:#e0ecff;border-radius:10px;padding:8px 10px}
     #sd-page .sd-msg small{flex:0 0 120px;color:#6b7280;font-size:11px;padding-top:8px}
     #sd-page a.sd-btn{background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px;white-space:nowrap}
+    #sd-page .sd-notes{align-items:flex-start;padding:7px 12px}
+    #sd-page .sd-notes .nt{font-size:12px;font-weight:500;color:#475569;line-height:1.35}
+    #sd-page .sd-notes .nt div{padding:1px 0}#sd-page .sd-notes .nt div+div{border-top:1px dashed #e5e7eb}
+    #sd-page .sd-notes .nt.fold div:nth-child(n+3){display:none}
+    #sd-page .nt-more{border:0;background:none;color:#025ac6;font:700 11px Inter,system-ui,sans-serif;padding:2px 0 0;cursor:pointer}
     tr.sd-row-click{cursor:pointer}tr.sd-row-click:hover td{background:#eef4ff}
     #sd-page .sd-x{width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer}`; document.head.appendChild(st); }
   async function subDetail(id){
@@ -606,6 +611,10 @@
     const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
     const stt = STATE[bk.state] || null;
     const row = (k, v) => `<div class="sd-row"><span>${k}</span><span>${v == null || v === '' ? '<span style="color:#9ca3af;font-weight:500">—</span>' : v}</span></div>`;
+    // notes: small grey lines, one per entry (split on "|"), folded to 2 lines with a tap to open
+    const notesRow = n => { const parts = String(n || '').split('|').map(x => x.trim()).filter(Boolean);
+      if (!parts.length) return row('Notes', '');
+      return `<div class="sd-row sd-notes"><span>Notes</span><span><div class="nt ${parts.length > 2 ? 'fold' : ''}">${parts.map(x => `<div>${esc(x)}</div>`).join('')}</div>${parts.length > 2 ? `<button type="button" class="nt-more" onclick="this.previousElementSibling.classList.toggle('fold');this.textContent=this.previousElementSibling.classList.contains('fold')?'show all ${parts.length}':'show less'">show all ${parts.length}</button>` : ''}</span></div>`; };
     const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
     const lifetime = live.reduce((a,x)=>a+Number(x.amount||0),0);
     const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' · prefers the ' + sub.pay_pref_day : ''}` : '';
@@ -616,7 +625,7 @@
           ${row('Status', esc([sub.status, sub.billing_status].filter(Boolean).join(' · ')) + (sub.billing_note ? ' <span style="color:#6b7280;font-weight:500">' + esc(sub.billing_note) + '</span>' : ''))}
           ${row('PPPoE', esc([sub.pppoe_username, sub.pppoe_server].filter(Boolean).join(' @ ')))}
           ${row('Line', sub.is_online == null ? '' : sub.is_online ? '<span style="color:#027e60">online</span>' : '<span style="color:#d91934">offline</span>' + (sub.last_seen_online ? ' <span style="color:#6b7280;font-weight:500">last seen ' + dt(sub.last_seen_online) + '</span>' : ''))}
-          ${row('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${row('Notes', esc(sub.notes))}
+          ${row('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${notesRow(sub.notes)}
           <div class="sd-h pink" style="margin-top:14px">📍 Location &amp; contact</div>
           ${row('Address', esc(sub.address))}${row('Contact', esc(sub.phone))}${row('Facebook', esc(sub.fb_name))}
           ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
