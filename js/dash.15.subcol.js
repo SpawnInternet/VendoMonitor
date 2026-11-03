@@ -536,11 +536,72 @@
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
           const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '<span style="color:#9ca3af">—</span>';
-          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b>${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0;text-decoration:underline dotted">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
             <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
       + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="3"></td></tr></tbody></table>`;
+  }
+
+  // ── Subscriber detail (2026-11-03): tap a name → who they are, GPS, month ledger, payments, deductions
+  document.addEventListener('click', e => { const b = e.target.closest('.sd-name'); if (b && b.dataset.sd) { e.preventDefault(); subDetail(+b.dataset.sd); } });
+  const mon = ym => new Date(String(ym).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
+  async function subDetail(id){
+    let ov = document.getElementById('sd-popup'); if (ov) ov.remove();
+    ov = document.createElement('div'); ov.id = 'sd-popup';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:12px;';
+    ov.onclick = ev => { if (ev.target === ov) ov.remove(); };
+    const shell = inner => `<div style="background:#fff;border-radius:16px;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">${inner}</div>`;
+    ov.innerHTML = shell('<div style="padding:30px;text-align:center;color:#6b7280">Loading subscriber…</div>');
+    document.body.appendChild(ov);
+    const onKey = ev => { if (ev.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+    let sub, months = [], pays = [], deds = [], bk = (book||[]).find(r => r.id === id) || {};
+    try {
+      [sub, months, pays, deds] = await Promise.all([
+        sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes`, 1),
+        sb('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,bashang_amount,log_amount,check_flag,due_amount,balance&order=ym.desc`, 36),
+        sb('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
+        sb('sub_deductions', `subscriber_id=eq.${id}&select=ym,days,rate,amount,reason,approved_by,approved_at,voided_at&order=ym.desc`, 24)
+      ]);
+      sub = Array.isArray(sub) ? sub[0] : sub;
+    } catch (e) { ov.innerHTML = shell(`<div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div>`); return; }
+    if (!sub) { ov.innerHTML = shell('<div style="padding:24px;color:#d91934">Subscriber not found.</div>'); return; }
+    const hasGps = sub.lat != null && sub.lng != null;
+    const gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
+    const stt = STATE[bk.state] || null;
+    const kv = (k, v) => v == null || v === '' ? '' : `<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px"><span style="flex:0 0 118px;color:#6b7280">${k}</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">${v}</span></div>`;
+    const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' (prefers to pay on the ' + sub.pay_pref_day + ')' : ''}` : '';
+    const srcL = { bashang:'BASHANG only', log:'sheet only', app:'Spawn Collect', 'bashang+log':'BASHANG + sheet', 'bashang+app':'BASHANG + app' };
+    const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
+    const mRows = months.map(m => `<tr><td><b>${mon(m.ym)}</b></td><td>${m.paid_date ? short(m.paid_date) : '<span style="color:#d91934">unpaid</span>'}</td><td class="n">${m.amount != null ? peso(m.amount) : '—'}</td>
+        <td>${esc(m.or_no || '—')}</td><td>${esc(m.received_by || '—')}</td><td style="color:#6b7280">${esc(srcL[m.source] || m.source || '')}${m.check_flag ? ' · <span style="color:#b45309">' + esc(m.check_flag.replace('_',' ')) + '</span>' : ''}${Number(m.balance) > 0 ? ' · <span style="color:#d91934">balance ' + peso(m.balance) + '</span>' : ''}</td></tr>`).join('');
+    const pRows = (list, dim) => list.map(x => `<tr${dim ? ' style="opacity:.55;text-decoration:line-through"' : ''}><td style="white-space:nowrap">${short(x.payment_date)}</td><td class="n"><b>${peso(x.amount)}</b></td>
+        <td>${x.coverage_from ? mon(x.coverage_from) + (x.coverage_months > 1 ? ' – ' + mon(x.coverage_to) : '') : '—'}</td>
+        <td>${esc(x.paper_no || x.gcash_ref || x.bank_ref || x.invoice_no || '—')}</td><td>${esc(x.pay_method ? cap(x.pay_method) : '—')}</td><td>${esc(x.collector || '—')}</td>
+        <td style="color:#6b7280;font-size:12px">${esc(dim ? ('voided: ' + (x.void_reason || '')) : (x.note || ''))}</td></tr>`).join('');
+    ov.innerHTML = shell(`
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;color:#fff;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%)">
+        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:16px">${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</div>
+        <div style="font-size:12px;opacity:.92">${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</div></div>
+        ${hasGps ? `<a href="${gmaps}" target="_blank" rel="noopener" style="flex:none;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px">📍 Open in Maps</a>` : '<span style="flex:none;font-size:12px;opacity:.85;background:rgba(255,255,255,.14);padding:7px 11px;border-radius:999px">no GPS</span>'}
+        <button type="button" id="sd-x" aria-label="Close" style="width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer">✕</button></div>
+      <div style="overflow:auto;padding:12px 16px 16px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0 24px">
+          <div>${kv('Address', esc(sub.address))}${kv('Phone', esc(sub.phone))}${kv('Facebook', esc(sub.fb_name))}${kv('Plan', [sub.plan_type, sub.plan_mbps ? sub.plan_mbps + ' Mbps' : ''].filter(Boolean).map(esc).join(' · '))}
+            ${kv('Status', esc([sub.status, sub.billing_status].filter(Boolean).join(' · ')) + (sub.billing_note ? ' <span style="color:#6b7280">' + esc(sub.billing_note) + '</span>' : ''))}${kv('Pays by', esc(howOf(sub) + (sub.usual_collector ? ' · ' + sub.usual_collector : '')))}</div>
+          <div>${kv('GPS', hasGps ? `${sub.lat}, ${sub.lng}${sub.gps_place ? ' · ' + esc(sub.gps_place) : ''}${sub.gps_updated_at ? ' <span style="color:#6b7280">(' + short(String(sub.gps_updated_at).slice(0,10)) + (sub.gps_source ? ' · ' + esc(sub.gps_source) : '') + ')</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
+            ${kv('Installed', [sub.date_installed ? short(String(sub.date_installed).slice(0,10)) : '', sub.installer].filter(Boolean).map(esc).join(' · '))}${kv('PPPoE', esc([sub.pppoe_username, sub.pppoe_server].filter(Boolean).join(' @ ')))}
+            ${kv('Line', sub.is_online == null ? '' : sub.is_online ? '<span style="color:#027e60;font-weight:700">online</span>' : '<span style="color:#d91934;font-weight:700">offline</span>' + (sub.last_seen_online ? ' <span style="color:#6b7280">last seen ' + short(String(sub.last_seen_online).slice(0,10)) + '</span>' : ''))}
+            ${kv('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${kv('Notes', esc(sub.notes))}</div>
+        </div>
+        <div class="cx-head" style="margin-top:12px"><b>📅 Month ledger</b><span style="font-size:11px;color:#6b7280">${months.length} month${months.length===1?'':'s'} · from BASHANG, the payment sheet and Spawn Collect</span></div>
+        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th>Paid on</th><th class="n">Amount</th><th>OR / ref</th><th>Received by</th><th>Source</th></tr></thead><tbody>${mRows || '<tr><td colspan="6" style="color:#9ca3af">No months on record.</td></tr>'}</tbody></table></div>
+        <div class="cx-head" style="margin-top:12px"><b>🧾 Payments</b><span style="font-size:11px;color:#6b7280">${live.length} payment${live.length===1?'':'s'}${vd.length ? ' · ' + vd.length + ' voided' : ''} · ${peso(live.reduce((a,x)=>a+Number(x.amount||0),0))}</span></div>
+        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Date</th><th class="n">Amount</th><th>For</th><th>OR / ref</th><th>Via</th><th>Collector</th><th>Note</th></tr></thead><tbody>${pRows(live) + pRows(vd, true) || '<tr><td colspan="7" style="color:#9ca3af">No payments on record.</td></tr>'}</tbody></table></div>
+        ${deds.length ? `<div class="cx-head" style="margin-top:12px"><b>📶 No-internet deductions</b></div><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th class="n">Days</th><th class="n">Amount</th><th>Reason</th><th>Approved by</th></tr></thead><tbody>${deds.map(d=>`<tr${d.voided_at?' style="opacity:.5;text-decoration:line-through"':''}><td>${mon(d.ym)}</td><td class="n">${d.days}</td><td class="n">−${peso(d.amount)}</td><td>${esc(d.reason||'')}</td><td>${esc(d.approved_by||'')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      </div>`);
+    ov.querySelector('#sd-x').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
   }
 
   // ⏳ Late — who owes, most owed first
@@ -553,7 +614,7 @@
     body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>⏳ ${list.length} subscribers owe ${peso(tot)}</b><span style="font-size:11px;color:#6b7280">last 3 months · this month counts after its due day · disconnected not included</span></div>
       <div class="cx-chips" style="padding:10px 14px">${Object.entries(byArea).sort((a,b)=>b[1].o-a[1].o).map(([a,x])=>`<span class="cx-chip">${esc(a)} · ${x.n} · ${peso(x.o)}</span>`).join('')}</div></div>
       <div class="cx-card"><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Phone</th><th>Months owed (oldest first)</th><th class="n">Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>
-      ${list.map(r=>`<tr><td><b>${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
+      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0;text-decoration:underline dotted">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
         <td>${(r.unpaid_months||[]).length?esc(r.unpaid_months.join(', ')):(Number(r.this_balance)>0?'balance this month':'balance')}</td>
         <td class="n"><b style="color:#d91934">${peso(r.owed)}</b></td><td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>
         <td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`).join('')}
