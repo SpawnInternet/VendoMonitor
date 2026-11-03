@@ -87,6 +87,8 @@
       .cx-seg button.on.h{color:#15803d}.cx-seg button.on.s{color:#025AC6}
       .cx-nav{display:inline-flex;gap:4px}
       .cx-nav button{padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;color:#334155}
+      #col-summary{display:grid}
+      @media(min-width:701px){#col-summary{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important}}
       @media(max-width:700px){.cx-top{grid-template-columns:repeat(2,minmax(0,1fr))}.cx-top .tot{grid-column:1/-1}#col-summary{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
       .cx-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;margin-bottom:12px}
       .cx-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:12px 14px;border-bottom:1px solid #eef0f4}
@@ -144,7 +146,7 @@
   function setSeg(k){
     seg = k; try { localStorage.setItem('col_seg', k); } catch(e){}
     document.querySelectorAll('#cx-seg button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
-    HARVEST_IDS.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = k === 'harvest' ? '' : 'none'; });
+    HARVEST_IDS.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = k === 'harvest' ? (id === 'col-summary' ? 'grid' : '') : 'none'; });
     const s = document.getElementById('cx-subs'), c = document.getElementById('cx-cols');
     if (s) s.style.display = k === 'subs' ? '' : 'none';
     if (c) c.style.display = k === 'cols' ? '' : 'none';
