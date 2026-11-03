@@ -536,7 +536,7 @@
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
           const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '<span style="color:#9ca3af">—</span>';
-          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" onclick="window.subDetail&&window.subDetail(${r.id})" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+          return `<tr class="sd-row-click" onclick="window.subDetail&&window.subDetail(${r.id})"${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
             <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
@@ -573,6 +573,7 @@
     #sd-page .sd-msg.in .b{background:#f1f5f9;border-radius:10px;padding:8px 10px}#sd-page .sd-msg.out .b{background:#e0ecff;border-radius:10px;padding:8px 10px}
     #sd-page .sd-msg small{flex:0 0 120px;color:#6b7280;font-size:11px;padding-top:8px}
     #sd-page a.sd-btn{background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px;white-space:nowrap}
+    tr.sd-row-click{cursor:pointer}tr.sd-row-click:hover td{background:#eef4ff}
     #sd-page .sd-x{width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer}`; document.head.appendChild(st); }
   async function subDetail(id){
     if (document.getElementById('sd-page') && subDetail._busy) return;
@@ -660,6 +661,7 @@
   }
 
   window.subDetail = subDetail;
+  sdCss();
 
   // ⏳ Late — who owes, most owed first
   function drawLate(){
@@ -671,7 +673,7 @@
     body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>⏳ ${list.length} subscribers owe ${peso(tot)}</b><span style="font-size:11px;color:#6b7280">last 3 months · this month counts after its due day · disconnected not included</span></div>
       <div class="cx-chips" style="padding:10px 14px">${Object.entries(byArea).sort((a,b)=>b[1].o-a[1].o).map(([a,x])=>`<span class="cx-chip">${esc(a)} · ${x.n} · ${peso(x.o)}</span>`).join('')}</div></div>
       <div class="cx-card"><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Phone</th><th>Months owed (oldest first)</th><th class="n">Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>
-      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" onclick="window.subDetail&&window.subDetail(${r.id})" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
+      ${list.map(r=>`<tr class="sd-row-click" onclick="window.subDetail&&window.subDetail(${r.id})"><td><b class="sd-name" data-sd="${r.id}" style="color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
         <td>${(r.unpaid_months||[]).length?esc(r.unpaid_months.join(', ')):(Number(r.this_balance)>0?'balance this month':'balance')}</td>
         <td class="n"><b style="color:#d91934">${peso(r.owed)}</b></td><td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>
         <td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`).join('')}
