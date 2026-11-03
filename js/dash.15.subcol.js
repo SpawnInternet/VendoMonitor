@@ -536,7 +536,7 @@
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
           const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '<span style="color:#9ca3af">—</span>';
-          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" onclick="window.subDetail&&window.subDetail(${r.id})" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
             <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
@@ -544,17 +544,13 @@
   }
 
   // ── Subscriber detail (2026-11-03): tap a name → a page like the vendo one — Info · Ledger · Contact · Spawn Text
-  document.addEventListener('click', e => {
-    const b = e.target.closest('.sd-name'); if (!b || !b.dataset.sd) return;
-    if (!b.closest('#st-tbl, #st-body')) return;                 // only the name cells in the Subscribers / Late tables
-    e.preventDefault(); e.stopPropagation(); subDetail(+b.dataset.sd);
-  });
+  // the name carries its own onclick (only the name cells in the Subscribers / Late tables have it)
   const mon = ym => new Date(String(ym).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
   const dt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : '';
   const srcL = { bashang:'BASHANG only', log:'sheet only', app:'Spawn Collect', 'bashang+log':'BASHANG + sheet', 'bashang+app':'BASHANG + app' };
   let sdCssOn = false;
   function sdCss(){ if (sdCssOn) return; sdCssOn = true; const st = document.createElement('style'); st.textContent = `
-    #sd-page{position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:14px;font-family:Inter,system-ui,sans-serif;color:#1f2937}
+    #sd-page{position:fixed;inset:0;z-index:20000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:14px;font-family:Inter,system-ui,sans-serif;color:#1f2937}
     #sd-page .sd-win{background:#eef2f8;border-radius:16px;width:100%;max-width:980px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,.35)}
     #sd-page .sd-scroll{overflow:auto;flex:1;min-height:0}
     #sd-page .sd-top{flex:none;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
@@ -579,6 +575,7 @@
     #sd-page a.sd-btn{background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px;white-space:nowrap}
     #sd-page .sd-x{width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer}`; document.head.appendChild(st); }
   async function subDetail(id){
+    if (document.getElementById('sd-page') && subDetail._busy) return;
     sdCss();
     let pg = document.getElementById('sd-page'); if (pg) pg.remove();
     pg = document.createElement('div'); pg.id = 'sd-page';
@@ -662,6 +659,8 @@
     draw('info');
   }
 
+  window.subDetail = subDetail;
+
   // ⏳ Late — who owes, most owed first
   function drawLate(){
     const body = document.getElementById('st-body'); if (!body || !book) return;
@@ -672,7 +671,7 @@
     body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>⏳ ${list.length} subscribers owe ${peso(tot)}</b><span style="font-size:11px;color:#6b7280">last 3 months · this month counts after its due day · disconnected not included</span></div>
       <div class="cx-chips" style="padding:10px 14px">${Object.entries(byArea).sort((a,b)=>b[1].o-a[1].o).map(([a,x])=>`<span class="cx-chip">${esc(a)} · ${x.n} · ${peso(x.o)}</span>`).join('')}</div></div>
       <div class="cx-card"><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Phone</th><th>Months owed (oldest first)</th><th class="n">Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>
-      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
+      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" onclick="window.subDetail&&window.subDetail(${r.id})" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
         <td>${(r.unpaid_months||[]).length?esc(r.unpaid_months.join(', ')):(Number(r.this_balance)>0?'balance this month':'balance')}</td>
         <td class="n"><b style="color:#d91934">${peso(r.owed)}</b></td><td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>
         <td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`).join('')}
