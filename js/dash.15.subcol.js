@@ -536,7 +536,7 @@
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
           const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '<span style="color:#9ca3af">—</span>';
-          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0;text-decoration:underline dotted">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+          return `<tr${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
             <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
@@ -544,19 +544,25 @@
   }
 
   // ── Subscriber detail (2026-11-03): tap a name → a page like the vendo one — Info · Ledger · Contact · Spawn Text
-  document.addEventListener('click', e => { const b = e.target.closest('.sd-name'); if (b && b.dataset.sd) { e.preventDefault(); subDetail(+b.dataset.sd); } });
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.sd-name'); if (!b || !b.dataset.sd) return;
+    if (!b.closest('#st-tbl, #st-body')) return;                 // only the name cells in the Subscribers / Late tables
+    e.preventDefault(); e.stopPropagation(); subDetail(+b.dataset.sd);
+  });
   const mon = ym => new Date(String(ym).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
   const dt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : '';
   const srcL = { bashang:'BASHANG only', log:'sheet only', app:'Spawn Collect', 'bashang+log':'BASHANG + sheet', 'bashang+app':'BASHANG + app' };
   let sdCssOn = false;
   function sdCss(){ if (sdCssOn) return; sdCssOn = true; const st = document.createElement('style'); st.textContent = `
-    #sd-page{position:fixed;inset:0;z-index:9000;background:#eef2f8;overflow:auto;font-family:Inter,system-ui,sans-serif;color:#1f2937}
-    #sd-page .sd-top{position:sticky;top:0;z-index:2;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
+    #sd-page{position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:14px;font-family:Inter,system-ui,sans-serif;color:#1f2937}
+    #sd-page .sd-win{background:#eef2f8;border-radius:16px;width:100%;max-width:980px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,.35)}
+    #sd-page .sd-scroll{overflow:auto;flex:1;min-height:0}
+    #sd-page .sd-top{flex:none;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
     #sd-page .sd-top b{font-size:17px}#sd-page .sd-top small{display:block;font-size:12px;opacity:.9}
-    #sd-page .sd-tabs{position:sticky;top:64px;z-index:2;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:4px;padding:0 12px}
+    #sd-page .sd-tabs{flex:none;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:4px;padding:0 12px}
     #sd-page .sd-tabs button{border:0;background:none;padding:14px 16px;font:600 14px Inter,system-ui,sans-serif;color:#4b5563;cursor:pointer;border-bottom:2px solid transparent}
     #sd-page .sd-tabs button.on{color:#025ac6;border-bottom-color:#025ac6}
-    #sd-page .sd-body{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+    #sd-page .sd-body{padding:14px 14px 24px}
     #sd-page .sd-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px}
     #sd-page .sd-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px}@media(max-width:760px){#sd-page .sd-grid{grid-template-columns:1fr}}
     #sd-page .sd-h{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#374151;margin:4px 0 8px}
@@ -576,9 +582,10 @@
     sdCss();
     let pg = document.getElementById('sd-page'); if (pg) pg.remove();
     pg = document.createElement('div'); pg.id = 'sd-page';
-    pg.innerHTML = '<div style="padding:40px;text-align:center;color:#6b7280">Loading subscriber…</div>';
+    pg.innerHTML = '<div class="sd-win"><div style="padding:40px;text-align:center;color:#6b7280">Loading subscriber…</div></div>';
     document.body.appendChild(pg);
     const close = () => { pg.remove(); document.removeEventListener('keydown', onKey); };
+    pg.onclick = ev => { if (ev.target === pg) close(); };
     const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const bk = (book||[]).find(r => r.id === id) || {};
@@ -596,8 +603,8 @@
         q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
-    } catch (e) { pg.innerHTML = `<div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div><button type="button" onclick="document.getElementById('sd-page').remove()">Close</button>`; return; }
-    if (!sub) { pg.innerHTML = '<div style="padding:24px;color:#d91934">Subscriber not found.</div>'; return; }
+    } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
+    if (!sub) { pg.innerHTML = '<div class="sd-win"><div style="padding:24px;color:#d91934">Subscriber not found.</div></div>'; return; }
     const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
     const stt = STATE[bk.state] || null;
     const row = (k, v) => `<div class="sd-row"><span>${k}</span><span>${v == null || v === '' ? '<span style="color:#9ca3af;font-weight:500">—</span>' : v}</span></div>`;
@@ -647,9 +654,9 @@
         ${msgs.map(m => `<div class="sd-msg ${m.direction === 'in' ? 'in' : 'out'}"><small>${m.direction === 'in' ? '⬅ from them' : '➡ Spawn'}<br>${dt(m.sent_at || m.created_at)}${m.status ? '<br>' + esc(m.status) : ''}</small><div class="b">${esc(m.body || '')}${m.intent ? `<div style="margin-top:4px;color:#6b7280;font-size:11px">${esc(m.intent)}${m.ym ? ' · ' + esc(String(m.ym).slice(0,7)) : ''}${m.error ? ' · <span style="color:#d91934">' + esc(m.error) + '</span>' : ''}</div>` : ''}</div></div>`).join('') || '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No reminders or replies yet for this subscriber.</div>'}
       </div>`; };
     const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : info(); };
-    pg.innerHTML = `<div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
+    pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         ${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
-      <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-body"></div>`;
+      <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;
     pg.querySelector('#sd-x').onclick = close;
     pg.querySelectorAll('.sd-tabs button').forEach(b => b.onclick = () => draw(b.dataset.t));
     draw('info');
@@ -665,7 +672,7 @@
     body.innerHTML = `<div class="cx-card"><div class="cx-head"><b>⏳ ${list.length} subscribers owe ${peso(tot)}</b><span style="font-size:11px;color:#6b7280">last 3 months · this month counts after its due day · disconnected not included</span></div>
       <div class="cx-chips" style="padding:10px 14px">${Object.entries(byArea).sort((a,b)=>b[1].o-a[1].o).map(([a,x])=>`<span class="cx-chip">${esc(a)} · ${x.n} · ${peso(x.o)}</span>`).join('')}</div></div>
       <div class="cx-card"><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Phone</th><th>Months owed (oldest first)</th><th class="n">Owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>
-      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0;text-decoration:underline dotted">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
+      ${list.map(r=>`<tr><td><b class="sd-name" data-sd="${r.id}" style="cursor:pointer;color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td><td>${esc(r.phone||'—')}</td>
         <td>${(r.unpaid_months||[]).length?esc(r.unpaid_months.join(', ')):(Number(r.this_balance)>0?'balance this month':'balance')}</td>
         <td class="n"><b style="color:#d91934">${peso(r.owed)}</b></td><td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>
         <td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`).join('')}
