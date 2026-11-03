@@ -68,9 +68,41 @@
     draw();
   }
 
+  // expense categories: daily-book categories + admin & capital groups (same rows the statement adds up)
+  const ADM = { network:'Network (admin book)', admin:'Admin', capex:'Capital / equipment', personnel:'Personnel', maintenance:'Maintenance' };
+  function cats(P, months){
+    const m = {};
+    const add = (k, kind, ym, a) => { m[k] = m[k] || { k, kind, by:{}, tot:0 }; m[k].by[ym] = (m[k].by[ym] || 0) + a; m[k].tot += a; };
+    (P.daily_expense||[]).forEach(r => { if (months.includes(r.ym)) add(r.category || 'Uncategorised', 'daily', r.ym, Number(r.amount)||0); });
+    (P.admin_expense||[]).forEach(r => { if (months.includes(r.ym)) add(ADM[r.statement_group] || ('Admin · ' + (r.statement_group || 'other')), 'admin', r.ym, Number(r.amount)||0); });
+    return Object.values(m).filter(c => Math.abs(c.tot) >= 1).sort((a,b) => b.tot - a.tot);
+  }
+  function expHtml(F, C){
+    const E = F.reduce((s,x) => s + x.expense, 0), last = F[F.length-1], prev = F[F.length-2];
+    const top = C[0], dailyN = C.filter(c => c.kind === 'daily').length;
+    const avg = E / F.length, hi = F.reduce((a,b) => b.expense > a.expense ? b : a, F[0]);
+    return `<div class="cs-t" style="margin:18px 2px 10px;font-size:14px">💸 Expenses</div>
+      <div class="anf-kpis">
+        <div class="anf-k" style="border-bottom-color:#d91934"><small>Total spent</small><b style="color:#d91934">${peso(E)}</b><i>avg ${peso(avg)}/mo</i></div>
+        <div class="anf-k" style="border-bottom-color:#B47F00"><small>${head(last.ym)} spent</small><b>${peso(last.expense)}</b><i>${prev ? (last.expense >= prev.expense ? '▲ ' : '▼ ') + peso(Math.abs(last.expense - prev.expense)) + ' vs ' + head(prev.ym) : '—'}</i></div>
+        <div class="anf-k" style="border-bottom-color:#C01176"><small>Highest month</small><b>${head(hi.ym)} ${peso(hi.expense)}</b><i>admin & capital ${peso(hi.admin)}</i></div>
+        <div class="anf-k" style="border-bottom-color:#311A8E"><small>Biggest item</small><b style="font-size:16px">${esc(top ? top.k : '—')}</b><i>${top ? peso(top.tot) + ' · ' + Math.round(top.tot / E * 100) + '% of spending' : ''}</i></div>
+      </div>
+      <div class="anf-row">
+        <div class="cs"><div class="cs-t">Expenses per month · daily vs admin &amp; capital</div><div class="chart-wrap" style="height:320px"><canvas id="anf-c3"></canvas></div></div>
+        <div class="cs"><div class="cs-t">Where the money goes · ${F.length} months</div><div class="chart-wrap" style="height:320px"><canvas id="anf-c4"></canvas></div></div>
+      </div>
+      <div class="cs"><details><summary style="cursor:pointer;font-weight:800;font-size:12.5px;color:#1f2a4d">Expenses by category per month <span style="font-weight:600;color:#6b7394">· ${C.length} categories (${dailyN} daily book, ${C.length - dailyN} admin &amp; capital) · tap to open</span></summary>
+        <div style="overflow-x:auto;margin-top:8px"><table><thead><tr><th>Category</th>${F.map(x => `<th>${head(x.ym)}</th>`).join('')}<th>Total</th><th>Share</th></tr></thead><tbody>
+        ${C.map(c => `<tr><td>${esc(c.k)} <span style="font-weight:500;color:#9aa3b8;font-size:11px">${c.kind === 'admin' ? 'admin' : 'daily'}</span></td>${F.map(x => `<td>${c.by[x.ym] ? peso(c.by[x.ym]) : ''}</td>`).join('')}<td><b>${peso(c.tot)}</b></td><td>${Math.round(c.tot / E * 100)}%</td></tr>`).join('')}
+        <tr class="tot"><td>Total</td>${F.map(x => `<td>${peso(x.expense)}</td>`).join('')}<td>${peso(E)}</td><td>100%</td></tr>
+        </tbody></table></div></details></div>`;
+  }
+
   function draw(){
     const host = document.getElementById('anv-fin'); if (!host || !pack) return;
     const F = (pack.months || []).map(ym => fig(pack, ym));
+    const C = cats(pack, F.map(x => x.ym));
     if (!F.length) { host.innerHTML = '<div class="cs">No financial data yet.</div>'; return; }
     const sum = k => F.reduce((s,x) => s + x[k], 0);
     const R = sum('revenue'), E = sum('expense'), N = R - E;
@@ -95,7 +127,8 @@
         <div style="overflow-x:auto"><table><thead><tr><th>Month</th><th>Vendo sales</th><th>Subscribers</th><th>Other</th><th>Revenue</th><th>Daily exp.</th><th>Admin & capital</th><th>Expenses</th><th>Net income</th><th>Kept</th></tr></thead><tbody>
         ${F.map(x => `<tr><td>${head(x.ym)}</td><td>${peso(x.vendo)}</td><td>${peso(x.subInc)}</td><td>${x.other ? peso(x.other) : ''}</td><td><b>${peso(x.revenue)}</b></td><td>${peso(x.daily)}</td><td>${peso(x.admin)}</td><td><b>${peso(x.expense)}</b></td><td class="${x.net < 0 ? 'neg' : ''}"><b>${peso(x.net)}</b></td><td class="${x.net < 0 ? 'neg' : ''}">${x.revenue ? Math.round(x.net / x.revenue * 100) + '%' : ''}</td></tr>`).join('')}
         <tr class="tot"><td>Total</td><td>${peso(sum('vendo'))}</td><td>${peso(sum('subInc'))}</td><td>${peso(sum('other'))}</td><td>${peso(R)}</td><td>${peso(sum('daily'))}</td><td>${peso(sum('admin'))}</td><td>${peso(E)}</td><td class="${N < 0 ? 'neg' : ''}">${peso(N)}</td><td>${margin}%</td></tr>
-        </tbody></table></div></div>`;
+        </tbody></table></div></div>
+      ${expHtml(F, C)}`;
     charts.forEach(c => { try { c.destroy(); } catch(e){} }); charts = [];
     if (typeof Chart !== 'function') return;
     const labels = F.map(x => head(x.ym));
@@ -118,6 +151,26 @@
       options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
         plugins:{ legend:{position:'bottom'}, tooltip:{callbacks:{label: c => c.dataset.label + ': ' + peso(c.parsed.y)}} },
         scales:{ x:{ stacked:true, grid:{display:false} }, y:{ stacked:true, ticks:tk, grid:{color:'#eef1f6'} } } }
+    }));
+    charts.push(new Chart(document.getElementById('anf-c3'), {
+      type:'bar',
+      data: { labels, datasets: [
+        { label:'Daily expense', data:F.map(x=>x.daily + x.expPaid), backgroundColor:'#025AC6', borderRadius:3 },
+        { label:'Admin & capital', data:F.map(x=>x.admin), backgroundColor:'#C01176', borderRadius:3 } ] },
+      options: { responsive:true, maintainAspectRatio:false, interaction:{mode:'index', intersect:false},
+        plugins:{ legend:{position:'bottom'}, tooltip:{callbacks:{label: c => c.dataset.label + ': ' + peso(c.parsed.y), footer: it => 'Total: ' + peso(it.reduce((s,c)=>s+c.parsed.y,0))}} },
+        scales:{ x:{ stacked:true, grid:{display:false} }, y:{ stacked:true, ticks:tk, grid:{color:'#eef1f6'} } } }
+    }));
+    const TOP = 12, topC = C.slice(0, TOP), rest = C.slice(TOP).reduce((s,c)=>s+c.tot, 0);
+    const lab4 = topC.map(c => c.k.length > 28 ? c.k.slice(0, 27) + '…' : c.k).concat(rest ? ['All other'] : []);
+    const val4 = topC.map(c => Math.round(c.tot)).concat(rest ? [Math.round(rest)] : []);
+    const col4 = topC.map(c => c.kind === 'admin' ? '#C01176' : '#025AC6').concat(rest ? ['#94a3b8'] : []);
+    charts.push(new Chart(document.getElementById('anf-c4'), {
+      type:'bar',
+      data: { labels: lab4, datasets: [{ label:'Spent', data: val4, backgroundColor: col4, borderRadius:4 }] },
+      options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{callbacks:{label: c => peso(c.parsed.x) + ' · ' + Math.round(c.parsed.x / val4.reduce((a,b)=>a+b,0) * 100) + '%'}} },
+        scales:{ x:{ ticks:tk, grid:{color:'#eef1f6'} }, y:{ grid:{display:false}, ticks:{font:{size:11}} } } }
     }));
   }
   window.anfLoad = load;
