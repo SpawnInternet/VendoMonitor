@@ -543,65 +543,116 @@
       + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="3"></td></tr></tbody></table>`;
   }
 
-  // ── Subscriber detail (2026-11-03): tap a name → who they are, GPS, month ledger, payments, deductions
+  // ── Subscriber detail (2026-11-03): tap a name → a page like the vendo one — Info · Ledger · Contact · Spawn Text
   document.addEventListener('click', e => { const b = e.target.closest('.sd-name'); if (b && b.dataset.sd) { e.preventDefault(); subDetail(+b.dataset.sd); } });
   const mon = ym => new Date(String(ym).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
+  const dt = ts => ts ? new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : '';
+  const srcL = { bashang:'BASHANG only', log:'sheet only', app:'Spawn Collect', 'bashang+log':'BASHANG + sheet', 'bashang+app':'BASHANG + app' };
+  let sdCssOn = false;
+  function sdCss(){ if (sdCssOn) return; sdCssOn = true; const st = document.createElement('style'); st.textContent = `
+    #sd-page{position:fixed;inset:0;z-index:9000;background:#eef2f8;overflow:auto;font-family:Inter,system-ui,sans-serif;color:#1f2937}
+    #sd-page .sd-top{position:sticky;top:0;z-index:2;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px}
+    #sd-page .sd-top b{font-size:17px}#sd-page .sd-top small{display:block;font-size:12px;opacity:.9}
+    #sd-page .sd-tabs{position:sticky;top:64px;z-index:2;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:4px;padding:0 12px}
+    #sd-page .sd-tabs button{border:0;background:none;padding:14px 16px;font:600 14px Inter,system-ui,sans-serif;color:#4b5563;cursor:pointer;border-bottom:2px solid transparent}
+    #sd-page .sd-tabs button.on{color:#025ac6;border-bottom-color:#025ac6}
+    #sd-page .sd-body{max-width:1120px;margin:0 auto;padding:16px 16px 40px}
+    #sd-page .sd-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:14px}
+    #sd-page .sd-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 28px}@media(max-width:760px){#sd-page .sd-grid{grid-template-columns:1fr}}
+    #sd-page .sd-h{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#374151;margin:4px 0 8px}
+    #sd-page .sd-h.pink{background:#f3ecfb;border-left:3px solid #c01176;padding:6px 10px;color:#7c1a56;border-radius:4px}
+    #sd-page .sd-h.green{background:#ecfdf5;border-left:3px solid #028867;padding:6px 10px;color:#065f46;border-radius:4px}
+    #sd-page .sd-row{display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;margin-bottom:8px;font-size:14px}
+    #sd-page .sd-row span:first-child{flex:0 0 130px;color:#6b7280;font-size:13px}#sd-page .sd-row span:last-child{flex:1;min-width:0;overflow-wrap:anywhere;font-weight:600}
+    #sd-page .sd-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:10px}
+    #sd-page .sd-kpi div{background:#f8fafc;border-radius:10px;padding:10px 12px}#sd-page .sd-kpi b{display:block;font-size:20px;font-weight:800}#sd-page .sd-kpi small{color:#6b7280;font-size:11px}
+    #sd-page .sd-tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+    #sd-page .sd-msg{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}#sd-page .sd-msg .b{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+    #sd-page .sd-msg.in .b{background:#f1f5f9;border-radius:10px;padding:8px 10px}#sd-page .sd-msg.out .b{background:#e0ecff;border-radius:10px;padding:8px 10px}
+    #sd-page .sd-msg small{flex:0 0 120px;color:#6b7280;font-size:11px;padding-top:8px}
+    #sd-page a.sd-btn{background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px;white-space:nowrap}
+    #sd-page .sd-x{width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer}`; document.head.appendChild(st); }
   async function subDetail(id){
-    let ov = document.getElementById('sd-popup'); if (ov) ov.remove();
-    ov = document.createElement('div'); ov.id = 'sd-popup';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:12px;';
-    ov.onclick = ev => { if (ev.target === ov) ov.remove(); };
-    const shell = inner => `<div style="background:#fff;border-radius:16px;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden">${inner}</div>`;
-    ov.innerHTML = shell('<div style="padding:30px;text-align:center;color:#6b7280">Loading subscriber…</div>');
-    document.body.appendChild(ov);
-    const onKey = ev => { if (ev.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', onKey); } };
+    sdCss();
+    let pg = document.getElementById('sd-page'); if (pg) pg.remove();
+    pg = document.createElement('div'); pg.id = 'sd-page';
+    pg.innerHTML = '<div style="padding:40px;text-align:center;color:#6b7280">Loading subscriber…</div>';
+    document.body.appendChild(pg);
+    const close = () => { pg.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
-    let sub, months = [], pays = [], deds = [], bk = (book||[]).find(r => r.id === id) || {};
+    const bk = (book||[]).find(r => r.id === id) || {};
+    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [];
+    const q = (t, p, n) => sb(t, p, n).then(r => Array.isArray(r) ? r : []).catch(() => []);
     try {
-      [sub, months, pays, deds] = await Promise.all([
-        sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes`, 1),
-        sb('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,bashang_amount,log_amount,check_flag,due_amount,balance&order=ym.desc`, 36),
-        sb('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
-        sb('sub_deductions', `subscriber_id=eq.${id}&select=ym,days,rate,amount,reason,approved_by,approved_at,voided_at&order=ym.desc`, 24)
+      [sub, months, pays, deds, nums, msgs, proms, tasks] = await Promise.all([
+        sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes,photo_url`, 1),
+        q('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,check_flag,balance&order=ym.desc`, 36),
+        q('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
+        q('sub_deductions', `subscriber_id=eq.${id}&select=ym,days,amount,reason,approved_by,voided_at&order=ym.desc`, 24),
+        q('remind_contacts', `subscriber_id=eq.${id}&select=channel,address,is_primary,verified_at,verified_by,source,created_at&order=is_primary.desc,created_at.asc`, 20),
+        q('remind_messages', `subscriber_id=eq.${id}&select=direction,address,body,intent,template,ym,status,error,created_at,sent_at&order=created_at.desc`, 40),
+        q('remind_promises', `subscriber_id=eq.${id}&select=promised_date,amount,months,status,note,created_at,resolved_at&order=created_at.desc`, 10),
+        q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
-    } catch (e) { ov.innerHTML = shell(`<div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div>`); return; }
-    if (!sub) { ov.innerHTML = shell('<div style="padding:24px;color:#d91934">Subscriber not found.</div>'); return; }
-    const hasGps = sub.lat != null && sub.lng != null;
-    const gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
+    } catch (e) { pg.innerHTML = `<div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div><button type="button" onclick="document.getElementById('sd-page').remove()">Close</button>`; return; }
+    if (!sub) { pg.innerHTML = '<div style="padding:24px;color:#d91934">Subscriber not found.</div>'; return; }
+    const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
     const stt = STATE[bk.state] || null;
-    const kv = (k, v) => v == null || v === '' ? '' : `<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:13px"><span style="flex:0 0 118px;color:#6b7280">${k}</span><span style="flex:1;min-width:0;overflow-wrap:anywhere">${v}</span></div>`;
-    const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' (prefers to pay on the ' + sub.pay_pref_day + ')' : ''}` : '';
-    const srcL = { bashang:'BASHANG only', log:'sheet only', app:'Spawn Collect', 'bashang+log':'BASHANG + sheet', 'bashang+app':'BASHANG + app' };
+    const row = (k, v) => `<div class="sd-row"><span>${k}</span><span>${v == null || v === '' ? '<span style="color:#9ca3af;font-weight:500">—</span>' : v}</span></div>`;
     const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
-    const mRows = months.map(m => `<tr><td><b>${mon(m.ym)}</b></td><td>${m.paid_date ? short(m.paid_date) : '<span style="color:#d91934">unpaid</span>'}</td><td class="n">${m.amount != null ? peso(m.amount) : '—'}</td>
-        <td>${esc(m.or_no || '—')}</td><td>${esc(m.received_by || '—')}</td><td style="color:#6b7280">${esc(srcL[m.source] || m.source || '')}${m.check_flag ? ' · <span style="color:#b45309">' + esc(m.check_flag.replace('_',' ')) + '</span>' : ''}${Number(m.balance) > 0 ? ' · <span style="color:#d91934">balance ' + peso(m.balance) + '</span>' : ''}</td></tr>`).join('');
-    const pRows = (list, dim) => list.map(x => `<tr${dim ? ' style="opacity:.55;text-decoration:line-through"' : ''}><td style="white-space:nowrap">${short(x.payment_date)}</td><td class="n"><b>${peso(x.amount)}</b></td>
-        <td>${x.coverage_from ? mon(x.coverage_from) + (x.coverage_months > 1 ? ' – ' + mon(x.coverage_to) : '') : '—'}</td>
-        <td>${esc(x.paper_no || x.gcash_ref || x.bank_ref || x.invoice_no || '—')}</td><td>${esc(x.pay_method ? cap(x.pay_method) : '—')}</td><td>${esc(x.collector || '—')}</td>
-        <td style="color:#6b7280;font-size:12px">${esc(dim ? ('voided: ' + (x.void_reason || '')) : (x.note || ''))}</td></tr>`).join('');
-    ov.innerHTML = shell(`
-      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;color:#fff;background:linear-gradient(120deg,#0146a0 0%,#025ac6 70%,#1f74e0 100%)">
-        <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:16px">${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</div>
-        <div style="font-size:12px;opacity:.92">${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</div></div>
-        ${hasGps ? `<a href="${gmaps}" target="_blank" rel="noopener" style="flex:none;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-weight:800;font-size:12px;padding:7px 11px;border-radius:999px">📍 Open in Maps</a>` : '<span style="flex:none;font-size:12px;opacity:.85;background:rgba(255,255,255,.14);padding:7px 11px;border-radius:999px">no GPS</span>'}
-        <button type="button" id="sd-x" aria-label="Close" style="width:34px;height:34px;border-radius:999px;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer">✕</button></div>
-      <div style="overflow:auto;padding:12px 16px 16px">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0 24px">
-          <div>${kv('Address', esc(sub.address))}${kv('Phone', esc(sub.phone))}${kv('Facebook', esc(sub.fb_name))}${kv('Plan', [sub.plan_type, sub.plan_mbps ? sub.plan_mbps + ' Mbps' : ''].filter(Boolean).map(esc).join(' · '))}
-            ${kv('Status', esc([sub.status, sub.billing_status].filter(Boolean).join(' · ')) + (sub.billing_note ? ' <span style="color:#6b7280">' + esc(sub.billing_note) + '</span>' : ''))}${kv('Pays by', esc(howOf(sub) + (sub.usual_collector ? ' · ' + sub.usual_collector : '')))}</div>
-          <div>${kv('GPS', hasGps ? `${sub.lat}, ${sub.lng}${sub.gps_place ? ' · ' + esc(sub.gps_place) : ''}${sub.gps_updated_at ? ' <span style="color:#6b7280">(' + short(String(sub.gps_updated_at).slice(0,10)) + (sub.gps_source ? ' · ' + esc(sub.gps_source) : '') + ')</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
-            ${kv('Installed', [sub.date_installed ? short(String(sub.date_installed).slice(0,10)) : '', sub.installer].filter(Boolean).map(esc).join(' · '))}${kv('PPPoE', esc([sub.pppoe_username, sub.pppoe_server].filter(Boolean).join(' @ ')))}
-            ${kv('Line', sub.is_online == null ? '' : sub.is_online ? '<span style="color:#027e60;font-weight:700">online</span>' : '<span style="color:#d91934;font-weight:700">offline</span>' + (sub.last_seen_online ? ' <span style="color:#6b7280">last seen ' + short(String(sub.last_seen_online).slice(0,10)) + '</span>' : ''))}
-            ${kv('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${kv('Notes', esc(sub.notes))}</div>
+    const lifetime = live.reduce((a,x)=>a+Number(x.amount||0),0);
+    const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' · prefers the ' + sub.pay_pref_day : ''}` : '';
+    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text']];
+    const info = () => `<div class="sd-card"><div class="sd-grid">
+        <div><div class="sd-h">Identity</div>
+          ${row('Subscriber', esc(sub.name))}${row('Account no.', esc(sub.acct_no))}${row('Area', esc(sub.area))}${row('Plan', [sub.plan_type, sub.plan_mbps ? sub.plan_mbps + ' Mbps' : ''].filter(Boolean).map(esc).join(' · '))}
+          ${row('Status', esc([sub.status, sub.billing_status].filter(Boolean).join(' · ')) + (sub.billing_note ? ' <span style="color:#6b7280;font-weight:500">' + esc(sub.billing_note) + '</span>' : ''))}
+          ${row('PPPoE', esc([sub.pppoe_username, sub.pppoe_server].filter(Boolean).join(' @ ')))}
+          ${row('Line', sub.is_online == null ? '' : sub.is_online ? '<span style="color:#027e60">online</span>' : '<span style="color:#d91934">offline</span>' + (sub.last_seen_online ? ' <span style="color:#6b7280;font-weight:500">last seen ' + dt(sub.last_seen_online) + '</span>' : ''))}
+          ${row('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${row('Notes', esc(sub.notes))}
+          <div class="sd-h pink" style="margin-top:14px">📍 Location &amp; contact</div>
+          ${row('Address', esc(sub.address))}${row('Contact', esc(sub.phone))}${row('Facebook', esc(sub.fb_name))}
+          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
         </div>
-        <div class="cx-head" style="margin-top:12px"><b>📅 Month ledger</b><span style="font-size:11px;color:#6b7280">${months.length} month${months.length===1?'':'s'} · from BASHANG, the payment sheet and Spawn Collect</span></div>
-        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th>Paid on</th><th class="n">Amount</th><th>OR / ref</th><th>Received by</th><th>Source</th></tr></thead><tbody>${mRows || '<tr><td colspan="6" style="color:#9ca3af">No months on record.</td></tr>'}</tbody></table></div>
-        <div class="cx-head" style="margin-top:12px"><b>🧾 Payments</b><span style="font-size:11px;color:#6b7280">${live.length} payment${live.length===1?'':'s'}${vd.length ? ' · ' + vd.length + ' voided' : ''} · ${peso(live.reduce((a,x)=>a+Number(x.amount||0),0))}</span></div>
-        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Date</th><th class="n">Amount</th><th>For</th><th>OR / ref</th><th>Via</th><th>Collector</th><th>Note</th></tr></thead><tbody>${pRows(live) + pRows(vd, true) || '<tr><td colspan="7" style="color:#9ca3af">No payments on record.</td></tr>'}</tbody></table></div>
-        ${deds.length ? `<div class="cx-head" style="margin-top:12px"><b>📶 No-internet deductions</b></div><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th class="n">Days</th><th class="n">Amount</th><th>Reason</th><th>Approved by</th></tr></thead><tbody>${deds.map(d=>`<tr${d.voided_at?' style="opacity:.5;text-decoration:line-through"':''}><td>${mon(d.ym)}</td><td class="n">${d.days}</td><td class="n">−${peso(d.amount)}</td><td>${esc(d.reason||'')}</td><td>${esc(d.approved_by||'')}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      </div>`);
-    ov.querySelector('#sd-x').onclick = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        <div><div class="sd-h green">💳 Billing</div>
+          ${row('Monthly', sub.monthly_amount ? peso(sub.monthly_amount) : '')}${row('Due', esc(dd))}${row('Pays by', esc(howOf(sub)) + (sub.usual_collector ? ' · ' + esc(sub.usual_collector) : ''))}
+          ${row('This month', stt ? `<span class="sd-tag" style="background:${stt.b};color:${stt.c}">${esc(stt.l)}</span>${Number(bk.this_paid)>0?' paid '+peso(bk.this_paid):''}${Number(bk.this_balance)>0?' · balance '+peso(bk.this_balance):''}` : '')}
+          ${row('Still owes', Number(bk.owed) > 0 ? `<span style="color:#d91934">${peso(bk.owed)}</span>${(bk.unpaid_months||[]).length ? ' <span style="color:#6b7280;font-weight:500">' + esc(bk.unpaid_months.join(', ')) + '</span>' : ''}` : '<span style="color:#027e60">nothing</span>')}
+          ${row('Last paid', bk.last_paid ? `${short(bk.last_paid)} · ${peso(bk.last_amount)}${bk.last_for ? ' <span style="color:#6b7280;font-weight:500">for ' + mon(bk.last_for) + '</span>' : ''}${bk.last_or ? ' · OR ' + esc(bk.last_or) : ''}${bk.last_by ? ' · ' + esc(bk.last_by) : ''}` : '')}
+          ${row('Installed', [sub.date_installed ? short(String(sub.date_installed).slice(0,10)) : '', sub.installer].filter(Boolean).map(esc).join(' · '))}
+          <div class="sd-kpi"><div><small>Lifetime paid (${live.length} payment${live.length===1?'':'s'})</small><b style="color:#025ac6">${peso(lifetime)}</b></div><div><small>Months on record</small><b>${months.length}</b></div><div><small>Linked numbers</small><b>${nums.length}</b></div></div>
+        </div></div></div>`;
+    const ledger = () => `<div class="sd-card"><div class="sd-h">📅 Month ledger <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· from BASHANG, the payment sheet and Spawn Collect</span></div>
+        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th>Paid on</th><th class="n">Amount</th><th>OR / ref</th><th>Received by</th><th>Source</th></tr></thead><tbody>${months.map(m => `<tr><td><b>${mon(m.ym)}</b></td><td>${m.paid_date ? short(m.paid_date) : '<span style="color:#d91934">unpaid</span>'}</td><td class="n">${m.amount != null ? peso(m.amount) : '—'}</td><td>${esc(m.or_no || '—')}</td><td>${esc(m.received_by || '—')}</td><td style="color:#6b7280">${esc(srcL[m.source] || m.source || '')}${m.check_flag ? ' · <span style="color:#b45309">' + esc(String(m.check_flag).replace('_',' ')) + '</span>' : ''}${Number(m.balance) > 0 ? ' · <span style="color:#d91934">balance ' + peso(m.balance) + '</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">No months on record.</td></tr>'}</tbody></table></div></div>
+      <div class="sd-card"><div class="sd-h">🧾 Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· ${live.length} · ${peso(lifetime)}${vd.length ? ' · ' + vd.length + ' voided' : ''}</span></div>
+        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Date</th><th class="n">Amount</th><th>For</th><th>OR / ref</th><th>Via</th><th>Collector</th><th>Note</th></tr></thead><tbody>${[...live.map(x=>[x,false]), ...vd.map(x=>[x,true])].map(([x, dim]) => `<tr${dim ? ' style="opacity:.55;text-decoration:line-through"' : ''}><td style="white-space:nowrap">${short(x.payment_date)}</td><td class="n"><b>${peso(x.amount)}</b></td><td>${x.coverage_from ? mon(x.coverage_from) + (x.coverage_months > 1 ? ' – ' + mon(x.coverage_to) : '') : '—'}</td><td>${esc(x.paper_no || x.gcash_ref || x.bank_ref || x.invoice_no || '—')}</td><td>${esc(x.pay_method ? cap(x.pay_method) : '—')}</td><td>${esc(x.collector || '—')}</td><td style="color:#6b7280;font-size:12px">${esc(dim ? ('voided: ' + (x.void_reason || '')) : (x.note || ''))}</td></tr>`).join('') || '<tr><td colspan="7" style="color:#9ca3af">No payments on record.</td></tr>'}</tbody></table></div></div>
+      ${deds.length ? `<div class="sd-card"><div class="sd-h">📶 No-internet deductions</div><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th class="n">Days</th><th class="n">Amount</th><th>Reason</th><th>Approved by</th></tr></thead><tbody>${deds.map(d=>`<tr${d.voided_at?' style="opacity:.5;text-decoration:line-through"':''}><td>${mon(d.ym)}</td><td class="n">${d.days}</td><td class="n">−${peso(d.amount)}</td><td>${esc(d.reason||'')}</td><td>${esc(d.approved_by||'')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
+    const contact = () => `<div class="sd-card"><div class="sd-grid"><div><div class="sd-h pink">📍 Location</div>
+          ${row('Address', esc(sub.address))}${row('Area', esc(sub.area))}
+          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}${hasGps ? row('Pinned', [sub.gps_updated_at ? dt(sub.gps_updated_at) : '', sub.gps_source, sub.gps_place].filter(Boolean).map(esc).join(' · ')) : ''}
+          ${hasGps ? `<a href="${gmaps}" target="_blank" rel="noopener" style="display:inline-block;margin-top:4px;background:#025ac6;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px">📍 Open in Google Maps</a>` : ''}
+        </div><div><div class="sd-h">Contact</div>
+          ${row('Phone', sub.phone ? `<a href="tel:${esc(sub.phone)}" style="color:#025ac6">${esc(sub.phone)}</a>` : '')}${row('Facebook', esc(sub.fb_name))}${row('Usual collector', esc(sub.usual_collector))}
+          <div class="sd-h" style="margin-top:14px">Numbers linked for Spawn Text</div>
+          ${nums.length ? nums.map(n => row(esc(n.channel || 'sms') + (n.is_primary ? ' · primary' : ''), esc(n.address) + (n.verified_at ? ' <span class="sd-tag" style="background:#e7f6f1;color:#027e60">verified</span>' : '') + (n.source ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(n.source) + '</span>' : ''))).join('') : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No number linked yet. Spawn Text uses the phone above when there is one.</div>'}
+        </div></div></div>`;
+    const text = () => {
+      const open = proms.filter(p => p.status === 'open' || p.status === 'pending');
+      return `<div class="sd-card"><div class="sd-h">📱 Spawn Text <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· ${msgs.length ? 'last ' + msgs.length + ' message' + (msgs.length===1?'':'s') : 'no messages yet'}</span></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">${nums.map(n => `<span class="sd-tag" style="background:#e0ecff;color:#0146a0">${esc(n.address)}${n.is_primary ? ' · primary' : ''}</span>`).join('') || (sub.phone ? `<span class="sd-tag" style="background:#f1f5f9;color:#475569">${esc(sub.phone)} · from the subscriber record</span>` : '<span style="color:#9ca3af;font-size:13px">no number on file</span>')}</div>
+        ${open.length ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px"><b>Promised:</b> ${open.map(p => `${p.promised_date ? short(String(p.promised_date).slice(0,10)) : '?'}${p.amount ? ' · ' + peso(p.amount) : ''}${p.months ? ' · ' + esc(String(p.months)) : ''}`).join(' · ')}</div>` : ''}
+        ${tasks.filter(t => t.status !== 'done').length ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px"><b>Open tasks:</b> ${tasks.filter(t => t.status !== 'done').map(t => esc(t.kind) + (t.reason ? ' · ' + esc(t.reason) : '')).join(' · ')}</div>` : ''}
+        ${msgs.map(m => `<div class="sd-msg ${m.direction === 'in' ? 'in' : 'out'}"><small>${m.direction === 'in' ? '⬅ from them' : '➡ Spawn'}<br>${dt(m.sent_at || m.created_at)}${m.status ? '<br>' + esc(m.status) : ''}</small><div class="b">${esc(m.body || '')}${m.intent ? `<div style="margin-top:4px;color:#6b7280;font-size:11px">${esc(m.intent)}${m.ym ? ' · ' + esc(String(m.ym).slice(0,7)) : ''}${m.error ? ' · <span style="color:#d91934">' + esc(m.error) + '</span>' : ''}</div>` : ''}</div></div>`).join('') || '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No reminders or replies yet for this subscriber.</div>'}
+      </div>`; };
+    const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : info(); };
+    pg.innerHTML = `<div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
+        ${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
+      <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-body"></div>`;
+    pg.querySelector('#sd-x').onclick = close;
+    pg.querySelectorAll('.sd-tabs button').forEach(b => b.onclick = () => draw(b.dataset.t));
+    draw('info');
   }
 
   // ⏳ Late — who owes, most owed first
