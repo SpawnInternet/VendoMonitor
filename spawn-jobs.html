@@ -310,6 +310,9 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .field:focus{border-color:var(--blue);}
 textarea.field{resize:vertical;min-height:64px;}
 .m-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:9px;}
+.btn-copy{background:var(--white);border:1px solid var(--green);color:var(--green);}
+.btn-copy:hover{background:var(--green);color:var(--white);}
+.btn-copy.done{background:var(--green);color:var(--white);}
 .stage-bar{display:flex;gap:6px;margin-top:4px;}
 .stage{flex:1;text-align:center;font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;background:var(--bg);color:var(--muted);cursor:pointer;transition:all .15s;}
 .stage.on{color:#fff;}
@@ -499,6 +502,7 @@ textarea.field{resize:vertical;min-height:64px;}
     </div>
     <div class="m-foot">
       <button class="btn btn-outline" style="flex:1" onclick="closeDetail()">Close</button>
+      <button class="btn btn-copy" id="copyMsgBtn" style="flex:1" onclick="copyForMessenger()" title="Name, address, concern and number — ready to paste in Messenger">&#128203; Copy for Messenger</button>
       <button class="btn btn-primary" style="flex:1" onclick="saveDetail()">Save changes</button>
     </div>
   </div>
@@ -992,6 +996,35 @@ async function openDetail(id){
     <div class="m-section"><h4>Assign lineman</h4><input class="field" id="dAssign" value="${esc(j.assigned_to||j.technician||'')}" placeholder="Lineman name (e.g. Jericho)"></div>
     <div class="m-section"><h4>Internal note</h4><textarea class="field" id="dNote" placeholder="Notes for the team...">${esc(j.notes||'')}</textarea></div>`;
   document.getElementById('detail').classList.add('show');
+}
+
+// Messenger-ready job text: Name / Address / Concern / Number
+function messengerText(j){
+  const name=(j.customer||j.fb_name||'').trim();
+  const addr=[j.address,j.area].map(x=>(x||'').trim()).filter(Boolean);
+  // skip the area if the address already mentions it
+  const where=addr.length===2&&addr[0].toLowerCase().includes(addr[1].toLowerCase())?addr[0]:addr.join(', ');
+  const lines=[];
+  if(name)lines.push(name);
+  if(where)lines.push(where);
+  lines.push('Concern: '+((j.issue||'').trim()||'—'));
+  if(j.contact)lines.push(String(j.contact).trim());
+  return lines.join('\n');
+}
+async function copyForMessenger(){
+  if(!currentJob)return;
+  const txt=messengerText(currentJob);
+  let ok=false;
+  try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(txt);ok=true;}}catch(e){}
+  if(!ok){
+    const ta=document.createElement('textarea');ta.value=txt;ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:-1000px;opacity:0';document.body.appendChild(ta);ta.select();
+    try{ok=document.execCommand('copy');}catch(e){}
+    ta.remove();
+  }
+  const b=document.getElementById('copyMsgBtn');
+  if(ok){toast('Copied — paste it in Messenger');if(b){b.classList.add('done');b.innerHTML='&#10003; Copied';setTimeout(()=>{b.classList.remove('done');b.innerHTML='&#128203; Copy for Messenger';},1800);}}
+  else{toast('Copy failed — select and copy manually');window.prompt('Copy this:',txt);}
 }
 
 function fmtTime(iso){if(!iso)return '';return new Date(iso).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});}
