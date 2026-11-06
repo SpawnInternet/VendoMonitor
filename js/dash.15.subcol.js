@@ -594,10 +594,10 @@
     const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const bk = (book||[]).find(r => r.id === id) || {};
-    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [];
+    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null;
     const q = (t, p, n) => sb(t, p, n).then(r => Array.isArray(r) ? r : []).catch(() => []);
     try {
-      [sub, months, pays, deds, nums, msgs, proms, tasks] = await Promise.all([
+      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx] = await Promise.all([
         sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes,photo_url`, 1),
         q('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,check_flag,balance&order=ym.desc`, 36),
         q('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
@@ -605,7 +605,9 @@
         q('remind_contacts', `subscriber_id=eq.${id}&select=channel,address,is_primary,verified_at,verified_by,source,created_at&order=is_primary.desc,created_at.asc`, 20),
         q('remind_messages', `subscriber_id=eq.${id}&select=direction,address,body,intent,template,ym,status,error,created_at,sent_at&order=created_at.desc`, 40),
         q('remind_promises', `subscriber_id=eq.${id}&select=promised_date,amount,months,status,note,created_at,resolved_at&order=created_at.desc`, 10),
-        q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10)
+        q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10),
+        // (2026-11-06) 💳 GCash: every GCash ref they texted + its proof in the GCash statements (view v_sub_gcash). null = not connected yet
+        sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
     } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
@@ -620,7 +622,32 @@
     const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
     const lifetime = live.reduce((a,x)=>a+Number(x.amount||0),0);
     const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' · prefers the ' + sub.pay_pref_day : ''}` : '';
-    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text']];
+    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text'],['gcash','💳 GCash' + (gcx && gcx.length ? ' ' + gcx.length : '')]];
+    // 💳 GCash proof for one texted ref — same reading as Spawn Text's badge
+    const gcProof = g => {
+      const when = g.tx_at ? ' · ' + dt(g.tx_at) : '';
+      if (!g.given) return ['#fff7ed', '#9a3412', '⚠ No 13-digit ref was written'];
+      if (g.match === 'several') return ['#fff7ed', '#9a3412', '⚠ Several GCash payments end in ' + g.given];
+      if (!g.found) return ['#fef2f2', '#b91c1c', '✗ Not in the GCash statements'];
+      if (g.direction !== 'in') return ['#fff7ed', '#9a3412', '⚠ Money sent OUT of GCash · ' + peso(g.amount) + when];
+      const from = g.from_theirs ? ' · from their number' : g.from_last4 ? ' · from …' + g.from_last4 : '';
+      if (!g.fits) return ['#fff7ed', '#9a3412', '⚠ In GCash: ' + peso(g.amount) + ' — monthly is ' + peso(g.due) + when + from];
+      return ['#ecfdf5', '#065f46', '✓ In GCash: ' + peso(g.amount) + when + from];
+    };
+    const gcWho = g => g.status === 'open' ? ['#fff7ed', '#9a3412', 'To check'] : g.confirmed_how === 'system' ? ['#e0ecff', '#0146a0', 'Confirmed by the system']
+      : g.confirmed_how === 'book' ? ['#ecfdf5', '#065f46', 'Confirmed — in BASHANG' + (g.confirmed_by ? ' (' + g.confirmed_by + ')' : '')]
+      : g.status === 'broken' ? ['#fef2f2', '#b91c1c', 'Marked not found' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')] : ['#ecfdf5', '#065f46', 'Confirmed' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')];
+    const gcashT = () => {
+      if (gcx === null) return `<div class="sd-card"><div class="sd-h">💳 GCash</div><div style="color:#6b7280;font-size:13px">The GCash view is not connected to Vendo Monitor yet.</div></div>`;
+      const sysPays = live.filter(x => x.collector === 'System · GCash');
+      return `<div class="sd-card"><div class="sd-h">💳 GCash refs they texted <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· checked against the GCash owner's statements · ${gcx.length}</span></div>
+        ${gcx.length ? `<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Texted</th><th>Ref</th><th>Status</th><th>In GCash?</th><th>Confirmed on</th></tr></thead><tbody>${gcx.map(g => { const [pb, pc, pt] = gcProof(g), [wb, wc, wt] = gcWho(g);
+            return `<tr><td style="white-space:nowrap">${dt(g.texted_at)}</td><td style="font-variant-numeric:tabular-nums">${g.given ? '…' + esc(String(g.given).slice(-4)) : '—'}</td>
+              <td><span class="sd-tag" style="background:${wb};color:${wc}">${esc(wt)}</span></td><td><span class="sd-tag" style="background:${pb};color:${pc};white-space:normal">${esc(pt)}</span></td>
+              <td style="white-space:nowrap">${g.resolved_at ? dt(g.resolved_at) : '—'}</td></tr>`; }).join('')}</tbody></table></div>`
+          : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No GCash ref texted to Spawn Text yet.</div>'}</div>
+        ${sysPays.length ? `<div class="sd-card"><div class="sd-h green">🤖 Payments the system recorded from GCash</div>${sysPays.map(x => row(short(String(x.payment_date).slice(0,10)), peso(x.amount) + (x.coverage_from ? ' · for ' + mon(x.coverage_from) + (x.coverage_months > 1 ? ' + ' + (x.coverage_months - 1) + ' more' : '') : '') + (x.gcash_ref ? ' · ref …' + esc(String(x.gcash_ref).slice(-4)) : ''))).join('')}</div>` : ''}`;
+    };
     const info = () => `<div class="sd-card"><div class="sd-grid">
         <div><div class="sd-h">Identity</div>
           ${row('Subscriber', esc(sub.name))}${row('Account no.', esc(sub.acct_no))}${row('Area', esc(sub.area))}${row('Plan', [sub.plan_type, sub.plan_mbps ? sub.plan_mbps + ' Mbps' : ''].filter(Boolean).map(esc).join(' · '))}
@@ -662,7 +689,7 @@
         ${tasks.filter(t => t.status !== 'done').length ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px"><b>Open tasks:</b> ${tasks.filter(t => t.status !== 'done').map(t => esc(t.kind) + (t.reason ? ' · ' + esc(t.reason) : '')).join(' · ')}</div>` : ''}
         ${msgs.map(m => `<div class="sd-msg ${m.direction === 'in' ? 'in' : 'out'}"><small>${m.direction === 'in' ? '⬅ from them' : '➡ Spawn'}<br>${dt(m.sent_at || m.created_at)}${m.status ? '<br>' + esc(m.status) : ''}</small><div class="b">${esc(m.body || '')}${m.intent ? `<div style="margin-top:4px;color:#6b7280;font-size:11px">${esc(m.intent)}${m.ym ? ' · ' + esc(String(m.ym).slice(0,7)) : ''}${m.error ? ' · <span style="color:#d91934">' + esc(m.error) + '</span>' : ''}</div>` : ''}</div></div>`).join('') || '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No reminders or replies yet for this subscriber.</div>'}
       </div>`; };
-    const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : info(); };
+    const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); };
     pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         ${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
       <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;
