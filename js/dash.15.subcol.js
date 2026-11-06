@@ -642,7 +642,7 @@
       : g.confirmed_how === 'book' ? ['#ecfdf5', '#065f46', 'Confirmed — in BASHANG' + (g.confirmed_by ? ' (' + g.confirmed_by + ')' : '')]
       : g.status === 'broken' ? ['#fef2f2', '#b91c1c', 'Marked not found' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')] : ['#ecfdf5', '#065f46', 'Confirmed' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')];
     // one ref from the whole system: is it in the GCash statements?
-    const GCV = { ok:['#ecfdf5','#065f46'], amount_diff:['#fff7ed','#9a3412'], money_out:['#fff7ed','#9a3412'], not_found:['#fef2f2','#b91c1c'], before:['#f1f5f9','#475569'], after:['#f1f5f9','#475569'] };
+    const GCV = { ok:['#ecfdf5','#065f46'], amount_diff:['#fff7ed','#9a3412'], money_out:['#fff7ed','#9a3412'], not_found:['#fef2f2','#b91c1c'], before:['#f1f5f9','#475569'], after:['#f1f5f9','#475569'], bank_ref:['#eef2ff','#3730a3'] };
     const gcAllProof = g => {
       const when = g.tx_at ? ' · ' + dt(g.tx_at) : '', from = g.from_last4 ? ' · from …' + g.from_last4 : '';
       const t = g.verdict === 'ok' ? '✓ In GCash: ' + peso(g.gcash_amount) + when + from
@@ -650,19 +650,20 @@
         : g.verdict === 'money_out' ? '⚠ This ref is money sent OUT of GCash · ' + peso(g.gcash_amount) + when
         : g.verdict === 'before' ? 'Paid before the GCash statements start (' + short(String(g.statements_from).slice(0,10)) + ') — cannot check'
         : g.verdict === 'after' ? '⏳ Newer than the last GCash statement (' + short(String(g.statements_to).slice(0,10)) + ')'
+        : g.verdict === 'bank_ref' ? '🏦 Bank transfer ref — paid to the bank, not GCash; check it in the bank'
         : '✗ Not in the GCash statements';
       return [...(GCV[g.verdict] || GCV.not_found), t];
     };
     const gcChip = (b, c, t) => `<span class="sd-tag" style="background:${b};color:${c};margin:0 6px 6px 0">${t}</span>`;
     const gcAllT = () => {
-      const n = k => gca.filter(g => g.verdict === k).length, shared = gca.filter(g => g.other_subs > 0).length, diff = n('amount_diff') + n('money_out'), out = n('before') + n('after');
+      const n = k => gca.filter(g => g.verdict === k).length, shared = gca.filter(g => g.other_subs > 0).length, diff = n('amount_diff') + n('money_out'), out = n('before') + n('after'), bank = n('bank_ref');
       const chips = gcChip('#ecfdf5','#065f46','✓ ' + n('ok') + ' match') + (diff ? gcChip('#fff7ed','#9a3412','⚠ ' + diff + ' different') : '')
-        + (n('not_found') ? gcChip('#fef2f2','#b91c1c','✗ ' + n('not_found') + ' not found') : '') + (out ? gcChip('#f1f5f9','#475569', out + ' outside the statements') : '')
+        + (n('not_found') ? gcChip('#fef2f2','#b91c1c','✗ ' + n('not_found') + ' not found') : '') + (out ? gcChip('#f1f5f9','#475569', out + ' outside the statements') : '') + (bank ? gcChip('#eef2ff','#3730a3', '🏦 ' + bank + ' bank ref' + (bank === 1 ? '' : 's')) : '')
         + (shared ? gcChip('#fef2f2','#b91c1c','⚠ ' + shared + ' also on another subscriber') : '');
       const rowsH = gca.map(g => {
         const [b, c, t] = gcAllProof(g);
         const where = [g.in_book || g.in_payments ? (g.sources ? String(g.sources).split(' + ').map(x => srcL[x] || x).join(' + ') : 'payment record') : '', g.texted ? '📱 texted' : ''].filter(Boolean).join(' · ');
-        const digits = g.match !== 'full' ? ' <span style="color:#6b7280;font-size:11px">(' + String(g.given).length + ' digits)</span>' : '';
+        const digits = g.match === 'bank' ? ' <span style="color:#6b7280;font-size:11px">(bank ref)</span>' : g.match !== 'full' ? ' <span style="color:#6b7280;font-size:11px">(' + String(g.given).length + ' digits)</span>' : '';
         const rec = (g.recorded_amount ? peso(g.recorded_amount) : '—') + ((g.months || []).length ? ' <span style="color:#6b7280">for ' + g.months.map(mon).join(', ') + '</span>' : '')
           + (g.recorded_by ? '<br><span style="color:#6b7280;font-size:11px">' + esc(g.recorded_by) + '</span>' : '');
         const sharedTag = g.other_subs > 0 ? '<br><span class="sd-tag" style="background:#fef2f2;color:#b91c1c;margin-top:4px">⚠ same ref on ' + g.other_subs + ' other subscriber' + (g.other_subs === 1 ? '' : 's') + '</span>' : '';
@@ -893,7 +894,7 @@
     const table = list.length ? `<table class="sc-tbl"><thead><tr><th>Paid</th><th>Subscriber</th><th>Ref</th><th class="n">Recorded</th><th>In GCash</th><th>Problem</th><th>Where</th></tr></thead><tbody>
       ${list.map(r => { const k = gcaKey(r); return `<tr><td style="white-space:nowrap">${short(r.paid_date)}</td>
         <td><b class="sd-name" style="color:#0146a0;cursor:pointer" onclick="window.subDetail&&window.subDetail(${r.subscriber_id})">${esc(nm(r.subscriber_id))}</b> <span style="color:#9ca3af">${esc(areaOf(r))}</span></td>
-        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">…${esc(String(r.given).slice(-4))}${r.match !== 'full' ? ` <span style="color:#6b7280;font-size:11px">(${String(r.given).length} digits)</span>` : ''}</td>
+        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">…${esc(String(r.given).slice(-4))}${r.match === 'bank' ? ' <span style="color:#6b7280;font-size:11px">(bank ref)</span>' : r.match !== 'full' ? ` <span style="color:#6b7280;font-size:11px">(${String(r.given).length} digits)</span>` : ''}</td>
         <td class="n" style="white-space:nowrap">${r.recorded_amount ? peso(r.recorded_amount) : '—'}${(r.months||[]).length ? `<br><span style="color:#6b7280;font-size:11px">for ${r.months.map(ym).join(', ')}</span>` : ''}</td>
         <td>${gc(r)}</td>
         <td><span class="st-badge" style="background:${GCA[k].bg};color:${GCA[k].c}">${GCA[k].l}</span>${k === 'shared' ? `<br><span style="font-size:11px">also on ${others(r)}</span>` : ''}</td>
