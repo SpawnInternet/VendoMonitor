@@ -403,7 +403,7 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['ded','📶 No internet'],['book','📒 Old book']];
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false;
   let bf = {state:'', area:'', q:'', how:''};
@@ -480,6 +480,7 @@
     else if (k === 'pays') payLoad(payDate || todayPH());
     else if (k === 'ded') dedLoad();
     else if (k === 'chk') chkLoad();
+    else if (k === 'gca') gcaLoad();
   }
   async function bookLoad(force){
     if (book && !force && Date.now() - bookAt < 60000) return;
@@ -847,6 +848,63 @@
       ${trail ? `<div class="cx-card"><div class="cx-head"><b>🧾 Receipt no. delay</b><span style="font-size:11px;color:#6b7280">payments the office typed first and added the receipt no. later · per collector: count · average days</span></div>
         <div class="cx-chips" style="padding:10px 14px">${trail}</div></div>` : ''}`;
     body.querySelectorAll('#chk-k div[data-k]').forEach(d => d.onclick = () => { chkFilt = chkFilt === d.dataset.k ? '' : d.dataset.k; drawChk(); });
+  }
+
+  // 💳 GCash audit (2026-11-06): every GCash ref on record (payment record, payments, Spawn Text) that does not check out
+  // against the GCash owner's statements — not found, a different amount, money out, or the same ref on two subscribers.
+  // Read-only (view v_sub_gcash_refs). Tap a name → the subscriber page.
+  let gcaRows = null, gcaFilt = '', gcaArea = '', gcaErr = '';
+  const GCA = {
+    not_found: { l:'✗ Not in GCash',       c:'#b91c1c', bg:'#fef2f2', d:'The ref is on record but no GCash payment has it (typo, another GCash account, or not paid)' },
+    diff:      { l:'⚠ Different amount',   c:'#9a3412', bg:'#fff7ed', d:'GCash has the ref, but the amount differs from what is recorded (or it is money going out)' },
+    shared:    { l:'⚠ Same ref, 2+ subs',  c:'#7c1a56', bg:'#f3ecfb', d:'One GCash payment is recorded on more than one subscriber' },
+  };
+  const gcaKey = r => r.other_subs > 0 ? 'shared' : (r.verdict === 'amount_diff' || r.verdict === 'money_out') ? 'diff' : 'not_found';
+  async function gcaLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    gcaErr = '';
+    try {
+      const [rows] = await Promise.all([
+        allRows('v_sub_gcash_refs', 'select=*&or=(verdict.in.(not_found,amount_diff,money_out),other_subs.gt.0)&order=paid_date.desc.nullslast'),
+        bookLoad()]);
+      gcaRows = rows;
+    } catch (e) { gcaRows = null; gcaErr = e.message || String(e); }
+    if (stTab !== 'gca') return;
+    drawGca();
+  }
+  function drawGca(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    if (!gcaRows) { body.innerHTML = `<div class="cx-card"><div class="sc-empty">💳 GCash audit did not load${gcaErr ? ' — ' + esc(gcaErr.slice(0, 120)) : ''}</div></div>`; return; }
+    const who = {}; (book || []).forEach(b => { who[b.id] = b; });
+    const byRef = {}; gcaRows.forEach(r => { if (r.ref && r.other_subs > 0) (byRef[r.ref] = byRef[r.ref] || []).push(r.subscriber_id); });
+    const short = d => d ? new Date(String(d).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'2-digit'}) : '—';
+    const ym = m => new Date(String(m).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
+    const nm = id => (who[id] && who[id].name) || ('#' + id);
+    const areaOf = r => String((who[r.subscriber_id] && who[r.subscriber_id].area) || '—').toUpperCase();
+    const areas = [...new Set(gcaRows.map(areaOf))].sort();
+    const inArea = gcaRows.filter(r => !gcaArea || areaOf(r) === gcaArea);
+    const cnt = k => inArea.filter(r => gcaKey(r) === k).length;
+    const kpis = Object.keys(GCA).map(k => `<div data-k="${k}" class="${gcaFilt===k?'on':''}" style="--c:${GCA[k].c}"><b>${cnt(k)}</b><span>${GCA[k].l}</span></div>`).join('');
+    const list = inArea.filter(r => !gcaFilt || gcaKey(r) === gcaFilt);
+    const gc = r => r.found ? `${peso(r.gcash_amount)} · ${r.tx_at ? new Date(r.tx_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : ''}${r.from_last4 ? ' · from …' + esc(r.from_last4) : ''}${r.direction && r.direction !== 'in' ? ' · <b>money out</b>' : ''}` : '<span style="color:#9ca3af">not in the statements</span>';
+    const where = r => [r.in_book || r.in_payments ? (r.sources ? String(r.sources).split(' + ').map(x => srcL[x] || x).join(' + ') : 'payment record') : '', r.texted ? '📱 texted' : ''].filter(Boolean).join(' · ');
+    const others = r => (byRef[r.ref] || []).filter(id => id !== r.subscriber_id).map(id => `<a href="#" onclick="window.subDetail&&window.subDetail(${id});return false" style="color:#7c1a56">${esc(nm(id))}</a>`).join(', ');
+    const table = list.length ? `<table class="sc-tbl"><thead><tr><th>Paid</th><th>Subscriber</th><th>Ref</th><th class="n">Recorded</th><th>In GCash</th><th>Problem</th><th>Where</th></tr></thead><tbody>
+      ${list.map(r => { const k = gcaKey(r); return `<tr><td style="white-space:nowrap">${short(r.paid_date)}</td>
+        <td><b class="sd-name" style="color:#0146a0;cursor:pointer" onclick="window.subDetail&&window.subDetail(${r.subscriber_id})">${esc(nm(r.subscriber_id))}</b> <span style="color:#9ca3af">${esc(areaOf(r))}</span></td>
+        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">…${esc(String(r.given).slice(-4))}${r.match !== 'full' ? ` <span style="color:#6b7280;font-size:11px">(${String(r.given).length} digits)</span>` : ''}</td>
+        <td class="n" style="white-space:nowrap">${r.recorded_amount ? peso(r.recorded_amount) : '—'}${(r.months||[]).length ? `<br><span style="color:#6b7280;font-size:11px">for ${r.months.map(ym).join(', ')}</span>` : ''}</td>
+        <td>${gc(r)}</td>
+        <td><span class="st-badge" style="background:${GCA[k].bg};color:${GCA[k].c}">${GCA[k].l}</span>${k === 'shared' ? `<br><span style="font-size:11px">also on ${others(r)}</span>` : ''}</td>
+        <td style="color:#4b5563;font-size:12px">${esc(where(r))}${r.recorded_by ? `<br><span style="color:#9ca3af">${esc(r.recorded_by)}</span>` : ''}</td></tr>`; }).join('')}</tbody></table>`
+      : `<div class="sc-empty">${gcaRows.length ? 'Nothing in this group 🎉' : '🎉 Every GCash ref on record checks out'}</div>`;
+    const upto = gcaRows.find(r => r.statements_to), from = gcaRows.find(r => r.statements_from);
+    body.innerHTML = `<div class="st-k" id="gca-k" style="grid-template-columns:repeat(3,minmax(0,1fr))">${kpis}</div>
+      <div class="cx-card"><div class="cx-head"><b>💳 GCash refs that do not check out</b><span style="font-size:11px;color:#6b7280">${gcaFilt ? esc(GCA[gcaFilt].d) : 'payment record, payments and Spawn Text texts vs the GCash owner\'s statements' + (from && upto ? ' (' + short(from.statements_from) + ' – ' + short(upto.statements_to) + ')' : '') + ' · older payments cannot be checked'}</span>
+        <select id="gca-area" style="margin-left:auto"><option value="">All areas</option>${areas.map(a => `<option${gcaArea===a?' selected':''}>${esc(a)}</option>`).join('')}</select></div>
+        <div class="sc-scroll">${table}</div></div>`;
+    body.querySelectorAll('#gca-k div[data-k]').forEach(d => d.onclick = () => { gcaFilt = gcaFilt === d.dataset.k ? '' : d.dataset.k; drawGca(); });
+    const sel = body.querySelector('#gca-area'); if (sel) sel.onchange = () => { gcaArea = sel.value; drawGca(); };
   }
 
   // The tab button calls subscribersInit(); route it through the sections.
