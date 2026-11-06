@@ -403,7 +403,7 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['ded','📶 No internet'],['book','📒 Old book']];
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false;
   let bf = {state:'', area:'', q:'', how:''};
@@ -481,6 +481,7 @@
     else if (k === 'ded') dedLoad();
     else if (k === 'chk') chkLoad();
     else if (k === 'gca') gcaLoad();
+    else if (k === 'gcu') gcuLoad();
   }
   async function bookLoad(force){
     if (book && !force && Date.now() - bookAt < 60000) return;
@@ -905,6 +906,51 @@
         <div class="sc-scroll">${table}</div></div>`;
     body.querySelectorAll('#gca-k div[data-k]').forEach(d => d.onclick = () => { gcaFilt = gcaFilt === d.dataset.k ? '' : d.dataset.k; drawGca(); });
     const sel = body.querySelector('#gca-area'); if (sel) sel.onchange = () => { gcaArea = sel.value; drawGca(); };
+  }
+
+  // 💰 GCash not on record (2026-11-06): incoming GCash payments whose ref is nowhere on record (payment record, payments,
+  // Spawn Text) — money that came in but is not tied to a customer yet — with the likely customer (their phone number, a ref
+  // that is 1–2 digits off, or the same amount recorded as GCash without a ref). Read-only (view v_gcash_unclaimed).
+  let gcuRows = null, gcuErr = '', gcuDays = 30, gcuKind = 'pay', gcuOnly = false;
+  async function gcuLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    gcuErr = '';
+    try { const [rows] = await Promise.all([allRows('v_gcash_unclaimed', 'select=*&order=tx_at.desc'), bookLoad()]); gcuRows = rows; }
+    catch (e) { gcuRows = null; gcuErr = e.message || String(e); }
+    if (stTab !== 'gcu') return;
+    drawGcu();
+  }
+  function drawGcu(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    if (!gcuRows) { body.innerHTML = `<div class="cx-card"><div class="sc-empty">💰 This list did not load${gcuErr ? ' — ' + esc(gcuErr.slice(0, 120)) : ''}</div></div>`; return; }
+    const who = {}; (book || []).forEach(b => { who[b.id] = b; });
+    const since = gcuDays ? Date.now() - gcuDays * 864e5 : 0;
+    const inPeriod = gcuRows.filter(r => new Date(r.tx_at).getTime() >= since);
+    const kindOk = r => gcuKind === 'all' ? true : gcuKind === 'pay' ? (r.kind === 'transfer' || r.kind === 'bank' || r.kind === 'other') : r.kind === gcuKind;
+    const shown = inPeriod.filter(r => kindOk(r) && (!gcuOnly || (r.suggestions || []).length));
+    const sum = a => a.reduce((t, r) => t + Number(r.amount || 0), 0);
+    const withSug = inPeriod.filter(r => kindOk(r) && (r.suggestions || []).length);
+    const when = ts => new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'});
+    const from = r => r.kind === 'transfer' ? (r.sender_last4 ? 'GCash …' + esc(r.sender_last4) : 'GCash') : r.kind === 'bank' ? 'a bank transfer' : r.kind === 'load' ? 'load' : 'other';
+    const sug = r => (r.suggestions || []).map(x => `<div><a href="#" onclick="window.subDetail&&window.subDetail(${Number(x.sub)});return false" style="color:#0146a0;font-weight:700">${esc((who[x.sub] && who[x.sub].name) || '#' + x.sub)}</a>${who[x.sub] && who[x.sub].area ? ' <span style="color:#9ca3af">' + esc(who[x.sub].area) + '</span>' : ''}<br><span style="font-size:11px;color:#6b7280">${esc(x.why)}</span></div>`).join('')
+      || '<span style="color:#9ca3af">no clue — not a known number, no near ref</span>';
+    const chip = (on, attr, label) => `<button type="button" class="sub-chip${on ? ' on' : ''}" ${attr} style="margin:0 6px 6px 0;padding:5px 11px;border-radius:999px;border:1px solid ${on ? '#025ac6' : '#d6dbe6'};background:${on ? '#025ac6' : '#fff'};color:${on ? '#fff' : '#334155'};font-weight:700;font-size:12px;cursor:pointer">${label}</button>`;
+    const table = shown.length ? `<table class="sc-tbl"><thead><tr><th>Came in</th><th class="n">Amount</th><th>From</th><th>GCash ref</th><th>Likely customer</th></tr></thead><tbody>
+      ${shown.map(r => `<tr><td style="white-space:nowrap">${when(r.tx_at)}</td><td class="n"><b>${peso(r.amount)}</b></td><td>${from(r)}</td>
+        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${esc(r.ref)}</td><td>${sug(r)}</td></tr>`).join('')}</tbody></table>`
+      : `<div class="sc-empty">${inPeriod.length ? 'Nothing with these filters' : '🎉 Every GCash payment in this period is on record'}</div>`;
+    body.innerHTML = `<div class="st-k" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div style="--c:#b45309"><b>${inPeriod.filter(kindOk).length}</b><span>GCash payments not on record · ${peso(sum(inPeriod.filter(kindOk)))}</span></div>
+        <div style="--c:#025ac6"><b>${withSug.length}</b><span>with a likely customer · ${peso(sum(withSug))}</span></div>
+        <div style="--c:#6b7280"><b>${inPeriod.filter(kindOk).length - withSug.length}</b><span>no clue yet</span></div></div>
+      <div class="cx-card"><div class="cx-head" style="flex-wrap:wrap"><b>💰 GCash that came in but is not on anyone's record</b><span style="font-size:11px;color:#6b7280">ref not in BASHANG, the payment sheet, Spawn Collect or Spawn Text · check the likely customer, then record the ref in BASHANG</span></div>
+        <div style="padding:10px 14px 4px">${[[7,'7 days'],[30,'30 days'],[90,'90 days'],[0,'All']].map(([d, l]) => chip(gcuDays === d, `data-gcud="${d}"`, l)).join('')}
+          <span style="display:inline-block;width:10px"></span>${[['pay','Payments'],['transfer','GCash only'],['bank','Bank only'],['all','All, incl. load']].map(([k, l]) => chip(gcuKind === k, `data-gcuk="${k}"`, l)).join('')}
+          ${chip(gcuOnly, 'data-gcuo="1"', 'Only with a likely customer')}</div>
+        <div class="sc-scroll">${table}</div></div>`;
+    body.querySelectorAll('[data-gcud]').forEach(b => b.onclick = () => { gcuDays = Number(b.dataset.gcud); drawGcu(); });
+    body.querySelectorAll('[data-gcuk]').forEach(b => b.onclick = () => { gcuKind = b.dataset.gcuk; drawGcu(); });
+    body.querySelectorAll('[data-gcuo]').forEach(b => b.onclick = () => { gcuOnly = !gcuOnly; drawGcu(); });
   }
 
   // The tab button calls subscribersInit(); route it through the sections.
