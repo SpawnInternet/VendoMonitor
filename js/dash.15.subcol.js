@@ -594,10 +594,10 @@
     const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const bk = (book||[]).find(r => r.id === id) || {};
-    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null;
+    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null, gca = null;
     const q = (t, p, n) => sb(t, p, n).then(r => Array.isArray(r) ? r : []).catch(() => []);
     try {
-      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx] = await Promise.all([
+      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx, gca] = await Promise.all([
         sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes,photo_url`, 1),
         q('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,check_flag,balance&order=ym.desc`, 36),
         q('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
@@ -607,7 +607,9 @@
         q('remind_promises', `subscriber_id=eq.${id}&select=promised_date,amount,months,status,note,created_at,resolved_at&order=created_at.desc`, 10),
         q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10),
         // (2026-11-06) 💳 GCash: every GCash ref they texted + its proof in the GCash statements (view v_sub_gcash). null = not connected yet
-        sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null)
+        sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null),
+        // every GCash ref in the system for them (payment record, payments, texted) checked against GCash (view v_sub_gcash_refs). null = not connected yet
+        sb('v_sub_gcash_refs', `subscriber_id=eq.${id}&select=*&order=paid_date.desc.nullslast`, 200).then(r => Array.isArray(r) ? r : null).catch(() => null)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
     } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
@@ -622,7 +624,7 @@
     const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
     const lifetime = live.reduce((a,x)=>a+Number(x.amount||0),0);
     const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' · prefers the ' + sub.pay_pref_day : ''}` : '';
-    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text'],['gcash','💳 GCash' + (gcx && gcx.length ? ' ' + gcx.length : '')]];
+    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text'],['gcash','💳 GCash' + (gca && gca.length ? ' ' + gca.length : gcx && gcx.length ? ' ' + gcx.length : '')]];
     // 💳 GCash proof for one texted ref — same reading as Spawn Text's badge
     const gcProof = g => {
       const when = g.tx_at ? ' · ' + dt(g.tx_at) : '';
@@ -637,7 +639,45 @@
     const gcWho = g => g.status === 'open' ? ['#fff7ed', '#9a3412', 'To check'] : g.confirmed_how === 'system' ? ['#e0ecff', '#0146a0', 'Confirmed by the system']
       : g.confirmed_how === 'book' ? ['#ecfdf5', '#065f46', 'Confirmed — in BASHANG' + (g.confirmed_by ? ' (' + g.confirmed_by + ')' : '')]
       : g.status === 'broken' ? ['#fef2f2', '#b91c1c', 'Marked not found' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')] : ['#ecfdf5', '#065f46', 'Confirmed' + (g.confirmed_by ? ' by ' + g.confirmed_by : '')];
+    // one ref from the whole system: is it in the GCash statements?
+    const GCV = { ok:['#ecfdf5','#065f46'], amount_diff:['#fff7ed','#9a3412'], money_out:['#fff7ed','#9a3412'], not_found:['#fef2f2','#b91c1c'], before:['#f1f5f9','#475569'], after:['#f1f5f9','#475569'] };
+    const gcAllProof = g => {
+      const when = g.tx_at ? ' · ' + dt(g.tx_at) : '', from = g.from_last4 ? ' · from …' + g.from_last4 : '';
+      const t = g.verdict === 'ok' ? '✓ In GCash: ' + peso(g.gcash_amount) + when + from
+        : g.verdict === 'amount_diff' ? '⚠ In GCash: ' + peso(g.gcash_amount) + ' — recorded ' + peso(g.recorded_amount) + when + from
+        : g.verdict === 'money_out' ? '⚠ This ref is money sent OUT of GCash · ' + peso(g.gcash_amount) + when
+        : g.verdict === 'before' ? 'Paid before the GCash statements start (' + short(String(g.statements_from).slice(0,10)) + ') — cannot check'
+        : g.verdict === 'after' ? '⏳ Newer than the last GCash statement (' + short(String(g.statements_to).slice(0,10)) + ')'
+        : '✗ Not in the GCash statements';
+      return [...(GCV[g.verdict] || GCV.not_found), t];
+    };
+    const gcChip = (b, c, t) => `<span class="sd-tag" style="background:${b};color:${c};margin:0 6px 6px 0">${t}</span>`;
+    const gcAllT = () => {
+      const n = k => gca.filter(g => g.verdict === k).length, shared = gca.filter(g => g.other_subs > 0).length, diff = n('amount_diff') + n('money_out'), out = n('before') + n('after');
+      const chips = gcChip('#ecfdf5','#065f46','✓ ' + n('ok') + ' match') + (diff ? gcChip('#fff7ed','#9a3412','⚠ ' + diff + ' different') : '')
+        + (n('not_found') ? gcChip('#fef2f2','#b91c1c','✗ ' + n('not_found') + ' not found') : '') + (out ? gcChip('#f1f5f9','#475569', out + ' outside the statements') : '')
+        + (shared ? gcChip('#fef2f2','#b91c1c','⚠ ' + shared + ' also on another subscriber') : '');
+      const rowsH = gca.map(g => {
+        const [b, c, t] = gcAllProof(g);
+        const where = [g.in_book || g.in_payments ? (g.sources ? String(g.sources).split(' + ').map(x => srcL[x] || x).join(' + ') : 'payment record') : '', g.texted ? '📱 texted' : ''].filter(Boolean).join(' · ');
+        const digits = g.match !== 'full' ? ' <span style="color:#6b7280;font-size:11px">(' + String(g.given).length + ' digits)</span>' : '';
+        const rec = (g.recorded_amount ? peso(g.recorded_amount) : '—') + ((g.months || []).length ? ' <span style="color:#6b7280">for ' + g.months.map(mon).join(', ') + '</span>' : '')
+          + (g.recorded_by ? '<br><span style="color:#6b7280;font-size:11px">' + esc(g.recorded_by) + '</span>' : '');
+        const sharedTag = g.other_subs > 0 ? '<br><span class="sd-tag" style="background:#fef2f2;color:#b91c1c;margin-top:4px">⚠ same ref on ' + g.other_subs + ' other subscriber' + (g.other_subs === 1 ? '' : 's') + '</span>' : '';
+        return '<tr><td style="white-space:nowrap">' + (g.paid_date ? short(String(g.paid_date).slice(0,10)) : '—') + '</td>'
+          + '<td style="font-variant-numeric:tabular-nums;white-space:nowrap">…' + esc(String(g.given).slice(-4)) + digits + '</td>'
+          + '<td style="white-space:nowrap">' + rec + '</td>'
+          + '<td><span class="sd-tag" style="background:' + b + ';color:' + c + ';white-space:normal">' + esc(t) + '</span>' + sharedTag + '</td>'
+          + '<td style="color:#4b5563;font-size:12px">' + esc(where) + '</td></tr>';
+      }).join('');
+      return '<div class="sd-card"><div class="sd-h">💳 Every GCash ref on record <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· payment record, payments and Spawn Text texts · checked against the GCash owner\'s statements</span></div>'
+        + '<div style="margin-bottom:8px">' + chips + '</div>'
+        + (gca.length ? '<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Paid</th><th>Ref</th><th>Recorded</th><th>In GCash?</th><th>Where</th></tr></thead><tbody>' + rowsH + '</tbody></table></div>'
+          : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No GCash ref on record for this subscriber.</div>') + '</div>';
+    };
+    const gcSysT = () => { const sysPays = live.filter(x => x.collector === 'System · GCash'); return sysPays.length ? `<div class="sd-card"><div class="sd-h green">🤖 Payments the system recorded from GCash</div>${sysPays.map(x => row(short(String(x.payment_date).slice(0,10)), peso(x.amount) + (x.coverage_from ? ' · for ' + mon(x.coverage_from) + (x.coverage_months > 1 ? ' + ' + (x.coverage_months - 1) + ' more' : '') : '') + (x.gcash_ref ? ' · ref …' + esc(String(x.gcash_ref).slice(-4)) : ''))).join('')}</div>` : ''; };
     const gcashT = () => {
+      if (gca !== null) return gcAllT() + gcSysT();   // the full checker is connected
       if (gcx === null) return `<div class="sd-card"><div class="sd-h">💳 GCash</div><div style="color:#6b7280;font-size:13px">The GCash view is not connected to Vendo Monitor yet.</div></div>`;
       const sysPays = live.filter(x => x.collector === 'System · GCash');
       return `<div class="sd-card"><div class="sd-h">💳 GCash refs they texted <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· checked against the GCash owner's statements · ${gcx.length}</span></div>
