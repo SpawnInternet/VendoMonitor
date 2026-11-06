@@ -403,7 +403,7 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false;
   let bf = {state:'', area:'', q:'', how:''};
@@ -482,6 +482,7 @@
     else if (k === 'chk') chkLoad();
     else if (k === 'gca') gcaLoad();
     else if (k === 'gcu') gcuLoad();
+    else if (k === 'gcd') gcdLoad();
   }
   async function bookLoad(force){
     if (book && !force && Date.now() - bookAt < 60000) return;
@@ -952,6 +953,85 @@
     body.querySelectorAll('[data-gcud]').forEach(b => b.onclick = () => { gcuDays = Number(b.dataset.gcud); drawGcu(); });
     body.querySelectorAll('[data-gcuk]').forEach(b => b.onclick = () => { gcuKind = b.dataset.gcuk; drawGcu(); });
     body.querySelectorAll('[data-gcuo]').forEach(b => b.onclick = () => { gcuOnly = !gcuOnly; drawGcu(); });
+  }
+
+  // 📅 GCash per day (2026-11-06): per day, what came into GCash (the statement) next to every GCash payment on record —
+  // BASHANG, payment sheet, Spawn Collect, System · GCash — and the refs texted in Spawn Text that are not checked yet.
+  // Read-only (view v_gcash_day_items). Tap a day for every item.
+  let gcdRows = null, gcdErr = '', gcdDays = 14, gcdOpen = '';
+  const GCD_SRC = ['BASHANG', 'payment sheet', 'Spawn Collect', 'System · GCash'];
+  const GCD_ST = {
+    on_record:['#ecfdf5','#065f46','✓ on record'], not_on_record:['#fef2f2','#b91c1c','❓ not on any record'],
+    ok:['#ecfdf5','#065f46','✓ in GCash'], amount_diff:['#fff7ed','#9a3412','⚠ different amount in GCash'], money_out:['#fff7ed','#9a3412','⚠ money out'],
+    not_found:['#fef2f2','#b91c1c','✗ not in GCash'], bank_ref:['#eef2ff','#3730a3','🏦 bank ref'], no_ref:['#f1f5f9','#475569','📝 no ref written'],
+    before:['#f1f5f9','#475569','before the statements'], after:['#f1f5f9','#475569','⏳ statement not in yet'], not_checked:['#fff7ed','#9a3412','⏳ not checked yet'] };
+  function gcdIso(d){ return new Date(d.getTime() + 8 * 3600e3).toISOString().slice(0, 10); }
+  async function gcdLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    gcdErr = '';
+    const from = gcdIso(new Date(Date.now() - (gcdDays - 1) * 864e5));
+    body.innerHTML = '<div class="sc-empty">Loading GCash per day…</div>';
+    try { const [rows] = await Promise.all([allRows('v_gcash_day_items', 'select=*&day=gte.' + from + '&order=day.desc'), bookLoad()]); gcdRows = rows; }
+    catch (e) { gcdRows = null; gcdErr = e.message || String(e); }
+    if (stTab !== 'gcd') return;
+    drawGcd();
+  }
+  function drawGcd(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    if (!gcdRows) { body.innerHTML = `<div class="cx-card"><div class="sc-empty">📅 GCash per day did not load${gcdErr ? ' — ' + esc(gcdErr.slice(0, 120)) : ''}</div></div>`; return; }
+    const who = {}; (book || []).forEach(b => { who[b.id] = b; });
+    const nm = id => id ? ((who[id] && who[id].name) || '#' + id) : '—';
+    const P = n => peso(Math.round(Number(n) || 0));
+    const dLab = d => new Date(String(d).slice(0,10) + 'T12:00:00').toLocaleDateString('en-PH', { weekday:'short', month:'short', day:'numeric' });
+    const hasStmt = gcdRows.some(r => r.kind === 'statement');
+    const lastStmt = gcdRows.filter(r => r.kind === 'statement').map(r => String(r.day)).sort().pop() || '';
+    const byDay = {};
+    gcdRows.forEach(r => { const d = String(r.day).slice(0, 10); (byDay[d] = byDay[d] || []).push(r); });
+    const days = Object.keys(byDay).sort().reverse();
+    const sum = a => a.reduce((t, r) => t + Number(r.amount || 0), 0);
+    const cell = (a, extra) => a.length ? `<b>${a.length}</b> · ${P(sum(a))}${extra || ''}` : '<span style="color:#cbd5e1">—</span>';
+    const tag = st => { const x = GCD_ST[st] || ['#f1f5f9','#475569', st]; return `<span class="st-badge" style="background:${x[0]};color:${x[1]}">${esc(x[2])}</span>`; };
+    let tot = { st:0, rec:0 };
+    const rowsH = days.map(d => {
+      const it = byDay[d], st = it.filter(r => r.kind === 'statement' && r.source !== 'GCash load'), rec = it.filter(r => r.kind === 'record'), tx = it.filter(r => r.kind === 'texted');
+      const covered = d <= lastStmt;
+      const notOn = st.filter(r => r.status === 'not_on_record');
+      const diff = covered ? sum(st) - sum(rec) : null;
+      if (covered) { tot.st += sum(st); tot.rec += sum(rec); }
+      const diffH = diff === null ? '<span style="color:#94a3b8">⏳ no statement yet</span>'
+        : Math.abs(diff) < 1 ? '<span style="color:#065f46;font-weight:800">✓ matches</span>'
+        : diff > 0 ? `<span style="color:#9a3412;font-weight:800">${P(diff)} more in GCash</span>` : `<span style="color:#b91c1c;font-weight:800">${P(-diff)} more on record</span>`;
+      const srcCells = GCD_SRC.map(sc => { const a = rec.filter(r => r.source === sc), bad = a.filter(r => r.status === 'not_found' || r.status === 'amount_diff').length;
+        return `<td class="n">${cell(a, bad ? ` <span style="color:#b91c1c">· ${bad} ✗</span>` : '')}</td>`; }).join('');
+      const head = `<tr class="sd-row-click" data-gcdd="${d}"><td style="white-space:nowrap"><b>${dLab(d)}</b> ${gcdOpen === d ? '▾' : '▸'}</td>
+        <td class="n">${covered ? cell(st, notOn.length ? ` <span style="color:#b91c1c">· ${notOn.length} ❓</span>` : '') : '<span style="color:#94a3b8">⏳</span>'}</td>${srcCells}
+        <td class="n">${tx.length ? `<b>${tx.length}</b>` : '<span style="color:#cbd5e1">—</span>'}</td><td>${diffH}</td></tr>`;
+      if (gcdOpen !== d) return head;
+      const order = { statement:0, record:1, texted:2 };
+      const detail = it.slice().sort((a, b) => (order[a.kind] - order[b.kind]) || String(a.source).localeCompare(String(b.source)) || Number(b.amount || 0) - Number(a.amount || 0)).map(r => {
+        const sug = r.kind === 'statement' && r.status === 'not_on_record' && (r.suggestions || []).length
+          ? '<br><span style="font-size:11px;color:#6b7280">likely: ' + r.suggestions.map(x => `<a href="#" onclick="window.subDetail&&window.subDetail(${Number(x.sub)});return false" style="color:#0146a0">${esc(nm(x.sub))}</a> (${esc(x.why)})`).join(', ') + '</span>' : '';
+        const name = r.subscriber_id ? `<a href="#" onclick="window.subDetail&&window.subDetail(${Number(r.subscriber_id)});return false" style="color:#0146a0;font-weight:700">${esc(nm(r.subscriber_id))}</a>` : '<span style="color:#9ca3af">—</span>';
+        const when = r.tx_at ? new Date(r.tx_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}) : '';
+        return `<tr style="background:#f8fafc"><td style="padding-left:22px;color:#6b7280">${r.kind === 'statement' ? '💰 GCash' : r.kind === 'texted' ? '📱 texted' : '📒 record'}</td>
+          <td colspan="2">${name}${sug}</td><td>${esc(r.source)}${r.recorded_by && r.kind === 'record' ? '<br><span style="font-size:11px;color:#9ca3af">' + esc(r.recorded_by) + '</span>' : ''}</td>
+          <td class="n">${r.amount != null ? P(r.amount) : '—'}</td><td style="font-variant-numeric:tabular-nums">${r.ref ? esc(r.ref) : '—'}${when && r.kind !== 'statement' ? '<br><span style="font-size:11px;color:#9ca3af">GCash ' + esc(when) + '</span>' : when ? '<br><span style="font-size:11px;color:#9ca3af">' + esc(when) + '</span>' : ''}</td>
+          <td colspan="2">${tag(r.status)}</td></tr>`;
+      }).join('');
+      return head + detail;
+    }).join('');
+    const chip = (on, attr, label) => `<button type="button" ${attr} style="margin:0 6px 6px 0;padding:5px 11px;border-radius:999px;border:1px solid ${on ? '#025ac6' : '#d6dbe6'};background:${on ? '#025ac6' : '#fff'};color:${on ? '#fff' : '#334155'};font-weight:700;font-size:12px;cursor:pointer">${label}</button>`;
+    const td = tot.st - tot.rec;
+    body.innerHTML = `<div class="st-k" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div style="--c:#025ac6"><b>${P(tot.st)}</b><span>came into GCash (days with a statement)</span></div>
+        <div style="--c:#065f46"><b>${P(tot.rec)}</b><span>recorded as GCash, same days (all sources)</span></div>
+        <div style="--c:${Math.abs(td) < 1 ? '#065f46' : td > 0 ? '#b45309' : '#b91c1c'}"><b>${Math.abs(td) < 1 ? '✓' : P(Math.abs(td))}</b><span>${Math.abs(td) < 1 ? 'matches' : td > 0 ? 'more in GCash than on record' : 'more on record than in GCash'}</span></div></div>
+      <div class="cx-card"><div class="cx-head" style="flex-wrap:wrap"><b>📅 GCash per day</b><span style="font-size:11px;color:#6b7280">GCash statement next to BASHANG, the payment sheet, Spawn Collect and the system · ⏳ = not checked / statement not in yet${hasStmt ? ' · statements up to ' + esc(dLab(lastStmt)) : ''} · a payment can be recorded a day after it came in · tap a day</span></div>
+        <div style="padding:10px 14px 4px">${[[7,'7 days'],[14,'14 days'],[31,'31 days'],[62,'2 months']].map(([d2, l]) => chip(gcdDays === d2, `data-gcdn="${d2}"`, l)).join('')}</div>
+        <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Day</th><th class="n">💰 Into GCash</th><th class="n">📒 BASHANG</th><th class="n">Payment sheet</th><th class="n">Spawn Collect</th><th class="n">🤖 System</th><th class="n">⏳ Texted</th><th>Difference</th></tr></thead>
+        <tbody>${rowsH || '<tr><td colspan="8" class="sc-empty">Nothing in this period</td></tr>'}</tbody></table></div></div>`;
+    body.querySelectorAll('[data-gcdd]').forEach(tr => tr.onclick = () => { gcdOpen = gcdOpen === tr.dataset.gcdd ? '' : tr.dataset.gcdd; drawGcd(); });
+    body.querySelectorAll('[data-gcdn]').forEach(b => b.onclick = () => { gcdDays = Number(b.dataset.gcdn); gcdOpen = ''; gcdLoad(); });
   }
 
   // The tab button calls subscribersInit(); route it through the sections.
