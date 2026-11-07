@@ -1043,6 +1043,7 @@ function showP(id, btn) {
   if(id==="status")     loadSystemStatus();
   if(id==="suspicious") loadSuspicious();
   if(id==="joborders")  { colLoad(); }
+  if((id==="spawntext"||id==="spawnfinance") && typeof window.spawnAppsShown==="function") window.spawnAppsShown(id);   // 2026-11-07 apps inside Vendo Monitor
   if(id==="spawnjobs"){
     var frm=document.getElementById('spawnjobs-frame');
     if(frm && (!frm.src || frm.src==='about:blank' || frm.src.endsWith('about:blank'))){
