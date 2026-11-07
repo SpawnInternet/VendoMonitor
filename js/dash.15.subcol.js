@@ -673,6 +673,7 @@
       return [...(GCV[g.verdict] || GCV.not_found), t];
     };
     const gcChip = (b, c, t) => `<span class="sd-tag" style="background:${b};color:${c};margin:0 6px 6px 0">${t}</span>`;
+    const gcNotes = g => gcNoteList(g).map(t => '<br><span style="font-size:11px;color:#6b7280">' + esc(t) + '</span>').join('');
     const gcAllT = () => {
       const n = k => gca.filter(g => g.verdict === k).length, shared = gca.filter(g => g.other_subs > 0).length, diff = n('amount_diff') + n('money_out'), out = n('before') + n('after'), bank = n('bank_ref');
       const chips = gcChip('#ecfdf5','#065f46','✓ ' + n('ok') + ' match') + (diff ? gcChip('#fff7ed','#9a3412','⚠ ' + diff + ' different') : '')
@@ -684,7 +685,7 @@
         const digits = g.match === 'bank' ? ' <span style="color:#6b7280;font-size:11px">(bank ref)</span>' : g.match !== 'full' ? ' <span style="color:#6b7280;font-size:11px">(' + String(g.given).length + ' digits)</span>' : '';
         const rec = (g.recorded_amount ? peso(g.recorded_amount) : '—') + ((g.months || []).length ? ' <span style="color:#6b7280">for ' + g.months.map(mon).join(', ') + '</span>' : '')
           + (g.recorded_by ? '<br><span style="color:#6b7280;font-size:11px">' + esc(g.recorded_by) + '</span>' : '');
-        const sharedTag = g.other_subs > 0 ? '<br><span class="sd-tag" style="background:#fef2f2;color:#b91c1c;margin-top:4px">⚠ same ref on ' + g.other_subs + ' other subscriber' + (g.other_subs === 1 ? '' : 's') + '</span>' : '';
+        const sharedTag = (g.other_subs > 0 ? '<br><span class="sd-tag" style="background:#fef2f2;color:#b91c1c;margin-top:4px">⚠ same ref on ' + g.other_subs + ' other subscriber' + (g.other_subs === 1 ? '' : 's') + '</span>' : '') + gcNotes(g);
         return '<tr><td style="white-space:nowrap">' + (g.paid_date ? short(String(g.paid_date).slice(0,10)) : '—') + '</td>'
           + '<td style="font-variant-numeric:tabular-nums;white-space:nowrap">…' + esc(String(g.given).slice(-4)) + digits + '</td>'
           + '<td style="white-space:nowrap">' + rec + '</td>'
@@ -881,6 +882,9 @@
     shared:    { l:'⚠ Same ref, 2+ subs',  c:'#7c1a56', bg:'#f3ecfb', d:'One GCash payment is recorded on more than one subscriber' },
   };
   const gcaKey = r => r.other_subs > 0 ? 'shared' : (r.verdict === 'amount_diff' || r.verdict === 'money_out') ? 'diff' : 'not_found';
+  // notes beside a ref (2026-11-07): a book row with several refs is a split payment, so each ref alone looks short; a future book date is a typo in the book
+  function gcNoteList(r){ const n = []; if (Number(r.row_refs) > 1) n.push('✂ ' + r.row_refs + ' refs on one row (split payment' + (r.recorded_amount ? ', ' + peso(r.recorded_amount) + ' total' : '') + ')'); if (r.future_date) n.push('📅 book date is in the future'); return n; }
+  window.gcNoteList = gcNoteList;
   async function gcaLoad(){
     const body = document.getElementById('st-body'); if (!body) return;
     gcaErr = '';
@@ -916,7 +920,7 @@
         <td style="font-variant-numeric:tabular-nums;white-space:nowrap">…${esc(String(r.given).slice(-4))}${r.match === 'bank' ? ' <span style="color:#6b7280;font-size:11px">(bank ref)</span>' : r.match !== 'full' ? ` <span style="color:#6b7280;font-size:11px">(${String(r.given).length} digits)</span>` : ''}</td>
         <td class="n" style="white-space:nowrap">${r.recorded_amount ? peso(r.recorded_amount) : '—'}${(r.months||[]).length ? `<br><span style="color:#6b7280;font-size:11px">for ${r.months.map(ym).join(', ')}</span>` : ''}</td>
         <td>${gc(r)}</td>
-        <td><span class="st-badge" style="background:${GCA[k].bg};color:${GCA[k].c}">${GCA[k].l}</span>${k === 'shared' ? `<br><span style="font-size:11px">also on ${others(r)}</span>` : ''}</td>
+        <td><span class="st-badge" style="background:${GCA[k].bg};color:${GCA[k].c}">${GCA[k].l}</span>${k === 'shared' ? `<br><span style="font-size:11px">also on ${others(r)}</span>` : ''}${gcNoteList(r).map(t => `<br><span style="font-size:11px;color:#6b7280">${esc(t)}</span>`).join('')}</td>
         <td style="color:#4b5563;font-size:12px">${esc(where(r))}${r.recorded_by ? `<br><span style="color:#9ca3af">${esc(r.recorded_by)}</span>` : ''}</td></tr>`; }).join('')}</tbody></table>`
       : `<div class="sc-empty">${gcaRows.length ? 'Nothing in this group 🎉' : '🎉 Every GCash ref on record checks out'}</div>`;
     const upto = gcaRows.find(r => r.statements_to), from = gcaRows.find(r => r.statements_from);
