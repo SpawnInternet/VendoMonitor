@@ -667,7 +667,7 @@
         : g.verdict === 'amount_diff' ? '⚠ In GCash: ' + peso(g.gcash_amount) + ' — recorded ' + peso(g.recorded_amount) + when + from
         : g.verdict === 'money_out' ? '⚠ This ref is money sent OUT of GCash · ' + peso(g.gcash_amount) + when
         : g.verdict === 'before' ? 'Paid before the GCash statements start (' + short(String(g.statements_from).slice(0,10)) + ') — cannot check'
-        : g.verdict === 'after' ? '⏳ Newer than the last GCash statement (' + short(String(g.statements_to).slice(0,10)) + ')'
+        : g.verdict === 'after' ? '📄 No export file yet (last export covers up to ' + short(String(g.statements_to).slice(0,10)) + ')'
         : g.verdict === 'bank_ref' ? '🏦 Bank transfer ref — paid to the bank, not GCash; check it in the bank'
         : '✗ Not in the GCash statements';
       return [...(GCV[g.verdict] || GCV.not_found), t];
@@ -982,7 +982,7 @@
     on_record:['#ecfdf5','#065f46','✓ on record'], not_on_record:['#fef2f2','#b91c1c','❓ not on any record'],
     ok:['#ecfdf5','#065f46','✓ in GCash'], amount_diff:['#fff7ed','#9a3412','⚠ different amount in GCash'], money_out:['#fff7ed','#9a3412','⚠ money out'],
     not_found:['#fef2f2','#b91c1c','✗ not in GCash'], bank_ref:['#eef2ff','#3730a3','🏦 bank ref'], no_ref:['#f1f5f9','#475569','📝 no ref written'],
-    before:['#f1f5f9','#475569','before the statements'], after:['#f1f5f9','#475569','⏳ statement not in yet'], not_checked:['#fff7ed','#9a3412','⏳ not checked yet'] };
+    before:['#f1f5f9','#475569','before the statements'], after:['#f1f5f9','#475569','📄 no export file yet'], not_checked:['#fff7ed','#9a3412','⏳ not checked yet'] };
   function gcdIso(d){ return new Date(d.getTime() + 8 * 3600e3).toISOString().slice(0, 10); }
   async function gcdLoad(){
     const body = document.getElementById('st-body'); if (!body) return;
@@ -1016,7 +1016,7 @@
       const notOn = st.filter(r => r.status === 'not_on_record');
       const diff = covered ? sum(st) - sum(rec) : null;
       if (covered) { tot.st += sum(st); tot.rec += sum(rec); }
-      const diffH = diff === null ? '<span style="color:#94a3b8">⏳ no statement yet</span>'
+      const diffH = diff === null ? '<span style="color:#94a3b8">📄 no export file yet</span>'
         : Math.abs(diff) < 1 ? '<span style="color:#065f46;font-weight:800">✓ matches</span>'
         : diff > 0 ? `<span style="color:#9a3412;font-weight:800">${P(diff)} more in GCash</span>` : `<span style="color:#b91c1c;font-weight:800">${P(-diff)} more on record</span>`;
       const srcCells = GCD_SRC.map(sc => { const a = rec.filter(r => r.source === sc), bad = a.filter(r => r.status === 'not_found' || r.status === 'amount_diff').length;
@@ -1044,7 +1044,7 @@
         <div style="--c:#025ac6"><b>${P(tot.st)}</b><span>came into GCash (days with a statement)</span></div>
         <div style="--c:#065f46"><b>${P(tot.rec)}</b><span>recorded as GCash, same days (all sources)</span></div>
         <div style="--c:${Math.abs(td) < 1 ? '#065f46' : td > 0 ? '#b45309' : '#b91c1c'}"><b>${Math.abs(td) < 1 ? '✓' : P(Math.abs(td))}</b><span>${Math.abs(td) < 1 ? 'matches' : td > 0 ? 'more in GCash than on record' : 'more on record than in GCash'}</span></div></div>
-      <div class="cx-card"><div class="cx-head" style="flex-wrap:wrap"><b>📅 GCash per day</b><span style="font-size:11px;color:#6b7280">GCash statement next to BASHANG, the payment sheet, Spawn Collect and the system · ⏳ = not checked / statement not in yet${hasStmt ? ' · statements up to ' + esc(dLab(lastStmt)) : ''} · a payment can be recorded a day after it came in · tap a day</span></div>
+      <div class="cx-card"><div class="cx-head" style="flex-wrap:wrap"><b>📅 GCash per day</b><span style="font-size:11px;color:#6b7280">GCash statement next to BASHANG, the payment sheet, Spawn Collect and the system · 📄 no export file yet = that day is not in any GCash export so far · ⏳ = not checked yet${hasStmt ? ' · statements up to ' + esc(dLab(lastStmt)) : ''} · a payment can be recorded a day after it came in · tap a day</span></div>
         <div style="padding:10px 14px 4px">${[[7,'7 days'],[14,'14 days'],[31,'31 days'],[62,'2 months']].map(([d2, l]) => chip(gcdDays === d2, `data-gcdn="${d2}"`, l)).join('')}</div>
         <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Day</th><th class="n">💰 Into GCash</th><th class="n">📒 BASHANG</th><th class="n">Payment sheet</th><th class="n">Spawn Collect</th><th class="n">🤖 System</th><th class="n">⏳ Texted</th><th>Difference</th></tr></thead>
         <tbody>${rowsH || '<tr><td colspan="8" class="sc-empty">Nothing in this period</td></tr>'}</tbody></table></div></div>`;
