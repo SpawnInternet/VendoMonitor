@@ -405,7 +405,7 @@
   // ══════════════════════════════════════════════════════════
   const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
-  let book = null, bookAt = 0, bookBusy = false;
+  let book = null, bookAt = 0, bookBusy = false, textSide = null;   // textSide: v_sub_text rows by subscriber id (2026-11-07)
   let bf = {state:'', area:'', q:'', how:''};
   let payDate = '', payRows = [], payFilt = '';
   const STATE = {
@@ -487,7 +487,11 @@
   async function bookLoad(force){
     if (book && !force && Date.now() - bookAt < 60000) return;
     if (bookBusy) return; bookBusy = true;
-    try { const r = await sb('v_sub_book', 'select=*&order=name.asc', 3000); if (Array.isArray(r)) { book = r; bookAt = Date.now(); } }
+    try {
+      const [r, t] = await Promise.all([sb('v_sub_book', 'select=*&order=name.asc', 3000), sb('v_sub_text', 'select=*', 3000).catch(() => null)]);
+      if (Array.isArray(r)) { book = r; bookAt = Date.now(); }
+      if (Array.isArray(t)) { textSide = {}; t.forEach(x => { textSide[x.subscriber_id] = x; }); }
+    }
     finally { bookBusy = false; }
   }
 
@@ -510,6 +514,19 @@
     drawKpis(); drawBookTable();
   }
   function stateOf(r, pt){ return pt[r.id] ? 'today' : r.state; }
+  // 📱 texting side of one subscriber (from v_sub_text): what Spawn Text's Month tab used to show
+  const whenShort = ts => ts ? new Date(ts).toLocaleDateString('en-PH', { month:'short', day:'numeric', timeZone:'Asia/Manila' }) : '';
+  function textCell(t, st){
+    if (!t) return '<span style="color:#cbd5e1">—</span>';
+    const bits = [];
+    if (t.to_check) bits.push('<span class="st-badge" style="background:#e0ecff;color:#0146a0">💳 To check</span>');
+    else if (t.promise_date) bits.push('<span class="st-badge" style="background:#fff7ed;color:#9a3412">🤝 Promised ' + esc(short(String(t.promise_date).slice(0,10))) + '</span>');
+    if (Number(t.reminders_month) > 0) bits.push('Texted ' + Number(t.reminders_month) + '× · last ' + esc(whenShort(t.last_reminder_at)));
+    else if (st === 'late' || st === 'due_soon' || st === 'partial') bits.push(t.can_text ? '<span style="color:#9a3412">not texted yet</span>' : '<span style="color:#b91c1c">📵 no number</span>');
+    if (Number(t.failed_30d) > 0) bits.push('<span style="color:#b91c1c">' + Number(t.failed_30d) + ' failed</span>');
+    if (Number(t.unanswered) > 0) bits.push('<span style="color:#0146a0">💬 ' + Number(t.unanswered) + ' waiting</span>');
+    return bits.length ? bits.join('<br>') : '<span style="color:#9ca3af">—</span>';
+  }
   function drawKpis(){
     const el = document.getElementById('st-k'); if (!el || !book) return;
     const pt = paidToday(), list = book.map(r => ({r, s: stateOf(r, pt)}));
@@ -536,7 +553,7 @@
       if (sa==='today' && sb_==='today') return String(pt[b.id].at).localeCompare(String(pt[a.id].at));     // newest payment first
       return (ORDER.indexOf(sa)-ORDER.indexOf(sb_)) || (Number(b.owed)-Number(a.owed)) || String(a.name).localeCompare(String(b.name)); });
     const shown = list.slice(0, 600);
-    el.innerHTML = `<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th class="n">Due day</th><th class="n">Monthly</th><th>This month</th><th>Still owes</th><th>Last paid</th><th>Pays by</th><th>Collector</th></tr></thead><tbody>`
+    el.innerHTML = `<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th class="n">Due day</th><th class="n">Monthly</th><th>This month</th><th>Still owes</th><th>Last paid</th>${textSide ? '<th>📱 Texting</th>' : ''}<th>Pays by</th><th>Collector</th></tr></thead><tbody>`
       + shown.map(r => { const st = stateOf(r, pt), s = STATE[st] || STATE.upcoming, t = pt[r.id];
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
@@ -544,8 +561,8 @@
           return `<tr class="sd-row-click" onclick="window.subDetail&&window.subDetail(${r.id})"${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
-            <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td><td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
-      + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="3"></td></tr></tbody></table>`;
+            <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>${textSide ? '<td style="font-size:12px">' + textCell(textSide[r.id], st) + '</td>' : ''}<td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
+      + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="${textSide ? 4 : 3}"></td></tr></tbody></table>`;
   }
 
   // ── Subscriber detail (2026-11-03): tap a name → a page like the vendo one — Info · Ledger · Contact · Spawn Text
