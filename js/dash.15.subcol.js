@@ -403,7 +403,12 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS_OLD = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
+  // 🔍 GCash review (2026-11-09): when it answers (switch gcash_review on + gateway line), it takes the GCash place and the
+  // three older GCash lists move to the end (still there for history). Otherwise the bar is exactly as before.
+  let gcrOk;   // undefined = not asked yet, null = asking, true/false = answer
+  const ST_TABS_REVIEW = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
+  const stTabs = () => gcrOk === true ? ST_TABS_REVIEW : ST_TABS_OLD;
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false, textSide = null;   // textSide: v_sub_text rows by subscriber id (2026-11-07)
   let bf = {state:'', area:'', q:'', how:''};
@@ -465,8 +470,13 @@
       const live = document.getElementById('sub-live');
       panel.insertBefore(bar, live ? live.nextSibling : panel.firstChild);
     }
-    bar.innerHTML = '<span class="t">📶 Subscribers</span>' + ST_TABS.map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('');
+    bar.innerHTML = '<span class="t">📶 Subscribers</span>' + stTabs().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('');
     bar.querySelectorAll('button').forEach(b => b.onclick = () => stGo(b.dataset.k));
+    if (gcrOk === undefined) {   // once per page load: is the GCash review on? (no rows = off, or the gateway line is missing)
+      gcrOk = null;
+      sb('v_gcash_review_marked', 'select=item_key', 1).then(r => { gcrOk = Array.isArray(r) && r.length > 0; }).catch(() => { gcrOk = false; })
+        .then(() => { if (gcrOk && document.getElementById('st-bar')) stShell(false); });
+    }
     if (withBody) { const body = document.createElement('div'); body.id = 'st-body'; panel.appendChild(body); return body; }
     return null;
   }
@@ -480,6 +490,7 @@
     else if (k === 'pays') payLoad(payDate || todayPH());
     else if (k === 'ded') dedLoad();
     else if (k === 'chk') chkLoad();
+    else if (k === 'gcr') gcrLoad();
     else if (k === 'gca') gcaLoad();
     else if (k === 'gcu') gcuLoad();
     else if (k === 'gcd') gcdLoad();
@@ -930,6 +941,87 @@
         <div class="sc-scroll">${table}</div></div>`;
     body.querySelectorAll('#gca-k div[data-k]').forEach(d => d.onclick = () => { gcaFilt = gcaFilt === d.dataset.k ? '' : d.dataset.k; drawGca(); });
     const sel = body.querySelector('#gca-area'); if (sel) sel.onchange = () => { gcaArea = sel.value; drawGca(); };
+  }
+
+  // 🔍 GCash review (2026-11-09): systematic GCash checking starts Nov 1, 2026 (gcash_review_from). Every GCash payment in and
+  // every GCash ref on record since then, one colour each, until accounted for: matched, or a person's decision with a note.
+  // Same data as Spawn Text's 🔍 Review (view v_gcash_review_marked, rows only while gcash_review is on). Read-only here —
+  // decisions are made in Spawn Text (its PIN; only Wendell clears a 🔴). Tap a name → the subscriber page.
+  let gcrRows = null, gcrErr = '', gcrFilt = 'open', gcrArea = '';
+  const GCR = {
+    open:   { l:'Open',               c:'#025ac6', bg:'#e6effb' },
+    red:    { l:'🔴 Possible fraud',  c:'#b91c1c', bg:'#fef2f2' },
+    grey:   { l:'⚪ Not on record',   c:'#475569', bg:'#f1f5f9' },
+    yellow: { l:'🟡 Needs a look',    c:'#9a3412', bg:'#fff7ed' },
+    wait:   { l:'⏳ Waiting export',  c:'#6b7280', bg:'#f3f4f6' },
+    fraud:  { l:'🚩 Marked fraud',    c:'#7c1a56', bg:'#f3ecfb' },
+    done:   { l:'✅ Cleared',         c:'#027e60', bg:'#e7f6f1' },
+    ok:     { l:'✅ Matches',         c:'#027e60', bg:'#e7f6f1' },
+  };
+  const GCR_WHY = {
+    not_on_record:'GCash money in, not on record', texted_not_recorded:'Texted to Spawn Text, not recorded yet',
+    recorded_more:'Recorded MORE than GCash received', gcash_more:'GCash received MORE than recorded',
+    ref_typo:'Ref is 1–2 digits off a GCash payment (typo?)', ref_incomplete:'Ref incomplete — cannot be matched',
+    bank_ref:'Bank transfer ref — check by hand', future_date:'Paid date is in the future', after_export:'Paid after the last GCash export',
+    ref_not_in_gcash:'Ref on record is NOT in GCash', texted_ref_not_in_gcash:'Customer texted a ref that is NOT in GCash',
+    ref_is_money_out:'Ref is money OUT of GCash, not a payment in', old_ref:'Ref is from an older GCash payment',
+    old_ref_recorded_more:'Older GCash ref, recorded MORE than it paid', split:'One GCash payment for several accounts', matched:'Matches GCash' };
+  const GCR_DEC = { fixed:'Fixed', explained:'Explained', not_customer:'Not a customer', fraud:'🚩 Fraud' };
+  const gcrOpen = s => s === 'red' || s === 'grey' || s === 'yellow' || s === 'wait';
+  async function gcrLoad(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    gcrErr = '';
+    try { gcrRows = await allRows('v_gcash_review_marked', 'select=*'); } catch (e) { gcrRows = null; gcrErr = e.message || String(e); }
+    if (stTab !== 'gcr') return;
+    drawGcr();
+  }
+  function drawGcr(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    if (!gcrRows) { body.innerHTML = `<div class="cx-card"><div class="sc-empty">🔍 GCash review did not load${gcrErr ? ' — ' + esc(gcrErr.slice(0, 120)) : ''}</div></div>`; return; }
+    if (!gcrRows.length) { body.innerHTML = `<div class="cx-card"><div class="sc-empty">🔍 GCash review is switched off.</div></div>`; return; }
+    const short = d => d ? new Date(String(d).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    const when = ts => new Date(ts).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'});
+    const areaOf = r => { const m = /\(([^)]+)\)$/.exec(String(r.names || '').split(' + ')[0]); return m ? m[1].toUpperCase() : '—'; };
+    const areas = [...new Set(gcrRows.filter(r => r.names).map(areaOf))].sort();
+    const inArea = gcrRows.filter(r => !gcrArea || areaOf(r) === gcrArea);
+    const cnt = k => k === 'open' ? inArea.filter(r => gcrOpen(r.state)).length : inArea.filter(r => r.state === k).length;
+    const all = gcrRows, acc = all.filter(r => r.state === 'ok' || r.state === 'done').length, open = all.filter(r => gcrOpen(r.state)).length;
+    const red = all.filter(r => r.state === 'red').length, gin = all.filter(r => r.side === 'gcash');
+    const f0 = all[0] || {}, from = f0.review_from, upto = f0.statements_upto;
+    const rank = { red:0, fraud:1, grey:2, yellow:3, wait:4, done:5, ok:6 };
+    const list = inArea.filter(r => gcrFilt === 'open' ? gcrOpen(r.state) : r.state === gcrFilt)
+      .sort((a, b) => (rank[a.state] - rank[b.state]) || String(b.tx_at || b.paid_date || '').localeCompare(String(a.tx_at || a.paid_date || '')));
+    const kpis = Object.keys(GCR).map(k => `<div data-k="${k}" class="${gcrFilt===k?'on':''}" style="--c:${GCR[k].c}"><b>${cnt(k)}</b><span>${GCR[k].l}</span></div>`).join('');
+    const who = r => {
+      const subs = (r.subs || []), names = String(r.names || '').split(' + ');
+      if (subs.length && r.names) return subs.map((id, i) => `<b class="sd-name" style="color:#0146a0;cursor:pointer" onclick="window.subDetail&&window.subDetail(${Number(id)})">${esc(names[i] || '#' + id)}</b>`).join(' + ');
+      const base = r.kind === 'bank' ? 'Bank transfer (sender not shown)' : 'Unknown sender' + (r.sender_last4 ? ' …' + esc(r.sender_last4) : '');
+      return `<span style="color:#6b7280">${base}</span>` + (r.likely ? `<br><span style="font-size:11px">💡 Likely: ${r.likely_sub ? `<a href="#" onclick="window.subDetail&&window.subDetail(${Number(r.likely_sub)});return false" style="color:#0146a0">${esc(r.likely)}</a>` : esc(r.likely)}</span>` : '');
+    };
+    const table = list.length ? `<table class="sc-tbl"><thead><tr><th>Status</th><th>Date</th><th>Subscriber</th><th>Problem</th><th class="n">Recorded</th><th class="n">GCash</th><th>Ref</th><th>Decision</th></tr></thead><tbody>
+      ${list.map(r => { const s = GCR[r.state] || GCR.open; return `<tr style="background:${r.state === 'red' || r.state === 'fraud' ? '#fff7f7' : ''}">
+        <td><span class="st-badge" style="background:${s.bg};color:${s.c}">${s.l}</span></td>
+        <td style="white-space:nowrap">${r.side === 'gcash' && r.tx_at ? when(r.tx_at) : short(r.paid_date)}</td>
+        <td>${who(r)}</td>
+        <td>${esc(GCR_WHY[r.reason] || r.reason)}${r.recorded_by ? `<br><span style="font-size:11px;color:#9ca3af">recorded by ${esc(r.recorded_by)}</span>` : ''}</td>
+        <td class="n" style="white-space:nowrap">${r.recorded_amount != null ? peso(r.recorded_amount) : '—'}</td>
+        <td class="n" style="white-space:nowrap">${r.gcash_amount != null ? peso(r.gcash_amount) : '—'}</td>
+        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${esc(r.ref || r.given || '—')}</td>
+        <td style="font-size:12px">${r.decision ? `<b>${esc(GCR_DEC[r.decision] || r.decision)}</b> · ${esc(r.marked_by || '')}${r.mark_note ? `<br><span style="color:#6b7280">“${esc(r.mark_note)}”</span>` : ''}` : '<span style="color:#9ca3af">—</span>'}</td></tr>`; }).join('')}</tbody></table>`
+      : `<div class="sc-empty">${gcrFilt === 'open' ? '🎉 Everything is accounted for' : gcrFilt === 'red' ? '🎉 No possible fraud' : 'Nothing in this group'}</div>`;
+    body.innerHTML = `<div class="cx-card" style="padding:12px 14px;margin-bottom:12px">
+        <div style="font-size:18px"><b>${acc}</b> of <b>${all.length}</b> accounted for${open ? ` · <b>${open}</b> open` : ' ✓'}${red ? ` · <b style="color:#b91c1c">🔴 ${red}</b>` : ''}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:4px">Systematic GCash checking starts ${esc(short(from))}. Earlier months are not in this review.
+          GCash in since then: ${gin.length} payments, ${peso(gin.reduce((t, r) => t + Number(r.gcash_amount || 0), 0))} — ${gin.filter(r => r.color === 'ok').length} on record. Statements up to ${esc(short(upto))}.</div>
+        <div style="margin-top:8px"><button type="button" id="gcr-decide" style="padding:7px 12px;border:1px solid #025ac6;border-radius:9px;background:#025ac6;color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✍ Decide in Spawn Text</button>
+          <span style="font-size:11px;color:#6b7280;margin-left:6px">Fixed / Explained / Not a customer / 🚩 Fraud — with your Spawn Text PIN; only Wendell clears a 🔴</span></div></div>
+      <div class="st-k" id="gcr-k" style="grid-template-columns:repeat(8,minmax(0,1fr))">${kpis}</div>
+      <div class="cx-card"><div class="cx-head"><b>🔍 Every GCash item since ${esc(short(from))}</b><span style="font-size:11px;color:#6b7280">worst first · tap a name for the subscriber page</span>
+        <select id="gcr-area" style="margin-left:auto"><option value="">All areas</option>${areas.map(a => `<option${gcrArea===a?' selected':''}>${esc(a)}</option>`).join('')}</select></div>
+        <div class="sc-scroll">${table}</div></div>`;
+    body.querySelectorAll('#gcr-k div[data-k]').forEach(d => d.onclick = () => { gcrFilt = d.dataset.k; drawGcr(); });
+    const sel = body.querySelector('#gcr-area'); if (sel) sel.onchange = () => { gcrArea = sel.value; drawGcr(); };
+    const dec = body.querySelector('#gcr-decide'); if (dec) dec.onclick = () => { if (typeof window.spawnOpenReview === 'function') window.spawnOpenReview(); };
   }
 
   // 💰 GCash not on record (2026-11-06): incoming GCash payments whose ref is nowhere on record (payment record, payments,

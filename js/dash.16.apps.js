@@ -34,6 +34,8 @@
     if (f && f.__ready) send(); else { (f.__queue = f.__queue || []).push(msg); }
   }
   window.spawnOpenChat = function(sub){ openTextTab(); tell({ type:'spawntext:openSub', sub:Number(sub) }); };
+  // 🔍 GCash review → Spawn Text's 💳 GCash › 🔍 Review, where decisions are made with the PIN (2026-11-09)
+  window.spawnOpenReview = function(){ openTextTab(); tell({ type:'spawntext:openReview' }); };
 
   // ── pop-ups ──
   let unread = 0;
