@@ -625,10 +625,10 @@
     const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const bk = (book||[]).find(r => r.id === id) || {};
-    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null, gca = null;
+    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null, gca = null, evd = null;
     const q = (t, p, n) => sb(t, p, n).then(r => Array.isArray(r) ? r : []).catch(() => []);
     try {
-      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx, gca] = await Promise.all([
+      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx, gca, evd] = await Promise.all([
         sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes,photo_url`, 1),
         q('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,check_flag,balance&order=ym.desc`, 36),
         q('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
@@ -640,7 +640,9 @@
         // (2026-11-06) 💳 GCash: every GCash ref they texted + its proof in the GCash statements (view v_sub_gcash). null = not connected yet
         sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null),
         // every GCash ref in the system for them (payment record, payments, texted) checked against GCash (view v_sub_gcash_refs). null = not connected yet
-        sb('v_sub_gcash_refs', `subscriber_id=eq.${id}&select=*&order=paid_date.desc.nullslast`, 200).then(r => Array.isArray(r) ? r : null).catch(() => null)
+        sb('v_sub_gcash_refs', `subscriber_id=eq.${id}&select=*&order=paid_date.desc.nullslast`, 200).then(r => Array.isArray(r) ? r : null).catch(() => null),
+        // (2026-11-12) 📷 Evidence per month: every claim for them — book, app, text, Facebook screenshot — with the export's verdict and the recorder's note (view v_sub_evidence_v1). null = not connected yet
+        sb('v_sub_evidence_v1', `subscriber_id=eq.${id}&select=*&order=claimed_on.desc.nullslast`, 100).then(r => Array.isArray(r) ? r : null).catch(() => null)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
     } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
@@ -708,9 +710,40 @@
         + (gca.length ? '<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Paid</th><th>Ref</th><th>Recorded</th><th>In GCash?</th><th>Where</th></tr></thead><tbody>' + rowsH + '</tbody></table></div>'
           : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No GCash ref on record for this subscriber.</div>') + '</div>';
     };
-    const gcSysT = () => { const sysPays = live.filter(x => x.collector === 'System · GCash'); return sysPays.length ? `<div class="sd-card"><div class="sd-h green">🤖 Payments the system recorded from GCash</div>${sysPays.map(x => row(short(String(x.payment_date).slice(0,10)), peso(x.amount) + (x.coverage_from ? ' · for ' + mon(x.coverage_from) + (x.coverage_months > 1 ? ' + ' + (x.coverage_months - 1) + ' more' : '') : '') + (x.gcash_ref ? ' · ref …' + esc(String(x.gcash_ref).slice(-4)) : ''))).join('')}</div>` : ''; };
+    const gcSysT = () => { const sysPays = live.filter(x => x.collector === 'System · GCash' || x.collector === 'System · FB'); return sysPays.length ? `<div class="sd-card"><div class="sd-h green">🤖 Payments the system recorded from GCash</div>${sysPays.map(x => row(short(String(x.payment_date).slice(0,10)), peso(x.amount) + (x.coverage_from ? ' · for ' + mon(x.coverage_from) + (x.coverage_months > 1 ? ' + ' + (x.coverage_months - 1) + ' more' : '') : '') + (x.gcash_ref ? ' · ref …' + esc(String(x.gcash_ref).slice(-4)) : '') + (x.collector === 'System · FB' ? ' · <span style="color:#6b7280;font-weight:500">from a Facebook screenshot</span>' : ''))).join('')}</div>` : ''; };
+    // (2026-11-12) 📷 Evidence per month — one row per claim that money arrived (book / app / texted / Facebook screenshot), the export's
+    // verdict on it, and what the recorder would do with a screenshot (watch: "would add …"; on: "added …"). Read-only.
+    const EV_SRC = { book:['📖', 'BASHANG'], app:['🧾', 'app record'], 'book+app':['📖', 'BASHANG + app'], sms:['📱', 'texted ref'], fb:['📷', 'screenshot'], other:['•', 'other'] };
+    const EV_ST = { recorded:['#ecfdf5', '#065f46', '✓ recorded'], to_record:['#e0ecff', '#0146a0', '💡 confirmed, not yet recorded'], waiting_export:['#f1f5f9', '#475569', '⏳ waiting for the export'],
+                    check:['#fff7ed', '#9a3412', '⚠ needs a look'], unreadable:['#fef2f2', '#b91c1c', '✗ ref not readable'] };
+    const EV_VD = { ok:'in GCash', amount_diff:'amount differs', money_out:'money out', not_found:'not in GCash', after:'export not in yet', before:'before the statements', bank_ref:'bank ref', near_match:'near match', no_ref:'no ref', confirmed:'in GCash', wait:'export not in yet' };
+    const evNote = n => !n ? '' : /^would add/.test(n) ? ['#e0ecff', '#0146a0', '🤖 ' + n] : /^added/.test(n) ? ['#ecfdf5', '#065f46', '🤖 ' + n] : /^office decides/.test(n) ? ['#fff7ed', '#9a3412', '🤖 ' + n] : /^already/.test(n) ? ['#f1f5f9', '#475569', '🤖 ' + n] : ['#fef2f2', '#b91c1c', '🤖 ' + n];
+    const evidenceT = () => {
+      if (evd === null) return '';   // view not connected yet → the card is simply absent
+      const n = k => evd.filter(e => e.status === k).length, fb = evd.filter(e => e.source === 'fb').length;
+      const chips = gcChip('#ecfdf5', '#065f46', '✓ ' + n('recorded') + ' recorded') + (n('to_record') ? gcChip('#e0ecff', '#0146a0', '💡 ' + n('to_record') + ' to record') : '')
+        + (n('waiting_export') ? gcChip('#f1f5f9', '#475569', '⏳ ' + n('waiting_export') + ' waiting') : '') + (n('check') ? gcChip('#fff7ed', '#9a3412', '⚠ ' + n('check') + ' to check') : '')
+        + (n('unreadable') ? gcChip('#fef2f2', '#b91c1c', '✗ ' + n('unreadable') + ' unreadable') : '') + (fb ? gcChip('#eef2ff', '#3730a3', '📷 ' + fb + ' screenshot' + (fb === 1 ? '' : 's')) : '');
+      const rowsH = evd.map(e => {
+        const [si, sl] = EV_SRC[e.source] || EV_SRC.other, [b, c, t] = EV_ST[e.status] || EV_ST.check;
+        const forM = e.month_from ? mon(e.month_from) + (e.month_to && e.month_to !== e.month_from ? ' – ' + mon(e.month_to) : '') : '<span style="color:#9ca3af">—</span>';
+        const amt = (e.gcash_amount != null ? '<b>' + peso(e.gcash_amount) + '</b> in GCash' : '') + (e.claimed_amount != null && e.claimed_amount !== e.gcash_amount ? (e.gcash_amount != null ? ' · ' : '') + peso(e.claimed_amount) + ' claimed' : '');
+        const ref = e.ref ? '…' + esc(String(e.ref).slice(-4)) : e.given ? '…' + esc(String(e.given).slice(-4)) + ' <span style="color:#6b7280;font-size:11px">(' + String(e.given).length + ' digits)</span>' : '—';
+        const who = e.source === 'fb' ? (e.poster ? 'posted by ' + esc(e.poster) : '') + (e.bubble_text ? '<br><span style="color:#6b7280;font-size:11px">“' + esc(e.bubble_text) + '”</span>' : '') + (e.name_status === 'conflict' ? '<br><span class="sd-tag" style="background:#fff7ed;color:#9a3412;margin-top:4px">⚡ name conflict</span>' : '')
+          : (e.recorded_by ? esc(e.recorded_by) : '');
+        const note = e.record_note ? (([nb, nc, nt]) => '<br><span class="sd-tag" style="background:' + nb + ';color:' + nc + ';margin-top:4px;white-space:normal">' + esc(nt) + '</span>')(evNote(e.record_note)) : '';
+        return '<tr><td style="white-space:nowrap">' + (e.claimed_on ? short(String(e.claimed_on).slice(0,10)) : '—') + '</td><td style="white-space:nowrap">' + si + ' ' + sl + '</td><td style="white-space:nowrap">' + forM + '</td>'
+          + '<td style="white-space:nowrap">' + amt + '</td><td style="font-variant-numeric:tabular-nums;white-space:nowrap">' + ref + '</td>'
+          + '<td><span class="sd-tag" style="background:' + b + ';color:' + c + ';white-space:normal">' + esc(t) + '</span>' + (e.verdict && !/^(ok|confirmed)$/.test(e.verdict) ? ' <span style="color:#6b7280;font-size:11px">' + esc(EV_VD[e.verdict] || e.verdict) + '</span>' : '') + note + '</td>'
+          + '<td style="color:#4b5563;font-size:12px">' + who + '</td></tr>';
+      }).join('');
+      return '<div class="sd-card"><div class="sd-h">📷 Evidence per month <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· every claim that money arrived — BASHANG, app, texted ref, Facebook screenshot — checked against the GCash statements · what the system would record</span></div>'
+        + '<div style="margin-bottom:8px">' + chips + '</div>'
+        + (evd.length ? '<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>When</th><th>From</th><th>For</th><th>Amount</th><th>Ref</th><th>Status</th><th>Who / note</th></tr></thead><tbody>' + rowsH + '</tbody></table></div>'
+          : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No payment evidence for this subscriber yet.</div>') + '</div>';
+    };
     const gcashT = () => {
-      if (gca !== null) return gcAllT() + gcSysT();   // the full checker is connected
+      if (gca !== null) return evidenceT() + gcAllT() + gcSysT();   // the full checker is connected
       if (gcx === null) return `<div class="sd-card"><div class="sd-h">💳 GCash</div><div style="color:#6b7280;font-size:13px">The GCash view is not connected to Vendo Monitor yet.</div></div>`;
       const sysPays = live.filter(x => x.collector === 'System · GCash');
       return `<div class="sd-card"><div class="sd-h">💳 GCash refs they texted <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· checked against the GCash owner's statements · ${gcx.length}</span></div>
