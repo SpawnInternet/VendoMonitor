@@ -403,11 +403,11 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS_OLD = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS_OLD = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['rcp','📷 Receipts'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
   // 🔍 GCash review (2026-11-09): when it answers (switch gcash_review on + gateway line), it takes the GCash place and the
   // three older GCash lists move to the end (still there for history). Otherwise the bar is exactly as before.
   let gcrOk;   // undefined = not asked yet, null = asking, true/false = answer
-  const ST_TABS_REVIEW = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
+  const ST_TABS_REVIEW = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['rcp','📷 Receipts'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
   const stTabs = () => gcrOk === true ? ST_TABS_REVIEW : ST_TABS_OLD;
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false, textSide = null;   // textSide: v_sub_text rows by subscriber id (2026-11-07)
@@ -491,6 +491,7 @@
     else if (k === 'ded') dedLoad();
     else if (k === 'chk') chkLoad();
     else if (k === 'gcr') gcrLoad();
+    else if (k === 'rcp') rcpLoad();
     else if (k === 'gca') gcaLoad();
     else if (k === 'gcu') gcuLoad();
     else if (k === 'gcd') gcdLoad();
@@ -807,6 +808,64 @@
 
   window.subDetail = subDetail;
   sdCss();
+
+  // ══════════════════════════════════════════════════════════
+  // 📷 Receipts (2026-11-13) — every Messenger photo the GCash reader handled, newest first: what it read, what the export
+  // says, who it named, and what the recorder would do. Read-only (view v_fb_receipts_v1 through the gateway). Decisions are
+  // taken on the exceptions screen; this list shows the reader's work. Null = view not connected yet → "not connected" card.
+  // ══════════════════════════════════════════════════════════
+  let rcpRows = null, rcpErr = null, rcpF = 'all', rcpDays = 30, rcpQ = '';
+  const RCP_M = { confirmed:['#ecfdf5','#065f46','✓ in GCash'], amount_diff:['#fff7ed','#9a3412','⚠ amount differs'], money_out:['#fff7ed','#9a3412','⚠ money out'],
+                  near_match:['#eef2ff','#3730a3','≈ near match'], wait:['#f1f5f9','#475569','⏳ waiting for export'], not_found:['#fef2f2','#b91c1c','✗ not in GCash'],
+                  no_ref:['#fef2f2','#b91c1c','✗ no ref read'], not_receipt:['#f1f5f9','#475569','not a receipt'], error:['#fef2f2','#b91c1c','error'] };
+  const RCP_KIND = { gcash_send:'GCash', gcash_bills:'GCash bills', paper_or:'paper OR', bank:'bank', maya:'Maya', history_list:'history list', other:'other', none:'—' };
+  const rcpNote = t => !t ? '' : /^would add/.test(t) ? ['#e0ecff','#0146a0'] : /^added/.test(t) ? ['#ecfdf5','#065f46'] : /^office/.test(t) ? ['#fff7ed','#9a3412'] : /^already/.test(t) ? ['#f1f5f9','#475569'] : ['#fef2f2','#b91c1c'];
+  async function rcpLoad(){
+    rcpErr = null;
+    try { const r = await sb('v_fb_receipts_v1', `fb_ts=gte.${new Date(Date.now() - rcpDays * 86400000).toISOString()}&select=*&order=fb_ts.desc`, 1000); rcpRows = Array.isArray(r) ? r : null; }
+    catch (e) { rcpRows = null; rcpErr = e.message; }
+    drawRcp();
+  }
+  function drawRcp(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    if (rcpRows === null) { body.innerHTML = `<div class="sc-empty">📷 The receipts view is not connected to Vendo Monitor yet${rcpErr ? ' (' + esc(rcpErr) + ')' : ''}.</div>`; return; }
+    const rows = rcpRows, q = rcpQ.trim().toLowerCase();
+    const isRec = r => r.status === 'read' && r.is_receipt !== false;
+    const cnt = { all: rows.length, confirmed:0, check:0, unreadable:0, unnamed:0, conflict:0, not_receipt:0, would:0 };
+    rows.forEach(r => { if (!isRec(r)) { cnt.not_receipt++; return; } if (r.match === 'confirmed') cnt.confirmed++; else if (r.match === 'no_ref') cnt.unreadable++; else cnt.check++;
+                        if (!r.subscriber_id) cnt.unnamed++; if (r.name_status === 'conflict') cnt.conflict++; if (/^would add|^added/.test(r.record_note || '')) cnt.would++; });
+    const pick = r => rcpF === 'all' ? true : rcpF === 'confirmed' ? isRec(r) && r.match === 'confirmed' : rcpF === 'check' ? isRec(r) && !['confirmed','no_ref'].includes(r.match)
+      : rcpF === 'unreadable' ? isRec(r) && r.match === 'no_ref' : rcpF === 'unnamed' ? isRec(r) && !r.subscriber_id : rcpF === 'conflict' ? r.name_status === 'conflict'
+      : rcpF === 'would' ? /^would add|^added/.test(r.record_note || '') : rcpF === 'not_receipt' ? !isRec(r) : true;
+    const list = rows.filter(pick).filter(r => !q || [r.subscriber_name, r.poster, r.bubble_text, r.ref].some(v => String(v || '').toLowerCase().includes(q)));
+    const chip = (k, l, c) => `<button type="button" data-f="${k}" style="padding:4px 10px;border-radius:999px;border:1px solid ${rcpF===k?'#025ac6':'#e5e7eb'};background:${rcpF===k?'#e0ecff':'#fff'};color:${rcpF===k?'#0146a0':'#374151'};font-size:12px;font-weight:600;cursor:pointer">${l} ${c}</button>`;
+    const tag = (b, c, t) => `<span class="sd-tag" style="background:${b};color:${c};white-space:normal">${esc(t)}</span>`;
+    const trs = list.map(r => {
+      const [mb, mc, mt] = RCP_M[isRec(r) ? r.match : 'not_receipt'] || RCP_M.error;
+      const nm = r.subscriber_name ? `<a href="#" onclick="window.subDetail&&window.subDetail(${r.subscriber_id});return false" style="color:#025ac6;font-weight:700">${esc(r.subscriber_name)}</a>`
+               + (r.sub_source ? ` <span style="color:#6b7280;font-size:11px">· ${esc(r.sub_source)}</span>` : '') : '<span style="color:#b45309">unnamed</span>';
+      const conflict = r.name_status === 'conflict' ? '<br>' + tag('#fff7ed', '#9a3412', '⚡ bubble says ' + (r.name_text || '?')) : '';
+      const mon = r.months_from ? mon_(r.months_from) + (r.months_to && r.months_to !== r.months_from ? ' – ' + mon_(r.months_to) : '') : '—';
+      const note = r.record_note ? (([b, c]) => '<br>' + tag(b, c, '🤖 ' + r.record_note))(rcpNote(r.record_note)) : '';
+      const amt = r.gcash_amount != null ? '<b>' + peso(r.gcash_amount) + '</b>' : r.amount != null ? '<span style="color:#6b7280">' + peso(r.amount) + ' read</span>' : '—';
+      return `<tr><td style="white-space:nowrap">${dt(r.fb_ts)}</td><td style="font-size:12px">${esc(r.poster || '—')}${r.bubble_text ? '<br><span style="color:#6b7280;font-size:11px">“' + esc(String(r.bubble_text).slice(0, 60)) + '”</span>' : ''}</td>
+        <td style="font-variant-numeric:tabular-nums;white-space:nowrap">${r.ref ? '…' + esc(String(r.ref).slice(-4)) : '—'}${r.engine_agree === false ? ' <span title="the two OCR engines disagreed" style="color:#b45309">?</span>' : ''}${r.low_confidence ? ' <span title="low confidence" style="color:#b45309">⚠</span>' : ''}</td>
+        <td style="white-space:nowrap">${amt}</td><td>${tag(mb, mc, mt)}${r.duplicate_photo ? '<br><span style="color:#6b7280;font-size:11px">📷 photographed twice</span>' : ''}</td>
+        <td>${nm}${conflict}</td><td style="white-space:nowrap">${mon}${note}</td><td style="color:#6b7280;font-size:11px">${esc(RCP_KIND[r.receipt_kind] || r.receipt_kind || '')}</td></tr>`;
+    }).join('');
+    body.innerHTML = `<div class="cx-card"><div class="cx-head">📷 Receipts the reader handled <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· last ${rcpDays} days · ${rows.length} photos · what it read, what the export says, who it named, what the recorder would do</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0">
+        ${chip('all','All',cnt.all)}${chip('confirmed','✓ In GCash',cnt.confirmed)}${chip('check','⚠ Needs a look',cnt.check)}${chip('unreadable','✗ Unreadable',cnt.unreadable)}${chip('unnamed','Unnamed',cnt.unnamed)}${chip('conflict','⚡ Conflicts',cnt.conflict)}${chip('would','🤖 Would record',cnt.would)}${chip('not_receipt','Not a receipt',cnt.not_receipt)}
+        <select id="rcp-days" style="font-size:12px;padding:4px 6px;border-radius:8px;border:1px solid #e5e7eb"><option value="7"${rcpDays===7?' selected':''}>7 days</option><option value="30"${rcpDays===30?' selected':''}>30 days</option><option value="90"${rcpDays===90?' selected':''}>90 days</option></select>
+        <input id="rcp-q" type="search" placeholder="Search name, poster, bubble, ref" value="${esc(rcpQ)}" style="font-size:12px;padding:5px 9px;border-radius:8px;border:1px solid #e5e7eb;min-width:220px">
+        <span style="font-size:11px;color:#6b7280">decide on the ⚠ Exceptions screen</span></div>
+      ${list.length ? `<div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Posted</th><th>By · bubble</th><th>Ref</th><th>Amount</th><th>Export</th><th>Subscriber</th><th>Month · recorder</th><th>Kind</th></tr></thead><tbody>${trs}</tbody></table></div>`
+                   : '<div class="sc-empty">Nothing here.</div>'}</div>`;
+    body.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { rcpF = b.dataset.f; drawRcp(); });
+    const dsel = body.querySelector('#rcp-days'); if (dsel) dsel.onchange = () => { rcpDays = +dsel.value; rcpLoad(); };
+    const qi = body.querySelector('#rcp-q'); if (qi) qi.oninput = () => { rcpQ = qi.value; const pos = qi.selectionStart; drawRcp(); const q2 = body.querySelector('#rcp-q'); if (q2) { q2.focus(); q2.setSelectionRange(pos, pos); } };
+  }
+  const mon_ = ym => new Date(String(ym).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short',year:'2-digit'});
 
   // ⏳ Late — who owes, most owed first
   function drawLate(){
