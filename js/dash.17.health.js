@@ -217,7 +217,8 @@ async function dhLink(officeName, vendoId, vendoName){
     b.innerHTML = `<span class="nbadge am" id="nav-health-badge" style="display:none;"></span>
       <div class="ni" style="background:#ecfdf5"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#028867" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
       <span class="nl">Health</span>`;
-    if(skipBtn && skipBtn.nextSibling) nav.insertBefore(b, skipBtn.nextSibling); else nav.appendChild(b);
+    // 2026-11-13: the tabs sit inside group divs (.nav-grp) — insert next to Skipped inside its group, never on the bar itself
+    if(skipBtn && skipBtn.parentNode) skipBtn.parentNode.insertBefore(b, skipBtn.nextSibling); else nav.appendChild(b);
 
     const panel = document.createElement('div');
     panel.id = 'panel-health'; panel.className = 'panel';
