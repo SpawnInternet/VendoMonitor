@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Spawn HQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EDF1EF; --surface:#FFFFFF; --ink:#16201C; --muted:#5A6962; --line:#D2DBD6;
+  --accent:#1F5FD1; --ok:#2E8B57; --warn:#B87A0C; --bad:#C2372B; --off:#8C9A93;
+  --ok-bg:#E6F2EB; --warn-bg:#FBF0DA; --bad-bg:#FBE7E4;
+  --radius:10px; color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1412; --surface:#161E1B; --ink:#E5ECE8; --muted:#97A59F; --line:#28332F;
+    --accent:#6E9BFF; --ok:#4FBF84; --warn:#E3A43A; --bad:#F06A5C; --off:#6C7A74;
+    --ok-bg:#15291F; --warn-bg:#2E2412; --bad-bg:#331A17; color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font-family:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:15px;line-height:1.5;
+  padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.wrap{max-width:920px;margin:0 auto;padding:0 18px 48px}
+button{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header + nav */
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.bar{max-width:920px;margin:0 auto;padding:12px 18px 0;display:flex;align-items:center;gap:12px}
+.mark{font-weight:600;font-size:17px;letter-spacing:-.01em}
+.mark span{color:var(--muted);font-weight:400}
+.bar .spacer{flex:1}
+.ghost{background:none;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.ghost:hover{border-color:var(--muted)}
+nav{max-width:920px;margin:0 auto;padding:8px 18px 0;display:flex;gap:4px;overflow-x:auto}
+nav button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 10px;font-weight:500;color:var(--muted);cursor:pointer;white-space:nowrap}
+nav button[aria-current="page"]{color:var(--ink);border-bottom-color:var(--ink)}
+nav .count{display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:999px;font-size:12px;line-height:18px;text-align:center;background:var(--bad);color:#fff}
+
+/* roll call */
+.hero{padding:28px 0 8px}
+.hero h1{font-size:26px;line-height:1.25;font-weight:600;letter-spacing:-.015em;margin:0 0 6px;max-width:30ch}
+.hero p{margin:0;color:var(--muted)}
+.roll{display:flex;flex-wrap:wrap;gap:6px;margin:22px 0 4px}
+.pip{width:34px;height:46px;border-radius:7px;border:1px solid var(--line);background:var(--surface);position:relative;cursor:pointer;padding:0}
+.pip::after{content:"";position:absolute;left:50%;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--c)}
+.pip.red{border-color:var(--bad);background:var(--bad-bg)}
+.pip.amber{border-color:var(--warn);background:var(--warn-bg)}
+.legend{font-size:13px;color:var(--muted);margin:6px 0 0}
+
+/* sections + rows */
+h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-spacing:.02em}
+.list{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.row{display:grid;grid-template-columns:14px 1fr auto;gap:4px 12px;padding:13px 16px;border-top:1px solid var(--line);align-items:start}
+.row:first-child{border-top:0}
+.dot{width:10px;height:10px;border-radius:50%;margin-top:6px;background:var(--c)}
+.title{font-weight:500}
+.sub{font-size:13px;color:var(--muted);grid-column:2/4}
+.why{font-size:13px;grid-column:2/4}
+.why.red{color:var(--bad)} .why.amber{color:var(--warn)}
+.meta{font-size:13px;color:var(--muted);text-align:right;white-space:nowrap}
+.row.click{cursor:pointer}
+.row.click:hover{background:color-mix(in srgb,var(--surface) 92%,var(--ink))}
+.detail{grid-column:2/4;margin-top:8px}
+.jobs{width:100%;border-collapse:collapse;font-size:13px}
+.jobs th{font-weight:500;color:var(--muted);text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid var(--line)}
+.jobs td{padding:6px 8px 6px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.jobs tr:last-child td{border-bottom:0}
+.scroll{overflow-x:auto}
+.err{color:var(--bad)}
+.empty{padding:18px 16px;color:var(--muted)}
+.tag{display:inline-block;font-size:12px;padding:0 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-left:6px;vertical-align:1px}
+
+/* login */
+.login{max-width:360px;margin:16vh auto 0;padding:0 18px}
+.login h1{font-size:24px;font-weight:600;margin:0 0 4px}
+.login p{color:var(--muted);margin:0 0 22px}
+.login input{width:100%;font:inherit;padding:11px 12px;border-radius:var(--radius);border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.login button{margin-top:10px;width:100%;padding:11px;border-radius:var(--radius);border:0;background:var(--ink);color:var(--bg);font-weight:600;cursor:pointer}
+.login button:disabled{opacity:.6;cursor:default}
+.login .msg{min-height:22px;margin-top:10px;font-size:14px}
+.banner{margin:16px 0 0;padding:10px 14px;border-radius:var(--radius);background:var(--bad-bg);color:var(--bad);font-size:14px}
+@media (max-width:560px){
+  .hero h1{font-size:22px}
+  .row{grid-template-columns:14px 1fr}
+  .meta{grid-column:2;text-align:left}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(() => {
+  const URL_BASE = 'https://cviraqfhphhsonjmrtvu.supabase.co/rest/v1/rpc/';
+  const KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';
+  const STORE = 'spawnhq.session';
+  const TZ = 'Asia/Manila';
+  const VIEWS = ['today', 'employees', 'health', 'log'];
+  const LABEL = { today: 'Today', employees: 'Employees', health: 'Health', log: 'Log' };
+  const AREA = { apps: 'Apps', jobs: 'Digital employees', security: 'Security', data: 'Data', storage: 'Storage', feeds: 'Feeds' };
+  const COLOR = { red: 'var(--bad)', amber: 'var(--warn)', green: 'var(--ok)', off: 'var(--off)' };
+
+  const app = document.getElementById('app');
+  const state = { view: 'today', status: null, health: null, runs: null, actions: null, approvals: null,
+                  loadedAt: null, error: null, open: {}, jobs: {} };
+  let timer = null;
+
+  // ---------- helpers ----------
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmtTime = iso => iso ? new Date(iso).toLocaleString('en-PH', { timeZone: TZ, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+  const ago = iso => {
+    if (!iso) return 'never';
+    const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + ' min ago';
+    const h = Math.round(m / 60);
+    if (h < 48) return h + ' h ago';
+    return Math.round(h / 24) + ' days ago';
+  };
+  const interval = v => {
+    if (!v) return '';
+    const m = String(v).match(/(?:(\d+) days? )?(\d+):(\d+):\d+/);
+    if (!m) return String(v);
+    const d = +(m[1] || 0), h = +m[2], mi = +m[3];
+    if (d) return 'every ' + (d * 24 + h) + ' h';
+    if (h) return 'every ' + h + ' h' + (mi ? ' ' + mi + ' min' : '');
+    return 'every ' + mi + ' min';
+  };
+  const session = {
+    get() { try { const s = JSON.parse(localStorage.getItem(STORE) || 'null'); return s && new Date(s.expires_at) > new Date() ? s : null; } catch { return null; } },
+    set(s) { try { localStorage.setItem(STORE, JSON.stringify(s)); } catch {} },
+    clear() { try { localStorage.removeItem(STORE); } catch {} }
+  };
+
+  async function rpc(fn, body) {
+    const r = await fetch(URL_BASE + fn, {
+      method: 'POST',
+      headers: { apikey: KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('Server answered ' + r.status);
+    return r.json();
+  }
+  async function call(kind, params = {}) {
+    const s = session.get();
+    if (!s) { showLogin(); throw new Error('signed_out'); }
+    const res = await rpc('hq_call', { p_token: s.token, p_kind: kind, p_params: params });
+    if (!res.ok) {
+      if (res.error === 'signed_out') { session.clear(); showLogin('Your session ended. Sign in again.'); }
+      throw new Error(res.error || 'unknown error');
+    }
+    return res.data;
+  }
+
+  // ---------- login ----------
+  function showLogin(note) {
+    clearInterval(timer);
+    app.innerHTML = `
+      <main class="login">
+        <h1>Spawn HQ</h1>
+        <p>Reports and audits of every digital employee.</p>
+        <form id="lf" autocomplete="on">
+          <label for="pw" class="muted" style="font-size:13px">Owner passcode</label>
+          <input id="pw" type="password" autocomplete="current-password" required minlength="1">
+          <button id="go" type="submit">Sign in</button>
+          <div class="msg" id="msg" role="status">${note ? esc(note) : ''}</div>
+        </form>
+      </main>`;
+    const pw = document.getElementById('pw'), msg = document.getElementById('msg'), go = document.getElementById('go');
+    pw.focus();
+    pw.addEventListener('input', () => { msg.textContent = ''; msg.className = 'msg'; });
+    document.getElementById('lf').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!pw.value) { msg.textContent = 'Enter the passcode first.'; msg.className = 'msg err'; return; }
+      go.disabled = true; go.textContent = 'Signing in…';
+      try {
+        const r = await rpc('hq_login', { p_pass: pw.value });
+        if (r.ok) { session.set({ token: r.token, expires_at: r.expires_at }); start(); return; }
+        msg.className = 'msg err';
+        if (r.error === 'wrong') msg.textContent = `Wrong passcode. ${r.tries_left} ${r.tries_left === 1 ? 'try' : 'tries'} left before a 15-minute lock.`;
+        else if (r.error === 'locked') msg.textContent = `Too many wrong tries. Locked until ${fmtTime(r.until)}.`;
+        else if (r.error === 'not_set_up') msg.textContent = 'No passcode set yet. Set it once in the Supabase SQL editor with hq.set_owner_passcode.';
+        else msg.textContent = 'Sign-in failed: ' + (r.error || 'unknown error');
+      } catch (err) {
+        msg.className = 'msg err'; msg.textContent = 'Can’t reach the server. Check the connection and try again.';
+      }
+      go.disabled = false; go.textContent = 'Sign in';
+      pw.select();
+    });
+  }
+
+  // ---------- data ----------
+  async function load() {
+    try {
+      const [status, health, runs, actions, approvals] = await Promise.all([
+        call('status'), call('health'), call('runs', { limit: 60 }), call('actions', { limit: 60 }), call('approvals')
+      ]);
+      Object.assign(state, { status, health, runs, actions, approvals, loadedAt: new Date().toISOString(), error: null });
+    } catch (e) {
+      if (e.message === 'signed_out') return;
+      state.error = 'Couldn’t refresh: ' + e.message;
+    }
+    render();
+  }
+
+  function start() {
+    const h = location.hash.replace('#', '');
+    state.view = VIEWS.includes(h) ? h : 'today';
+    shell();
+    load();
+    clearInterval(timer);
+    timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60000);
+  }
+
+  // ---------- shell ----------
+  function shell() {
+    app.innerHTML = `
+      <header>
+        <div class="bar">
+          <div class="mark">Spawn HQ <span>· owner</span></div>
+          <div class="spacer"></div>
+          <span class="muted num" id="upd" style="font-size:13px"></span>
+          <button class="ghost" id="rf">Refresh</button>
+          <button class="ghost" id="so">Sign out</button>
+        </div>
+        <nav id="nav" aria-label="Sections"></nav>
+      </header>
+      <div class="wrap" id="main"><p class="muted" style="padding:28px 0">Loading…</p></div>`;
+    document.getElementById('rf').onclick = () => { document.getElementById('upd').textContent = 'Refreshing…'; load(); };
+    document.getElementById('so').onclick = async () => {
+      try { await call('logout'); } catch {}
+      session.clear(); showLogin('Signed out.');
+    };
+    renderNav();
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('nav'); if (!nav) return;
+    const needs = (state.status || []).filter(e => e.light === 'red').length
+                + ((state.health && state.health.findings) || []).filter(f => f.status === 'red').length
+                + (state.approvals || []).length;
+    nav.innerHTML = VIEWS.map(v => `<button data-v="${v}" ${v === state.view ? 'aria-current="page"' : ''}>${LABEL[v]}${v === 'today' && needs ? `<span class="count num">${needs}</span>` : ''}</button>`).join('');
+    nav.querySelectorAll('button').forEach(b => b.onclick = () => { state.view = b.dataset.v; history.replaceState(null, '', '#' + b.dataset.v); render(); window.scrollTo(0, 0); });
+  }
+
+  function render() {
+    const main = document.getElementById('main'); if (!main) return;
+    renderNav();
+    const upd = document.getElementById('upd');
+    if (upd) upd.textContent = state.loadedAt ? 'Updated ' + fmtTime(state.loadedAt) : '';
+    if (!state.status) { main.innerHTML = state.error ? `<div class="banner">${esc(state.error)}</div>` : '<p class="muted" style="padding:28px 0">Loading…</p>'; return; }
+    const banner = state.error ? `<div class="banner">${esc(state.error)}</div>` : '';
+    main.innerHTML = banner + ({ today, employees, health, log }[state.view])();
+    wire(main);
+  }
+
+  // ---------- views ----------
+  function today() {
+    const emps = state.status;
+    const red = emps.filter(e => e.light === 'red'), amber = emps.filter(e => e.light === 'amber');
+    const ok = emps.filter(e => e.light === 'green').length;
+    const finds = (state.health && state.health.findings) || [];
+    const fRed = finds.filter(f => f.status === 'red' && f.check_key !== 'employees');
+    const fAmber = finds.filter(f => f.status === 'amber' && f.check_key !== 'employees');
+    const appr = state.approvals || [];
+    const needs = red.length + fRed.length + appr.length;
+    const headline = needs === 0
+      ? 'Everything is running. Nothing needs you right now.'
+      : `${needs} ${needs === 1 ? 'thing needs' : 'things need'} you today.`;
+    const roll = emps.map(e => `<button class="pip ${e.light}" style="--c:${COLOR[e.light] || COLOR.off}" title="${esc(e.name)}: ${esc(e.reason || e.light)}" aria-label="${esc(e.name)}, ${esc(e.light)}" data-goto="${esc(e.id)}"></button>`).join('');
+    const itemRows = [
+      ...appr.map(a => row('amber', a.title, `${a.name} is waiting for your yes or no`, '', fmtTime(a.created_at))),
+      ...red.map(e => row('red', e.name, e.job, e.reason, 'seen ' + ago(e.last_seen), e.id)),
+      ...fRed.map(f => row('red', f.label, f.value, f.detail, AREA[f.area])),
+      ...amber.map(e => row('amber', e.name, e.job, e.reason, 'seen ' + ago(e.last_seen), e.id)),
+      ...fAmber.map(f => row('amber', f.label, f.value, f.detail, AREA[f.area]))
+    ];
+    return `
+      <section class="hero">
+        <h1>${esc(headline)}</h1>
+        <p>${ok} of ${emps.length} digital employees on duty and healthy${state.health && state.health.run ? ` · last full check ${esc(ago(state.health.run.finished_at))}` : ''}.</p>
+        <div class="roll" role="list" aria-label="Roll call">${roll}</div>
+        <p class="legend">Roll call: one tile per digital employee. Tap a tile to open it.</p>
+      </section>
+      <h2>Needs a look</h2>
+      <div class="list">${itemRows.length ? itemRows.join('') : '<div class="empty">Nothing waiting. Every employee and every check is green.</div>'}</div>`;
+  }
+
+  function row(light, title, sub, why, meta, empId) {
+    return `<div class="row${empId ? ' click' : ''}" ${empId ? `data-goto="${esc(empId)}" tabindex="0" role="button"` : ''}>
+      <span class="dot" style="--c:${COLOR[light] || COLOR.off}"></span>
+      <div class="title">${esc(title)}</div>
+      <div class="meta num">${esc(meta || '')}</div>
+      ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+      ${why ? `<div class="why ${light}">${esc(why)}</div>` : ''}
+    </div>`;
+  }
+
+  function employees() {
+    const rows = state.status.map(e => {
+      const open = !!state.open[e.id];
+      const j = state.jobs[e.id];
+      let detail = '';
+      if (open) {
+        if (!j) detail = '<div class="detail muted">Loading jobs…</div>';
+        else if (j.error) detail = `<div class="detail err">${esc(j.error)}</div>`;
+        else detail = `<div class="detail scroll">${jobsTable(j.data)}</div>`;
+      }
+      return `<div class="row click" data-emp="${esc(e.id)}" tabindex="0" role="button" aria-expanded="${open}" id="emp-${esc(e.id)}">
+        <span class="dot" style="--c:${COLOR[e.light] || COLOR.off}"></span>
+        <div class="title">${esc(e.name)}<span class="tag">${esc(e.permission)}</span></div>
+        <div class="meta num">seen ${esc(ago(e.last_seen))}</div>
+        <div class="sub">${esc(e.job)}</div>
+        <div class="sub num">${e.runs_24h} runs in 24 h · ${e.fails_24h} failed${e.expected_every ? ' · expected ' + esc(interval(e.expected_every)) : ''}</div>
+        ${e.reason ? `<div class="why ${e.light}">${esc(e.reason)}</div>` : ''}
+        ${detail}
+      </div>`;
+    }).join('');
+    return `<h2>Digital employees · ${state.status.length}</h2><div class="list">${rows}</div>`;
+  }
+
+  function jobsTable(list) {
+    if (!list.length) return '<div class="muted">No jobs or heartbeats linked yet.</div>';
+    return `<table class="jobs"><thead><tr><th>Job</th><th>Schedule / status</th><th>Last</th><th>24 h</th><th>Last error</th></tr></thead><tbody>${
+      list.map(x => {
+        const bad = x.type === 'cron' && x.runs_24h > 0 && x.fails_24h * 2 > x.runs_24h;
+        return `<tr>
+          <td>${esc(x.name)}${x.exists ? '' : ' <span class="err">(missing)</span>'}${x.type === 'heartbeat' ? ' <span class="tag">heartbeat</span>' : ''}${x.active === false ? ' <span class="tag">paused</span>' : ''}</td>
+          <td class="num">${esc(x.type === 'cron' ? (x.schedule || '—') + ' UTC' : (x.status || '—'))}</td>
+          <td class="num">${esc(ago(x.last_run))}</td>
+          <td class="num ${bad ? 'err' : ''}">${x.type === 'cron' ? `${x.fails_24h}/${x.runs_24h} failed` : '—'}</td>
+          <td class="muted">${esc(x.last_error || x.detail || '')}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  }
+
+  function health() {
+    const h = state.health;
+    if (!h || !h.run) return '<h2>Health</h2><div class="list"><div class="empty">The System doctor hasn’t finished a check yet. It runs every 2 hours at :50.</div></div>';
+    const groups = {};
+    h.findings.forEach(f => (groups[f.area] = groups[f.area] || []).push(f));
+    const order = ['apps', 'jobs', 'feeds', 'data', 'security', 'storage'].filter(a => groups[a]);
+    return `<section class="hero">
+        <h1>${esc(h.run.summary)}</h1>
+        <p>System doctor · checked ${esc(fmtTime(h.run.finished_at))} (${esc(ago(h.run.finished_at))}). Runs every 2 hours and only reads.</p>
+      </section>` +
+      order.map(a => `<h2>${esc(AREA[a])}</h2><div class="list">${groups[a].map(f => row(f.status, f.label, f.value, f.detail, '')).join('')}</div>`).join('');
+  }
+
+  function log() {
+    const runs = state.runs || [], acts = state.actions || [];
+    const runRows = runs.map(r => row(r.result === 'running' ? 'off' : r.result, r.name, r.summary || (r.result === 'running' ? 'Running now' : ''), '', fmtTime(r.started_at))).join('');
+    const actRows = acts.map(a => row(a.undone_at ? 'off' : 'green', `${a.name}: ${a.op} on ${a.table_name}`, `Row ${a.row_key}${a.undone_at ? ` · undone by ${a.undone_by} ${fmtTime(a.undone_at)}` : ''}`, '', fmtTime(a.at))).join('');
+    return `<h2>Changes made by employees</h2>
+      <div class="list">${actRows || '<div class="empty">No changes logged yet. When an employee with write permission changes a record, it shows here with the before and after, ready to undo.</div>'}</div>
+      <h2>Runs</h2>
+      <div class="list">${runRows || '<div class="empty">No runs logged yet.</div>'}</div>`;
+  }
+
+  // ---------- interactions ----------
+  function wire(root) {
+    root.querySelectorAll('[data-goto]').forEach(el => {
+      const go = () => { state.view = 'employees'; history.replaceState(null, '', '#employees'); openEmp(el.dataset.goto, true); };
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+    root.querySelectorAll('[data-emp]').forEach(el => {
+      const t = () => openEmp(el.dataset.emp, !state.open[el.dataset.emp]);
+      el.addEventListener('click', e => { if (e.target.closest('.detail')) return; t(); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t(); } });
+    });
+  }
+
+  async function openEmp(id, open) {
+    state.open[id] = open;
+    render();
+    if (open) {
+      const el = document.getElementById('emp-' + id);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+      try { state.jobs[id] = { data: await call('jobs', { employee: id }) }; }
+      catch (e) { if (e.message !== 'signed_out') state.jobs[id] = { error: 'Couldn’t load jobs: ' + e.message }; }
+      render();
+    }
+  }
+
+  window.addEventListener('hashchange', () => {
+    const h = location.hash.replace('#', '');
+    if (VIEWS.includes(h) && h !== state.view && document.getElementById('main')) { state.view = h; render(); }
+  });
+
+  session.get() ? start() : showLogin();
+})();
+</script>
+</body>
+</html>
