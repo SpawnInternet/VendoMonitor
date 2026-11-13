@@ -403,11 +403,11 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS_OLD = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['rcp','📷 Receipts'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
+  const ST_TABS_OLD = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['exc','⚠ Exceptions'],['rcp','📷 Receipts'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
   // 🔍 GCash review (2026-11-09): when it answers (switch gcash_review on + gateway line), it takes the GCash place and the
   // three older GCash lists move to the end (still there for history). Otherwise the bar is exactly as before.
   let gcrOk;   // undefined = not asked yet, null = asking, true/false = answer
-  const ST_TABS_REVIEW = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['rcp','📷 Receipts'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
+  const ST_TABS_REVIEW = [['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['exc','⚠ Exceptions'],['rcp','📷 Receipts'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
   const stTabs = () => gcrOk === true ? ST_TABS_REVIEW : ST_TABS_OLD;
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'subs'; } catch(e){ return 'subs'; } })();
   let book = null, bookAt = 0, bookBusy = false, textSide = null;   // textSide: v_sub_text rows by subscriber id (2026-11-07)
@@ -492,6 +492,7 @@
     else if (k === 'chk') chkLoad();
     else if (k === 'gcr') gcrLoad();
     else if (k === 'rcp') rcpLoad();
+    else if (k === 'exc') { if (typeof window.excTabLoad === 'function') window.excTabLoad(); else body.innerHTML = '<div class="sc-empty">⚠ The exceptions script is not loaded.</div>'; }
     else if (k === 'gca') gcaLoad();
     else if (k === 'gcu') gcuLoad();
     else if (k === 'gcd') gcdLoad();
