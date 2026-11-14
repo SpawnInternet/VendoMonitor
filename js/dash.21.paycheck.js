@@ -17,7 +17,7 @@
   // the five words and their colours (same as the sheet)
   // cell colours by the word's first letters (2026-11-14: 'To check' is gone — Received keeps its observation on the cell; ref problems say what they are)
   const cellColor = w => /^Received —/.test(w) ? ['#eef7f0','#166534'] : /^Received/.test(w) ? ['#e6f4ea','#15803d'] : /^NOT received/.test(w) ? ['#fde2e1','#b91c1c']
-    : /^No exported file/.test(w) ? ['#eceff1','#475569'] : w ? ['#fff4d6','#92400e'] : ['', '#374151'];
+    : /^No exported file|^Export has a gap/.test(w) ? ['#eceff1','#475569'] : w ? ['#fff4d6','#92400e'] : ['', '#374151'];   // Likely received (short ref) is amber: not 100 %
   const S = { rows:null, err:'', days:null, dayErr:'', names:null, months:[], month:'', area:'', q:'', onlyProblems:true, day:'', src:'v2' };
   const body = () => document.getElementById('st-body');
 
@@ -108,7 +108,7 @@
     // per exported day (last 21 days); a tap filters the book to the months paid that day
     const days = S.days === null ? `<div class="lv-none" style="padding:4px 14px 10px">${S.dayErr ? 'Per-day summary not connected yet (' + esc(S.dayErr) + ').' : 'Loading the days…'}</div>`
       : !S.days.length ? '<div class="lv-none" style="padding:4px 14px 10px">No exported day in the last 3 weeks.</div>'
-      : `<div class="pck-days">${S.days.map(d => `<div class="pck-day${S.day === d10(d.day) ? ' on' : ''}" data-day="${d10(d.day)}"><b>${esc(dayL(d.day))}</b>
+      : `<div class="pck-days">${S.days.map(d => `<div class="pck-day${S.day === d10(d.day) ? ' on' : ''}" data-day="${d10(d.day)}" style="${d.export_gap ? 'background:#eceff1;border-style:dashed' : ''}" title="${d.export_gap ? 'the running balance in the export does not add up on this day — lines are missing; nothing can be called NOT received here' : ''}"><b>${esc(dayL(d.day))}${d.export_gap ? ' · export gap' : ''}</b>
            GCash in <b style="display:inline;color:#0f2a5c">${d.gcash_in}</b> · ${peso(d.gcash_in_pesos)}<br>
            recorded ${d.recorded} · <span class="ok">received ${d.received}</span><br>
            ${Number(d.not_received) ? `<span class="no">NOT received ${d.not_received}</span>` : '<span style="color:#9ca3af">NOT received 0</span>'} · ${Number(d.unclaimed) ? `<span class="un">unclaimed ${d.unclaimed} · ${peso(d.unclaimed_pesos)}</span>` : '<span style="color:#9ca3af">unclaimed 0</span>'}</div>`).join('')}</div>`;
@@ -132,7 +132,7 @@
     };
     const trs = ids.map(id => { const s = nm[id] || {}; return `<tr class="${s.status === 'cutoff' ? 'cut' : ''}"><td class="nm"><a href="#" onclick="window.subDetail&&window.subDetail(${id});return false">${esc(s.name || ('#' + id))}</a>${s.area ? ` <span style="color:#9ca3af;font-size:10.5px">${esc(s.area)}</span>` : ''}</td>${S.months.map(m => cell(byId[id][m])).join('')}</tr>`; }).join('');
     b.innerHTML = `<div class="cx-card"><div class="cx-head"><b>📒 Payments · ${esc(monL(S.month))}</b><span style="font-size:11px;color:#6b7280">one answer per paid month, from all sources${S.src === 'v1' ? ' (book refs only until the gateway allows v2)' : ''} · same words as the sheet${fresh ? ' · computed ' + new Date(fresh).toLocaleTimeString('en-PH', { hour:'numeric', minute:'2-digit', timeZone:'Asia/Manila' }) : ''}</span></div>
-        <div class="pck-tiles">${tile('Received', c.ok, '#15803d', c.noted ? c.noted + ' with a note (amount / date)' : '')}${tile('NOT received', c.no, '#b91c1c', c.noAmt ? peso(c.noAmt) : '')}${tile('Ref cannot be checked', c.check, '#b45309', 'incomplete · unreadable · bank')}${tile('Cannot check', c.wait, '#64748b', 'no ref / no export')}${tile('Cash OR', c.cash, '#94a3b8')}</div>
+        <div class="pck-tiles">${tile('Received', c.ok, '#15803d', c.noted ? c.noted + ' with a note (amount / date)' : '')}${tile('NOT received', c.no, '#b91c1c', c.noAmt ? peso(c.noAmt) : '')}${tile('Not 100 %', c.check, '#b45309', 'short ref · incomplete · unreadable · bank')}${tile('Cannot check', c.wait, '#64748b', 'no ref · no export · export gap')}${tile('Cash OR', c.cash, '#94a3b8')}</div>
         <div style="padding:0 14px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Per exported day · GCash in vs recorded</div>${days}</div>
       <div class="cx-card"><div class="pck-f">
           <select id="pck-mon">${S.months.map(m => `<option value="${m}"${m === S.month ? ' selected' : ''}>${esc(monL(m))}</option>`).join('')}</select>
