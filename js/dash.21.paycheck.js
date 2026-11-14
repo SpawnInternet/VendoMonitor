@@ -15,7 +15,9 @@
   const monL = ym => new Date(d10(ym) + 'T12:00:00').toLocaleDateString('en-PH', { month:'long', year:'numeric' });
   const monS = ym => new Date(d10(ym) + 'T12:00:00').toLocaleDateString('en-PH', { month:'short', year:'2-digit' });
   // the five words and their colours (same as the sheet)
-  const CELL = { 'Received':['#e6f4ea','#15803d'], 'NOT received':['#fde2e1','#b91c1c'], 'To check':['#fff4d6','#92400e'], 'No exported file':['#eceff1','#475569'], 'No OR / ref':['#fff4d6','#92400e'] };
+  // cell colours by the word's first letters (2026-11-14: 'To check' is gone — Received keeps its observation on the cell; ref problems say what they are)
+  const cellColor = w => /^Received —/.test(w) ? ['#eef7f0','#166534'] : /^Received/.test(w) ? ['#e6f4ea','#15803d'] : /^NOT received/.test(w) ? ['#fde2e1','#b91c1c']
+    : /^No exported file/.test(w) ? ['#eceff1','#475569'] : w ? ['#fff4d6','#92400e'] : ['', '#374151'];
   const S = { rows:null, err:'', days:null, dayErr:'', names:null, months:[], month:'', area:'', q:'', onlyProblems:true, day:'', src:'v2' };
   const body = () => document.getElementById('st-body');
 
@@ -29,7 +31,7 @@
     }
     return out;
   }
-  const SEL = 'subscriber_id,ym,paid_date,amount,or_no,received_by,source,gcash_ref,gcash_amount,gcash_at,comment,state,label';
+  const SEL = 'subscriber_id,ym,paid_date,amount,or_no,received_by,source,gcash_ref,gcash_amount,gcash_at,comment,state,label';   // v1 has no `note`; the label carries it
   async function load(){
     S.err = ''; S.rows = null; S.days = null; draw();
     const from = new Date(); from.setMonth(from.getMonth() - 5, 1);
@@ -50,8 +52,8 @@
     draw();
   }
   function counts(list){
-    const c = { ok:0, no:0, check:0, wait:0, cash:0, n:0, noAmt:0 };
-    list.forEach(r => { if (!r.state) return; c[r.state] = (c[r.state] || 0) + 1; c.n++; if (r.state === 'no') c.noAmt += Number(r.amount || 0); });
+    const c = { ok:0, no:0, check:0, wait:0, cash:0, n:0, noAmt:0, noted:0 };
+    list.forEach(r => { if (!r.state) return; c[r.state] = (c[r.state] || 0) + 1; c.n++; if (r.state === 'no') c.noAmt += Number(r.amount || 0); if (r.note || /^Received —/.test(r.label || '')) c.noted++; });
     return c;
   }
   function css(){
@@ -114,7 +116,7 @@
     const areas = [...new Set(Object.keys(byId).map(id => nm[id] && nm[id].area || '—'))].sort();
     const cell = r => {
       if (!r) return '<td class="dt"></td><td class="n"></td><td class="ref"></td><td class="by"></td><td class="c mend"></td>';
-      const w = r.label || ''; const [bg, fg] = CELL[w] || ['', '#374151'];
+      const w = r.label || ''; const [bg, fg] = cellColor(w);
       const why = r.comment && r.comment !== w ? r.comment : (w === 'Received' && r.gcash_at ? 'GCash ' + peso(r.gcash_amount) + ' on ' + mdy(r.gcash_at) : '');
       const hit = S.day && d10(r.paid_date) === S.day ? ';outline:2px solid #025ac6;outline-offset:-2px' : '';
       return `<td class="dt" style="${hit}">${esc(mdy(r.paid_date))}</td><td class="n">${Number(r.amount).toLocaleString('en-PH')}</td><td class="ref">${esc(r.or_no || '')}</td><td class="by">${esc(r.received_by || '')}</td>
@@ -122,7 +124,7 @@
     };
     const trs = ids.map(id => { const s = nm[id] || {}; return `<tr class="${s.status === 'cutoff' ? 'cut' : ''}"><td class="nm"><a href="#" onclick="window.subDetail&&window.subDetail(${id});return false">${esc(s.name || ('#' + id))}</a>${s.area ? ` <span style="color:#9ca3af;font-size:10.5px">${esc(s.area)}</span>` : ''}</td>${S.months.map(m => cell(byId[id][m])).join('')}</tr>`; }).join('');
     b.innerHTML = `<div class="cx-card"><div class="cx-head"><b>📒 Payments · ${esc(monL(S.month))}</b><span style="font-size:11px;color:#6b7280">one answer per paid month, from all sources${S.src === 'v1' ? ' (book refs only until the gateway allows v2)' : ''} · same five words as the sheet</span></div>
-        <div class="pck-tiles">${tile('Received', c.ok, '#15803d')}${tile('NOT received', c.no, '#b91c1c', c.noAmt ? peso(c.noAmt) : '')}${tile('To check', c.check, '#b45309')}${tile('Cannot check', c.wait, '#64748b', 'no ref / no export')}${tile('Cash OR', c.cash, '#94a3b8')}</div>
+        <div class="pck-tiles">${tile('Received', c.ok, '#15803d', c.noted ? c.noted + ' with a note (amount / date)' : '')}${tile('NOT received', c.no, '#b91c1c', c.noAmt ? peso(c.noAmt) : '')}${tile('Ref cannot be checked', c.check, '#b45309', 'incomplete · unreadable · bank')}${tile('Cannot check', c.wait, '#64748b', 'no ref / no export')}${tile('Cash OR', c.cash, '#94a3b8')}</div>
         <div style="padding:0 14px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Per exported day · GCash in vs recorded</div>${days}</div>
       <div class="cx-card"><div class="pck-f">
           <select id="pck-mon">${S.months.map(m => `<option value="${m}"${m === S.month ? ' selected' : ''}>${esc(monL(m))}</option>`).join('')}</select>
