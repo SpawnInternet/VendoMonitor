@@ -205,7 +205,7 @@
     } else {
       const m = F.data.month, c = F.data.candidates || [], fx = F.data.fix;
       const [w, bg, fg] = cellColor(m.label || '');
-      const WHY = { typo:['🔁 looks like a typo of the written ref', '#e0ecff', '#0146a0'], last_digits:['🔢 same last digits as written', '#eef2ff', '#3730a3'] };
+      const WHY = { typo:['🔁 looks like a typo of the written ref', '#e0ecff', '#0146a0'], last_digits:['🔢 same last digits as written', '#eef2ff', '#3730a3'], sender:['📱 sent from their own number / account', '#ecfdf5', '#065f46'] };
       const cand = x => `<div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;border:1px solid ${x.why && x.why !== 'window' ? '#93c5fd' : x.same_amount ? '#bbf7d0' : '#e5e7eb'};background:${x.why && x.why !== 'window' ? '#f5f9ff' : x.same_amount ? '#f0fdf4' : '#fff'};border-radius:10px;padding:8px 10px;margin-top:6px">
           ${WHY[x.why] ? `<span class="sd-tag" style="background:${WHY[x.why][1]};color:${WHY[x.why][2]};font-weight:700">${WHY[x.why][0]}</span>` : ''}${x.bank ? '<span class="sd-tag" style="background:#fff7ed;color:#9a3412">🏦 bank transfer in</span>' : ''}
           <b style="font-size:15px">${peso(x.amount)}</b>${x.same_amount ? '' : '<span style="color:#b45309;font-size:12px">amount differs</span>'}<span style="color:#6b7280">${esc(dtl(x.at))}${x.days_off ? ' · ' + x.days_off + ' day' + (x.days_off === 1 ? '' : 's') + ' off' : ' · same day'}</span>
