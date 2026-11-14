@@ -403,14 +403,31 @@
   //   👥 Subscribers · ⏳ Late · 🧾 Payments · 📶 No internet · 📒 Old book
   // Numbers come from v_sub_book = the same month table Spawn Collect uses.
   // ══════════════════════════════════════════════════════════
-  const ST_TABS_OLD = [['pck','📒 Payments'],['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['exc','⚠ Exceptions'],['rcp','📷 Receipts'],['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['ded','📶 No internet'],['book','📒 Old book']];
+  // 2026-11-14 (Wendell: "summarize tabs into one, the sheet-like book in one tab, search bar in all tabs"): the book first; the GCash lists and the old book sit behind More ▾
+  const ST_TABS_OLD = [['pck','📒 Payments'],['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Daily payments'],['chk','✅ Office check'],['exc','⚠ Exceptions'],['rcp','📷 Receipts'],['ded','📶 No internet']];
+  const ST_MORE_OLD = [['gca','💳 GCash audit'],['gcu','💰 GCash not on record'],['gcd','📅 GCash per day'],['book','📒 Old book']];
   // 🔍 GCash review (2026-11-09): when it answers (switch gcash_review on + gateway line), it takes the GCash place and the
   // three older GCash lists move to the end (still there for history). Otherwise the bar is exactly as before.
   let gcrOk;   // undefined = not asked yet, null = asking, true/false = answer
-  const ST_TABS_REVIEW = [['pck','📒 Payments'],['subs','👥 Subscribers'],['late','⏳ Late'],['pays','🧾 Payments'],['chk','✅ Office check'],['gcr','🔍 GCash review'],['exc','⚠ Exceptions'],['rcp','📷 Receipts'],['ded','📶 No internet'],['book','📒 Old book'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day']];
+  const ST_TABS_REVIEW = ST_TABS_OLD;
+  const ST_MORE_REVIEW = [['gcr','🔍 GCash review'],['gca','💳 GCash audit (all)'],['gcu','💰 Not on record (all)'],['gcd','📅 GCash per day'],['book','📒 Old book']];
   const stTabs = () => gcrOk === true ? ST_TABS_REVIEW : ST_TABS_OLD;
+  const stMore = () => gcrOk === true ? ST_MORE_REVIEW : ST_MORE_OLD;
+  let stMoreOpen = false;
   let stTab = (()=>{ try { return localStorage.getItem('sub_tab') || 'pck'; } catch(e){ return 'pck'; } })();   // 2026-11-14: the book opens first
+  // 2026-11-14: one search box in the bar filters whatever tab is open — every table row (not totals) whose text lacks the words is hidden
+  let stQ = '', stSearchTimer = null;
+  function stApplySearch(){
+    const body = document.getElementById('st-body'); if (!body) return;
+    const words = stQ.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    body.querySelectorAll('table tbody tr').forEach(tr => { if (tr.classList.contains('tot')) return; const t = tr.textContent.toLowerCase(); tr.style.display = words.every(w => t.includes(w)) ? '' : 'none'; });
+  }
+  new MutationObserver(() => { if (!stQ) return; clearTimeout(stSearchTimer); stSearchTimer = setTimeout(stApplySearch, 60); }).observe(document.body, { childList: true, subtree: true });
+  window.stCopy = (t, btn) => { const done = () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = o; }, 900); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, done); else { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove(); done(); } };
+  const cpy = t => t ? `<button type="button" class="st-cp" title="Copy" onclick="event.stopPropagation();window.stCopy(this.dataset.v,this)" data-v="${esc(t)}">📋</button>` : '';
   let book = null, bookAt = 0, bookBusy = false, textSide = null;   // textSide: v_sub_text rows by subscriber id (2026-11-07)
+  let subX = null;   // 2026-11-14: fb_name / gps / address per subscriber + the number Spawn Text uses (remind_contacts primary)
   let bf = {state:'', area:'', q:'', how:''};
   let payDate = '', payRows = [], payFilt = '';
   const STATE = {
@@ -430,6 +447,8 @@
       #st-bar .t{font-size:15px;font-weight:800;color:#025AC6;margin-right:6px}
       #st-bar button{padding:7px 12px;border:1px solid #e5e7eb;border-radius:9px;background:#fff;font-size:13px;font-weight:700;color:#334155;cursor:pointer;font-family:inherit}
       #st-bar button.on{background:#025AC6;border-color:#025AC6;color:#fff}
+      .st-cp{border:1px solid #e5e7eb;background:#fff;border-radius:6px;font-size:11px;padding:1px 5px;cursor:pointer;margin-left:4px;line-height:1.4;vertical-align:middle}
+      .st-cp:hover{background:#eef4ff;border-color:#025ac6}
       #st-body{padding:0 12px 80px}
       .st-k{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-bottom:12px}
       @media(max-width:900px){.st-k{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -470,8 +489,14 @@
       const live = document.getElementById('sub-live');
       panel.insertBefore(bar, live ? live.nextSibling : panel.firstChild);
     }
-    bar.innerHTML = '<span class="t">📶 Subscribers</span>' + stTabs().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('');
-    bar.querySelectorAll('button').forEach(b => b.onclick = () => stGo(b.dataset.k));
+    const inMore = stMore().some(([k]) => k === stTab);
+    bar.innerHTML = '<span class="t">📶 Subscribers</span>' + stTabs().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('')
+      + `<button type="button" id="st-more" class="${inMore ? 'on' : ''}" style="color:#6b7280">More ▾</button>`
+      + (stMoreOpen || inMore ? stMore().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}" style="font-weight:600">${l}</button>`).join('') : '')
+      + `<input id="st-q-all" type="search" placeholder="🔍 Search this tab" value="${esc(stQ)}" style="margin-left:auto;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;min-width:200px">`;
+    bar.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => stGo(b.dataset.k));
+    bar.querySelector('#st-more').onclick = () => { stMoreOpen = !stMoreOpen; stShell(false); };
+    const qa = bar.querySelector('#st-q-all'); qa.oninput = () => { stQ = qa.value; stApplySearch(); };
     if (gcrOk === undefined) {   // once per page load: is the GCash review on? (no rows = off, or the gateway line is missing)
       gcrOk = null;
       sb('v_gcash_review_marked', 'select=item_key', 1).then(r => { gcrOk = Array.isArray(r) && r.length > 0; }).catch(() => { gcrOk = false; })
@@ -502,9 +527,11 @@
     if (book && !force && Date.now() - bookAt < 60000) return;
     if (bookBusy) return; bookBusy = true;
     try {
-      const [r, t] = await Promise.all([sb('v_sub_book', 'select=*&order=name.asc', 3000), sb('v_sub_text', 'select=*', 3000).catch(() => null)]);
+      const [r, t, x, c] = await Promise.all([sb('v_sub_book', 'select=*&order=name.asc', 3000), sb('v_sub_text', 'select=*', 3000).catch(() => null),
+        sb('subscribers', 'select=id,fb_name,lat,lng,address,phone&order=id.asc', 3000).catch(() => null), sb('remind_contacts', 'is_primary=eq.true&select=subscriber_id,address,channel', 3000).catch(() => null)]);
       if (Array.isArray(r)) { book = r; bookAt = Date.now(); }
       if (Array.isArray(t)) { textSide = {}; t.forEach(x => { textSide[x.subscriber_id] = x; }); }
+      if (Array.isArray(x)) { subX = {}; x.forEach(v => { subX[v.id] = v; }); if (Array.isArray(c)) c.forEach(v => { if (subX[v.subscriber_id] && !subX[v.subscriber_id].text) subX[v.subscriber_id].text = v.address; }); }
     }
     finally { bookBusy = false; }
   }
@@ -562,21 +589,25 @@
     const ORDER = ['today','late','partial','due_soon','upcoming','paid','free','no_rate','no_due_day','disconnected'];
     let list = book.filter(r => { const s = stateOf(r, pt);
       return (!bf.state || s===bf.state || (bf.state==='paid' && s==='today')) && (!bf.area || (r.area||'—')===bf.area) && (!bf.how || howOf(r)===bf.how)
-        && (!bf.q || (String(r.name||'')+' '+String(r.acct_no||'')+' '+String(r.phone||'')).toLowerCase().includes(bf.q)); });
+        && (!bf.q || (String(r.name||'')+' '+String(r.acct_no||'')+' '+String(r.phone||'')+' '+(subX && subX[r.id] ? String(subX[r.id].fb_name||'')+' '+String(subX[r.id].text||'') : '')).toLowerCase().includes(bf.q)); });
     list.sort((a,b)=>{ const sa=stateOf(a,pt), sb_=stateOf(b,pt);
       if (sa==='today' && sb_==='today') return String(pt[b.id].at).localeCompare(String(pt[a.id].at));     // newest payment first
       return (ORDER.indexOf(sa)-ORDER.indexOf(sb_)) || (Number(b.owed)-Number(a.owed)) || String(a.name).localeCompare(String(b.name)); });
     const shown = list.slice(0, 600);
-    el.innerHTML = `<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th class="n">Due day</th><th class="n">Monthly</th><th>This month</th><th>Still owes</th><th>Last paid</th>${textSide ? '<th>📱 Texting</th>' : ''}<th>Pays by</th><th>Collector</th></tr></thead><tbody>`
+    const contactCell = r => { const x = subX && subX[r.id] || {}; const ph = x.text || r.phone || x.phone || ''; const fb = x.fb_name || ''; const gps = x.lat != null && x.lng != null ? x.lat + ',' + x.lng : '';
+      return `<td style="font-size:12px;white-space:nowrap">${ph ? esc(ph) + (x.text ? ' <span title="the number Spawn Text uses" style="color:#0146a0">📱</span>' : '') + cpy(ph) : '<span style="color:#b45309">no number</span>'}</td>`
+        + `<td style="font-size:12px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fb ? esc(fb) + cpy(fb) : '<span style="color:#9ca3af">—</span>'}</td>`
+        + `<td style="font-size:12px;white-space:nowrap">${gps ? `<a href="https://www.google.com/maps?q=${gps}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#025ac6">📍 Maps</a>` + cpy(gps) : '<span style="color:#b45309">no pin</span>'}</td>`; };
+    el.innerHTML = `<table class="sc-tbl"><thead><tr><th>Subscriber</th><th>Area</th><th>Contact</th><th>Facebook</th><th>GPS</th><th class="n">Due day</th><th class="n">Monthly</th><th>This month</th><th>Still owes</th><th>Last paid</th>${textSide ? '<th>📱 Texting</th>' : ''}<th>Pays by</th><th>Collector</th></tr></thead><tbody>`
       + shown.map(r => { const st = stateOf(r, pt), s = STATE[st] || STATE.upcoming, t = pt[r.id];
           const tm = st==='today' ? `✓ Paid today ${t.at?new Date(t.at).toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',timeZone:'Asia/Manila'}):''} · ${peso(t.amt)} · ${esc(t.who)}`
                    : st==='paid' ? 'Paid '+peso(r.this_paid) : st==='partial' ? 'Paid '+peso(r.this_paid)+' · balance '+peso(r.this_balance) : s.l;
           const owes = Number(r.owed)>0 ? `<b style="color:#d91934">${peso(r.owed)}</b>${(r.unpaid_months||[]).length?' <span style="color:#6b7280">'+esc((r.unpaid_months||[]).join(', '))+'</span>':''}` : '<span style="color:#9ca3af">—</span>';
-          return `<tr class="sd-row-click" onclick="window.subDetail&&window.subDetail(${r.id})"${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}</td><td>${esc(r.area||'—')}</td>
+          return `<tr class="sd-row-click" onclick="window.subDetail&&window.subDetail(${r.id})"${st==='today'?' style="background:#f0fdfa"':''}><td><b class="sd-name" data-sd="${r.id}" style="color:#0146a0">${esc(r.name||'')}</b>${r.acct_no?` <span style="color:#9ca3af">#${esc(r.acct_no)}</span>`:''}${cpy(r.name)}</td><td>${esc(r.area||'—')}</td>${contactCell(r)}
             <td class="n">${r.due_day||'—'}</td><td class="n">${r.rate?peso(r.rate):'—'}</td>
             <td><span class="st-badge" style="background:${s.b};color:${s.c}">${tm}</span></td><td>${owes}</td>
             <td style="white-space:nowrap">${r.last_paid?short(r.last_paid)+' · '+peso(r.last_amount)+(r.last_for?' <span style="color:#6b7280">for '+new Date(String(r.last_for).slice(0,10)+'T12:00:00').toLocaleDateString('en-PH',{month:'short'})+'</span>':''):'—'}</td>${textSide ? '<td style="font-size:12px">' + textCell(textSide[r.id], st) + '</td>' : ''}<td>${esc(howOf(r))}</td><td>${esc(r.usual_collector||'—')}</td></tr>`; }).join('')
-      + `<tr class="tot"><td colspan="5">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="${textSide ? 4 : 3}"></td></tr></tbody></table>`;
+      + `<tr class="tot"><td colspan="8">${list.length} subscriber${list.length===1?'':'s'}${list.length>shown.length?' (first '+shown.length+' shown)':''}</td><td>${peso(list.reduce((s,r)=>s+Number(r.owed||0),0))} still owed</td><td colspan="${textSide ? 4 : 3}"></td></tr></tbody></table>`;
   }
 
   // ── Subscriber detail (2026-11-03): tap a name → a page like the vendo one — Info · Ledger · Contact · Spawn Text
@@ -628,10 +659,10 @@
     const onKey = ev => { if (ev.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const bk = (book||[]).find(r => r.id === id) || {};
-    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null, gca = null, evd = null;
+    let sub, months = [], pays = [], deds = [], nums = [], msgs = [], proms = [], tasks = [], gcx = null, gca = null, evd = null, gcLoaded = false;
     const q = (t, p, n) => sb(t, p, n).then(r => Array.isArray(r) ? r : []).catch(() => []);
     try {
-      [sub, months, pays, deds, nums, msgs, proms, tasks, gcx, gca, evd] = await Promise.all([
+      [sub, months, pays, deds, nums, msgs, proms, tasks] = await Promise.all([
         sb('subscribers', `id=eq.${id}&select=id,name,acct_no,area,address,phone,fb_name,due_day,pay_pref_day,monthly_amount,plan_type,plan_mbps,status,billing_status,billing_note,pay_mode,usual_collector,date_installed,installer,pppoe_username,pppoe_server,is_online,last_seen_online,lat,lng,gps_place,gps_updated_at,gps_source,is_vendo_owner,notes,photo_url`, 1),
         q('sub_months', `subscriber_id=eq.${id}&select=ym,paid_date,amount,or_no,received_by,source,check_flag,balance&order=ym.desc`, 36),
         q('subscriber_payments', `subscriber_id=eq.${id}&select=id,payment_date,amount,collector,pay_method,paper_no,gcash_ref,bank_ref,invoice_no,coverage_from,coverage_to,coverage_months,note,voided_at,void_reason&order=payment_date.desc,id.desc`, 60),
@@ -639,18 +670,13 @@
         q('remind_contacts', `subscriber_id=eq.${id}&select=channel,address,is_primary,verified_at,verified_by,source,created_at&order=is_primary.desc,created_at.asc`, 20),
         q('remind_messages', `subscriber_id=eq.${id}&select=direction,address,body,intent,template,ym,status,error,created_at,sent_at&order=created_at.desc`, 40),
         q('remind_promises', `subscriber_id=eq.${id}&select=promised_date,amount,months,status,note,created_at,resolved_at&order=created_at.desc`, 10),
-        q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10),
-        // (2026-11-06) 💳 GCash: every GCash ref they texted + its proof in the GCash statements (view v_sub_gcash). null = not connected yet
-        sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null),
-        // every GCash ref in the system for them (payment record, payments, texted) checked against GCash (view v_sub_gcash_refs). null = not connected yet
-        sb('v_sub_gcash_refs', `subscriber_id=eq.${id}&select=*&order=paid_date.desc.nullslast`, 200).then(r => Array.isArray(r) ? r : null).catch(() => null),
-        // (2026-11-12) 📷 Evidence per month: every claim for them — book, app, text, Facebook screenshot — with the export's verdict and the recorder's note (view v_sub_evidence_v1). null = not connected yet
-        sb('v_sub_evidence_v1', `subscriber_id=eq.${id}&select=*&order=claimed_on.desc.nullslast`, 100).then(r => Array.isArray(r) ? r : null).catch(() => null)
+        q('remind_tasks', `subscriber_id=eq.${id}&select=kind,reason,status,created_by,created_at,done_by,done_at,note&order=created_at.desc`, 10)
       ]);
       sub = Array.isArray(sub) ? sub[0] : sub;
     } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
     if (!sub) { pg.innerHTML = '<div class="sd-win"><div style="padding:24px;color:#d91934">Subscriber not found.</div></div>'; return; }
     const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
+    const textNo = (nums.find(n => n.is_primary) || nums[0] || {}).address || '';   // the number Spawn Text actually uses
     const stt = STATE[bk.state] || null;
     const row = (k, v) => `<div class="sd-row"><span>${k}</span><span>${v == null || v === '' ? '<span style="color:#9ca3af;font-weight:500">—</span>' : v}</span></div>`;
     // notes: small grey lines, one per entry (split on "|"), folded to 2 lines with a tap to open
@@ -660,7 +686,15 @@
     const live = pays.filter(x => !x.voided_at), vd = pays.filter(x => x.voided_at);
     const lifetime = live.reduce((a,x)=>a+Number(x.amount||0),0);
     const dd = sub.due_day ? `every ${sub.due_day}${sub.pay_pref_day && sub.pay_pref_day !== sub.due_day ? ' · prefers the ' + sub.pay_pref_day : ''}` : '';
-    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text'],['gcash','💳 GCash' + (gca && gca.length ? ' ' + gca.length : gcx && gcx.length ? ' ' + gcx.length : '')]];
+    const tabs = [['info','Info'],['ledger','Ledger'],['contact','Contact'],['text','📱 Spawn Text'],['gcash','💳 GCash']];
+    // 2026-11-14 (speed): the three GCash views are the slow part of this page (they recompute the whole check each time), so they load
+    // only when the 💳 GCash tab is opened — the page itself now shows at once
+    const gcLoad = async () => { if (gcLoaded) return; gcLoaded = true;
+      [gcx, gca, evd] = await Promise.all([
+        sb('v_sub_gcash', `subscriber_id=eq.${id}&select=*&order=texted_at.desc`, 30).then(r => Array.isArray(r) ? r : null).catch(() => null),
+        sb('v_sub_gcash_refs', `subscriber_id=eq.${id}&select=*&order=paid_date.desc.nullslast`, 200).then(r => Array.isArray(r) ? r : null).catch(() => null),
+        sb('v_sub_evidence_v1', `subscriber_id=eq.${id}&select=*&order=claimed_on.desc.nullslast`, 100).then(r => Array.isArray(r) ? r : null).catch(() => null)
+      ]); };
     // 💳 GCash proof for one texted ref — same reading as Spawn Text's badge
     const gcProof = g => {
       const when = g.tx_at ? ' · ' + dt(g.tx_at) : '';
@@ -765,8 +799,8 @@
           ${row('Line', sub.is_online == null ? '' : sub.is_online ? '<span style="color:#027e60">online</span>' : '<span style="color:#d91934">offline</span>' + (sub.last_seen_online ? ' <span style="color:#6b7280;font-weight:500">last seen ' + dt(sub.last_seen_online) + '</span>' : ''))}
           ${row('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${notesRow(sub.notes)}
           <div class="sd-h pink" style="margin-top:14px">📍 Location &amp; contact</div>
-          ${row('Address', esc(sub.address))}${row('Contact', esc(sub.phone))}${row('Facebook', esc(sub.fb_name))}
-          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
+          ${row('Address', esc(sub.address) + cpy(sub.address))}${row('Contact', (textNo ? esc(textNo) + ' <span style="color:#0146a0;font-weight:500" title="the number Spawn Text uses">📱 Spawn Text</span>' + cpy(textNo) + (sub.phone && sub.phone !== textNo ? '<br><span style="font-weight:500;color:#6b7280">record: ' + esc(sub.phone) + '</span>' + cpy(sub.phone) : '') : esc(sub.phone) + cpy(sub.phone)))}${row('Facebook', esc(sub.fb_name) + cpy(sub.fb_name))}
+          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
         </div>
         <div><div class="sd-h green">💳 Billing</div>
           ${row('Monthly', sub.monthly_amount ? peso(sub.monthly_amount) : '')}${row('Due', esc(dd))}${row('Pays by', esc(howOf(sub)) + (sub.usual_collector ? ' · ' + esc(sub.usual_collector) : ''))}
@@ -782,11 +816,11 @@
         <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>Date</th><th class="n">Amount</th><th>For</th><th>OR / ref</th><th>Via</th><th>Collector</th><th>Note</th></tr></thead><tbody>${[...live.map(x=>[x,false]), ...vd.map(x=>[x,true])].map(([x, dim]) => `<tr${dim ? ' style="opacity:.55;text-decoration:line-through"' : ''}><td style="white-space:nowrap">${short(x.payment_date)}</td><td class="n"><b>${peso(x.amount)}</b></td><td>${x.coverage_from ? mon(x.coverage_from) + (x.coverage_months > 1 ? ' – ' + mon(x.coverage_to) : '') : '—'}</td><td>${esc(x.paper_no || x.gcash_ref || x.bank_ref || x.invoice_no || '—')}</td><td>${esc(x.pay_method ? cap(x.pay_method) : '—')}</td><td>${esc(x.collector || '—')}</td><td style="color:#6b7280;font-size:12px">${esc(dim ? ('voided: ' + (x.void_reason || '')) : (x.note || ''))}</td></tr>`).join('') || '<tr><td colspan="7" style="color:#9ca3af">No payments on record.</td></tr>'}</tbody></table></div></div>
       ${deds.length ? `<div class="sd-card"><div class="sd-h">📶 No-internet deductions</div><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th class="n">Days</th><th class="n">Amount</th><th>Reason</th><th>Approved by</th></tr></thead><tbody>${deds.map(d=>`<tr${d.voided_at?' style="opacity:.5;text-decoration:line-through"':''}><td>${mon(d.ym)}</td><td class="n">${d.days}</td><td class="n">−${peso(d.amount)}</td><td>${esc(d.reason||'')}</td><td>${esc(d.approved_by||'')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     const contact = () => `<div class="sd-card"><div class="sd-grid"><div><div class="sd-h pink">📍 Location</div>
-          ${row('Address', esc(sub.address))}${row('Area', esc(sub.area))}
-          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}${hasGps ? row('Pinned', [sub.gps_updated_at ? dt(sub.gps_updated_at) : '', sub.gps_source, sub.gps_place].filter(Boolean).map(esc).join(' · ')) : ''}
+          ${row('Address', esc(sub.address) + cpy(sub.address))}${row('Area', esc(sub.area))}
+          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}${hasGps ? row('Pinned', [sub.gps_updated_at ? dt(sub.gps_updated_at) : '', sub.gps_source, sub.gps_place].filter(Boolean).map(esc).join(' · ')) : ''}
           ${hasGps ? `<a href="${gmaps}" target="_blank" rel="noopener" style="display:inline-block;margin-top:4px;background:#025ac6;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px">📍 Open in Google Maps</a>` : ''}
         </div><div><div class="sd-h">Contact</div>
-          ${row('Phone', sub.phone ? `<a href="tel:${esc(sub.phone)}" style="color:#025ac6">${esc(sub.phone)}</a>` : '')}${row('Facebook', esc(sub.fb_name))}${row('Usual collector', esc(sub.usual_collector))}
+          ${row('Phone', sub.phone ? `<a href="tel:${esc(sub.phone)}" style="color:#025ac6">${esc(sub.phone)}</a>` + cpy(sub.phone) : '')}${row('Facebook', esc(sub.fb_name) + cpy(sub.fb_name))}${row('Usual collector', esc(sub.usual_collector))}
           <div class="sd-h" style="margin-top:14px">Numbers linked for Spawn Text</div>
           ${nums.length ? nums.map(n => row(esc(n.channel || 'sms') + (n.is_primary ? ' · primary' : ''), esc(n.address) + (n.verified_at ? ' <span class="sd-tag" style="background:#e7f6f1;color:#027e60">verified</span>' : '') + (n.source ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(n.source) + '</span>' : ''))).join('') : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No number linked yet. Spawn Text uses the phone above when there is one.</div>'}
         </div></div></div>`;
@@ -798,7 +832,9 @@
         ${tasks.filter(t => t.status !== 'done').length ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px"><b>Open tasks:</b> ${tasks.filter(t => t.status !== 'done').map(t => esc(t.kind) + (t.reason ? ' · ' + esc(t.reason) : '')).join(' · ')}</div>` : ''}
         ${msgs.map(m => `<div class="sd-msg ${m.direction === 'in' ? 'in' : 'out'}"><small>${m.direction === 'in' ? '⬅ from them' : '➡ Spawn'}<br>${dt(m.sent_at || m.created_at)}${m.status ? '<br>' + esc(m.status) : ''}</small><div class="b">${esc(m.body || '')}${m.intent ? `<div style="margin-top:4px;color:#6b7280;font-size:11px">${esc(m.intent)}${m.ym ? ' · ' + esc(String(m.ym).slice(0,7)) : ''}${m.error ? ' · <span style="color:#d91934">' + esc(m.error) + '</span>' : ''}</div>` : ''}</div></div>`).join('') || '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No reminders or replies yet for this subscriber.</div>'}
       </div>`; };
-    const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k)); pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); };
+    const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k));
+      if (k === 'gcash' && !gcLoaded) { pg.querySelector('.sd-body').innerHTML = '<div class="sd-card" style="color:#6b7280">Checking their GCash refs against the statements…</div>'; gcLoad().then(() => { if (document.getElementById('sd-page') === pg && pg.querySelector('.sd-tabs button.on') && pg.querySelector('.sd-tabs button.on').dataset.t === 'gcash') pg.querySelector('.sd-body').innerHTML = gcashT(); }); return; }
+      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); };
     pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         <a class="sd-btn" href="#" id="sd-chat">💬 Open chat</a>${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
       <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;
