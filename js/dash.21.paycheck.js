@@ -31,8 +31,14 @@
     }
     return out;
   }
-  const SEL = 'subscriber_id,ym,paid_date,amount,or_no,received_by,source,gcash_ref,gcash_amount,gcash_at,comment,state,label';   // v1 has no `note`; the label carries it
-  async function load(){
+  const SEL = '*';   // v2 adds note and refreshed_at over time; v1 lacks them — take whatever the view has
+  // 2026-11-14 (speed): keep the last answer in this tab's sessionStorage for 5 minutes — coming back to the book is instant; ↻ forces a reload
+  const CK = 'vm_pck_cache', TTL = 5 * 60e3;
+  function cacheGet(){ try { const j = JSON.parse(sessionStorage.getItem(CK) || 'null'); if (j && Date.now() - j.t < TTL) return j; } catch (e) {} return null; }
+  function cachePut(){ try { sessionStorage.setItem(CK, JSON.stringify({ t: Date.now(), rows: S.rows, names: S.names, days: S.days, src: S.src })); } catch (e) {} }
+  async function load(force){
+    const c = !force && cacheGet();
+    if (c) { S.rows = c.rows; S.names = c.names; S.days = c.days; S.src = c.src; S.err = ''; S.months = [...new Set(S.rows.map(r => d10(r.ym)))].sort(); if (!S.month || !S.months.includes(S.month)) S.month = S.months[S.months.length - 1] || ''; draw(); return; }
     S.err = ''; S.rows = null; S.days = null; draw();
     const from = new Date(); from.setMonth(from.getMonth() - 5, 1);
     const ym0 = from.toLocaleDateString('en-CA').slice(0, 7) + '-01';
@@ -50,6 +56,7 @@
     try { const since = new Date(Date.now() - 21 * 86400000).toLocaleDateString('en-CA'); S.days = await get(`v_pay_day_v1?day=gte.${since}&select=*&order=day.desc`); }
     catch (e) { S.days = null; S.dayErr = e.message || 'error'; }
     draw();
+    if (S.rows && !S.err) cachePut();
   }
   function counts(list){
     const c = { ok:0, no:0, check:0, wait:0, cash:0, n:0, noAmt:0, noted:0 };
@@ -95,6 +102,7 @@
     if (S.rows === null && !S.err) { b.innerHTML = '<div class="sc-empty">Loading the book…</div>'; return; }
     if (S.err) { b.innerHTML = `<div class="sc-empty">📒 The payments check is not connected to Vendo Monitor yet (${esc(S.err)}).</div>`; return; }
     const nm = S.names || {};
+    const fresh = (S.rows.find(r => r.refreshed_at) || {}).refreshed_at;
     const inMonth = S.rows.filter(r => d10(r.ym) === S.month), c = counts(inMonth);
     const tile = (l, v, col, sub) => `<div class="pck-tile" style="--c:${col}"><b>${v}</b><span>${l}${sub ? '<br>' + sub : ''}</span></div>`;
     // per exported day (last 21 days); a tap filters the book to the months paid that day
@@ -123,7 +131,7 @@
         <td class="c mend" style="background:${bg};color:${fg}" title="${esc(why)}">${esc(w)}</td>`;
     };
     const trs = ids.map(id => { const s = nm[id] || {}; return `<tr class="${s.status === 'cutoff' ? 'cut' : ''}"><td class="nm"><a href="#" onclick="window.subDetail&&window.subDetail(${id});return false">${esc(s.name || ('#' + id))}</a>${s.area ? ` <span style="color:#9ca3af;font-size:10.5px">${esc(s.area)}</span>` : ''}</td>${S.months.map(m => cell(byId[id][m])).join('')}</tr>`; }).join('');
-    b.innerHTML = `<div class="cx-card"><div class="cx-head"><b>📒 Payments · ${esc(monL(S.month))}</b><span style="font-size:11px;color:#6b7280">one answer per paid month, from all sources${S.src === 'v1' ? ' (book refs only until the gateway allows v2)' : ''} · same five words as the sheet</span></div>
+    b.innerHTML = `<div class="cx-card"><div class="cx-head"><b>📒 Payments · ${esc(monL(S.month))}</b><span style="font-size:11px;color:#6b7280">one answer per paid month, from all sources${S.src === 'v1' ? ' (book refs only until the gateway allows v2)' : ''} · same words as the sheet${fresh ? ' · computed ' + new Date(fresh).toLocaleTimeString('en-PH', { hour:'numeric', minute:'2-digit', timeZone:'Asia/Manila' }) : ''}</span></div>
         <div class="pck-tiles">${tile('Received', c.ok, '#15803d', c.noted ? c.noted + ' with a note (amount / date)' : '')}${tile('NOT received', c.no, '#b91c1c', c.noAmt ? peso(c.noAmt) : '')}${tile('Ref cannot be checked', c.check, '#b45309', 'incomplete · unreadable · bank')}${tile('Cannot check', c.wait, '#64748b', 'no ref / no export')}${tile('Cash OR', c.cash, '#94a3b8')}</div>
         <div style="padding:0 14px;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.04em">Per exported day · GCash in vs recorded</div>${days}</div>
       <div class="cx-card"><div class="pck-f">
@@ -142,7 +150,7 @@
     b.querySelector('#pck-area').onchange = e => { S.area = e.target.value; draw(); };
     b.querySelector('#pck-prob').onclick = () => { S.onlyProblems = !S.onlyProblems; S.day = ''; draw(); };
     const off = b.querySelector('#pck-dayoff'); if (off) off.onclick = () => { S.day = ''; draw(); };
-    b.querySelector('#pck-re').onclick = () => load();
+    b.querySelector('#pck-re').onclick = () => load(true);
     b.querySelectorAll('.pck-day').forEach(d => d.onclick = () => { S.day = S.day === d.dataset.day ? '' : d.dataset.day; draw(); });
     const qi = b.querySelector('#pck-q'); qi.oninput = () => { S.q = qi.value; const pos = qi.selectionStart; draw(); const q2 = b.querySelector('#pck-q'); if (q2) { q2.focus(); q2.setSelectionRange(pos, pos); } };
     const wrap = b.querySelector('#pck-wrap'); if (wrap) wrap.scrollLeft = wrap.scrollWidth;   // newest months on the right, like the sheet; start there
