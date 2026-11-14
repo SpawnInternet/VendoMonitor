@@ -15,7 +15,31 @@
                 not_a_conflict:'Already settled — refreshing.', no_sender_number:'No sender number on this payment — it cannot be learned.', no_such_subscriber:'That subscriber is gone — search again.',
                 no_such_read:'This receipt is gone — refreshing.', bad_list:'Not a choice here.', bad_request:'Not a choice here.' };
   const SESS = 'vm_office_pin';
-  const S = { pin:'', data:null, list:'unnamed', open:null, q:'', res:[], none:false, busy:false, err:'' };
+  const S = { pin:'', data:null, list:'unnamed', open:null, q:'', res:[], none:false, busy:false, err:'', days:null, lastDay:'', foldOpen:false };
+  // 2026-11-14 (Wendell: "only say NOT received if there is an exported file and no gap"): the day summary says which days are complete
+  async function loadDays(){ try { const r = await fetch(`${SB()}/rest/v1/v_pay_day_v1?select=day,export_gap&order=day.asc&limit=1000`, { headers:{ apikey:'gw' } }); const j = await r.json();
+      if (Array.isArray(j)) { S.days = {}; j.forEach(d => { S.days[String(d.day).slice(0,10)] = !!d.export_gap; }); S.lastDay = j.length ? String(j[j.length-1].day).slice(0,10) : ''; } } catch (e) {} }
+  const dayOf = ts => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone:'Asia/Manila' }) : '';
+  // the word for a receipt's export check — same rule as the book: NOT received needs a complete exported day
+  function matchWord(m, at){
+    if (m === 'confirmed') return ['✅ Received', '#e7f6ec', '#15803d'];
+    if (m === 'amount_diff') return ['⚠ Received — amount differs', '#eef7f0', '#166534'];
+    if (m === 'money_out') return ['🔴 money out', '#fde2e1', '#b91c1c'];
+    if (m === 'near_match') return ['≈ near match', '#fff4d6', '#92400e'];
+    if (m === 'no_ref') return ['✗ no ref read', '#fff4d6', '#92400e'];
+    if (m === 'wait' || m === 'not_found') {
+      const d = dayOf(at);
+      if (!S.days || !d || !S.lastDay || d > S.lastDay || !(d in S.days)) return ['⏳ No exported file', '#eceff1', '#475569'];
+      if (S.days[d]) return ['▦ Export has a gap', '#eceff1', '#475569'];
+      return m === 'not_found' ? ['✗ NOT received', '#fde2e1', '#b91c1c'] : ['⏳ No exported file', '#eceff1', '#475569'];
+    }
+    return [m || '', '#f1f5f9', '#475569'];
+  }
+  const chipOf = (m, at) => { const [t, b, c] = matchWord(m, at); return `<span class="sd-tag" style="background:${b};color:${c};font-weight:700">${esc(t)}</span>`; };
+  // a photo is 'unreadable' when nothing usable came out of it: no amount and no ref
+  const unreadable = r => !(Number(r.amount) > 0) && !r.ref;
+  // the same ref + amount + day photographed twice shows once
+  function dedupe(rows){ const seen = {}; const out = []; rows.forEach(r => { const k = r.ref ? r.ref + '|' + r.amount + '|' + dayOf(r.at) : 'id' + r.id; if (seen[k]) { seen[k].dup = (seen[k].dup || 1) + 1; return; } seen[k] = r; out.push(r); }); return out; }
   function pinGet(){ try { const j = JSON.parse(sessionStorage.getItem(SESS) || 'null'); if (j && j.p && Date.now() - j.t < 3 * 3600e3) return j.p; } catch (e) {} return ''; }
   function pinSet(p){ try { sessionStorage.setItem(SESS, JSON.stringify({ p, t: Date.now() })); } catch (e) {} }
   function pinClear(){ S.pin = ''; try { sessionStorage.removeItem(SESS); } catch (e) {} }
@@ -46,7 +70,7 @@
     try {
       const j = await rpc('pay_exceptions_v1', { p_pin: pin });
       if (!j.on) { S.data = null; card('<div class="sc-empty">⚠ The exceptions screen is switched off (setting pay_exceptions).</div>'); return; }
-      S.pin = pin; pinSet(pin); S.data = j; render();
+      S.pin = pin; pinSet(pin); S.data = j; if (!S.days) await loadDays(); render();
     } catch (e) {
       if (e.pin) { pinClear(); pinScreen(e.message); return; }
       S.err = e.message; card(`<div class="sc-empty">⚠ ${esc(e.message)}</div>`);
@@ -77,11 +101,16 @@
       <div style="font-size:12px;color:#6b7280">${esc(LISTS.find(l => l[0] === k)[2])} · rows leave by themselves once the record catches up.</div></div>`;
     const rows = X[k] || [];
     if (!rows.length) { card(h + '<div class="sc-empty">Nothing here ✓</div>'); wire(); return; }
-    if (k === 'unnamed') h += rows.map(r => item(`<div><b>${peso(r.amount)}</b> · ${esc(dt(r.at))} · ${esc(MATCH[r.match] || r.match || '')}${r.ref ? ' · ref …' + esc(String(r.ref).slice(-4)) : ''} · posted by ${esc(r.poster || '?')}${r.low_conf ? ' · ⚠ hard to read' : ''}</div>
+    if (k === 'unnamed') {
+      const all = dedupe(rows), good = all.filter(r => !unreadable(r)), bad = all.filter(unreadable);
+      const line = r => item(`<div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center"><b style="font-size:15px">${peso(r.amount)}</b><span style="color:#6b7280">${esc(dt(r.at))}</span>${chipOf(r.match, r.at)}${r.ref ? '<span style="font-variant-numeric:tabular-nums">ref …' + esc(String(r.ref).slice(-4)) + '</span>' : ''}<span style="color:#6b7280">posted by ${esc(r.poster || '?')}</span>${r.low_conf ? '<span style="color:#b45309">⚠ hard to read</span>' : ''}${r.dup ? '<span style="color:#6b7280">📷 ×' + r.dup + '</span>' : ''}</div>
         <div style="font-size:12px;color:#6b7280;margin-top:2px">${r.bubble ? 'Bubble: “' + esc(r.bubble) + '” ' + esc(months(r.month_from, r.month_to)) : 'No name bubble next to this photo.'}</div>
         <div>${(r.candidates || []).map(c => btn('✔ ' + esc(c.name) + (c.area ? ' · ' + esc(c.area) : '') + ' ' + Math.round(c.score * 100) + '%', `data-exact="set" data-exsub="${c.id}" data-exname="${esc(c.name)}"`, true)).join('')}
-        ${S.open && S.open.key === String(r.id) ? '' : btn('🔎 Another name', 'data-exsearch="1"') + btn('Nobody / skip', 'data-exact="none"')}</div>${picker(String(r.id))}`, r.id, 'unnamed', '#9ca3af')).join('');
-    else if (k === 'conflict') h += rows.map(r => item(`<div><b>${peso(r.amount)}</b> · ${esc(dt(r.at))} · ${esc(MATCH[r.match] || r.match || '')}${r.ref ? ' · ref …' + esc(String(r.ref).slice(-4)) : ''} · posted by ${esc(r.poster || '?')}</div>
+        ${S.open && S.open.key === String(r.id) ? '' : btn('🔎 Another name', 'data-exsearch="1"') + btn('Nobody / skip', 'data-exact="none"')}</div>${picker(String(r.id))}`, r.id, 'unnamed', (r.candidates || []).length ? '#025ac6' : '#9ca3af');
+      h += good.map(line).join('');
+      if (bad.length) h += `<div style="margin:10px 0 6px;font-size:12px;color:#6b7280"><button type="button" id="ex-fold" style="border:1px solid #e5e7eb;background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer">${S.foldOpen ? 'Hide' : 'Show'} ${bad.length} unreadable photo${bad.length === 1 ? '' : 's'} (no amount, no ref)</button></div>` + (S.foldOpen ? bad.map(line).join('') : '');
+    }
+    else if (k === 'conflict') h += dedupe(rows).map(r => item(`<div style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center"><b style="font-size:15px">${peso(r.amount)}</b><span style="color:#6b7280">${esc(dt(r.at))}</span>${chipOf(r.match, r.at)}${r.ref ? '<span style="font-variant-numeric:tabular-nums">ref …' + esc(String(r.ref).slice(-4)) + '</span>' : ''}<span style="color:#6b7280">posted by ${esc(r.poster || '?')}</span>${r.dup ? '<span style="color:#6b7280">📷 ×' + r.dup + '</span>' : ''}</div>
         <div style="margin-top:4px">On record: <b>${esc(r.current_name || '?')}</b> <span style="color:#6b7280;font-size:12px">(from ${esc(r.current_source === 'ref' ? 'the book / ref' : r.current_source || '?')})</span></div>
         <div>Bubble says: <b>${esc(r.bubble_name || r.name_text || '?')}</b> <span style="color:#6b7280;font-size:12px">“${esc(r.bubble || '')}” ${esc(months(r.month_from, r.month_to))}${r.bubble_score ? ' · ' + Math.round(r.bubble_score * 100) + '%' : ''}</span></div>
         <div>${S.open && S.open.key === String(r.id) ? '' : btn('✔ Record is right', `data-exact="book" data-exsub="${r.current_id}"`, true) + (r.bubble_id ? btn('Bubble is right → ' + esc(r.bubble_name), `data-exact="bubble" data-exsub="${r.bubble_id}" data-exname="${esc(r.bubble_name)}"`) : '') + btn('🔎 Another name', 'data-exsearch="1"')}</div>${picker(String(r.id))}`, r.id, 'conflict', '#f59e0b')).join('');
@@ -93,7 +122,7 @@
     else if (k === 'cash_or') h += rows.map(r => item(`<div><b>OR ${esc(r.or_no || '?')}</b>${r.date_txt ? ' · dated ' + esc(r.date_txt) : ''} · ${r.status === 'in_book_far' ? 'in the book, but a month apart — same serial re-used?' : 'not in the book'} · photo ${esc(dt(r.at))} · posted by ${esc(r.poster || '?')}${r.duplicate ? ' · 📷 photographed twice' : ''}</div>
         <div style="font-size:12px;color:#6b7280;margin-top:2px">Ask the collector who issued it; once it is written in BASHANG this row leaves by itself.</div>
         <div>${btn('Not a real gap — skip', 'data-exact="skip"')}</div>`, r.id, 'cash_or', '#9ca3af')).join('');
-    else h += rows.map(r => item(`<div><b>${esc(MATCH[r.verdict] || r.verdict)}</b> · ${r.claimed != null ? 'claimed ' + peso(r.claimed) : ''}${r.gcash != null ? ' · GCash ' + peso(r.gcash) : ''} · ${esc(r.source)} · ${esc(dt(r.at))}${r.ref ? ' · ref …' + esc(String(r.ref).slice(-4)) : r.given ? ' · ref on record …' + esc(String(r.given).slice(-4)) : ''}</div>
+    else h += rows.map(r => item(`<div>${chipOf(r.verdict, r.at)} · ${r.claimed != null ? 'claimed ' + peso(r.claimed) : ''}${r.gcash != null ? ' · GCash ' + peso(r.gcash) : ''} · ${esc(r.source)} · ${esc(dt(r.at))}${r.ref ? ' · ref …' + esc(String(r.ref).slice(-4)) : r.given ? ' · ref on record …' + esc(String(r.given).slice(-4)) : ''}</div>
         <div style="margin-top:4px">${r.name ? '<b>' + esc(r.name) + '</b>' : 'No subscriber'} ${esc(months(r.month_from, r.month_to))} <span style="color:#6b7280;font-size:12px">· decide in 🔍 GCash review</span></div>`, r.key, 'check', '#f59e0b')).join('');
     card(h); wire();
   }
@@ -112,6 +141,7 @@
     catch (e) { say(e.message); }
   }
   function wire(){
+    const f = document.getElementById('ex-fold'); if (f) f.onclick = () => { S.foldOpen = !S.foldOpen; render(); };
     const b = body(); if (!b) return;
     const rf = b.querySelector('#ex-refresh'); if (rf) rf.onclick = () => load(S.pin);
     const lk = b.querySelector('#ex-lock'); if (lk) lk.onclick = () => { pinClear(); pinScreen(''); };
