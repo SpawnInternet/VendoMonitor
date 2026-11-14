@@ -116,13 +116,15 @@
     // the book: one row per subscriber, one block per month
     const byId = {}; S.rows.forEach(r => { (byId[r.subscriber_id] = byId[r.subscriber_id] || {})[d10(r.ym)] = r; });
     const q = S.q.trim().toLowerCase();
-    let ids = Object.keys(byId).map(Number);
+    // 'All subscribers' = everyone on the subscriber list, like the sheet — a subscriber with no paid month in the window shows an empty row
+    let ids = (!S.onlyProblems && !S.day && S.names && Object.keys(S.names).length) ? Object.keys(S.names).map(Number) : Object.keys(byId).map(Number);
+    ids.forEach(id => { if (!byId[id]) byId[id] = {}; });
     if (S.area) ids = ids.filter(id => (nm[id] && nm[id].area || '—') === S.area);
     if (S.day) ids = ids.filter(id => Object.values(byId[id]).some(r => d10(r.paid_date) === S.day));
     else if (S.onlyProblems) ids = ids.filter(id => Object.values(byId[id]).some(r => r.state === 'no' || r.state === 'check'));
     if (q) ids = ids.filter(id => [nm[id] && nm[id].name, nm[id] && nm[id].acct_no].concat(Object.values(byId[id]).map(r => r.or_no)).some(v => String(v || '').toLowerCase().includes(q)));
     ids.sort((a, b2) => String(nm[a] && nm[a].area || 'zz').localeCompare(String(nm[b2] && nm[b2].area || 'zz')) || String(nm[a] && nm[a].name || '').localeCompare(String(nm[b2] && nm[b2].name || '')));
-    const areas = [...new Set(Object.keys(byId).map(id => nm[id] && nm[id].area || '—'))].sort();
+    const areas = [...new Set(Object.keys(nm).concat(Object.keys(byId)).map(id => nm[id] && nm[id].area || '—'))].sort();
     const cell = r => {
       if (!r) return '<td class="dt"></td><td class="n"></td><td class="ref"></td><td class="by"></td><td class="c mend"></td>';
       const w = r.label || ''; const [bg, fg] = cellColor(w);
