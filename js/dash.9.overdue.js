@@ -346,6 +346,79 @@ function _ovdComputeFrom(raw, thresh){
   return {rows: Object.values(merged), rowCount: rows.length, byArea, byGroup};
 }
 
+/* ── 2b. FAST PATH (2026-11-16) ──────────────────────────────────────────
+   The whole list is computed in the database (spawn_overdue_list_v1) and written
+   to admin-cache/overdue.json every 5 minutes. One small read instead of ~10
+   paged calls. Refresh button = live RPC + ask the cache to rebuild.
+   The old client-side compute above stays as the last fallback.            */
+const _OVD_CACHE_MAX_AGE = 20*60*1000;
+async function _ovdFetchCacheFile(){
+  const TOKEN = window.__ADMIN_GW_TOKEN; if(!TOKEN) return null;
+  const ctl = new AbortController(); const kill = setTimeout(()=>ctl.abort(), 4000);
+  try{
+    const r = await fetch(_SB + '/functions/v1/spawn-gw-admin', {method:'POST', cache:'no-store', signal:ctl.signal,
+      headers:{'Content-Type':'application/json','x-gw-token':TOKEN},
+      body: JSON.stringify({kind:'cacheread', bucket:'admin-cache', path:'overdue.json'})});
+    clearTimeout(kill);
+    if(!r.ok) return null;
+    const j = await r.json();
+    if(!j || !Array.isArray(j.rows)) return null;
+    const age = Date.now() - new Date(j.generated_at||0).getTime();
+    if(!isFinite(age) || age < 0 || age > _OVD_CACHE_MAX_AGE) return null;
+    j._source = 'cache'; j._age = age;
+    return j;
+  }catch(_){ clearTimeout(kill); return null; }
+}
+async function _ovdFetchListLive(){
+  const r = await fetch(`${_SB}/rest/v1/rpc/spawn_overdue_list_v1`, {method:'POST', headers:_HDR, body:'{}'});
+  const j = await r.json().catch(()=>null);
+  if(!j || !Array.isArray(j.rows)){ const why=(j&&(j.message||j.hint||j.error))||('HTTP '+r.status); throw new Error('spawn_overdue_list_v1: '+why); }
+  j._source = 'live'; j._age = 0;
+  return j;
+}
+function _ovdAskRebuild(){
+  const TOKEN = window.__ADMIN_GW_TOKEN; if(!TOKEN) return;
+  fetch(_SB + '/functions/v1/spawn-gw-admin', {method:'POST', headers:{'Content-Type':'application/json','x-gw-token':TOKEN},
+    body: JSON.stringify({kind:'cache', fns:['write-overdue-cache']})}).catch(()=>{});
+}
+// Turn the server list into the same {rows, byArea, byGroup} shape the renderers expect.
+function _ovdComputeFromList(list, thresh){
+  const rows=[], byArea={}, byGroup={};
+  const now = Date.now();
+  const touch = g => {
+    if(!byGroup[g.gid]) byGroup[g.gid] = {overdue:0,oldest:0,total:0,never:0,d181:0,d91:0,dle90:0,members:[],bgy:{},
+      label:g.label||g.code||('Group '+g.gid), code:g.code||'', area:(g.area||'').toUpperCase(), collector:g.collector||''};
+    return byGroup[g.gid];
+  };
+  let rowCount = 0;
+  list.rows.forEach(x => {
+    const days = Number(x.days);
+    const area = (x.area||'').toUpperCase();
+    (x.groups||[]).forEach(g => {
+      const gb = touch(g); gb.total++;
+      if(gb.members.indexOf(x.vendo_id)<0){ gb.members.push(x.vendo_id); const b=_ovdNormBgy(x.barangay||x.address)||'(no address)'; gb.bgy[b]=(gb.bgy[b]||0)+1; }
+      const ga = (g.area||area||'').toUpperCase(); if(!ga) return;
+      if(!byArea[ga]) byArea[ga] = {overdue:0,oldest:0,groups:new Set()};
+      byArea[ga].groups.add(g.gid);
+      if(days<9999){ if(days>gb.oldest) gb.oldest=days; if(days>byArea[ga].oldest) byArea[ga].oldest=days; }
+      if(days<=thresh) return;
+      rowCount++;
+      gb.overdue++; if(days>=9999) gb.never++; else if(days>180) gb.d181++; else if(days>90) gb.d91++; else gb.dle90++;
+      byArea[ga].overdue++;
+    });
+    if(days<=thresh) return;
+    rows.push({
+      vendo_id:x.vendo_id, code:x.code||'', name:x.name||('vendo #'+x.vendo_id), tg:x.tg||'', owner:x.owner||'',
+      area, barangay:x.barangay||x.address||'', vlan:x.vlan==null?'':x.vlan,
+      lhd:x.lhd||'', inst:x.inst||'', note:x.note||'', src:x.src||'', appd:x.appd||'', bookd:x.bookd||'',
+      days, online:x.online===true, contact:'',
+      groups:(x.groups||[]).map(g=>g.label||g.code||('Group '+g.gid)), gids:(x.groups||[]).map(g=>g.gid),
+      gid:(x.groups&&x.groups[0]&&x.groups[0].gid)||null, glabel:(x.groups&&x.groups[0]&&x.groups[0].label)||''
+    });
+  });
+  return {rows, rowCount, byArea, byGroup};
+}
+
 /* ── 3. LOAD ──────────────────────────────────────────────────────────── */
 async function ovdLoad(force){
   if(_ovdBusy) return;
@@ -357,7 +430,12 @@ async function ovdLoad(force){
     if(cards) cards.innerHTML = '<div style="padding:22px;color:#6b7280;font-size:13px;">Computing overdue from live vendo state…</div>';
     if(tb) tb.innerHTML = '<tr><td colspan="8" style="padding:26px;text-align:center;color:#9ca3af;font-size:12px;">Loading…</td></tr>';
     try{
-      _ovdRaw = await _ovdFetchAll();
+      // 1) cache file (fast)  2) live list RPC  3) old client-side compute
+      let list = force ? null : await _ovdFetchCacheFile();
+      if(!list){ try{ list = await _ovdFetchListLive(); }catch(_){ list = null; } }
+      if(force) _ovdAskRebuild();
+      if(list){ _ovdRaw = {list}; }
+      else { _ovdRaw = await _ovdFetchAll(); }
       _ovdTs = Date.now();
     }catch(e){
       _ovdBusy = false; _ovdRaw = null; _ovdTs = 0;
@@ -376,7 +454,7 @@ function ovdRecompute(){
   if(!_ovdRaw) return;
   const sel = document.getElementById('ovd-thresh');
   _ovdThresh = sel ? parseInt(sel.value) : 30;
-  const out = _ovdComputeFrom(_ovdRaw, _ovdThresh);
+  const out = _ovdRaw.list ? _ovdComputeFromList(_ovdRaw.list, _ovdThresh) : _ovdComputeFrom(_ovdRaw, _ovdThresh);
   _ovdRows  = out.rows;
   _ovdArea  = out.byArea;
   _ovdGroup = out.byGroup;
@@ -656,6 +734,7 @@ async function ovdSaveNote(vid){
     await _ovdPatchVendo(vid, {admin_notes: note||null});
     const row=_ovdRows.find(x=>x.vendo_id===vid); if(row) row.note=note;
     if(_ovdRaw && _ovdRaw.V && _ovdRaw.V[vid]) _ovdRaw.V[vid].admin_notes = note||null;
+    if(_ovdRaw && _ovdRaw.list){ const x=_ovdRaw.list.rows.find(y=>y.vendo_id===vid); if(x) x.note=note||null; }
     _ovdMsg(note?'Note saved.':'Note cleared.', true);
     ovdRenderTable();
   }catch(e){ _ovdMsg('Could not save: '+e.message); }
@@ -673,6 +752,8 @@ async function ovdInactivate(vid){
     const note = prev ? prev+'\n'+line : line;
     await _ovdPatchVendo(vid, {status:'inactive', admin_notes: note});
     if(_ovdRaw && _ovdRaw.V && _ovdRaw.V[vid]){ _ovdRaw.V[vid].status='inactive'; _ovdRaw.V[vid].admin_notes=note; }
+    if(_ovdRaw && _ovdRaw.list){ _ovdRaw.list.rows = _ovdRaw.list.rows.filter(y=>y.vendo_id!==vid); }
+    _ovdAskRebuild();
     _ovdMsg('Inactivated. It will leave the overdue list.', true);
     if(typeof toast==='function') toast('Vendo inactivated');
     setTimeout(()=>{ ovdCloseHistory(); ovdRecompute(); }, 700);
@@ -693,10 +774,15 @@ function _ovdHistHtml(rows, r){
       ${gaps?chip(gaps+' amount differs','#991b1b','#fef2f2','#fecaca'):''}
     </div>
     <div style="font-size:10.5px;color:#9ca3af;margin-bottom:10px;">Rows pair when app and book dates are within 3 days. Amounts are Spawn share.</div>`;
+  // ledger: one line per harvest, newest first, with running total of spawn share (oldest → newest)
+  let run = 0; const runMap = {};
+  [...rows].reverse().forEach((x,i)=>{ run += Number(x.src==='app' ? (x.app_amount||0) : (x.book_amount||0)); runMap[i]=run; });
+  const total = run;
   const cell = (d, amt, who, on, c) => on
     ? `<div style="font-weight:700;color:#1e293b;">${d}</div><div style="font-size:11px;color:${c};font-weight:700;">${_ovdPeso(amt)}</div>${who?`<div style="font-size:10px;color:#6b7280;">${_ovdEsc(who)}</div>`:''}`
     : `<div style="color:#d1d5db;font-weight:700;">—</div><div style="font-size:10px;color:#9ca3af;">not recorded</div>`;
-  const trs = rows.map(x=>{
+  const trs = rows.map((x,idx)=>{
+    const runTot = runMap[rows.length-1-idx];
     const gap = x.src==='both' ? Number(x.amount_gap||0) : 0;
     const bad = Math.abs(gap)>20;
     const bg = x.src==='both' ? (bad?'#fff7ed':'#fff') : x.src==='app' ? '#f0f6ff' : '#fffbeb';
@@ -707,13 +793,15 @@ function _ovdHistHtml(rows, r){
       <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.app_date, x.app_amount, x.app_collector, !!x.app_id, '#1d4ed8')}</td>
       <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.book_date, x.book_amount, null, !!x.book_id, '#b45309')}</td>
       <td style="padding:9px 10px;vertical-align:middle;text-align:center;font-size:12px;">${mark}</td>
+      <td style="padding:9px 10px;vertical-align:middle;text-align:right;font-size:11.5px;font-weight:700;color:#374151;white-space:nowrap;">${_ovdPeso(runTot)}</td>
     </tr>`;
   }).join('');
   const th=(t,c)=>`<th style="padding:8px 10px;text-align:left;font-size:10px;color:${c};font-weight:800;text-transform:uppercase;letter-spacing:.04em;">${t}</th>`;
   return summary + `<div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('📱 Spawn Harvest (app)','#1d4ed8')}${th('📒 BASHANG (book)','#b45309')}<th style="padding:8px 10px;text-align:center;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Match</th></tr></thead>
-      <tbody>${trs}</tbody></table></div>`;
+      <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('📱 Spawn Harvest (app)','#1d4ed8')}${th('📒 BASHANG (book)','#b45309')}<th style="padding:8px 10px;text-align:center;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Match</th><th style="padding:8px 10px;text-align:right;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Running</th></tr></thead>
+      <tbody>${trs}</tbody>
+      <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;"><td colspan="3" style="padding:9px 10px;font-size:11.5px;font-weight:800;color:#1e293b;">Total spawn share · ${rows.length} harvest${rows.length===1?'':'s'}</td><td style="padding:9px 10px;text-align:right;font-size:12.5px;font-weight:900;color:#1e293b;">${_ovdPeso(total)}</td></tr></tfoot></table></div>`;
 }
 
 /* ── 5. INTERACTION ───────────────────────────────────────────────────── */
