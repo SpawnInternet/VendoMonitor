@@ -947,6 +947,16 @@ async function deletePhotoOffline(key){
 
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const VENDO_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/vendo-cache/vendos.json';
+// 2026-11-16: last harvest for DISPLAY + OVERDUE = latest of the app date and
+// vendos.last_harvest_any (all sources: app, group items, BASHANG book).
+// last_harvest_date itself is left alone — submitHarvest() uses it as the
+// harvest_window_start for reconciliation.
+function _lhdShow(i){
+  if(!i) return null;
+  const a=i.last_harvest_date||null, b=i.last_harvest_any||null;
+  return (a&&b) ? (a>b?a:b) : (a||b);
+}
+const _lhdBook=i=>!!(i&&i.last_harvest_any&&i.last_harvest_src==='book'&&(!i.last_harvest_date||i.last_harvest_any>i.last_harvest_date));
 
 // Preloaded vendo data from storage cache — avoids batch DB fetches
 let _vendoCacheMap = null; // {id: vendoObj}
@@ -1284,6 +1294,8 @@ async function downloadAllOffline(manual=false){
           return {
             ...item, status:(item.status==='pulled_out'?'pulled_out':'pending'),
             last_harvest_date:(cached && cached.last_harvest_date)||item.last_harvest_date,
+            last_harvest_any:(cached && cached.last_harvest_any)||null,
+            last_harvest_src:(cached && cached.last_harvest_src)||null,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -1971,9 +1983,9 @@ async function computeOverdue(){
     const dateMap={}, statusMap={};
     for(let i=0;i<vids.length;i+=300){
       const chunk = vids.slice(i,i+300);
-      const r2 = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,{headers:HDR});
+      const r2 = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,last_harvest_any,status&limit=400`,{headers:HDR});
       const vs = await r2.json();
-      if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=v.last_harvest_date; statusMap[v.id]=v.status; });
+      if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=_lhdShow(v); statusMap[v.id]=v.status; });
     }
 
     _ovdOverlay(items, dateMap, statusMap);
@@ -2350,6 +2362,8 @@ async function prewarmGroups(groupDefs){
           const base = {
             ...item,
             last_harvest_date:lhd,
+            last_harvest_any:(cached && cached.last_harvest_any)||null,
+            last_harvest_src:(cached && cached.last_harvest_src)||null,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2499,17 +2513,17 @@ async function startGroup(groupId){
 
     // Use storage cache for vendo data — avoids slow batch DB fetches
     const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
-    let lhdMap = {};
+    let lhdMap = {}, anyMap = {}, srcMap = {};
     if(_vendoCacheMap && Object.keys(_vendoCacheMap).length > 0){
       // Fast path: use preloaded cache
-      vendoIds.forEach(id=>{ if(_vendoCacheMap[id]) lhdMap[id]=_vendoCacheMap[id].last_harvest_date; });
+      vendoIds.forEach(id=>{ if(_vendoCacheMap[id]){ lhdMap[id]=_vendoCacheMap[id].last_harvest_date; anyMap[id]=_vendoCacheMap[id].last_harvest_any||null; srcMap[id]=_vendoCacheMap[id].last_harvest_src||null; } });
       console.log('[VendoCache] Used cache for', vendoIds.length, 'vendos');
     } else {
       // Fallback: fetch from DB in batches
       for(let i=0;i<vendoIds.length;i+=200){
         try{
-          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,vendo_code`,{headers:HDR});
-          (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; if(!_vendoCacheMap) _vendoCacheMap={}; _vendoCacheMap[v.id]=v; });
+          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,last_harvest_any,last_harvest_src,vendo_code`,{headers:HDR});
+          (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; anyMap[v.id]=v.last_harvest_any||null; srcMap[v.id]=v.last_harvest_src||null; if(!_vendoCacheMap) _vendoCacheMap={}; _vendoCacheMap[v.id]=v; });
         }catch(e){}
       }
     }
@@ -2525,6 +2539,8 @@ async function startGroup(groupId){
         return {
           ...item, status:'harvested',
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2544,6 +2560,8 @@ async function startGroup(groupId){
           ...item, status:'pulled_out',
           _pulloutReason:_r, _pulloutDetails:_d, _pulloutAt:item.harvested_at||null,
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2554,6 +2572,8 @@ async function startGroup(groupId){
       return {
         ...item, status:'pending',
         last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
         vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
         address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2690,17 +2710,20 @@ async function _refreshLHD(groupId){
     const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
     if(!cached) return;
     const vendoIds=cached.items.filter(i=>i.vendo_id).map(i=>i.vendo_id);
-    let lhdMap={};
+    let lhdMap={}, anyMap2={};
     for(let i=0;i<vendoIds.length;i+=200){
-      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
-      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date;});
+      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,last_harvest_any,last_harvest_src`,{headers:HDR});
+      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date; anyMap2[v.id]=v;});
     }
     // Update cache and currentItems
     let changed=false;
     cached.items=cached.items.map(item=>{
       const fresh=item.vendo_id&&lhdMap[item.vendo_id];
-      if(fresh&&fresh!==item.last_harvest_date){changed=true;return{...item,last_harvest_date:fresh};}
-      return item;
+      const va=item.vendo_id&&anyMap2[item.vendo_id];
+      let out=item;
+      if(fresh&&fresh!==item.last_harvest_date){changed=true;out={...out,last_harvest_date:fresh};}
+      if(va&&(va.last_harvest_any||null)!==(item.last_harvest_any||null)){changed=true;out={...out,last_harvest_any:va.last_harvest_any||null,last_harvest_src:va.last_harvest_src||null};}
+      return out;
     });
     if(changed){
       localStorage.setItem(CACHE_KEY,JSON.stringify(cached));
@@ -2709,7 +2732,11 @@ async function _refreshLHD(groupId){
       if(currentGroupRun&&currentGroupRun.id===groupId){
         currentItems=currentItems.map(item=>{
           const fresh=item.vendo_id&&lhdMap[item.vendo_id];
-          return fresh&&fresh!==item.last_harvest_date?{...item,last_harvest_date:fresh}:item;
+          const va=item.vendo_id&&anyMap2[item.vendo_id];
+          let out=item;
+          if(fresh&&fresh!==item.last_harvest_date) out={...out,last_harvest_date:fresh};
+          if(va&&(va.last_harvest_any||null)!==(item.last_harvest_any||null)) out={...out,last_harvest_any:va.last_harvest_any||null,last_harvest_src:va.last_harvest_src||null};
+          return out;
         });
         renderVendoList();
       }
@@ -2737,7 +2764,7 @@ async function startAllVendos(areaJson){
     while(true){
       const r = await fetch(
         `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area.id)}`+
-        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address`+
+        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,last_harvest_any,last_harvest_src,contact_number,address`+
         `&order=sheet_name.asc&limit=500&offset=${offset}`,{headers:HDR}
       );
       const batch = await r.json();
@@ -2758,6 +2785,8 @@ async function startAllVendos(areaJson){
       lat: v.lat,
       lng: v.lng,
       last_harvest_date: v.last_harvest_date,
+      last_harvest_any: v.last_harvest_any||null,
+      last_harvest_src: v.last_harvest_src||null,
       contact_number: v.contact_number,
       address: v.address,
       status: 'pending'
@@ -2844,8 +2873,9 @@ function renderVendoList(){
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
   const pending=all.filter(i=>i.status==='pending').sort((a,b)=>{
-    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):99999;
-    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):99999;
+    const _la=_lhdShow(a), _lb=_lhdShow(b);
+    const da=_la?Math.floor((Date.now()-new Date(_la+'T12:00:00'))/86400000):99999;
+    const db=_lb?Math.floor((Date.now()-new Date(_lb+'T12:00:00'))/86400000):99999;
     return db-da;
   });
   const done=all.filter(i=>i.status==='harvested');
@@ -2888,7 +2918,7 @@ function renderVendoList(){
   // Sort respects collector-chosen _sortMode + toggle direction (_sortDir)
   let sorted=false; let _sortLabel='';
   const _nm=i=>(i.sheet_name||i.tg_name||'Unknown');
-  const _days=i=>i.last_harvest_date?Math.floor((Date.now()-new Date(i.last_harvest_date+'T12:00:00'))/86400000):99999;
+  const _days=i=>{ const l=_lhdShow(i); return l?Math.floor((Date.now()-new Date(l+'T12:00:00'))/86400000):99999; };
   const _vlanNum=i=>{ const v=parseInt(i.vlan); return isNaN(v)?null:v; };
   if(activeTab!=='done'){
     const dir=_sortDir[_sortMode]||1;
@@ -2946,8 +2976,9 @@ function renderVendoList(){
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':
       item.status==='pulled_out'?'<span class="pill pill-red">📤 Pulled out</span>':'<span class="pill pill-gray">Tap to harvest</span>';
-    const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
-    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):null;
+    const _lshow=_lhdShow(item);
+    const lastH=_lshow?new Date(_lshow+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+(_lhdBook(item)?' 📒':''):'—';
+    const daysSince=_lshow?Math.floor((Date.now()-new Date(_lshow+'T12:00:00'))/(86400000)):null;
     const lhdColor=item.status==='harvested'?'#9ca3af':daysSince===null?'#6b7280':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#025AC6':'#15803d';
     const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince===null?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
     const _dLabel=daysSince===null?'Never':daysSince>=30?Math.floor(daysSince/30)+'mo '+Math.floor(daysSince%30)+'d':daysSince+'d';
@@ -3273,8 +3304,9 @@ function openItem(idx){
     else { _vcodeEl.style.display='none'; }
   }
   const fmtLastDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
-  document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(currentItem.last_harvest_date)}`;
-  const _ds=currentItem.last_harvest_date?Math.floor((Date.now()-new Date(currentItem.last_harvest_date+'T12:00:00'))/86400000):null;
+  const _lcur=_lhdShow(currentItem);
+  document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(_lcur)}${_lhdBook(currentItem)?' (book)':''}`;
+  const _ds=_lcur?Math.floor((Date.now()-new Date(_lcur+'T12:00:00'))/86400000):null;
   const _hdrColor=_ds===null?'#6b7280':_ds>45?'#dc2626':_ds>30?'#d97706':_ds>14?'#025AC6':'#15803d';
   document.getElementById('form-header-el').style.background=_hdrColor;
 
@@ -4277,7 +4309,7 @@ async function submitHarvest(){
     }
 
     // Update in-memory
-    Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today});
+    Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today,last_harvest_any:today,last_harvest_src:'app'});
     if(capturedGPS){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
     if(ownerName) currentItems[currentItemIdx].sheet_name=ownerName;
     if(contact) currentItems[currentItemIdx].contact_number=contact;
