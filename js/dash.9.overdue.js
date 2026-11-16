@@ -433,7 +433,7 @@ function _ovdComputeFromList(list, thresh){
       vendo_id:x.vendo_id, code:x.code||'', name:x.name||('vendo #'+x.vendo_id), tg:x.tg||'', owner:x.owner||'',
       area, barangay:x.barangay||x.address||'', vlan:x.vlan==null?'':x.vlan,
       lhd:x.lhd||'', inst:x.inst||'', note:x.note||'', src:x.src||'', appd:x.appd||'', bookd:x.bookd||'',
-      days, online:x.online===true, contact:'', rt:x.rt||null,
+      days, online:x.online===true, contact:'', rt:x.rt||null, keys:x.keys||null, instRt:x.inst_rt===true,
       groups:(x.groups||[]).map(g=>g.label||g.code||('Group '+g.gid)), gids:(x.groups||[]).map(g=>g.gid),
       gid:(x.groups&&x.groups[0]&&x.groups[0].gid)||null, glabel:(x.groups&&x.groups[0]&&x.groups[0].label)||''
     });
@@ -674,7 +674,7 @@ function ovdRenderTable(){
     const _lhdCell = r.lhd
       ? `<div style="font-weight:700;color:#1e293b;">${r.lhd}</div>${_ovdSrcTag(r.src)}`
       : r.inst
-        ? `<div style="font-weight:800;color:#6d28d9;">never</div><div style="font-size:10.5px;color:#6b7280;margin-top:2px;">installed ${r.inst}</div>${_ovdSrcTag('installed')}`
+        ? `<div style="font-weight:800;color:#6d28d9;">never</div><div style="font-size:10.5px;color:#6b7280;margin-top:2px;">installed ${r.inst}${r.instRt?' <span title="date read from the router comment" style="color:#9ca3af;">(router)</span>':''}</div>${_ovdSrcTag('installed')}`
         : `<div style="font-weight:800;color:#311A8E;">never</div><div style="font-size:10px;color:#9ca3af;margin-top:2px;">no install date</div>`;
     return `<tr class="ovd-row" data-vid="${r.vendo_id}" onclick="ovdOpenHistory(${r.vendo_id})" style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onmouseenter="this.style.background='#f8faff'" onmouseleave="this.style.background=''">
       <td style="padding:9px 8px;color:#9ca3af;font-size:11px;text-align:right;">${i+1}</td>
@@ -717,7 +717,8 @@ async function ovdOpenHistory(vid){
     ? `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;">● online</span>`
     : `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;">○ offline${rt.since?' · seen '+String(rt.since).slice(0,10):''}</span>`;
   const rtFlag = rt&&rt.flag ? `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;text-transform:uppercase;">⚑ ${_ovdEsc(rt.flag)}</span>` : '';
-  const lastTxt = r.lhd ? `Last harvest <b style="color:#1e293b;">${r.lhd}</b>` : r.inst ? `Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}` : `Never harvested · no install date`;
+  const lastTxt = r.lhd ? `Last harvest <b style="color:#1e293b;">${r.lhd}</b>` : r.inst ? `Never harvested · installed <b>${r.inst}</b>${r.instRt?' <span style="color:#9ca3af;">(from router)</span>':''} · first due ${_ovdAddDays(r.inst,30)}` : `Never harvested · no install date`;
+  const keysHtml = _ovdKeysHtml(r.keys);
 
   panel.innerHTML = `
     <!-- header -->
@@ -730,6 +731,7 @@ async function ovdOpenHistory(vid){
         </div>
         <div style="font-size:11.5px;color:#6b7280;margin-top:3px;">${where}</div>
         <div style="font-size:11.5px;color:#374151;margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${lastTxt}${r.lhd?_ovdSrcTag(r.src).replace('margin-top:3px;','margin-top:0;'):''}</div>
+        ${keysHtml}
       </div>
       <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;width:32px;height:32px;font-weight:800;cursor:pointer;font-family:inherit;flex:none;">✕</button>
     </div>
@@ -833,8 +835,26 @@ async function ovdInactivate(vid){
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') ovdCloseHistory(); });
 function _ovdAddDays(d,n){ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()+n); return x.toLocaleDateString('en-CA'); }
 const _ovdPeso = v => v==null ? '' : '₱'+Number(v).toLocaleString('en-PH',{maximumFractionDigits:0});
+// 🔑 keys: QR fobs on the ring (vendo_key_qr), latest custody (key_transfers), open collector loans (key_items)
+function _ovdKeysHtml(k){
+  if(!k) return `<div style="font-size:11px;color:#9ca3af;margin-top:5px;">🔑 no key on record</div>`;
+  const chip=(t,c,bg,bd,title)=>`<span title="${_ovdEsc(title||'')}" style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;color:${c};background:${bg};border:1px solid ${bd};">${t}</span>`;
+  const parts=[];
+  (k.fobs||[]).forEach(f=>{
+    const out = f.status==='out';
+    parts.push(chip(`${_ovdEsc(f.qr)} · ${_ovdEsc(f.type||'key')}${out?' · OUT'+(f.by?' · '+_ovdEsc(f.by):''):''}`,
+      out?'#991b1b':'#1d4ed8', out?'#fef2f2':'#eff6ff', out?'#fecaca':'#bfdbfe',
+      (out?'Borrowed':'On the ring')+(f.at?' · '+f.at:'')));
+  });
+  if(k.custody) parts.push(chip(`held by ${_ovdEsc(k.custody.held_by)}${k.custody.kind?' · '+_ovdEsc(k.custody.kind):''}${k.custody.variant?' '+_ovdEsc(k.custody.variant):''}${k.custody.pungpung?' · pungpung':''}`,
+      '#6d28d9','#f5f3ff','#ddd6fe', 'Key custody'+(k.custody.date?' since '+k.custody.date:'')+(k.custody.dest?' → '+k.custody.dest:'')));
+  (k.loans||[]).forEach(l=>parts.push(chip(`${_ovdEsc(l.kind||'key')} with ${_ovdEsc(l.by||'?')} since ${l.taken||'?'}`,'#b45309','#fffbeb','#fde68a','Taken by collector, not yet returned')));
+  if(!parts.length) return `<div style="font-size:11px;color:#9ca3af;margin-top:5px;">🔑 no key on record</div>`;
+  return `<div style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;"><span style="font-size:11px;color:#6b7280;font-weight:700;">🔑</span>${parts.join('')}</div>`;
+}
+const _OVD_BUILD = 'ovd1116h';
 function _ovdHistHtml(rows, r){
-  if(!rows.length) return `<div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">No harvest in the app and none in the book.</div>`;
+  if(!rows.length) return `<div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">No harvest in the app and none in the book.<div style="font-size:9.5px;color:#d1d5db;margin-top:6px;">${_OVD_BUILD}</div></div>`;
   const n = {both:0, app:0, book:0}; rows.forEach(x=>n[x.src]=(n[x.src]||0)+1);
   const gaps = rows.filter(x=>x.src==='both' && Math.abs(Number(x.amount_gap||0))>20).length;
   // running total oldest → newest, shown newest first
@@ -873,7 +893,7 @@ function _ovdHistHtml(rows, r){
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('Date','#6b7280','left')}${th('📱 App','#1d4ed8')}${th('📒 Book','#b45309')}${th('Match','#6b7280','center')}${th('Running','#6b7280')}</tr></thead>
       <tbody>${trs}</tbody>
-      <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;"><td colspan="4" style="padding:8px 10px;font-size:11.5px;font-weight:800;color:#1e293b;">Total · ${rows.length} harvest${rows.length===1?'':'s'}</td><td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:900;color:#1e293b;">${_ovdPeso(total)}</td></tr></tfoot>
+      <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;"><td colspan="4" style="padding:8px 10px;font-size:11.5px;font-weight:800;color:#1e293b;">Total · ${rows.length} harvest${rows.length===1?'':'s'} <span style="font-weight:400;color:#d1d5db;font-size:9.5px;margin-left:8px;">${_OVD_BUILD}</span></td><td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:900;color:#1e293b;">${_ovdPeso(total)}</td></tr></tfoot>
     </table></div>`;
 }
 
@@ -909,12 +929,14 @@ function ovdGoVendo(name){
 function ovdExport(){
   const rows = _ovdVisible();
   if(!rows.length){ if(typeof toast==='function') toast('Nothing to export'); return; }
-  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Source','App date','Book date','Installed','Days overdue','Online'];
+  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Source','App date','Book date','Installed','Days overdue','Online','Router name','Router flag','Keys'];
   const esc = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const csv = [head.join(',')].concat(rows.map((r,i) =>
     [i+1, r.name, r.code, r.owner, r.area, r.barangay, r.groups.join(' | '), r.vlan, r.lhd || 'never',
      _ovdSrcLabel(r.src), r.appd, r.bookd, r.inst,
-     r.days>=9999 ? 'never' : r.days, r.online?'online':'offline'].map(esc).join(','))).join('\n');
+     r.days>=9999 ? 'never' : r.days, r.online?'online':'offline',
+     (r.rt&&r.rt.name)||'', (r.rt&&r.rt.flag)||'',
+     r.keys ? [...(r.keys.fobs||[]).map(f=>f.qr+' '+(f.type||'')+(f.status==='out'?' OUT':'')), r.keys.custody?('held by '+r.keys.custody.held_by):'' , ...(r.keys.loans||[]).map(l=>(l.kind||'key')+' with '+(l.by||'?'))].filter(Boolean).join(' | ') : ''].map(esc).join(','))).join('\n');
   const scope = (_ovdSelArea || 'ALL') + (_ovdSelGroup ? '-G'+_ovdSelGroup : '');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'}));
