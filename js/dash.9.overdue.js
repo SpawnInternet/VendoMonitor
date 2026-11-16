@@ -64,6 +64,28 @@ const _OVD_SRC = {
   'vendo':     {t:'record only', fg:'#6b7280', bg:'#f3f4f6', bd:'#e5e7eb', dots:[0,0]},
   'installed': {t:'since install', fg:'#6d28d9', bg:'#f5f3ff', bd:'#ddd6fe', dots:[0,0]}
 };
+// router side: online/offline (+since), the router's own name for this VLAN, keyword flags
+function _ovdRtCell(r){
+  const rt = r.rt;
+  if(!rt) return `<span style="color:#9ca3af;font-size:11px;">— not on router</span>`;
+  const since = rt.since ? String(rt.since).slice(0,10) : '';
+  const days = since ? Math.floor((Date.now()-new Date(since+'T12:00:00'))/86400000) : null;
+  const on = rt.online===true;
+  const chip = on
+    ? `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;">● online</span>`
+    : `<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;">○ offline</span>${days!=null?`<div style="font-size:10px;color:#9ca3af;margin-top:2px;">last seen ${since} · ${days}d</div>`:''}`;
+  const flag = rt.flag ? `<div style="margin-top:3px;"><span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:9.5px;font-weight:800;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;text-transform:uppercase;">⚑ ${_ovdEsc(rt.flag)}</span></div>` : '';
+  const dis = rt.disabled===true ? `<div style="font-size:10px;color:#b45309;font-weight:700;margin-top:2px;">VLAN disabled</div>` : '';
+  return chip + flag + dis;
+}
+// the router comment is the operator's name as typed on the MikroTik — show it when it adds info
+function _ovdRtName(r){
+  const n = r.rt && r.rt.name ? String(r.rt.name).trim() : '';
+  if(!n) return '';
+  const a = (r.name||'').toLowerCase().replace(/[^a-z0-9]/g,''), b = n.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const same = a && b && (a.indexOf(b.slice(0,6))>=0 || b.indexOf(a.slice(0,6))>=0);
+  return `<div style="font-size:10.5px;color:${same?'#9ca3af':'#b45309'};margin-top:2px;" title="Router comment on VLAN ${r.vlan}">📡 ${_ovdEsc(n)}</div>`;
+}
 // two dots: ● app  ● book — filled when that source has the latest harvest
 function _ovdDots(s){
   const m=_OVD_SRC[s]; if(!m) return '';
@@ -411,7 +433,7 @@ function _ovdComputeFromList(list, thresh){
       vendo_id:x.vendo_id, code:x.code||'', name:x.name||('vendo #'+x.vendo_id), tg:x.tg||'', owner:x.owner||'',
       area, barangay:x.barangay||x.address||'', vlan:x.vlan==null?'':x.vlan,
       lhd:x.lhd||'', inst:x.inst||'', note:x.note||'', src:x.src||'', appd:x.appd||'', bookd:x.bookd||'',
-      days, online:x.online===true, contact:'',
+      days, online:x.online===true, contact:'', rt:x.rt||null,
       groups:(x.groups||[]).map(g=>g.label||g.code||('Group '+g.gid)), gids:(x.groups||[]).map(g=>g.gid),
       gid:(x.groups&&x.groups[0]&&x.groups[0].gid)||null, glabel:(x.groups&&x.groups[0]&&x.groups[0].label)||''
     });
@@ -611,14 +633,19 @@ function ovdRenderGroups(){
   </div>`;
 }
 
+var _ovdOnlineOnly=false, _ovdFlagOnly=false;
+function ovdToggleOnline(cb){ _ovdOnlineOnly=!!cb.checked; ovdRenderTable(); }
+function ovdToggleFlag(cb){ _ovdFlagOnly=!!cb.checked; ovdRenderTable(); }
 function _ovdVisible(){
   const q = (document.getElementById('ovd-search')?.value || '').trim().toLowerCase();
   let rows = _ovdRows.slice();
   if(_ovdSelArea)  rows = rows.filter(r => r.area === _ovdSelArea);
   if(_ovdSelGroup) rows = rows.filter(r => r.gids.indexOf(+_ovdSelGroup) >= 0);
   if(document.getElementById('ovd-never')?.checked) rows = rows.filter(r => r.days >= 9999);
+  if(_ovdOnlineOnly) rows = rows.filter(r => r.rt && r.rt.online===true);
+  if(_ovdFlagOnly)   rows = rows.filter(r => (r.rt && r.rt.flag) || r.note);
   if(q) rows = rows.filter(r =>
-    (r.name+' '+r.tg+' '+r.owner+' '+r.code+' '+r.area+' '+r.barangay+' '+r.vlan+' '+r.groups.join(' ')).toLowerCase().includes(q));
+    (r.name+' '+r.tg+' '+r.owner+' '+r.code+' '+r.area+' '+r.barangay+' '+r.vlan+' '+r.groups.join(' ')+' '+((r.rt&&r.rt.name)||'')+' '+(r.note||'')).toLowerCase().includes(q));
   const k = _ovdSort.k, dir = _ovdSort.dir;
   rows.sort((a,b) => {
     let x = a[k], y = b[k];
@@ -654,6 +681,7 @@ function ovdRenderTable(){
       <td style="padding:9px 8px;">
         <div style="font-weight:700;color:#025AC6;font-size:12.5px;" title="Click row for app + book history">${_ovdEsc(r.name)}</div>
         <div style="font-size:10.5px;color:#9ca3af;">${_ovdEsc(r.code||'—')}${r.owner && r.owner!==r.name ? ' · '+_ovdEsc(r.owner) : ''}</div>
+        ${_ovdRtName(r)}
         ${r.note?`<div style="font-size:10.5px;color:#92400e;background:#fef3c7;border-radius:5px;padding:2px 6px;margin-top:3px;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_ovdEsc(r.note)}">📝 ${_ovdEsc(r.note)}</div>`:''}
       </td>
       <td style="padding:9px 8px;font-size:11.5px;color:#374151;">${_ovdTitle(r.area)}${r.barangay?'<div style="font-size:10.5px;color:#9ca3af;">'+_ovdEsc(r.barangay)+'</div>':''}</td>
@@ -663,7 +691,7 @@ function ovdRenderTable(){
       <td style="padding:9px 8px;text-align:center;">
         <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};">${_ovdFmtDays(r.days)}</span>
       </td>
-      <td style="padding:9px 8px;text-align:center;font-size:11px;">${r.online?'<span style="color:#028867;font-weight:700;">● online</span>':'<span style="color:#9ca3af;">○ offline</span>'}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:11px;">${r.rt ? _ovdRtCell(r) : (r.online?'<span style="color:#028867;font-weight:700;">● online</span>':'<span style="color:#9ca3af;">○ offline</span>')}</td>
     </tr>`;
   }).join('');
 }
@@ -690,6 +718,7 @@ async function ovdOpenHistory(vid){
         <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;font-family:inherit;">✕</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        ${r.rt?`<div style="width:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">${_ovdRtCell(r)}${r.rt.name?`<span style="font-size:11px;color:#6b7280;">router: <b style="color:#374151;">${_ovdEsc(r.rt.name)}</b></span>`:''}</div>`:''}
         ${r.lhd?`<span style="font-size:11px;color:#374151;">Last harvest <b>${r.lhd}</b></span>${_ovdSrcTag(r.src)}`:r.inst?`<span style="font-size:11px;color:#374151;">Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}</span>`:`<span style="font-size:11px;color:#374151;">Never harvested · no install date</span>`}
       </div>
     </div>
