@@ -121,7 +121,7 @@ async function _ovdFetchAll(){
   const V = {};
   for(let i = 0; i < vids.length; i += 250){
     const chunk = vids.slice(i, i+250);
-    const b = await _ovdGet(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,address,vlan,last_harvest_date,date_installed,status,contact_number,is_online&limit=300`, 'vendos');
+    const b = await _ovdGet(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,address,vlan,last_harvest_date,date_installed,status,contact_number,is_online,admin_notes&limit=300`, 'vendos');
     b.forEach(v => V[v.id] = v);
   }
   // a vendo missing from V would silently read as "active, never harvested" —
@@ -320,6 +320,7 @@ function _ovdComputeFrom(raw, thresh){
       vlan: v.vlan == null ? '' : v.vlan,
       lhd: lhd || '',
       inst: _inst || '',
+      note: v.admin_notes || '',
       src: srcMap[row.vendo_id] || (_inst ? 'installed' : ''),
       appd: (L[row.vendo_id]||{}).app_last || '',
       bookd: (L[row.vendo_id]||{}).book_last || '',
@@ -575,6 +576,7 @@ function ovdRenderTable(){
       <td style="padding:9px 8px;">
         <div style="font-weight:700;color:#025AC6;font-size:12.5px;" title="Click row for app + book history">${_ovdEsc(r.name)}</div>
         <div style="font-size:10.5px;color:#9ca3af;">${_ovdEsc(r.code||'—')}${r.owner && r.owner!==r.name ? ' · '+_ovdEsc(r.owner) : ''}</div>
+        ${r.note?`<div style="font-size:10.5px;color:#92400e;background:#fef3c7;border-radius:5px;padding:2px 6px;margin-top:3px;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_ovdEsc(r.note)}">📝 ${_ovdEsc(r.note)}</div>`:''}
       </td>
       <td style="padding:9px 8px;font-size:11.5px;color:#374151;">${_ovdTitle(r.area)}${r.barangay?'<div style="font-size:10.5px;color:#9ca3af;">'+_ovdEsc(r.barangay)+'</div>':''}</td>
       <td style="padding:9px 8px;font-size:11.5px;color:#374151;">${_ovdEsc(r.groups.join(', '))}</td>
@@ -613,6 +615,18 @@ async function ovdOpenHistory(vid){
         ${r.lhd?`<span style="font-size:11px;color:#374151;">Last harvest <b>${r.lhd}</b></span>${_ovdSrcTag(r.src)}`:r.inst?`<span style="font-size:11px;color:#374151;">Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}</span>`:`<span style="font-size:11px;color:#374151;">Never harvested · no install date</span>`}
       </div>
     </div>
+    <div style="padding:12px 18px;border-bottom:1px solid #e5e7eb;background:#fafafa;">
+      <div style="font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">📝 Note on this vendo</div>
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <textarea id="ovd-note" rows="2" placeholder="e.g. owner asked to pause · unit for pull-out · reachable only on weekends" style="flex:1;font-family:inherit;font-size:12px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;resize:vertical;">${_ovdEsc(r.note||'')}</textarea>
+        <button id="ovd-note-save" onclick="ovdSaveNote(${vid})" style="padding:8px 12px;border:none;border-radius:8px;background:#025AC6;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Save note</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+        <button onclick="ovdInactivate(${vid})" style="padding:7px 12px;border:1px solid #fecaca;border-radius:8px;background:#fef2f2;color:#991b1b;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;">⏸ Inactivate vendo</button>
+        <span style="font-size:10.5px;color:#9ca3af;">Removes it from the overdue list and from collector routes. Can be reactivated in the Vendos tab.</span>
+      </div>
+      <div id="ovd-act-msg" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
+    </div>
     <div id="ovd-hist-body" style="flex:1;overflow:auto;padding:14px 18px;"><div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">Loading app + book history…</div></div>`;
   try{
     let rows = _ovdHistCache[vid];
@@ -628,6 +642,42 @@ async function ovdOpenHistory(vid){
   }
 }
 function ovdCloseHistory(){ const h=document.getElementById('ovd-hist'); if(h) h.style.display='none'; }
+
+function _ovdMsg(t, ok){ const m=document.getElementById('ovd-act-msg'); if(m){ m.textContent=t; m.style.color = ok?'#047857':'#991b1b'; } }
+async function _ovdPatchVendo(vid, body){
+  const r = await fetch(`${_SB}/rest/v1/vendos?id=eq.${vid}`, {method:'PATCH', headers:Object.assign({}, _HDR, {Prefer:'return=minimal'}), body:JSON.stringify(body)});
+  if(!r.ok){ const b=await r.json().catch(()=>null); throw new Error((b&&(b.message||b.error))||('HTTP '+r.status)); }
+}
+async function ovdSaveNote(vid){
+  const ta=document.getElementById('ovd-note'); const btn=document.getElementById('ovd-note-save');
+  const note=(ta.value||'').trim();
+  btn.disabled=true; _ovdMsg('Saving…');
+  try{
+    await _ovdPatchVendo(vid, {admin_notes: note||null});
+    const row=_ovdRows.find(x=>x.vendo_id===vid); if(row) row.note=note;
+    if(_ovdRaw && _ovdRaw.V && _ovdRaw.V[vid]) _ovdRaw.V[vid].admin_notes = note||null;
+    _ovdMsg(note?'Note saved.':'Note cleared.', true);
+    ovdRenderTable();
+  }catch(e){ _ovdMsg('Could not save: '+e.message); }
+  btn.disabled=false;
+}
+async function ovdInactivate(vid){
+  const row=_ovdRows.find(x=>x.vendo_id===vid) || {};
+  const reason = prompt('Inactivate "'+(row.name||('vendo #'+vid))+'"?\n\nReason (saved to the note):', '');
+  if(reason===null) return;
+  _ovdMsg('Inactivating…');
+  try{
+    const stamp = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
+    const prev = (row.note||'').trim();
+    const line = 'INACTIVE '+stamp+(reason.trim()?': '+reason.trim():'');
+    const note = prev ? prev+'\n'+line : line;
+    await _ovdPatchVendo(vid, {status:'inactive', admin_notes: note});
+    if(_ovdRaw && _ovdRaw.V && _ovdRaw.V[vid]){ _ovdRaw.V[vid].status='inactive'; _ovdRaw.V[vid].admin_notes=note; }
+    _ovdMsg('Inactivated. It will leave the overdue list.', true);
+    if(typeof toast==='function') toast('Vendo inactivated');
+    setTimeout(()=>{ ovdCloseHistory(); ovdRecompute(); }, 700);
+  }catch(e){ _ovdMsg('Could not inactivate: '+e.message); }
+}
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') ovdCloseHistory(); });
 function _ovdAddDays(d,n){ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()+n); return x.toLocaleDateString('en-CA'); }
 const _ovdPeso = v => v==null ? '' : '₱'+Number(v).toLocaleString('en-PH',{maximumFractionDigits:0});
