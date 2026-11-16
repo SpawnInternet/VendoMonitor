@@ -703,47 +703,56 @@ async function ovdOpenHistory(vid){
   let host = document.getElementById('ovd-hist');
   if(!host){
     host = document.createElement('div'); host.id='ovd-hist';
-    host.innerHTML = `<div id="ovd-hist-bg" onclick="ovdCloseHistory()" style="position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:9998;"></div>
-      <div id="ovd-hist-panel" style="position:fixed;top:0;right:0;bottom:0;width:min(560px,96vw);background:#fff;z-index:9999;box-shadow:-8px 0 30px rgba(0,0,0,.15);display:flex;flex-direction:column;font-family:inherit;"></div>`;
+    host.innerHTML = `<div id="ovd-hist-bg" onclick="ovdCloseHistory()" style="position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9998;"></div>
+      <div id="ovd-hist-panel" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(760px,96vw);max-height:92vh;background:#fff;border-radius:16px;z-index:9999;box-shadow:0 24px 70px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden;font-family:inherit;"></div>`;
     document.body.appendChild(host);
   }
   host.style.display='';
   const panel = document.getElementById('ovd-hist-panel');
-  panel.innerHTML = `<div style="padding:16px 18px;border-bottom:1px solid #e5e7eb;">
-      <div style="display:flex;align-items:flex-start;gap:10px;">
-        <div style="flex:1;">
-          <div style="font-size:16px;font-weight:800;color:#1e293b;">${_ovdEsc(r.name||('vendo #'+vid))}</div>
-          <div style="font-size:11.5px;color:#6b7280;margin-top:2px;">${_ovdEsc(r.code||'')}${r.code?' · ':''}${_ovdTitle(r.area)}${r.barangay?' · '+_ovdEsc(r.barangay):''}${r.vlan!==''&&r.vlan!=null?' · VLAN '+r.vlan:''}</div>
+  const t = _ovdAgeTier(r.days||0);
+  const ageTxt = r.days>=9999 ? 'never' : _ovdFmtDays(r.days);
+  const where = [r.code, _ovdTitle(r.area), r.barangay, (r.vlan!==''&&r.vlan!=null)?'VLAN '+r.vlan:''].filter(Boolean).map(_ovdEsc).join(' · ');
+  const rt = r.rt;
+  const rtChip = !rt ? '' : rt.online
+    ? `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;">● online</span>`
+    : `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;">○ offline${rt.since?' · seen '+String(rt.since).slice(0,10):''}</span>`;
+  const rtFlag = rt&&rt.flag ? `<span style="padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;text-transform:uppercase;">⚑ ${_ovdEsc(rt.flag)}</span>` : '';
+  const lastTxt = r.lhd ? `Last harvest <b style="color:#1e293b;">${r.lhd}</b>` : r.inst ? `Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}` : `Never harvested · no install date`;
+
+  panel.innerHTML = `
+    <!-- header -->
+    <div style="padding:14px 18px 12px;border-bottom:1px solid #e5e7eb;display:flex;align-items:flex-start;gap:12px;">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:17px;font-weight:800;color:#1e293b;">${_ovdEsc(r.name||('vendo #'+vid))}</div>
+          <span style="padding:3px 11px;border-radius:999px;font-size:12px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};">${ageTxt}${r.days<9999?' overdue':''}</span>
+          ${rtChip}${rtFlag}
         </div>
-        <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;font-family:inherit;">✕</button>
+        <div style="font-size:11.5px;color:#6b7280;margin-top:3px;">${where}</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${lastTxt}${r.lhd?_ovdSrcTag(r.src).replace('margin-top:3px;','margin-top:0;'):''}</div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-        ${r.rt?`<div style="width:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">${_ovdRtCell(r)}${r.rt.name?`<span style="font-size:11px;color:#6b7280;">router: <b style="color:#374151;">${_ovdEsc(r.rt.name)}</b></span>`:''}</div>`:''}
-        ${r.lhd?`<span style="font-size:11px;color:#374151;">Last harvest <b>${r.lhd}</b></span>${_ovdSrcTag(r.src)}`:r.inst?`<span style="font-size:11px;color:#374151;">Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}</span>`:`<span style="font-size:11px;color:#374151;">Never harvested · no install date</span>`}
-      </div>
+      <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;width:32px;height:32px;font-weight:800;cursor:pointer;font-family:inherit;flex:none;">✕</button>
     </div>
-    <div style="padding:12px 18px;border-bottom:1px solid #e5e7eb;background:#fafafa;">
-      <div style="font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">📝 Note on this vendo</div>
-      <div style="display:flex;gap:8px;align-items:flex-start;">
-        <textarea id="ovd-note" rows="2" placeholder="e.g. owner asked to pause · unit for pull-out · reachable only on weekends" style="flex:1;font-family:inherit;font-size:12px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;resize:vertical;">${_ovdEsc(r.note||'')}</textarea>
-        <button id="ovd-note-save" onclick="ovdSaveNote(${vid})" style="padding:8px 12px;border:none;border-radius:8px;background:#025AC6;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Save note</button>
+
+    <!-- actions: one compact bar -->
+    <div style="padding:10px 18px;border-bottom:1px solid #e5e7eb;background:#fafafa;display:grid;grid-template-columns:1fr auto;gap:8px 10px;align-items:center;">
+      <input id="ovd-note" type="text" value="${_ovdEsc(r.note||'')}" placeholder="📝 Note (e.g. owner asked to pause · for pull-out · weekends only)" style="font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;min-width:0;">
+      <div style="display:flex;gap:6px;">
+        <button id="ovd-note-save" onclick="ovdSaveNote(${vid})" style="padding:7px 12px;border:none;border-radius:8px;background:#025AC6;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;">Save</button>
+        <button onclick="ovdInactivate(${vid})" title="Removes it from the overdue list and collector routes. Reactivate in the Vendos tab." style="padding:7px 12px;border:1px solid #fecaca;border-radius:8px;background:#fef2f2;color:#991b1b;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">⏸ Inactivate</button>
       </div>
-      ${r.rt ? `<div style="margin-top:10px;">
-        <div style="font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">📡 Router name on VLAN ${r.vlan}</div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input id="ovd-rtname" type="text" value="${_ovdEsc(r.rt.name||'')}" placeholder="name as it should read on the MikroTik" style="flex:1;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;">
-          <button onclick="ovdUseRecordName(${vid})" title="Copy the vendo record name into the box" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;font-weight:700;cursor:pointer;font-family:inherit;font-size:11.5px;white-space:nowrap;">← use record</button>
-          <button id="ovd-rtname-save" onclick="ovdQueueRename(${vid})" style="padding:7px 12px;border:none;border-radius:8px;background:#b45309;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Fix on router</button>
-        </div>
-        <div id="ovd-rt-pending" style="font-size:10.5px;color:#9ca3af;margin-top:4px;">Queued renames are applied by the router poller on its next pass (about a minute).</div>
+      ${rt ? `
+      <input id="ovd-rtname" type="text" value="${_ovdEsc(rt.name||'')}" placeholder="📡 Router name on VLAN ${r.vlan}" title="Name as it reads on the MikroTik for VLAN ${r.vlan}" style="font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid ${rt.name&&r.name&&rt.name.toLowerCase().replace(/[^a-z0-9]/g,'').indexOf((r.name||'').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6))<0?'#fcd34d':'#e5e7eb'};border-radius:8px;min-width:0;">
+      <div style="display:flex;gap:6px;">
+        <button onclick="ovdUseRecordName(${vid})" title="Copy the vendo record name into the box" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;font-weight:700;cursor:pointer;font-family:inherit;font-size:11.5px;white-space:nowrap;">← use record</button>
+        <button id="ovd-rtname-save" onclick="ovdQueueRename(${vid})" title="Queued; the router poller writes it within a minute" style="padding:7px 12px;border:none;border-radius:8px;background:#b45309;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Fix on router</button>
       </div>` : ''}
-      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-        <button onclick="ovdInactivate(${vid})" style="padding:7px 12px;border:1px solid #fecaca;border-radius:8px;background:#fef2f2;color:#991b1b;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;">⏸ Inactivate vendo</button>
-        <span style="font-size:10.5px;color:#9ca3af;">Removes it from the overdue list and from collector routes. Can be reactivated in the Vendos tab.</span>
-      </div>
-      <div id="ovd-act-msg" style="font-size:11px;margin-top:6px;min-height:14px;"></div>
+      <div id="ovd-act-msg" style="grid-column:1 / -1;font-size:11px;min-height:0;"></div>
+      <div id="ovd-rt-pending" style="grid-column:1 / -1;font-size:10.5px;color:#9ca3af;display:none;"></div>
     </div>
-    <div id="ovd-hist-body" style="flex:1;overflow:auto;padding:14px 18px;"><div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">Loading app + book history…</div></div>`;
+
+    <!-- ledger -->
+    <div id="ovd-hist-body" style="flex:1;overflow:auto;padding:12px 18px 16px;"><div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">Loading app + book history…</div></div>`;
   try{
     let rows = _ovdHistCache[vid];
     if(!rows){
@@ -776,7 +785,7 @@ async function ovdQueueRename(vid){
       body: JSON.stringify({server_name:server, vlan:r.vlan, new_comment:name, old_comment:r.rt.name||null, vendo_id:vid, requested_by:'overdue-tab'})});
     if(!resp.ok){ const b=await resp.json().catch(()=>null); throw new Error((b&&(b.message||b.error))||('HTTP '+resp.status)); }
     r.rt = Object.assign({}, r.rt, {pending:name});
-    const p=document.getElementById('ovd-rt-pending'); if(p){ p.style.color='#b45309'; p.textContent='Queued: "'+name+'". The poller will write it to the router within a minute or two; the list updates on the next cache refresh.'; }
+    const p=document.getElementById('ovd-rt-pending'); if(p){ p.style.display=''; p.style.color='#b45309'; p.textContent='Queued: "'+name+'". The poller will write it to the router within a minute or two; the list updates on the next cache refresh.'; }
     _ovdMsg('Router rename queued.', true);
     if(typeof toast==='function') toast('Router rename queued');
   }catch(e){ _ovdMsg('Could not queue: '+e.message); }
@@ -828,42 +837,44 @@ function _ovdHistHtml(rows, r){
   if(!rows.length) return `<div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">No harvest in the app and none in the book.</div>`;
   const n = {both:0, app:0, book:0}; rows.forEach(x=>n[x.src]=(n[x.src]||0)+1);
   const gaps = rows.filter(x=>x.src==='both' && Math.abs(Number(x.amount_gap||0))>20).length;
-  const chip=(t,c,bg,bd)=>`<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:${c};background:${bg};border:1px solid ${bd};">${t}</span>`;
-  const summary = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
-      ${chip(n.both+' in both','#047857','#ecfdf5','#a7f3d0')}
-      ${chip(n.app+' app only','#1d4ed8','#eff6ff','#bfdbfe')}
-      ${chip(n.book+' book only','#b45309','#fffbeb','#fde68a')}
-      ${gaps?chip(gaps+' amount differs','#991b1b','#fef2f2','#fecaca'):''}
-    </div>
-    <div style="font-size:10.5px;color:#9ca3af;margin-bottom:10px;">Rows pair when app and book dates are within 3 days. Amounts are Spawn share.</div>`;
-  // ledger: one line per harvest, newest first, with running total of spawn share (oldest → newest)
-  let run = 0; const runMap = {};
+  // running total oldest → newest, shown newest first
+  let run=0; const runMap={};
   [...rows].reverse().forEach((x,i)=>{ run += Number(x.src==='app' ? (x.app_amount||0) : (x.book_amount||0)); runMap[i]=run; });
-  const total = run;
-  const cell = (d, amt, who, on, c) => on
-    ? `<div style="font-weight:700;color:#1e293b;">${d}</div><div style="font-size:11px;color:${c};font-weight:700;">${_ovdPeso(amt)}</div>${who?`<div style="font-size:10px;color:#6b7280;">${_ovdEsc(who)}</div>`:''}`
-    : `<div style="color:#d1d5db;font-weight:700;">—</div><div style="font-size:10px;color:#9ca3af;">not recorded</div>`;
+  const total=run;
+  const chip=(t,c,bg,bd)=>`<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;color:${c};background:${bg};border:1px solid ${bd};">${t}</span>`;
+  const summary = `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <span style="font-size:12px;font-weight:800;color:#1e293b;margin-right:4px;">Spawn share ledger</span>
+      ${chip(n.both+' in both','#047857','#ecfdf5','#a7f3d0')}
+      ${n.app?chip(n.app+' app only','#1d4ed8','#eff6ff','#bfdbfe'):''}
+      ${n.book?chip(n.book+' book only','#b45309','#fffbeb','#fde68a'):''}
+      ${gaps?chip(gaps+' amount differs','#991b1b','#fef2f2','#fecaca'):''}
+      <span style="flex:1"></span>
+      <span style="font-size:10.5px;color:#9ca3af;">pairs within 3 days · newest first</span>
+    </div>`;
+  const amt=(v,c)=>v==null?`<span style="color:#d1d5db;">—</span>`:`<span style="font-weight:700;color:${c};">${_ovdPeso(v)}</span>`;
   const trs = rows.map((x,idx)=>{
-    const runTot = runMap[rows.length-1-idx];
     const gap = x.src==='both' ? Number(x.amount_gap||0) : 0;
     const bad = Math.abs(gap)>20;
-    const bg = x.src==='both' ? (bad?'#fff7ed':'#fff') : x.src==='app' ? '#f0f6ff' : '#fffbeb';
+    const d = x.d;
     const mark = x.src==='both' ? (bad?`<span title="app − book = ${_ovdPeso(gap)}" style="color:#c2410c;font-weight:800;">≠ ${_ovdPeso(Math.abs(gap))}</span>`:`<span style="color:#047857;font-weight:800;">✓</span>`)
-               : x.src==='app' ? `<span style="color:#1d4ed8;font-weight:800;font-size:10.5px;">missing in book</span>`
-               : `<span style="color:#b45309;font-weight:800;font-size:10.5px;">not in app</span>`;
+               : x.src==='app' ? `<span style="color:#1d4ed8;font-weight:700;font-size:10.5px;">missing in book</span>`
+               : `<span style="color:#b45309;font-weight:700;font-size:10.5px;">not in app</span>`;
+    const bg = x.src==='both' ? (bad?'#fff7ed':'') : x.src==='app' ? '#f0f6ff' : '#fffbeb';
     return `<tr style="background:${bg};border-bottom:1px solid #f1f5f9;">
-      <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.app_date, x.app_amount, x.app_collector, !!x.app_id, '#1d4ed8')}</td>
-      <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.book_date, x.book_amount, null, !!x.book_id, '#b45309')}</td>
-      <td style="padding:9px 10px;vertical-align:middle;text-align:center;font-size:12px;">${mark}</td>
-      <td style="padding:9px 10px;vertical-align:middle;text-align:right;font-size:11.5px;font-weight:700;color:#374151;white-space:nowrap;">${_ovdPeso(runTot)}</td>
+      <td style="padding:6px 10px;font-weight:700;color:#1e293b;white-space:nowrap;">${d}</td>
+      <td style="padding:6px 10px;text-align:right;white-space:nowrap;">${amt(x.app_id?x.app_amount:null,'#1d4ed8')}${x.app_collector?`<div style="font-size:10px;color:#6b7280;font-weight:400;">${_ovdEsc(x.app_collector)}</div>`:''}</td>
+      <td style="padding:6px 10px;text-align:right;white-space:nowrap;">${amt(x.book_id?x.book_amount:null,'#b45309')}</td>
+      <td style="padding:6px 10px;text-align:center;white-space:nowrap;">${mark}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:700;color:#374151;white-space:nowrap;">${_ovdPeso(runMap[rows.length-1-idx])}</td>
     </tr>`;
   }).join('');
-  const th=(t,c)=>`<th style="padding:8px 10px;text-align:left;font-size:10px;color:${c};font-weight:800;text-transform:uppercase;letter-spacing:.04em;">${t}</th>`;
+  const th=(t,c,al)=>`<th style="padding:7px 10px;text-align:${al||'right'};font-size:10px;color:${c};font-weight:800;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;">${t}</th>`;
   return summary + `<div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
     <table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('📱 Spawn Harvest (app)','#1d4ed8')}${th('📒 BASHANG (book)','#b45309')}<th style="padding:8px 10px;text-align:center;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Match</th><th style="padding:8px 10px;text-align:right;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Running</th></tr></thead>
+      <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('Date','#6b7280','left')}${th('📱 App','#1d4ed8')}${th('📒 Book','#b45309')}${th('Match','#6b7280','center')}${th('Running','#6b7280')}</tr></thead>
       <tbody>${trs}</tbody>
-      <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;"><td colspan="3" style="padding:9px 10px;font-size:11.5px;font-weight:800;color:#1e293b;">Total spawn share · ${rows.length} harvest${rows.length===1?'':'s'}</td><td style="padding:9px 10px;text-align:right;font-size:12.5px;font-weight:900;color:#1e293b;">${_ovdPeso(total)}</td></tr></tfoot></table></div>`;
+      <tfoot><tr style="background:#f8fafc;border-top:1.5px solid #e5e7eb;"><td colspan="4" style="padding:8px 10px;font-size:11.5px;font-weight:800;color:#1e293b;">Total · ${rows.length} harvest${rows.length===1?'':'s'}</td><td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:900;color:#1e293b;">${_ovdPeso(total)}</td></tr></tfoot>
+    </table></div>`;
 }
 
 /* ── 5. INTERACTION ───────────────────────────────────────────────────── */
