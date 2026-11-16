@@ -468,6 +468,57 @@ def _iface_snapshot(api):
     return snap
 
 
+def apply_router_renames():
+    """v21 (2026-11-16): apply VLAN-comment renames queued from Vendo Monitor.
+
+    Rows in router_rename_outbox with status='pending' and our SERVER_NAME.
+    One RouterOS call each: /interface set .id=<id> comment=<new>. Each row is
+    marked done or failed with the reason. Never raises: a failure here must
+    not stop the status poll. Returns (done, failed).
+    """
+    pend = _sb_request("GET", "router_rename_outbox?status=eq.pending"
+                       f"&server_name=eq.{urllib.parse.quote(SERVER_NAME)}"
+                       "&select=id,vlan,new_comment&order=id.asc&limit=50")
+    if not pend:
+        return (0, 0)
+    done = failed = 0
+    conn = None
+    try:
+        conn = routeros_api.RouterOsApiPool(
+            MIKROTIK_HOST, username=MIKROTIK_USER, password=MIKROTIK_PASS,
+            port=MIKROTIK_PORT, plaintext_login=PLAINTEXT_LOGIN)
+        api = conn.get_api()
+        iface = api.get_resource("/interface")
+        for row in pend:
+            rid = row["id"]
+            name = f"vlan{row['vlan']}"
+            try:
+                found = iface.get(name=name)
+                if not found:
+                    raise RuntimeError(f"{name} not on this router")
+                iface.set(id=found[0][".id"], comment=str(row["new_comment"]))
+                _sb_request("PATCH", f"router_rename_outbox?id=eq.{rid}",
+                            {"status": "done",
+                             "applied_at": datetime.now(timezone.utc).isoformat()},
+                            prefer="return=minimal")
+                done += 1
+                print(f"  [rename] vlan{row['vlan']} -> {row['new_comment']!r}")
+            except Exception as e:
+                _sb_request("PATCH", f"router_rename_outbox?id=eq.{rid}",
+                            {"status": "failed", "error": str(e)[:300],
+                             "applied_at": datetime.now(timezone.utc).isoformat()},
+                            prefer="return=minimal")
+                failed += 1
+                print(f"  [rename] vlan{row['vlan']} FAILED: {e}")
+    except Exception as e:
+        _note_error(f"apply_router_renames -> {type(e).__name__}: {e}")
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except Exception: pass
+    return (done, failed)
+
+
 def poll_mikrotik(prev_state):
     """
     Read:
@@ -838,10 +889,10 @@ def main():
     # connection could block forever with no heartbeat. urllib calls pass
     # their own timeout and are unaffected.
     socket.setdefaulttimeout(60)
-    print(f"[{datetime.now()}] SPAWN MikroTik poller v20 ({BUILD}) on {HOSTNAME}")
+    print(f"[{datetime.now()}] SPAWN MikroTik poller v21 ({BUILD}) on {HOSTNAME}")
     print(f"  Router: {MIKROTIK_HOST}:{MIKROTIK_PORT}  Poll: {POLL_SECONDS}s  "
           f"Self-update: {'on' if SELF_UPDATE else 'off'}")
-    write_heartbeat("starting", f"Poller v20 build {BUILD} started"
+    write_heartbeat("starting", f"Poller v21 build {BUILD} started"
                     f"{' (self-update on)' if SELF_UPDATE else ''}", 0)
     cycle = 0
     status_sig = {}     # match_key -> signature tuple
@@ -854,6 +905,8 @@ def main():
         try:
             full = (cycle % FULL_REFRESH_EVERY_N_CYCLES == 0) or (cycle == 1)
             sup_vlans, sup_ppps = get_suppress_set()
+            # v21: queued renames go first so this cycle's read sees the new name
+            apply_router_renames()
             prev_state = fetch_previous_state()
             rows, device_rows, stats = poll_mikrotik(prev_state)
             # v17: suppression is a DISPLAY preference, not a write filter.

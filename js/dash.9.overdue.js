@@ -728,6 +728,15 @@ async function ovdOpenHistory(vid){
         <textarea id="ovd-note" rows="2" placeholder="e.g. owner asked to pause · unit for pull-out · reachable only on weekends" style="flex:1;font-family:inherit;font-size:12px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;resize:vertical;">${_ovdEsc(r.note||'')}</textarea>
         <button id="ovd-note-save" onclick="ovdSaveNote(${vid})" style="padding:8px 12px;border:none;border-radius:8px;background:#025AC6;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Save note</button>
       </div>
+      ${r.rt ? `<div style="margin-top:10px;">
+        <div style="font-size:10.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px;">📡 Router name on VLAN ${r.vlan}</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="ovd-rtname" type="text" value="${_ovdEsc(r.rt.name||'')}" placeholder="name as it should read on the MikroTik" style="flex:1;font-family:inherit;font-size:12px;padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;">
+          <button onclick="ovdUseRecordName(${vid})" title="Copy the vendo record name into the box" style="padding:7px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;color:#374151;font-weight:700;cursor:pointer;font-family:inherit;font-size:11.5px;white-space:nowrap;">← use record</button>
+          <button id="ovd-rtname-save" onclick="ovdQueueRename(${vid})" style="padding:7px 12px;border:none;border-radius:8px;background:#b45309;color:#fff;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap;">Fix on router</button>
+        </div>
+        <div id="ovd-rt-pending" style="font-size:10.5px;color:#9ca3af;margin-top:4px;">Queued renames are applied by the router poller on its next pass (about a minute).</div>
+      </div>` : ''}
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
         <button onclick="ovdInactivate(${vid})" style="padding:7px 12px;border:1px solid #fecaca;border-radius:8px;background:#fef2f2;color:#991b1b;font-weight:800;cursor:pointer;font-family:inherit;font-size:12px;">⏸ Inactivate vendo</button>
         <span style="font-size:10.5px;color:#9ca3af;">Removes it from the overdue list and from collector routes. Can be reactivated in the Vendos tab.</span>
@@ -749,6 +758,30 @@ async function ovdOpenHistory(vid){
   }
 }
 function ovdCloseHistory(){ const h=document.getElementById('ovd-hist'); if(h) h.style.display='none'; }
+
+// ── Router rename: queue only. The dashboard never talks to the MikroTik;
+//    mikrotik_status_poller.py applies router_rename_outbox rows for its server.
+function ovdUseRecordName(vid){ const r=_ovdRows.find(x=>x.vendo_id===vid)||{}; const i=document.getElementById('ovd-rtname'); if(i&&r.name) i.value=r.name; }
+async function ovdQueueRename(vid){
+  const r=_ovdRows.find(x=>x.vendo_id===vid)||{}; if(!r.rt) return;
+  const i=document.getElementById('ovd-rtname'); const btn=document.getElementById('ovd-rtname-save');
+  const name=(i.value||'').trim();
+  if(!name){ _ovdMsg('Router name cannot be blank.'); return; }
+  if(name===(r.rt.name||'').trim()){ _ovdMsg('That is already the router name.'); return; }
+  const server = (r.area||'').toUpperCase()==='DAPITAN' ? 'Dapitan Server' : 'Dicayas Server';
+  if(!confirm('Rename VLAN '+r.vlan+' on '+server+'\n\nfrom: '+(r.rt.name||'(blank)')+'\nto:   '+name+'\n\nThe router poller will apply this on its next pass.')) return;
+  btn.disabled=true; _ovdMsg('Queuing…');
+  try{
+    const resp = await fetch(`${_SB}/rest/v1/router_rename_outbox`, {method:'POST', headers:Object.assign({}, _HDR, {Prefer:'return=minimal'}),
+      body: JSON.stringify({server_name:server, vlan:r.vlan, new_comment:name, old_comment:r.rt.name||null, vendo_id:vid, requested_by:'overdue-tab'})});
+    if(!resp.ok){ const b=await resp.json().catch(()=>null); throw new Error((b&&(b.message||b.error))||('HTTP '+resp.status)); }
+    r.rt = Object.assign({}, r.rt, {pending:name});
+    const p=document.getElementById('ovd-rt-pending'); if(p){ p.style.color='#b45309'; p.textContent='Queued: "'+name+'". The poller will write it to the router within a minute or two; the list updates on the next cache refresh.'; }
+    _ovdMsg('Router rename queued.', true);
+    if(typeof toast==='function') toast('Router rename queued');
+  }catch(e){ _ovdMsg('Could not queue: '+e.message); }
+  btn.disabled=false;
+}
 
 function _ovdMsg(t, ok){ const m=document.getElementById('ovd-act-msg'); if(m){ m.textContent=t; m.style.color = ok?'#047857':'#991b1b'; } }
 async function _ovdPatchVendo(vid, body){
