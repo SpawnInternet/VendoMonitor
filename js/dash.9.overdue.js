@@ -11,7 +11,13 @@
        • more than N days (default 30) since last harvest.
 
      Last harvest = MAX( vendos.last_harvest_date ,
-                         harvest_group_items.harvested_at where status='harvested' )
+                         harvest_group_items.harvested_at where status='harvested' ,
+                         ALL SOURCES from rpc spawn_last_harvest_v1:
+                           app  = harvests (Spawn Harvest entries)
+                           book = office_harvest_records (BASHANG book) )
+     Each row shows where its date came from (app+book / book only / app only /
+     vendo record only) so a machine harvested but never entered in the app, or
+     entered in the app but never written in the book, is visible.  (2026-11-16)
      compared in Manila calendar days (harvested_at is UTC timestamptz — slicing
      the raw string would read a 06:00 Manila harvest as the previous day).
      Never harvested = 9999 days.
@@ -50,6 +56,18 @@ function _ovdAgeTier(d){
 }
 const _ovdEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const _ovdTitle = a => a ? a.charAt(0)+a.slice(1).toLowerCase() : '—';
+// where the last-harvest date came from
+const _OVD_SRC = {
+  'app+book': {t:'app + book',    fg:'#028867', bg:'#ecfdf5'},
+  'book':     {t:'book only',     fg:'#a16207', bg:'#fffbeb'},
+  'app':      {t:'app only',      fg:'#025AC6', bg:'#eff6ff'},
+  'vendo':    {t:'record only',   fg:'#6b7280', bg:'#f3f4f6'}
+};
+const _ovdSrcLabel = s => (_OVD_SRC[s]||{}).t || '';
+function _ovdSrcTag(s){
+  const m = _OVD_SRC[s]; if(!m) return '';
+  return `<div style="margin-top:2px;"><span style="display:inline-block;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:700;color:${m.fg};background:${m.bg};">${m.t}</span></div>`;
+}
 
 /* ── 1. FETCH ─────────────────────────────────────────────────────────── */
 // A non-array reply means PostgREST rejected the query (bad column, bad filter,
@@ -102,7 +120,20 @@ async function _ovdFetchAll(){
   // a vendo missing from V would silently read as "active, never harvested" —
   // count it so the UI can say so out loud rather than inventing overdue machines
   const missing = vids.filter(id => !V[id]).length;
-  return {gs, items, V, missing};
+
+  // all-sources last harvest (app + BASHANG book + vendo field). Dates only.
+  const L = {};
+  for(let i = 0; i < vids.length; i += 400){
+    const chunk = vids.slice(i, i+400);
+    const r = await fetch(`${SB}/rest/v1/rpc/spawn_last_harvest_v1`, {method:'POST', headers:_HDR, body: JSON.stringify({p_ids: chunk})});
+    const b = await r.json().catch(() => null);
+    if(!Array.isArray(b)){
+      const why = (b && (b.message || b.hint || b.error)) || ('HTTP '+r.status);
+      throw new Error('spawn_last_harvest_v1: '+why);
+    }
+    b.forEach(x => L[x.vendo_id] = x);
+  }
+  return {gs, items, V, L, missing};
 }
 
 /* Free-text address -> barangay. Ported from the SQL used to verify these counts.
@@ -198,7 +229,8 @@ function _ovdNormBgy(raw){
 /* ── 2. COMPUTE ───────────────────────────────────────────────────────── */
 function _ovdComputeFrom(raw, thresh){
   const {gs, items, V} = raw;
-  const dateMap = {}, statusMap = {}, bgyMap = {};
+  const L = raw.L || {};
+  const dateMap = {}, statusMap = {}, bgyMap = {}, srcMap = {};
   items.forEach(row => { if(row.barangay && !bgyMap[row.vendo_id]) bgyMap[row.vendo_id] = row.barangay; });
   Object.values(V).forEach(v => { dateMap[v.id] = v.last_harvest_date; statusMap[v.id] = v.status; });
 
@@ -210,6 +242,13 @@ function _ovdComputeFrom(raw, thresh){
       const d = new Date(row.harvested_at).toLocaleDateString('en-CA', {timeZone:'Asia/Manila'});
       if(d > (dateMap[row.vendo_id]||'')) dateMap[row.vendo_id] = d;
     }
+  });
+
+  // all sources win when newer (BASHANG book, app harvests)
+  Object.keys(L).forEach(id => {
+    const x = L[id];
+    if(x.last_any && x.last_any > (dateMap[id]||'')) dateMap[id] = x.last_any;
+    srcMap[id] = x.last_source || '';
   });
 
   const now = Date.now();
@@ -270,6 +309,9 @@ function _ovdComputeFrom(raw, thresh){
       area, barangay: bgyMap[row.vendo_id] || v.address || '',
       vlan: v.vlan == null ? '' : v.vlan,
       lhd: lhd || '',
+      src: srcMap[row.vendo_id] || '',
+      appd: (L[row.vendo_id]||{}).app_last || '',
+      bookd: (L[row.vendo_id]||{}).book_last || '',
       days,
       online: v.is_online === true,
       contact: v.contact_number || '',
@@ -521,7 +563,7 @@ function ovdRenderTable(){
       <td style="padding:7px 8px;font-size:11.5px;color:#374151;">${_ovdTitle(r.area)}${r.barangay?'<div style="font-size:10.5px;color:#9ca3af;">'+_ovdEsc(r.barangay)+'</div>':''}</td>
       <td style="padding:7px 8px;font-size:11.5px;color:#374151;">${_ovdEsc(r.groups.join(', '))}</td>
       <td style="padding:7px 8px;font-size:11.5px;color:#6b7280;text-align:center;">${r.vlan===''?'—':r.vlan}</td>
-      <td style="padding:7px 8px;font-size:11.5px;color:#374151;">${r.lhd || '<span style="color:#311A8E;font-weight:700;">never</span>'}</td>
+      <td style="padding:7px 8px;font-size:11.5px;color:#374151;" title="App: ${r.appd||'none'} · Book: ${r.bookd||'none'}">${r.lhd || '<span style="color:#311A8E;font-weight:700;">never</span>'}${_ovdSrcTag(r.src)}</td>
       <td style="padding:7px 8px;text-align:center;">
         <span style="display:inline-block;padding:3px 9px;border-radius:7px;font-size:11.5px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};">${_ovdFmtDays(r.days)}</span>
       </td>
@@ -562,10 +604,11 @@ function ovdGoVendo(name){
 function ovdExport(){
   const rows = _ovdVisible();
   if(!rows.length){ if(typeof toast==='function') toast('Nothing to export'); return; }
-  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Days overdue','Online'];
+  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Source','App date','Book date','Days overdue','Online'];
   const esc = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const csv = [head.join(',')].concat(rows.map((r,i) =>
     [i+1, r.name, r.code, r.owner, r.area, r.barangay, r.groups.join(' | '), r.vlan, r.lhd || 'never',
+     _ovdSrcLabel(r.src), r.appd, r.bookd,
      r.days>=9999 ? 'never' : r.days, r.online?'online':'offline'].map(esc).join(','))).join('\n');
   const scope = (_ovdSelArea || 'ALL') + (_ovdSelGroup ? '-G'+_ovdSelGroup : '');
   const a = document.createElement('a');
