@@ -434,6 +434,7 @@ function _ovdComputeFromList(list, thresh){
       area, barangay:x.barangay||x.address||'', vlan:x.vlan==null?'':x.vlan,
       lhd:x.lhd||'', inst:x.inst||'', note:x.note||'', src:x.src||'', appd:x.appd||'', bookd:x.bookd||'',
       days, online:x.online===true, contact:'', rt:x.rt||null, keys:x.keys||null, instRt:x.inst_rt===true,
+      lat:x.lat??null, lng:x.lng??null, photo:x.photo||null,
       groups:(x.groups||[]).map(g=>g.label||g.code||('Group '+g.gid)), gids:(x.groups||[]).map(g=>g.gid),
       gid:(x.groups&&x.groups[0]&&x.groups[0].gid)||null, glabel:(x.groups&&x.groups[0]&&x.groups[0].label)||''
     });
@@ -732,6 +733,7 @@ async function ovdOpenHistory(vid){
         <div style="font-size:11.5px;color:#6b7280;margin-top:3px;">${where}</div>
         <div style="font-size:11.5px;color:#374151;margin-top:5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${lastTxt}${r.lhd?_ovdSrcTag(r.src).replace('margin-top:3px;','margin-top:0;'):''}</div>
         ${keysHtml}
+        <div id="ovd-gps-line">${_ovdGpsHtml(r)}</div>
       </div>
       <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;width:32px;height:32px;font-weight:800;cursor:pointer;font-family:inherit;flex:none;">✕</button>
     </div>
@@ -852,7 +854,156 @@ function _ovdKeysHtml(k){
   if(!parts.length) return `<div style="font-size:11px;color:#9ca3af;margin-top:5px;">🔑 no key on record</div>`;
   return `<div style="margin-top:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;"><span style="font-size:11px;color:#6b7280;font-weight:700;">🔑</span>${parts.join('')}</div>`;
 }
-const _OVD_BUILD = 'ovd1116h';
+// 📍 GPS on record, or a photo-to-GPS reader when there is none
+function _ovdGpsHtml(r){
+  const has = r.lat!=null && r.lng!=null && isFinite(+r.lat) && isFinite(+r.lng);
+  const btn = `<button onclick="ovdPhotoGps(${r.vendo_id})" style="padding:3px 10px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-weight:800;cursor:pointer;font-family:inherit;font-size:10.5px;">📷 ${has?'Update from photo':'Add from photo'}</button>`;
+  if(has){
+    return `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:#374151;">
+      <span>📍 <b>${(+r.lat).toFixed(5)}, ${(+r.lng).toFixed(5)}</b></span>
+      <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" style="color:#025AC6;font-weight:700;text-decoration:none;">open map ↗</a>
+      ${r.photo?`<a href="${_ovdEsc(r.photo)}" target="_blank" style="color:#6b7280;text-decoration:none;">photo ↗</a>`:''}
+      ${btn}</div>`;
+  }
+  return `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;"><span style="color:#b45309;font-weight:800;">📍 No GPS on record</span>${btn}</div>`;
+}
+
+// ── Photo → GPS. Order: 1) EXIF GPS tag (exact)  2) OCR of the stamp overlay
+//    (Tesseract.js in the browser, stamp strip cropped + upscaled first)  3) paste.
+//    Result must fall inside Zamboanga del Norte-ish bounds before it can be saved.
+// EXIF GPS reader (same as dicayas.html); guarded so a later shared copy wins
+if(typeof window.exifGps!=='function'){
+function exifGpsFromTiff(dv, base){
+  const le = dv.getUint16(base)===0x4949;
+  const u16=o=>dv.getUint16(o,le), u32=o=>dv.getUint32(o,le);
+  if(u16(base+2)!==0x002A) return null;
+  const ifd0 = base + u32(base+4), n = u16(ifd0);
+  let gpsOff=0;
+  for(let i=0;i<n;i++){ const e=ifd0+2+i*12; if(u16(e)===0x8825){ gpsOff=base+u32(e+8); break; } }
+  if(!gpsOff) return null;
+  const gn=u16(gpsOff), tags={};
+  for(let i=0;i<gn;i++){
+    const e=gpsOff+2+i*12, tag=u16(e), type=u16(e+2), cnt=u32(e+4);
+    const unit = type===5?8 : type===2?1 : type===3?2 : 4;
+    const at = (cnt*unit>4) ? base+u32(e+8) : e+8;
+    if(type===2){ let t=''; for(let k=0;k<cnt-1;k++) t+=String.fromCharCode(dv.getUint8(at+k)); tags[tag]=t; }
+    else if(type===5){ const a=[]; for(let k=0;k<cnt;k++){ const num=u32(at+k*8), den=u32(at+k*8+4); a.push(den?num/den:0); } tags[tag]=a; }
+  }
+  const dms=a=>(Array.isArray(a)&&a.length===3)?a[0]+a[1]/60+a[2]/3600:null;
+  let lat=dms(tags[2]), lng=dms(tags[4]);
+  if(lat==null||lng==null||(!lat&&!lng)) return null;
+  if(String(tags[1]||'N').toUpperCase().startsWith('S')) lat=-lat;
+  if(String(tags[3]||'E').toUpperCase().startsWith('W')) lng=-lng;
+  return {lat:+lat.toFixed(6), lng:+lng.toFixed(6), how:'photo exif'};
+}
+function exifGps(buf){
+  try{
+    const dv=new DataView(buf);
+    if(dv.getUint16(0)!==0xFFD8) return null;
+    let off=2;
+    while(off < dv.byteLength-4){
+      const marker=dv.getUint16(off);
+      if((marker & 0xFF00)!==0xFF00) break;
+      const size=dv.getUint16(off+2);
+      if(marker===0xFFE1){
+        let tag=''; for(let i=0;i<4;i++) tag+=String.fromCharCode(dv.getUint8(off+4+i));
+        if(tag==='Exif'){ const g=exifGpsFromTiff(dv, off+10); if(g) return g; }
+      }
+      if(size<2) break;
+      off += 2 + size;
+    }
+  }catch(e){}
+  return null;
+}
+
+}
+let _ovdTess = null;
+async function _ovdTesseract(){
+  if(_ovdTess) return _ovdTess;
+  if(!window.Tesseract){
+    await new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; sc.onload=ok; sc.onerror=()=>bad(new Error('could not load OCR')); document.head.appendChild(sc); });
+  }
+  _ovdTess = await window.Tesseract.createWorker('eng');
+  return _ovdTess;
+}
+function _ovdLoadImg(file){ return new Promise((ok,bad)=>{ const u=URL.createObjectURL(file); const im=new Image(); im.onload=()=>ok(im); im.onerror=bad; im.src=u; }); }
+// crop a band, upscale, grayscale + contrast → much better digit recognition on small stamp text
+function _ovdBandCanvas(img, top, bottom){
+  const sx=0, sy=Math.floor(img.naturalHeight*top), sh=Math.floor(img.naturalHeight*(bottom-top));
+  const scale = Math.max(1, Math.min(3, 1800/img.naturalWidth));
+  const c=document.createElement('canvas'); c.width=Math.floor(img.naturalWidth*scale); c.height=Math.floor(sh*scale);
+  const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+  ctx.drawImage(img, sx, sy, img.naturalWidth, sh, 0, 0, c.width, c.height);
+  const d=ctx.getImageData(0,0,c.width,c.height), px=d.data;
+  for(let i=0;i<px.length;i+=4){ let g=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2]; g=((g-128)*1.6)+128; g=g<0?0:g>255?255:g; px[i]=px[i+1]=px[i+2]=g; }
+  ctx.putImageData(d,0,0);
+  return c;
+}
+// pull "lat, lng" out of OCR text; tolerant of O→0, l→1, spaces, "Lat 8.5 Long 123.3"
+function _ovdCoordsFromText(t){
+  let s=String(t||'').replace(/[Oo]/g,'0').replace(/[lI|]/g,'1').replace(/,(?=\d{3,})/g,'.');
+  const cands=[];
+  const re=/(-?\d{1,2}[.,]\d{3,})\s*[,;:\s]\s*(-?\d{1,3}[.,]\d{3,})/g; let m;
+  while((m=re.exec(s))){ const la=parseFloat(m[1].replace(',','.')), lo=parseFloat(m[2].replace(',','.')); if(isFinite(la)&&isFinite(lo)) cands.push([la,lo]); }
+  const re2=/lat[^\d-]{0,8}(-?\d{1,2}[.,]\d{3,})[\s\S]{0,40}?lon?g?[^\d-]{0,8}(-?\d{1,3}[.,]\d{3,})/ig;
+  while((m=re2.exec(s))){ const la=parseFloat(m[1].replace(',','.')), lo=parseFloat(m[2].replace(',','.')); if(isFinite(la)&&isFinite(lo)) cands.push([la,lo]); }
+  // prefer the candidate inside the service area
+  const inArea=([la,lo])=>la>=7.5&&la<=9.5&&lo>=122&&lo<=124.5;
+  const best = cands.find(inArea) || cands.find(([la,lo])=>la>=4&&la<=22&&lo>=115&&lo<=128);
+  return best ? {lat:+best[0].toFixed(6), lng:+best[1].toFixed(6), inArea:inArea(best)} : null;
+}
+async function ovdPhotoGps(vid){
+  const r=_ovdRows.find(x=>x.vendo_id===vid)||{};
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+  inp.onchange=async()=>{
+    const file=inp.files[0]; if(!file) return;
+    _ovdMsg('Reading photo…');
+    let g=null, how='';
+    try{ const e=(typeof exifGps==='function')?exifGps(await file.arrayBuffer()):null; if(e){ g={lat:e.lat,lng:e.lng,inArea:true}; how='EXIF tag'; } }catch(_){}
+    if(!g){
+      try{
+        _ovdMsg('No GPS tag — reading the stamp text (OCR)…');
+        const img=await _ovdLoadImg(file);
+        const w=await _ovdTesseract();
+        // stamp overlays sit at the bottom (GPS Map Camera, Timestamp Camera) or top; try bottom band, then top, then whole
+        for(const [a,b] of [[0.62,1],[0,0.38],[0,1]]){
+          const {data}=await w.recognize(_ovdBandCanvas(img,a,b));
+          const c=_ovdCoordsFromText(data.text);
+          if(c){ g=c; how='stamp OCR'; break; }
+        }
+      }catch(e){ _ovdMsg('OCR failed: '+e.message); }
+    }
+    if(!g){
+      const t=prompt('Could not read coordinates from the photo.\nPaste the stamp line (e.g. 8.57732, 123.35280):','');
+      if(t===null){ _ovdMsg(''); return; }
+      g=_ovdCoordsFromText(t); how='typed';
+      if(!g){ _ovdMsg('No coordinates in that text.'); return; }
+    }
+    if(!g.inArea){ if(!confirm(`Read ${g.lat}, ${g.lng} (${how}) — that is OUTSIDE the Dipolog/Dapitan/Sindangan area.\nSave anyway?`)){ _ovdMsg('Not saved.'); return; } }
+    const fix=prompt(`Found ${g.lat}, ${g.lng} via ${how}.\nCheck on the map: https://www.google.com/maps?q=${g.lat},${g.lng}\n\nSave this as the GPS for "${r.name||vid}"? Edit if needed:`, g.lat+', '+g.lng);
+    if(fix===null){ _ovdMsg('Not saved.'); return; }
+    const fx=_ovdCoordsFromText(fix); if(!fx){ _ovdMsg('Bad coordinates.'); return; }
+    _ovdMsg('Saving GPS…');
+    try{
+      await _ovdPatchVendo(vid, {lat:fx.lat, lng:fx.lng, gps:fx.lat+', '+fx.lng, gps_updated_at:new Date().toISOString()});
+      try{ await fetch(`${_SB}/rest/v1/harvest_group_items?vendo_id=eq.${vid}`, {method:'PATCH', headers:Object.assign({}, _HDR, {Prefer:'return=minimal'}), body:JSON.stringify({lat:fx.lat,lng:fx.lng})}); }catch(_){}
+      let photo=null;
+      try{
+        const path='vendo-profiles/vendo_'+vid+'.jpg';
+        const up=await fetch(_SB+'/storage/v1/object/harvest-photos/'+path,{method:'POST',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},body:file});
+        if(up.ok){ photo=_SB+'/storage/v1/object/public/harvest-photos/'+path+'?t='+Date.now(); await _ovdPatchVendo(vid,{photo_url:photo}); }
+      }catch(_){}
+      r.lat=fx.lat; r.lng=fx.lng; if(photo) r.photo=photo;
+      if(_ovdRaw&&_ovdRaw.list){ const x=_ovdRaw.list.rows.find(y=>y.vendo_id===vid); if(x){ x.lat=fx.lat; x.lng=fx.lng; if(photo) x.photo=photo; } }
+      const line=document.getElementById('ovd-gps-line'); if(line) line.innerHTML=_ovdGpsHtml(r);
+      _ovdMsg('GPS saved ('+how+')'+(photo?' and photo kept.':'.'), true);
+      if(typeof toast==='function') toast('GPS saved');
+      _ovdAskRebuild();
+    }catch(e){ _ovdMsg('Could not save GPS: '+e.message); }
+  };
+  inp.click();
+}
+const _OVD_BUILD = 'ovd1116i';
 function _ovdHistHtml(rows, r){
   if(!rows.length) return `<div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">No harvest in the app and none in the book.<div style="font-size:9.5px;color:#d1d5db;margin-top:6px;">${_OVD_BUILD}</div></div>`;
   const n = {both:0, app:0, book:0}; rows.forEach(x=>n[x.src]=(n[x.src]||0)+1);
