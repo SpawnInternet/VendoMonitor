@@ -58,15 +58,22 @@ const _ovdEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;',
 const _ovdTitle = a => a ? a.charAt(0)+a.slice(1).toLowerCase() : '—';
 // where the last-harvest date came from
 const _OVD_SRC = {
-  'app+book': {t:'app + book',    fg:'#028867', bg:'#ecfdf5'},
-  'book':     {t:'book only',     fg:'#a16207', bg:'#fffbeb'},
-  'app':      {t:'app only',      fg:'#025AC6', bg:'#eff6ff'},
-  'vendo':    {t:'record only',   fg:'#6b7280', bg:'#f3f4f6'}
+  'app+book':  {t:'app + book',  fg:'#047857', bg:'#ecfdf5', bd:'#a7f3d0', dots:[1,1]},
+  'book':      {t:'book only',   fg:'#b45309', bg:'#fffbeb', bd:'#fde68a', dots:[0,1]},
+  'app':       {t:'app only',    fg:'#1d4ed8', bg:'#eff6ff', bd:'#bfdbfe', dots:[1,0]},
+  'vendo':     {t:'record only', fg:'#6b7280', bg:'#f3f4f6', bd:'#e5e7eb', dots:[0,0]},
+  'installed': {t:'since install', fg:'#6d28d9', bg:'#f5f3ff', bd:'#ddd6fe', dots:[0,0]}
 };
+// two dots: ● app  ● book — filled when that source has the latest harvest
+function _ovdDots(s){
+  const m=_OVD_SRC[s]; if(!m) return '';
+  const dot=(on,c,t)=>`<span title="${t}" style="display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;background:${on?c:'#e5e7eb'};"></span>`;
+  return `<span style="display:inline-flex;align-items:center;margin-right:5px;">${dot(m.dots[0],'#1d4ed8','app')}${dot(m.dots[1],'#b45309','book')}</span>`;
+}
 const _ovdSrcLabel = s => (_OVD_SRC[s]||{}).t || '';
 function _ovdSrcTag(s){
   const m = _OVD_SRC[s]; if(!m) return '';
-  return `<div style="margin-top:2px;"><span style="display:inline-block;padding:1px 6px;border-radius:5px;font-size:9.5px;font-weight:700;color:${m.fg};background:${m.bg};">${m.t}</span></div>`;
+  return `<div style="margin-top:3px;display:flex;align-items:center;">${_ovdDots(s)}<span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:9.5px;font-weight:700;color:${m.fg};background:${m.bg};border:1px solid ${m.bd};">${m.t}</span></div>`;
 }
 
 /* ── 1. FETCH ─────────────────────────────────────────────────────────── */
@@ -114,7 +121,7 @@ async function _ovdFetchAll(){
   const V = {};
   for(let i = 0; i < vids.length; i += 250){
     const chunk = vids.slice(i, i+250);
-    const b = await _ovdGet(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,address,vlan,last_harvest_date,status,contact_number,is_online&limit=300`, 'vendos');
+    const b = await _ovdGet(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,vendo_code,sheet_name,tg_name,owner_name,area,address,vlan,last_harvest_date,date_installed,status,contact_number,is_online&limit=300`, 'vendos');
     b.forEach(v => V[v.id] = v);
   }
   // a vendo missing from V would silently read as "active, never harvested" —
@@ -283,7 +290,10 @@ function _ovdComputeFrom(raw, thresh){
     }
 
     const lhd  = dateMap[row.vendo_id];
-    const days = lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000) : 9999;
+    // never harvested: count from the install date (install + 30d = first due). No install date → 9999.
+    const _inst = !lhd && V[row.vendo_id] && V[row.vendo_id].date_installed ? String(V[row.vendo_id].date_installed).slice(0,10) : null;
+    const days = lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000)
+               : _inst ? Math.floor((now - new Date(_inst+'T12:00:00'))/86400000) : 9999;
     const area = (g.area||'').toUpperCase(); if(!area) return;
     if(!byArea[area]) byArea[area] = {overdue:0, oldest:0, groups:new Set()};
     byArea[area].groups.add(g.id);
@@ -309,7 +319,8 @@ function _ovdComputeFrom(raw, thresh){
       area, barangay: bgyMap[row.vendo_id] || v.address || '',
       vlan: v.vlan == null ? '' : v.vlan,
       lhd: lhd || '',
-      src: srcMap[row.vendo_id] || '',
+      inst: _inst || '',
+      src: srcMap[row.vendo_id] || (_inst ? 'installed' : ''),
       appd: (L[row.vendo_id]||{}).app_last || '',
       bookd: (L[row.vendo_id]||{}).book_last || '',
       days,
@@ -554,22 +565,105 @@ function ovdRenderTable(){
   }
   tb.innerHTML = rows.map((r,i) => {
     const t = _ovdAgeTier(r.days);
-    return `<tr style="border-bottom:1px solid #f1f5f9;">
-      <td style="padding:7px 8px;color:#9ca3af;font-size:11px;text-align:right;">${i+1}</td>
-      <td style="padding:7px 8px;">
-        <div style="font-weight:700;color:#025AC6;font-size:12.5px;cursor:pointer;" onclick="ovdGoVendo(${JSON.stringify(r.name).replace(/"/g,'&quot;')})" title="Open in Vendos tab">${_ovdEsc(r.name)}</div>
+    const _lhdCell = r.lhd
+      ? `<div style="font-weight:700;color:#1e293b;">${r.lhd}</div>${_ovdSrcTag(r.src)}`
+      : r.inst
+        ? `<div style="font-weight:800;color:#6d28d9;">never</div><div style="font-size:10.5px;color:#6b7280;margin-top:2px;">installed ${r.inst}</div>${_ovdSrcTag('installed')}`
+        : `<div style="font-weight:800;color:#311A8E;">never</div><div style="font-size:10px;color:#9ca3af;margin-top:2px;">no install date</div>`;
+    return `<tr class="ovd-row" data-vid="${r.vendo_id}" onclick="ovdOpenHistory(${r.vendo_id})" style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onmouseenter="this.style.background='#f8faff'" onmouseleave="this.style.background=''">
+      <td style="padding:9px 8px;color:#9ca3af;font-size:11px;text-align:right;">${i+1}</td>
+      <td style="padding:9px 8px;">
+        <div style="font-weight:700;color:#025AC6;font-size:12.5px;" title="Click row for app + book history">${_ovdEsc(r.name)}</div>
         <div style="font-size:10.5px;color:#9ca3af;">${_ovdEsc(r.code||'—')}${r.owner && r.owner!==r.name ? ' · '+_ovdEsc(r.owner) : ''}</div>
       </td>
-      <td style="padding:7px 8px;font-size:11.5px;color:#374151;">${_ovdTitle(r.area)}${r.barangay?'<div style="font-size:10.5px;color:#9ca3af;">'+_ovdEsc(r.barangay)+'</div>':''}</td>
-      <td style="padding:7px 8px;font-size:11.5px;color:#374151;">${_ovdEsc(r.groups.join(', '))}</td>
-      <td style="padding:7px 8px;font-size:11.5px;color:#6b7280;text-align:center;">${r.vlan===''?'—':r.vlan}</td>
-      <td style="padding:7px 8px;font-size:11.5px;color:#374151;" title="App: ${r.appd||'none'} · Book: ${r.bookd||'none'}">${r.lhd || '<span style="color:#311A8E;font-weight:700;">never</span>'}${_ovdSrcTag(r.src)}</td>
-      <td style="padding:7px 8px;text-align:center;">
-        <span style="display:inline-block;padding:3px 9px;border-radius:7px;font-size:11.5px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};">${_ovdFmtDays(r.days)}</span>
+      <td style="padding:9px 8px;font-size:11.5px;color:#374151;">${_ovdTitle(r.area)}${r.barangay?'<div style="font-size:10.5px;color:#9ca3af;">'+_ovdEsc(r.barangay)+'</div>':''}</td>
+      <td style="padding:9px 8px;font-size:11.5px;color:#374151;">${_ovdEsc(r.groups.join(', '))}</td>
+      <td style="padding:9px 8px;font-size:11.5px;color:#6b7280;text-align:center;">${r.vlan===''?'—':r.vlan}</td>
+      <td style="padding:9px 8px;font-size:11.5px;color:#374151;" title="App: ${r.appd||'none'} · Book: ${r.bookd||'none'}">${_lhdCell}</td>
+      <td style="padding:9px 8px;text-align:center;">
+        <span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:800;background:${t.bg};color:${t.fg};border:1px solid ${t.bd};">${_ovdFmtDays(r.days)}</span>
       </td>
-      <td style="padding:7px 8px;text-align:center;font-size:11px;">${r.online?'<span style="color:#028867;font-weight:700;">● online</span>':'<span style="color:#9ca3af;">○ offline</span>'}</td>
+      <td style="padding:9px 8px;text-align:center;font-size:11px;">${r.online?'<span style="color:#028867;font-weight:700;">● online</span>':'<span style="color:#9ca3af;">○ offline</span>'}</td>
     </tr>`;
   }).join('');
+}
+
+/* ── 4b. HISTORY DRAWER — one vendo, app record and BASHANG book side by side ── */
+var _ovdHistCache = {};
+async function ovdOpenHistory(vid){
+  const r = _ovdRows.find(x=>x.vendo_id===vid) || {};
+  let host = document.getElementById('ovd-hist');
+  if(!host){
+    host = document.createElement('div'); host.id='ovd-hist';
+    host.innerHTML = `<div id="ovd-hist-bg" onclick="ovdCloseHistory()" style="position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:9998;"></div>
+      <div id="ovd-hist-panel" style="position:fixed;top:0;right:0;bottom:0;width:min(560px,96vw);background:#fff;z-index:9999;box-shadow:-8px 0 30px rgba(0,0,0,.15);display:flex;flex-direction:column;font-family:inherit;"></div>`;
+    document.body.appendChild(host);
+  }
+  host.style.display='';
+  const panel = document.getElementById('ovd-hist-panel');
+  panel.innerHTML = `<div style="padding:16px 18px;border-bottom:1px solid #e5e7eb;">
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:16px;font-weight:800;color:#1e293b;">${_ovdEsc(r.name||('vendo #'+vid))}</div>
+          <div style="font-size:11.5px;color:#6b7280;margin-top:2px;">${_ovdEsc(r.code||'')}${r.code?' · ':''}${_ovdTitle(r.area)}${r.barangay?' · '+_ovdEsc(r.barangay):''}${r.vlan!==''&&r.vlan!=null?' · VLAN '+r.vlan:''}</div>
+        </div>
+        <button onclick="ovdCloseHistory()" style="border:none;background:#f1f5f9;color:#475569;border-radius:8px;padding:6px 10px;font-weight:800;cursor:pointer;font-family:inherit;">✕</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+        ${r.lhd?`<span style="font-size:11px;color:#374151;">Last harvest <b>${r.lhd}</b></span>${_ovdSrcTag(r.src)}`:r.inst?`<span style="font-size:11px;color:#374151;">Never harvested · installed <b>${r.inst}</b> · due ${_ovdAddDays(r.inst,30)}</span>`:`<span style="font-size:11px;color:#374151;">Never harvested · no install date</span>`}
+      </div>
+    </div>
+    <div id="ovd-hist-body" style="flex:1;overflow:auto;padding:14px 18px;"><div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">Loading app + book history…</div></div>`;
+  try{
+    let rows = _ovdHistCache[vid];
+    if(!rows){
+      const resp = await fetch(`${_SB}/rest/v1/rpc/spawn_vendo_harvest_history_v1`, {method:'POST', headers:_HDR, body:JSON.stringify({p_vendo_id: vid})});
+      rows = await resp.json().catch(()=>null);
+      if(!Array.isArray(rows)) throw new Error((rows&&(rows.message||rows.error))||('HTTP '+resp.status));
+      _ovdHistCache[vid] = rows;
+    }
+    document.getElementById('ovd-hist-body').innerHTML = _ovdHistHtml(rows, r);
+  }catch(e){
+    document.getElementById('ovd-hist-body').innerHTML = `<div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:12px;font-size:12px;"><b>Could not load history.</b><br>${_ovdEsc(e.message)}</div>`;
+  }
+}
+function ovdCloseHistory(){ const h=document.getElementById('ovd-hist'); if(h) h.style.display='none'; }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') ovdCloseHistory(); });
+function _ovdAddDays(d,n){ const x=new Date(d+'T12:00:00'); x.setDate(x.getDate()+n); return x.toLocaleDateString('en-CA'); }
+const _ovdPeso = v => v==null ? '' : '₱'+Number(v).toLocaleString('en-PH',{maximumFractionDigits:0});
+function _ovdHistHtml(rows, r){
+  if(!rows.length) return `<div style="color:#9ca3af;font-size:12px;padding:20px;text-align:center;">No harvest in the app and none in the book.</div>`;
+  const n = {both:0, app:0, book:0}; rows.forEach(x=>n[x.src]=(n[x.src]||0)+1);
+  const gaps = rows.filter(x=>x.src==='both' && Math.abs(Number(x.amount_gap||0))>20).length;
+  const chip=(t,c,bg,bd)=>`<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;color:${c};background:${bg};border:1px solid ${bd};">${t}</span>`;
+  const summary = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      ${chip(n.both+' in both','#047857','#ecfdf5','#a7f3d0')}
+      ${chip(n.app+' app only','#1d4ed8','#eff6ff','#bfdbfe')}
+      ${chip(n.book+' book only','#b45309','#fffbeb','#fde68a')}
+      ${gaps?chip(gaps+' amount differs','#991b1b','#fef2f2','#fecaca'):''}
+    </div>
+    <div style="font-size:10.5px;color:#9ca3af;margin-bottom:10px;">Rows pair when app and book dates are within 3 days. Amounts are Spawn share.</div>`;
+  const cell = (d, amt, who, on, c) => on
+    ? `<div style="font-weight:700;color:#1e293b;">${d}</div><div style="font-size:11px;color:${c};font-weight:700;">${_ovdPeso(amt)}</div>${who?`<div style="font-size:10px;color:#6b7280;">${_ovdEsc(who)}</div>`:''}`
+    : `<div style="color:#d1d5db;font-weight:700;">—</div><div style="font-size:10px;color:#9ca3af;">not recorded</div>`;
+  const trs = rows.map(x=>{
+    const gap = x.src==='both' ? Number(x.amount_gap||0) : 0;
+    const bad = Math.abs(gap)>20;
+    const bg = x.src==='both' ? (bad?'#fff7ed':'#fff') : x.src==='app' ? '#f0f6ff' : '#fffbeb';
+    const mark = x.src==='both' ? (bad?`<span title="app − book = ${_ovdPeso(gap)}" style="color:#c2410c;font-weight:800;">≠ ${_ovdPeso(Math.abs(gap))}</span>`:`<span style="color:#047857;font-weight:800;">✓</span>`)
+               : x.src==='app' ? `<span style="color:#1d4ed8;font-weight:800;font-size:10.5px;">missing in book</span>`
+               : `<span style="color:#b45309;font-weight:800;font-size:10.5px;">not in app</span>`;
+    return `<tr style="background:${bg};border-bottom:1px solid #f1f5f9;">
+      <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.app_date, x.app_amount, x.app_collector, !!x.app_id, '#1d4ed8')}</td>
+      <td style="padding:9px 10px;vertical-align:top;border-right:1px dashed #e5e7eb;">${cell(x.book_date, x.book_amount, null, !!x.book_id, '#b45309')}</td>
+      <td style="padding:9px 10px;vertical-align:middle;text-align:center;font-size:12px;">${mark}</td>
+    </tr>`;
+  }).join('');
+  const th=(t,c)=>`<th style="padding:8px 10px;text-align:left;font-size:10px;color:${c};font-weight:800;text-transform:uppercase;letter-spacing:.04em;">${t}</th>`;
+  return summary + `<div style="border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f8fafc;border-bottom:1.5px solid #e5e7eb;">${th('📱 Spawn Harvest (app)','#1d4ed8')}${th('📒 BASHANG (book)','#b45309')}<th style="padding:8px 10px;text-align:center;font-size:10px;color:#6b7280;font-weight:800;text-transform:uppercase;">Match</th></tr></thead>
+      <tbody>${trs}</tbody></table></div>`;
 }
 
 /* ── 5. INTERACTION ───────────────────────────────────────────────────── */
@@ -604,11 +698,11 @@ function ovdGoVendo(name){
 function ovdExport(){
   const rows = _ovdVisible();
   if(!rows.length){ if(typeof toast==='function') toast('Nothing to export'); return; }
-  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Source','App date','Book date','Days overdue','Online'];
+  const head = ['#','Vendo','Code','Owner','Area','Barangay','Group(s)','VLAN','Last harvest','Source','App date','Book date','Installed','Days overdue','Online'];
   const esc = v => '"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const csv = [head.join(',')].concat(rows.map((r,i) =>
     [i+1, r.name, r.code, r.owner, r.area, r.barangay, r.groups.join(' | '), r.vlan, r.lhd || 'never',
-     _ovdSrcLabel(r.src), r.appd, r.bookd,
+     _ovdSrcLabel(r.src), r.appd, r.bookd, r.inst,
      r.days>=9999 ? 'never' : r.days, r.online?'online':'offline'].map(esc).join(','))).join('\n');
   const scope = (_ovdSelArea || 'ALL') + (_ovdSelGroup ? '-G'+_ovdSelGroup : '');
   const a = document.createElement('a');
