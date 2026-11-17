@@ -803,9 +803,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="photo-gps-badge" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600"></div>
       </div>
       <!-- Open camera button -->
-      <button class="btn btn-teal" id="camera-open-btn" onclick="openCamera()" style="margin-bottom:8px">📷 Open Camera &amp; Capture GPS</button>
+      <button class="btn" id="v4-get-gps-btn" onclick="v4GetGps()" style="margin-bottom:8px;background:var(--spawn-navy);color:#fff">📍 Get GPS</button>
+      <button class="btn btn-teal" id="camera-open-btn" onclick="openCamera()" style="margin-bottom:8px">📷 Open Camera (optional)</button>
       <!-- GPS status display -->
-      <div id="gps-status-lbl" class="gps-status">No GPS yet — tap Open Camera</div>
+      <div id="gps-status-lbl" class="gps-status">No GPS yet — tap 📍 Get GPS</div>
       <!-- GPS action buttons (copy + maps) -->
       <div id="gps-actions" style="display:none;margin-top:6px;gap:8px;flex-wrap:wrap">
         <button onclick="copyGPS()" style="flex:1;padding:8px 10px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;font-family:inherit">📋 Copy coords</button>
@@ -1473,6 +1474,13 @@ let _dupConfirmed = false;   // reset on every vendo open; see submitHarvest
 let currentItem = null;
 let currentItemIdx = null;
 let capturedGPS = null;
+const v4GpsWeakTries = {};   // item id → weak readings this visit (v4 GPS gate)
+function v4GetGps(){
+  const lbl=document.getElementById('gps-status-lbl');
+  lbl.style.display=''; lbl.className='gps-status'; lbl.style.background='';lbl.style.borderColor='';lbl.style.color='';
+  lbl.textContent='📍 Getting GPS… hold still (up to 30 s)';
+  bestOfThreeGPS(lbl, null);
+}
 let offlineQueue = JSON.parse(localStorage.getItem('hq')||'[]');
 let syncLog = JSON.parse(localStorage.getItem('hs')||'[]');
 // ── One-time repair (pre-v13.1) ──────────────────────────────────────────────
@@ -3713,7 +3721,7 @@ function openItem(idx){
   } else {
     gpsLbl.className='gps-status';
     gpsLbl.style.background='';gpsLbl.style.borderColor='';gpsLbl.style.color='';
-    gpsLbl.textContent='No GPS yet — tap Capture';
+    gpsLbl.textContent='No GPS yet — tap 📍 Get GPS';
   }
   document.getElementById('gps-verify-link').style.display='none';
   // Show GPS label if coords already exist, hide otherwise until Edit
@@ -4020,7 +4028,8 @@ function bestOfThreeGPS(lbl, onFinalized){
   const readings=[];
   let watchId=null, done=false;
   const GOOD_ACC=20;
-  const MAX_WAIT=4000;
+  const MAX_WAIT=30000;   // v4: cold fix with no data can take 30 s
+  let denied=false;
 
   function finalize(){
     if(done) return;
@@ -4028,17 +4037,21 @@ function bestOfThreeGPS(lbl, onFinalized){
     if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
     if(!readings.length){
       lbl.className='gps-status err';
-      lbl.textContent='❌ Could not get GPS — try outdoors or retry';
+      lbl.textContent=denied
+        ? 'Location is blocked. Chrome → ⋮ → Settings → Site settings → Location → Allow, then tap 📍 Get GPS again.'
+        : 'Cannot save without GPS. Call the office.';
+      toast(denied?'📍 Location is blocked — allow it in Chrome site settings':'❌ Cannot save without GPS. Call the office.',4000);
       document.getElementById('photo-gps-badge').textContent='No GPS';
       if(onFinalized) onFinalized(null);
       return;
     }
     const best=readings.reduce((a,b)=>a.acc<b.acc?a:b);
-    capturedGPS={lat:best.lat,lng:best.lng};
+    capturedGPS={lat:best.lat,lng:best.lng,acc:Math.round(best.acc),at:new Date().toISOString(),itemId:currentItem?currentItem.id:null};
+    if(best.acc>V4_GPS_WEAK_M && currentItem){ v4GpsWeakTries[currentItem.id]=(v4GpsWeakTries[currentItem.id]||0)+1; }
     const accStr='±'+Math.round(best.acc)+'m';
     const coordStr=`${best.lat.toFixed(6)}, ${best.lng.toFixed(6)}`;
     lbl.className='gps-status got';
-    lbl.textContent=`✅ ${coordStr} (${accStr})`;
+    lbl.textContent=(best.acc>V4_GPS_WEAK_M?'⚠️ Weak ':'✅ ')+`${coordStr} (${accStr})`;
     document.getElementById('photo-gps-badge').textContent=`📍 ${coordStr} ${accStr}`;
     const actionsEl=document.getElementById('gps-actions');
     actionsEl.style.display='flex';
@@ -4058,8 +4071,8 @@ function bestOfThreeGPS(lbl, onFinalized){
         finalize();
       }
     },
-    err=>{ },
-    {enableHighAccuracy:true, timeout:4000, maximumAge:3000}
+    err=>{ if(err&&err.code===1){ denied=true; clearTimeout(deadline); finalize(); } },
+    {enableHighAccuracy:true, timeout:30000, maximumAge:0}
   );
 }
 
@@ -4067,7 +4080,7 @@ function retakePhoto(){
   capturedPhotoBlob=null; capturedGPS=null;
   document.getElementById('photo-thumb-wrap').style.display='none';
   document.getElementById('gps-status-lbl').className='gps-status';
-  document.getElementById('gps-status-lbl').textContent='No GPS yet — tap Open Camera';
+  document.getElementById('gps-status-lbl').textContent='No GPS yet — tap 📍 Get GPS';
   document.getElementById('gps-actions').style.display='none';
   openCamera();
 }
