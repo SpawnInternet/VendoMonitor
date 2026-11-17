@@ -1367,8 +1367,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b15';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 15';
+const APP_BUILD = 'v4-b16';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 16';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -5104,7 +5104,7 @@ async function submitHarvest(){
       // If it succeeds, skip the passthrough calls below. If it fails
       // for ANY reason, _bOk stays false and the original A-passthrough
       // path runs as fallback — collector never gets stuck.
-      let _bOk = false;
+      let _bOk = false, _bReject = null;   // v4 b16: a server rejection must escape the fallback catch below
       try {
         const _packB = (window._pendingPackItems||[]).map(p=>({
           vendo_id:currentItem.vendo_id||null, vendo_code:p.vendo_code||'',
@@ -5117,20 +5117,42 @@ async function submitHarvest(){
           contacts_added:(currentGroupRun.contacts_added||0)+((contact&&!prevHadContact)?1:0),
           total_net:(parseFloat(currentGroupRun.total_net)||0)+net
         } : null;
-        const _bResp = await fetch(`${SB}/functions/v1/spawn-ops`,{
+        // v4 build 16: submit-harvest-v2 (honest answer, app rounding, GPS checked on the
+        // server, replays answered with the existing id). If the server does not know v2
+        // yet ("unknown action"), send the same payload to v1 — exactly what build 15 did.
+        const _bBody = {
+          action:'submit-harvest-v2', require_gps:(_v4GuardIsOn && !v4HasGpsOnFile(currentItem)),
+          item_id:currentItem.id, vendo_id:currentItem.vendo_id||null,
+          group_run_id:currentGroupRun?currentGroupRun.id:null,
+          coins:{net,free,saloy,free_coins:freeCoins},
+          item_update:itemUpdate, vendo_update:vendoUpdate,
+          harvest_record:harvestRecord, pack_items:_packB, group_counts:_gc
+        };
+        const _bSend = () => fetch(`${SB}/functions/v1/spawn-ops`,{
           method:'POST',
           headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
-          body:JSON.stringify({
-            action:'submit-harvest', require_gps:(_v4GuardIsOn && !v4HasGpsOnFile(currentItem)),
-            item_id:currentItem.id, vendo_id:currentItem.vendo_id||null,
-            group_run_id:currentGroupRun?currentGroupRun.id:null,
-            coins:{net,free,saloy,free_coins:freeCoins},
-            item_update:itemUpdate, vendo_update:vendoUpdate,
-            harvest_record:harvestRecord, pack_items:_packB, group_counts:_gc
-          })
+          body:JSON.stringify(_bBody)
         });
+        let _bResp = await _bSend();
+        let _bJson = await _bResp.clone().json().catch(()=>({}));
+        if(_bResp.status===400 && _bJson && _bJson.error==='unknown action'){
+          window._v4OpsVersion = 'v1';
+          _bBody.action = 'submit-harvest';
+          _bResp = await _bSend();
+          _bJson = await _bResp.clone().json().catch(()=>({}));
+        } else { window._v4OpsVersion = 'v2'; }
+        // A v2 rejection (422, rejected:true) is final: the server refused the harvest
+        // (bad coins, GPS required, reading outside PH). Stop here — coins stay on the form,
+        // nothing is queued, and the old passthrough writes are NOT attempted.
+        if(_bResp.status===422 && _bJson && _bJson.rejected){
+          _bReject = 'Not saved — ' + (_bJson.error || 'rejected by server');
+          throw new Error(_bReject);
+        }
+        if(Array.isArray(_bJson && _bJson.warnings) && _bJson.warnings.length){
+          window._v4LastWarnings = _bJson.warnings;
+          try{ pwLog('sync','spawn-ops v2 warnings',{item_id:currentItem.id, warnings:_bJson.warnings}); }catch(_){}
+        } else { window._v4LastWarnings = null; }
         if(_bResp.ok){
-          const _bJson = await _bResp.json().catch(()=>({}));
           // v4: spawn-ops answers ok:true even when the harvests insert failed; only a
           // row id proves the harvest is in the database. No id → direct path → queue.
           if(_bJson && _bJson.ok && _bJson.harvest_id != null){
@@ -5147,6 +5169,7 @@ async function submitHarvest(){
           }
         }
       } catch(_e){ console.warn('[spawn-ops] submit-harvest fallback to passthrough:', _e && _e.message); }
+      if(_bReject) throw new Error(_bReject);   // outer catch toasts it; coins stay on the form, nothing queued
 
       if(!_bOk){
       // Update group item
@@ -5266,6 +5289,8 @@ async function submitHarvest(){
     // v4: the receipt shows what really happened to this harvest, not just the numbers.
     window._v4Receipt = {
       status: _submitted ? (_v4Mode !== 'live' ? 'test' : 'saved') : 'queued',
+      via: _submitted ? (window._v4OpsVersion || 'direct') : null,
+      warnings: window._v4LastWarnings || null,
       id: (_submitted && window._v4LastHarvestId && window._v4LastHarvestId !== 'TEST') ? window._v4LastHarvestId : null,
       gps: capturedGPS ? { lat: capturedGPS.lat, lng: capturedGPS.lng, acc: capturedGPS.acc, flag: _v4Verdict.flag, distM: _v4Verdict.distM } : null,
       gpsOnFile: v4HasGpsOnFile(currentItem),
@@ -6022,6 +6047,7 @@ function showHarvestReceipt(){
       if(R && R.owner) lines.push('👤 Owner: ' + R.owner);
       if(R && R.contact) lines.push('📞 Contact: ' + R.contact);
       if(R && R.brgy) lines.push('🏘️ Barangay: ' + R.brgy);
+      if(R && R.status==='saved' && Array.isArray(R.warnings) && R.warnings.length) lines.push('⚠️ Saved, but ' + R.warnings.length + ' side update(s) did not land — the office will see it in the audit.');
       if(lines.length){ dr.style.display=''; lines.forEach(t=>{ const d=document.createElement('div'); d.textContent=t; dd.appendChild(d); }); }
       else dr.style.display='none';
     }
