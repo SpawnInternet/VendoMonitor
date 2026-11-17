@@ -438,18 +438,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .v4-idsheet-f span{display:block;font-size:11px;font-weight:700;color:#5B3FB8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 .v4-idsheet-gps{background:#eef3fd;border:1.5px solid #c7d6f5;border-radius:12px;padding:10px;margin-bottom:10px}
 .v4-idsheet-gps .st{font-size:12px;font-weight:700;color:#0B1E63;margin-top:6px;min-height:16px}
-.v4-ledger{padding:12px 14px}
-.v4-ledger .t{font-size:11px;font-weight:800;color:#0B1E63;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.v4-ledger .t small{font-weight:600;color:#64748b;text-transform:none;letter-spacing:0}
-.v4-lrow{display:grid;grid-template-columns:72px 1fr 1fr;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #eef2f7;font-size:12px}
-.v4-lrow:first-of-type{border-top:0}
-.v4-lrow .d{font-weight:800;color:#0B1E63}
-.v4-lrow .a,.v4-lrow .b{font-size:11px;color:#334155}
-.v4-lrow .a b,.v4-lrow .b b{display:block;font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
-.v4-lrow .miss{color:#B52383;font-weight:700}
-.v4-lrow.both .d::after{content:' ✓';color:#1B9A6C}
-.v4-lrow .gap{font-size:10px;color:#D62839;font-weight:700}
-.v4-ledger .note{font-size:11px;color:#64748b;margin-top:6px}
 .v4-idbox-ok{font-size:13px;font-weight:700;color:var(--brand-green)}
 </style>
 </head>
@@ -806,12 +794,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="card v4-gpscard">
     <button class="btn" id="v4-get-gps-btn" onclick="v4GetGps()" style="margin-bottom:8px;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff">📍 Get GPS</button>
     <div id="gps-status-lbl" class="gps-status">No GPS yet — tap 📍 Get GPS</div>
-  </div>
-  <!-- V4: this vendo's ledger — app harvests and BASHANG book rows combined, so nothing is missed -->
-  <div class="card v4-ledger" id="v4-ledger" style="display:none">
-    <div class="t">📒 Ledger · app + book <small id="v4-ledger-sub"></small></div>
-    <div id="v4-ledger-rows"></div>
-    <div class="note" id="v4-ledger-note"></div>
   </div>
   <div id="form-directions" style="display:none;background:#e0f2fe;border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center"></div>
 
@@ -1352,8 +1334,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b13';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 13';
+const APP_BUILD = 'v4-b14';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 14';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -1535,48 +1517,6 @@ function v4IdentityEntered(){
 }
 let _v4BrgyRequired = false;
 
-/* ── V4 vendo ledger: app + book, paired within 3 days (spawn_vendo_ledger_v1, public key, read-only).
-   Cached per vendo on the phone so it still shows offline. */
-const V4_LEDGER_URL = SB + '/rest/v1/rpc/spawn_vendo_ledger_v1';
-async function v4LoadLedger(item){
-  const card = document.getElementById('v4-ledger'); if (!card) return;
-  if (!item || !item.vendo_id){ card.style.display = 'none'; return; }
-  const key = 'ledger_' + item.vendo_id;
-  let rows = null, fromCache = false;
-  if (navigator.onLine){
-    try {
-      const r = await fetch(V4_LEDGER_URL, { method: 'POST', headers: { apikey: V4_PUBLISHABLE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_vendo_id: item.vendo_id }) });
-      if (r.ok){ const j = await r.json(); if (Array.isArray(j)){ rows = j; try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), rows })); } catch (_) {} } }
-    } catch (_) {}
-  }
-  if (!rows){ try { const c = JSON.parse(localStorage.getItem(key) || 'null'); if (c && Array.isArray(c.rows)){ rows = c.rows; fromCache = true; } } catch (_) {} }
-  if (!currentItem || currentItem.id !== item.id) return;   // moved on
-  v4RenderLedger(rows, fromCache);
-}
-function v4RenderLedger(rows, fromCache){
-  const card = document.getElementById('v4-ledger'), box = document.getElementById('v4-ledger-rows'), sub = document.getElementById('v4-ledger-sub'), note = document.getElementById('v4-ledger-note');
-  if (!card || !box) return;
-  card.style.display = ''; box.textContent = ''; note.textContent = '';
-  if (!rows){ sub.textContent = ''; note.textContent = navigator.onLine ? 'Ledger not available yet.' : '📴 No ledger saved on this phone yet.'; return; }
-  if (!rows.length){ sub.textContent = ''; note.textContent = 'No harvest in the app or the book for this vendo.'; return; }
-  const fd = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: '2-digit' }) : null;
-  const peso = n => (n == null) ? null : '₱' + Number(n).toLocaleString('en-PH', { maximumFractionDigits: 0 });
-  let nBoth = 0, nApp = 0, nBook = 0;
-  rows.slice(0, 12).forEach(r => {
-    const row = document.createElement('div'); row.className = 'v4-lrow ' + (r.src || '');
-    const d = document.createElement('div'); d.className = 'd'; d.textContent = fd(r.d) || '—';
-    const a = document.createElement('div'); a.className = 'a'; const ab = document.createElement('b'); ab.textContent = 'App'; a.appendChild(ab);
-    const av = document.createElement('span'); if (r.app_amt != null){ av.textContent = peso(r.app_amt) + (r.collector ? ' · ' + r.collector : ''); } else { av.textContent = 'not in app'; av.className = 'miss'; } a.appendChild(av);
-    const b = document.createElement('div'); b.className = 'b'; const bb = document.createElement('b'); bb.textContent = 'Book'; b.appendChild(bb);
-    const bv = document.createElement('span'); if (r.book_amt != null){ bv.textContent = peso(r.book_amt); } else { bv.textContent = 'not in book'; bv.className = 'miss'; } b.appendChild(bv);
-    if (r.src === 'both' && r.gap && Math.abs(Number(r.gap)) > 0){ const g = document.createElement('div'); g.className = 'gap'; g.textContent = 'differs by ₱' + Math.abs(Math.round(Number(r.gap))); b.appendChild(g); }
-    row.appendChild(d); row.appendChild(a); row.appendChild(b); box.appendChild(row);
-    if (r.src === 'both') nBoth++; else if (r.src === 'app') nApp++; else nBook++;
-  });
-  sub.textContent = (rows.length > 12 ? 'last 12 of ' + rows.length : rows.length + ' rows') + (fromCache ? ' · saved copy' : '');
-  const parts = []; if (nApp) parts.push(nApp + ' only in app'); if (nBook) parts.push(nBook + ' only in book');
-  note.textContent = parts.length ? '⚠ ' + parts.join(', ') + ' — tell the office if a harvest is missing on one side.' : '✓ App and book agree.';
-}
 let _v4SheetEntered = null;          // values typed in the submit sheet when the top card has no inputs
 let _v4SheetTimer = null;
 function v4IdSheetOpen(missing, gpsMsg){
@@ -4099,7 +4039,6 @@ function openItem(idx){
   if(window._v4GpsWatch!==undefined && window._v4GpsWatch!==null){ try{ navigator.geolocation.clearWatch(window._v4GpsWatch); }catch(_){} window._v4GpsWatch=null; }
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null; _v4SheetEntered=null;
   v4RenderIdentityBox();
-  v4LoadLedger(currentItem).catch(()=>{});
   _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
