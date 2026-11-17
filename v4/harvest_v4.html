@@ -1249,8 +1249,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b2';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 2';
+const APP_BUILD = 'v4-b3';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 3';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -4903,6 +4903,15 @@ async function submitHarvest(){
       if(_v4Mode !== 'live') toast('🧪 TEST — not saved (see Would have sent)', 3000);
       else toast('✅ Saved to database' + (window._v4LastHarvestId && window._v4LastHarvestId !== 'TEST' ? ' (#' + window._v4LastHarvestId + ')' : ''), 3000);
     }
+    // v4: the receipt shows what really happened to this harvest, not just the numbers.
+    window._v4Receipt = {
+      status: _submitted ? (_v4Mode !== 'live' ? 'test' : 'saved') : 'queued',
+      id: (_submitted && window._v4LastHarvestId && window._v4LastHarvestId !== 'TEST') ? window._v4LastHarvestId : null,
+      gps: capturedGPS ? { lat: capturedGPS.lat, lng: capturedGPS.lng, acc: capturedGPS.acc, flag: _v4Verdict.flag, distM: _v4Verdict.distM } : null,
+      gpsOnFile: v4HasGpsOnFile(currentItem),
+      owner: _v4Owner || '', contact: _v4Contact || '', brgy: _v4Brgy || '',
+      at: now
+    };
     setTimeout(()=>showHarvestReceipt(),600);
   } catch(e){
     toast('❌ '+e.message,4000);
@@ -5627,6 +5636,34 @@ function showHarvestReceipt(){
   else if(brRow){ brRow.style.display='none'; }
   const refNum = 'HRV-' + Date.now().toString(36).toUpperCase().slice(-8);
   const refEl = document.getElementById('hr-ref'); if(refEl) refEl.textContent = 'Ref No. ' + refNum;
+  // v4: save status + what was recorded (GPS, identity)
+  try{
+    const R = window._v4Receipt || null; window._v4Receipt = null;
+    const st = document.getElementById('hr-save-status');
+    const dr = document.getElementById('hr-details-row'), dd = document.getElementById('hr-details');
+    if(st){
+      if(!R){ st.style.display='none'; }
+      else {
+        st.style.display='';
+        if(R.status==='saved'){ st.style.background='#eaf7f1'; st.style.color='#1B9A6C'; st.textContent='✅ Saved to database' + (R.id ? ' · #' + R.id : ''); }
+        else if(R.status==='queued'){ st.style.background='#fff4e5'; st.style.color='#b45309'; st.textContent='📴 Saved on this phone — will sync when online'; }
+        else { st.style.background='#f3e8ff'; st.style.color='#7A2A9E'; st.textContent='🧪 TEST MODE — not saved (see Would have sent)'; }
+      }
+    }
+    if(dr && dd){
+      dd.textContent='';
+      const lines=[];
+      if(R && R.gps){
+        const fl = R.gps.flag==='weak' ? ' · weak' : R.gps.flag==='far' ? (' · ' + R.gps.distM + ' m from saved spot') : '';
+        lines.push('📍 GPS ' + Number(R.gps.lat).toFixed(5) + ', ' + Number(R.gps.lng).toFixed(5) + ' (±' + R.gps.acc + ' m)' + fl);
+      } else if(R && R.gpsOnFile){ lines.push('📍 GPS already on file'); }
+      if(R && R.owner) lines.push('👤 Owner: ' + R.owner);
+      if(R && R.contact) lines.push('📞 Contact: ' + R.contact);
+      if(R && R.brgy) lines.push('🏘️ Barangay: ' + R.brgy);
+      if(lines.length){ dr.style.display=''; lines.forEach(t=>{ const d=document.createElement('div'); d.textContent=t; dd.appendChild(d); }); }
+      else dr.style.display='none';
+    }
+  }catch(e){ console.warn('[v4 receipt]', e); }
   document.getElementById('harvest-receipt-overlay').classList.add('show');
 }
 
@@ -7147,6 +7184,7 @@ async function submitEodSession(){
           <div id="hr-collector" style="color:rgba(255,255,255,0.82);font-size:0.82rem;margin-bottom:1px;">—</div>
           <div style="color:rgba(255,255,255,0.78);font-size:0.78rem;">Harvest Remittance</div>
         </div>
+        <div id="hr-save-status" style="display:none;padding:10px 16px;text-align:center;font-size:13px;font-weight:800;letter-spacing:.2px"></div>
         <div style="text-align:center;padding:20px 20px 14px;border-bottom:1.5px solid #eee;">
           <div style="color:#888;font-size:0.78rem;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Spawn Share to Remit</div>
           <div id="hr-spawn-share" style="color:#0E47C4;font-size:2.3rem;font-weight:800;letter-spacing:-1.5px;line-height:1;">₱0</div>
@@ -7167,6 +7205,10 @@ async function submitEodSession(){
           <div id="hr-breakdown-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
             <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Pack Breakdown</div>
             <div id="hr-packs" style="color:#333;font-size:0.88rem;line-height:1.6;"></div>
+          </div>
+          <div id="hr-details-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
+            <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Recorded with this harvest</div>
+            <div id="hr-details" style="color:#333;font-size:0.86rem;line-height:1.7;"></div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;">
             <span id="hr-ref" style="color:#bbb;font-size:0.76rem;letter-spacing:.3px;">Ref No. —</span>
