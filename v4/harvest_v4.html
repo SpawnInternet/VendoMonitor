@@ -1,22 +1,23 @@
 <!DOCTYPE html>
-<!-- v3.0 · SECURITY: service_role removed, routed via spawn-gw gateway (from v2.9) -->
+<!-- V4 TRIAL LANE · built from harvest_v3.html v13.9 · own storage (v4_ keys), own service worker, own manifest.
+     TEST mode holds every write on the phone; see the V4 TRIAL block after the gateway interceptor. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Spawn Harvest</title>
-<link rel="manifest" href="/VendoMonitor/v4/manifest-v4.json">
+<title>Spawn Harvest V4 TRIAL</title>
+<link rel="manifest" href="manifest-v4.json">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#025AC6">
+<meta name="theme-color" content="#ef6c00">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <!-- iOS ignores the manifest for the home-screen icon and reads this tag only.
      Points at the same icon v2 uses, so both apps share one mark. -->
-<meta name="apple-mobile-web-app-title" content="Spawn Harvest">
-<link rel="apple-touch-icon" sizes="180x180" href="/VendoMonitor/v4/icon-v4-192.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/VendoMonitor/v4/icon-v4-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/VendoMonitor/v4/icon-v4-512.png">
+<meta name="apple-mobile-web-app-title" content="Harvest V4">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-v4-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-v4-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-v4-512.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -368,96 +369,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* Sticky bottom bar for receipt screen */
 .rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
 </style>
-<!-- Borrow flow needs: barcode scanning (area tags) + QR rendering (for Steph).
-     v4 had no external scripts; these are the only two. Both are guarded —
-     if a CDN is unreachable (spotty signal at 6AM), bwStartScan/bwRequestQR
-     fall back to manual entry rather than dying silently. -->
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-
-<!-- ══ SPAWN KEYS GATE ══════════════════════════════════════════
-     Mounted directly in the shell, OUTSIDE the .screen system.
-     showScreen() only touches .screen elements, so it can never
-     hide or clobber this. The admin escape lives here too — if the
-     gate's own render throws, the escape is still on the page.
-     ═══════════════════════════════════════════════════════════ -->
-<div id="gate-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#eef1fa;overflow-y:auto;-webkit-overflow-scrolling:touch">
-  <div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 20px;box-sizing:border-box">
-    <div style="width:100%;max-width:380px;background:#fff;border-radius:18px;box-shadow:0 6px 28px rgba(2,90,198,.13);padding:26px 22px;text-align:center">
-      <div id="gate-icon" style="font-size:44px;line-height:1;margin-bottom:10px">🔐</div>
-      <div id="gate-title" style="font-size:19px;font-weight:800;color:#025AC6;margin-bottom:6px">Checking…</div>
-      <div id="gate-msg" style="font-size:14px;color:#5a6478;line-height:1.5;margin-bottom:4px">One moment.</div>
-      <div id="gate-rings" style="font-size:13px;color:#DF1A35;font-weight:700;margin-top:12px;display:none"></div>
-      <div id="gate-actions" style="margin-top:20px;display:none">
-        <button onclick="gateRecheck()" style="width:100%;padding:13px;border-radius:12px;border:0;background:#025AC6;color:#fff;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer">↻ Check again</button>
-        <button onclick="gateLogoutBack()" style="width:100%;margin-top:9px;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">🚪 Log out</button>
-      </div>
-      <!-- The escape hatch. Deliberately plain and quiet. -->
-      <div style="margin-top:22px;padding-top:14px;border-top:1px solid #eef1f6">
-        <span id="gate-admin-link" onclick="gateAdminPrompt()" style="font-size:12px;color:#b6bfd0;cursor:pointer;user-select:none;letter-spacing:.4px">admin</span>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══ BORROW KEYS ══════════════════════════════════════════════════
-     Shown after the gate opens, before harvesting. He scans area tags
-     (Code128 "SK01".."SK20"), taps Go Harvest, and a QR appears that
-     Steph scans in SPAWN KEYS. Only then does harvest open.
-     Mounted in the SHELL, outside .screen, so showScreen() can't hide it. -->
-<div id="borrow-overlay" style="display:none;position:fixed;inset:0;z-index:99998;background:linear-gradient(160deg,#eef1fa 0%,#e6ecfa 100%);overflow-y:auto;-webkit-overflow-scrolling:touch">
-  <div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 16px;box-sizing:border-box">
-    <div style="width:100%;max-width:400px">
-
-      <!-- STEP 1 — scan rings -->
-      <div id="bw-scan-card" style="background:#fff;border-radius:20px;box-shadow:0 8px 34px rgba(2,90,198,.14);overflow:hidden">
-        <div style="background:linear-gradient(135deg,#025AC6 0%,#311A8E 100%);padding:20px 22px;color:#fff">
-          <div style="font-size:20px;font-weight:800;letter-spacing:-.3px">🔑 Borrow Keys</div>
-          <div id="bw-who" style="font-size:12.5px;opacity:.82;margin-top:3px"></div>
-        </div>
-        <div style="padding:20px 18px">
-          <div id="bw-reader" style="display:none;border-radius:14px;overflow:hidden;margin-bottom:14px;background:#000"></div>
-
-          <!-- Big immediate confirmation of the last tag scanned — sits right
-               under the camera so it's read without scrolling. -->
-          <div id="bw-lastscan" style="display:none;margin-bottom:14px;border-radius:14px;padding:14px 16px;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;box-shadow:0 4px 16px rgba(2,136,103,.3)">
-            <div style="font-size:11px;font-weight:700;opacity:.85;letter-spacing:.4px">JUST SCANNED</div>
-            <div id="bw-lastscan-area" style="font-size:27px;font-weight:800;line-height:1.05;margin-top:2px;letter-spacing:-.3px">—</div>
-            <div id="bw-lastscan-code" style="font-size:12.5px;font-weight:600;opacity:.9;margin-top:2px"></div>
-          </div>
-
-          <button id="bw-scan-btn" onclick="bwStartScan()" style="width:100%;padding:15px;border-radius:14px;border:0;background:linear-gradient(135deg,#025AC6,#1565c0);color:#fff;font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px rgba(2,90,198,.3)">📷 Scan area tag</button>
-          <button id="bw-stop-btn" onclick="bwStopScan()" style="display:none;width:100%;padding:13px;border-radius:14px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">✕ Stop camera</button>
-
-          <button onclick="bwManualEntry()" style="width:100%;margin-top:10px;padding:13px;border-radius:14px;border:2px solid #cdd8f0;background:#fff;color:#025AC6;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer">⌨ Type the code instead</button>
-          <div onclick="bwAdminBypass()" style="text-align:center;margin-top:11px;font-size:11px;color:#c3c9d6;cursor:pointer;text-decoration:underline;text-underline-offset:2px">admin</div>
-
-          <div id="bw-picked" style="margin-top:16px"></div>
-
-          <button id="bw-go" onclick="bwRequestQR()" disabled style="display:none;width:100%;margin-top:16px;padding:16px;border-radius:14px;border:0;background:linear-gradient(135deg,#028867,#02a37c);color:#fff;font-size:17px;font-weight:800;font-family:inherit;cursor:pointer;box-shadow:0 4px 16px rgba(2,136,103,.34)">Go Harvest →</button>
-        </div>
-      </div>
-
-      <!-- STEP 2 — show QR for Steph -->
-      <div id="bw-qr-card" style="display:none;background:#fff;border-radius:20px;box-shadow:0 8px 34px rgba(2,90,198,.14);overflow:hidden">
-        <div style="background:linear-gradient(135deg,#028867 0%,#025AC6 100%);padding:20px 22px;color:#fff;text-align:center">
-          <div style="font-size:19px;font-weight:800">Show this to Steph</div>
-          <div style="font-size:12.5px;opacity:.85;margin-top:3px">She scans it in Spawn Keys</div>
-        </div>
-        <div style="padding:22px 18px;text-align:center">
-          <div id="bw-qr" style="display:inline-block;padding:14px;background:#fff;border:3px solid #EEF1FA;border-radius:16px"></div>
-          <div id="bw-qr-rings" style="font-size:13px;color:#5a6478;margin-top:14px;line-height:1.6"></div>
-          <div id="bw-qr-timer" style="font-size:12px;font-weight:700;color:#FFB725;margin-top:10px"></div>
-          <div id="bw-qr-status" style="font-size:13px;font-weight:700;color:#025AC6;margin-top:14px">⏳ Waiting for approval…</div>
-          <button onclick="bwCancelQR()" style="width:100%;margin-top:18px;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">← Back</button>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
 
 <div class="offline-banner" id="offline-banner">🔴 No internet — harvests will sync when back online</div>
 
@@ -467,7 +380,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div>
       <div class="topbar-logo" style="display:flex;align-items:center;gap:7px">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);flex-shrink:0">
-          <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet" style="width:26px;height:26px;object-fit:contain">
+          <img src="../spawn-logo.png" alt="Spawn Internet" style="width:26px;height:26px;object-fit:contain">
         </span>
         Spawn Harvest
       </div>
@@ -476,7 +389,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="topbar-logout" id="topbar-install" onclick="promptInstall()" style="display:none;margin-right:6px">⬇️ Install</button>
-    <button class="topbar-logout" id="topbar-logout" onclick="pinLogoutConfirm()">🚪 Logout</button>
+    <button class="topbar-logout" id="topbar-logout" onclick="pinLogout()">🚪 Logout</button>
     <div class="sync-badge">
       <div class="sync-dot" id="sync-dot"></div>
       <span id="sync-label">Online</span>
@@ -491,7 +404,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Hero -->
     <div style="text-align:center;margin-bottom:24px">
-      <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
+      <img src="../spawn-logo.png" alt="Spawn Internet"
         style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
       <div style="font-size:26px;font-weight:900;color:#025AC6;letter-spacing:.3px">Spawn Harvest</div>
       <div style="font-size:12px;color:#8b99b8;margin-top:4px">Select your name then enter PIN</div>
@@ -533,9 +446,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
 
     <div style="text-align:center;padding-top:4px">
-      <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 3:00 AM</div>
+      <div style="font-size:11px;color:#8b99b8;margin-bottom:8px">🔒 Auto sign-out at 9:00 PM</div>
       <span onclick="hardReset()" style="font-size:11px;color:#8b99b8;cursor:pointer;text-decoration:underline">⚠️ App stuck? Tap here to reset</span>
-      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px">v13.7</div>
+      <div id="app-version-badge" style="font-size:10px;color:#b8c0d8;margin-top:6px"></div>
     </div>
 
   </div>
@@ -545,7 +458,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="screen" id="screen-signedin" style="background:#eef1fa;min-height:100vh">
   <div style="max-width:360px;margin:0 auto;padding:36px 16px 24px">
     <div style="text-align:center;margin-bottom:22px">
-      <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
+      <img src="../spawn-logo.png" alt="Spawn Internet"
         style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
       <div style="font-size:26px;font-weight:900;color:#025AC6;letter-spacing:.3px">Spawn Harvest</div>
     </div>
@@ -557,7 +470,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="btn btn-gray" onclick="pinLogout()">🚪 Not you? Log out</button>
     </div>
     <div style="text-align:center;padding-top:14px">
-      <div style="font-size:11px;color:#8b99b8">🕘 Stays signed in until 3:00 AM</div>
+      <div style="font-size:11px;color:#8b99b8">🕘 Stays signed in until 9:00 PM</div>
     </div>
   </div>
 </div><!-- /screen-signedin -->
@@ -663,7 +576,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">Loading…</div></div>
   </div>
 
-  <button class="btn btn-gray" onclick="pinLogoutConfirm()" style="margin-top:4px">← Logout</button>
+  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
 </div>
 
 <!-- ── SCREEN: AREAS (kept for navigation) ── -->
@@ -710,7 +623,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="card-title">Recent Harvests Today</div>
     <div id="home-recent-list"><div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No harvests yet today</div></div>
   </div>
-  <button class="btn btn-gray" onclick="pinLogoutConfirm()" style="margin-top:4px">← Logout</button>
+  <button class="btn btn-gray" onclick="pinLogout()" style="margin-top:4px">← Logout</button>
 </div>
 
 <div class="screen" id="screen-areas">
@@ -1007,11 +920,103 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="toast" id="toast"></div>
 
 <script>
+/* ══ V4 STORAGE WALL (must stay the very first code on the page) ══════════
+   v4 lives on the same origin as the live v3 app, so the two share one
+   localStorage / sessionStorage. v3 keeps its offline queue (hq), sync log
+   (hs), session and caches there. v4 must never read, write or flush them.
+
+   Every key v4 uses is stored as "v4_<key>". The page sees a stand-in object
+   that only ever touches v4_ keys, including Object.keys(localStorage),
+   .length, .key(i) and .clear(), so even code that enumerates storage
+   cannot reach a v3 key. If the wall cannot be installed, the page stops
+   with a red screen instead of running against v3's storage. */
+(function v4StorageWall(){
+  var P = 'v4_';
+  var failed = [];
+  function wall(real){
+    function own(){
+      var out = [];
+      for (var i = 0; i < real.length; i++){
+        var k = real.key(i);
+        if (k && k.indexOf(P) === 0) out.push(k.slice(P.length));
+      }
+      return out;
+    }
+    var api = {
+      getItem:    function(k){ return real.getItem(P + String(k)); },
+      setItem:    function(k, v){ real.setItem(P + String(k), String(v)); },
+      removeItem: function(k){ real.removeItem(P + String(k)); },
+      key:        function(i){ var ks = own(); return (i >= 0 && i < ks.length) ? ks[i] : null; },
+      clear:      function(){ own().forEach(function(k){ real.removeItem(P + k); }); }
+    };
+    return new Proxy(api, {
+      get: function(t, p){
+        if (p === 'length') return own().length;
+        if (typeof p !== 'string') return undefined;
+        if (Object.prototype.hasOwnProperty.call(t, p)) return t[p];
+        var v = real.getItem(P + p);
+        return v === null ? undefined : v;
+      },
+      set: function(t, p, v){ real.setItem(P + String(p), String(v)); return true; },
+      deleteProperty: function(t, p){ real.removeItem(P + String(p)); return true; },
+      has: function(t, p){
+        if (p === 'length' || Object.prototype.hasOwnProperty.call(t, p)) return true;
+        return real.getItem(P + String(p)) !== null;
+      },
+      ownKeys: function(){ return own(); },
+      getOwnPropertyDescriptor: function(t, p){
+        var v = real.getItem(P + String(p));
+        if (v === null) return undefined;
+        return { value: v, enumerable: true, configurable: true, writable: true };
+      }
+    });
+  }
+  function fingerprint(real){
+    var ks = [];
+    for (var i = 0; i < real.length; i++){
+      var k = real.key(i);
+      if (k && k.indexOf(P) !== 0) ks.push(k + ':' + (real.getItem(k) || '').length);
+    }
+    return ks.sort().join('|');
+  }
+  ['localStorage', 'sessionStorage'].forEach(function(name){
+    try {
+      var real = window[name];
+      if (!real || typeof real.getItem !== 'function') throw new Error('no ' + name);
+      var shim = wall(real);
+      Object.defineProperty(window, name, { value: shim, configurable: true, enumerable: true, writable: false });
+      if (window[name] !== shim) throw new Error(name + ' not replaced');
+      // Boot check (console only): how many non-v4 keys exist, and whether any
+      // of them change while this page is open. v4 itself cannot change them;
+      // a change means another tab (v3) is open and working, which is fine.
+      var fp0 = fingerprint(real), hidden = fp0 ? fp0.split('|').length : 0;
+      console.log('[v4 wall] ' + name + ': ' + hidden + ' non-v4 key(s) present, hidden from v4');
+      var check = function(){
+        var fp = fingerprint(real);
+        if (fp !== fp0){ console.warn('[v4 wall] ' + name + ': non-v4 keys changed while v4 was open (v3 open in another tab?)'); fp0 = fp; }
+      };
+      setInterval(check, 60000);
+      window.addEventListener('pagehide', check);
+    } catch (e){ failed.push(name + ': ' + (e && e.message)); }
+  });
+  window.__V4_WALL_OK = failed.length === 0;
+  if (!window.__V4_WALL_OK){
+    console.error('[v4 wall] FAILED', failed);
+    // Fail closed: do not let the app run against v3's storage.
+    document.addEventListener('DOMContentLoaded', function(){
+      document.body.innerHTML = '<div style="padding:32px;font:16px sans-serif;color:#fff;background:#c62828;min-height:100vh">' +
+        '<b>V4 TRIAL cannot start safely on this phone.</b><br><br>Its storage wall did not install, so it could touch the live app\'s data. ' +
+        'Close this page and use the normal Spawn Harvest.</div>';
+    });
+    throw new Error('v4 storage wall failed: ' + failed.join('; '));
+  }
+})();
+
 var cameraStream = null;
 var capturedPhotoBlob = null;
 
 // ── Offline photo storage (IndexedDB — handles large blobs) ──────
-const _PHOTO_DB='spawn_photos', _PHOTO_STORE='queued';
+const _PHOTO_DB='v4_spawn_photos', _PHOTO_STORE='queued';
 function _openPhotoDB(){
   return new Promise((resolve,reject)=>{
     const req=indexedDB.open(_PHOTO_DB,1);
@@ -1035,6 +1040,16 @@ async function deletePhotoOffline(key){
 
 const SB  = 'https://cviraqfhphhsonjmrtvu.supabase.co';
 const VENDO_CACHE_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/vendo-cache/vendos.json';
+// 2026-11-16: last harvest for DISPLAY + OVERDUE = latest of the app date and
+// vendos.last_harvest_any (all sources: app, group items, BASHANG book).
+// last_harvest_date itself is left alone — submitHarvest() uses it as the
+// harvest_window_start for reconciliation.
+function _lhdShow(i){
+  if(!i) return null;
+  const a=i.last_harvest_date||null, b=i.last_harvest_any||null;
+  return (a&&b) ? (a>b?a:b) : (a||b);
+}
+const _lhdBook=i=>!!(i&&i.last_harvest_any&&i.last_harvest_src==='book'&&(!i.last_harvest_date||i.last_harvest_any>i.last_harvest_date));
 
 // Preloaded vendo data from storage cache — avoids batch DB fetches
 let _vendoCacheMap = null; // {id: vendoObj}
@@ -1064,8 +1079,57 @@ var _eodPin = '';
 // ── v3 SECURITY: no service_role key in this file. ──
 // All DB/storage calls are transparently routed through the
 // Spawn Gateway edge function, which holds the real key server-side.
-const GW_URL   = SB + '/functions/v1/spawn-gw';
-const GW_TOKEN = 'X7mP92QaL4nVz81TkR6wHy53BcN9Df28JsM1Er5U';   // matches edge function GW_TOKEN secret
+const GW_URL    = SB + '/functions/v1/spawn-gw';
+const LOGIN_URL = SB + '/functions/v1/spawn-field-login';
+/* SECURITY: no gateway token at rest in this file. It used to be a literal
+   here, which meant anyone who opened View Source on this public page had
+   full gateway access without ever touching the PIN pad. The token is now
+   minted by spawn-field-login in exchange for a valid collector PIN.
+   7-day cache: a collector who starts the day in a dead spot must still be
+   able to work. Rotating the GW_TOKEN secret invalidates every cache. */
+let GW_TOKEN = null;
+const FIELD_AUTH_KEY = 'spawn_field_auth';
+const FIELD_AUTH_TTL = 7*24*60*60*1000;
+(function restoreFieldToken(){
+  try{
+    const s=JSON.parse(localStorage.getItem(FIELD_AUTH_KEY)||'null');
+    if(s && s.token && (Date.now()-s.ts) < FIELD_AUTH_TTL) GW_TOKEN=s.token;
+  }catch(e){}
+})();
+function saveFieldToken(tok){
+  GW_TOKEN=tok;
+  try{ localStorage.setItem(FIELD_AUTH_KEY, JSON.stringify({token:tok, ts:Date.now()})); }catch(e){}
+}
+/* The gateway answers 401 when the token it was handed is no longer the one
+   the server expects — which is exactly what a GW_TOKEN rotation looks like
+   from the phone's side. Handled in one place so a rotation costs a collector
+   one PIN entry instead of a screen full of unexplained failures.
+   Guarded so twenty parallel requests all 401-ing trigger a single return. */
+let _gwReauthPending=false;
+function gwHandle401(){
+  if(_gwReauthPending) return;
+  _gwReauthPending=true;
+  GW_TOKEN=null;
+  try{ localStorage.removeItem(FIELD_AUTH_KEY); }catch(e){}
+  try{ toast('🔑 Session expired — please enter your PIN again', 3500); }catch(e){}
+  setTimeout(()=>{ try{ pinLogout(); }catch(e){ location.reload(); } _gwReauthPending=false; }, 600);
+}
+/* Exchange a PIN for the gateway token. Returns the collector row on success,
+   null on a bad PIN, and throws on any network/server failure so the caller
+   can fall back to the offline path instead of showing "Wrong PIN". */
+async function fieldLogin(pin){
+  const r=await fetch(LOGIN_URL,{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pin:pin})
+  });
+  if(r.status===401) return null;
+  if(r.status===429) throw new Error('THROTTLED');
+  if(!r.ok) throw new Error('login '+r.status);
+  const d=await r.json();
+  if(!d || !d.ok || !d.token) return null;
+  saveFieldToken(d.token);
+  return d;
+}
 // HDR kept as a harmless marker object so existing call sites are unchanged;
 // the fetch interceptor below detects it and reroutes to the gateway.
 const KEY = 'gw';
@@ -1074,9 +1138,6 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 // ── Transparent fetch interceptor: reroute REST + storage uploads via gateway ──
 (function installGatewayInterceptor(){
   const _origFetch = window.fetch.bind(window);
-  // Expose the untouched fetch. The SPAWN KEYS gate posts to the gateway
-  // directly with kind:'rpc' and must not be re-parsed by the shim below.
-  window._spawnOrigFetch = _origFetch;
   const REST_RE = /\/rest\/v1\/([a-z_0-9]+)(\?([^#]*))?$/;
   const STOR_UP_RE = /\/storage\/v1\/object\/(?!public\/)([a-z0-9_-]+)\/(.+)$/i;
 
@@ -1114,7 +1175,7 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
             method: 'POST',
             headers: { 'Content-Type':'application/json', 'x-gw-token': GW_TOKEN },
             body: JSON.stringify({ kind:'rest', table, method, query, body, prefer })
-          });
+          }).then(r=>{ if(r.status===401) gwHandle401(); return r; });
           if (method === 'GET') return _dedupe('GET|'+table+'|'+query, send);
           return send();
         }
@@ -1143,6 +1204,191 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
     return _origFetch(input, init);
   };
 })();
+
+/* ══ V4 TRIAL: BUILD LABEL, WRITE MODE, DRY-RUN GUARD ═════════════════════
+   APP_BUILD goes up by one on every push to v4 (b2, b3 …).
+
+   Write mode comes from the server, so it can be switched without a redeploy:
+     spawn_harvest_v4_mode(p_collector) → 'live' only when spawn_settings
+     harvest_v4_mode = 'pilot' AND this collector is in harvest_v4_pilot.
+   Anything else, including no signal or an error, is 'test'.
+
+   TEST (the default, and the state before the answer arrives):
+     every write is held on the phone, never sent. The app gets a fake
+     success, and the call is listed in the "Would have sent" panel.
+     Reads (GET, PIN login, the mode check itself) go through.
+     Anything not known to be a read is treated as a write.
+   LIVE: nothing is held; the banner says PILOT — saving for real.
+
+   This wrapper is installed after the gateway interceptor, so it is the
+   outermost fetch and sees every call first. */
+const APP_BUILD = 'v4-b1';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 1';
+const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
+const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
+const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
+let _v4Mode = 'test';            // 'test' | 'live'
+let _v4ModeFor = null;           // collector name the current answer belongs to
+let _v4ModeSeq = 0;
+const _v4Held = [];              // "Would have sent" entries (newest first)
+
+(function installV4DryRun(){
+  const _inner = window.fetch;   // = the gateway interceptor
+  window._v4InnerFetch = _inner;
+
+  function _methodOf(input, init){
+    const m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
+    return String(m).toUpperCase();
+  }
+  function _urlOf(input){
+    return (typeof input === 'string') ? input : (input && input.url) || String(input || '');
+  }
+  // The only non-GET calls that are reads. Everything else that is not
+  // GET/HEAD is a write.
+  function _isRead(url, method){
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return true;
+    if (method === 'POST' && url.indexOf(V4_LOGIN_URL) === 0) return true;   // PIN → token
+    if (method === 'POST' && url.indexOf(V4_MODE_URL) === 0) return true;    // this mode check
+    return false;
+  }
+  function _bodyOf(init){
+    const b = init && init.body;
+    if (b == null) return null;
+    if (typeof b === 'string'){ try { return JSON.parse(b); } catch(_){ return b; } }
+    if (typeof Blob !== 'undefined' && b instanceof Blob) return '[file ' + b.size + ' bytes, ' + (b.type || 'binary') + ']';
+    if (typeof FormData !== 'undefined' && b instanceof FormData) return '[form data]';
+    return '[' + (b.constructor && b.constructor.name || 'body') + ']';
+  }
+  function _wantsRows(init){
+    const h = (init && init.headers) || {};
+    const pref = (typeof h.get === 'function') ? (h.get('Prefer') || '') : (h.Prefer || h.prefer || '');
+    return String(pref).indexOf('return=representation') !== -1;
+  }
+
+  window.fetch = async function(input, init){
+    const url = _urlOf(input);
+    const method = _methodOf(input, init);
+    if (_v4Mode === 'live' || _isRead(url, method)) return _inner(input, init);
+
+    // TEST mode write. Offline: fail like a real network error so the app's
+    // own offline queue (v4_hq) takes it, exactly as it would for real.
+    if (!navigator.onLine) throw new TypeError('Failed to fetch (offline)');
+
+    _v4Held.unshift({ at: new Date().toISOString(), method, url: url.replace(SB, ''), body: _bodyOf(init) });
+    if (_v4Held.length > 60) _v4Held.length = 60;
+    _v4PaintHeld();
+    const payload = _wantsRows(init) ? [] : { ok: true, harvest_id: null };
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+})();
+
+// Ask the server which mode this collector is in. Called on every change of
+// collector (login, resume, logout) and on every app start.
+async function v4CheckMode(name){
+  const seq = ++_v4ModeSeq;
+  _v4Mode = 'test'; _v4ModeFor = name || null; _v4PaintMode('checking');
+  if (!name){ _v4PaintMode(); return; }
+  let answer = 'test';
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const r = await window._v4InnerFetch(V4_MODE_URL, {
+      method: 'POST',
+      headers: { apikey: V4_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_collector: name }),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    if (r.ok){ const v = await r.json(); if (v === 'live') answer = 'live'; }
+  } catch (e) { console.warn('[v4] mode check failed, staying in TEST:', e && e.message); }
+  if (seq !== _v4ModeSeq) return;          // a newer check started; ignore this one
+  _v4Mode = answer;
+  _v4PaintMode();
+}
+
+// Watch for the collector changing, whichever login path set it.
+let _v4LastName = undefined;
+setInterval(() => {
+  let n = null;
+  try { n = (typeof selectedCollector !== 'undefined') ? selectedCollector : null; } catch (_) {}
+  if (n !== _v4LastName){ _v4LastName = n; v4CheckMode(n); }
+}, 1000);
+
+// ── TRIAL strip + "Would have sent" panel ─────────────────────────────
+function _v4PaintMode(state){
+  const s = document.getElementById('v4-strip');
+  if (!s) return;
+  let txt, bg;
+  if (_v4Mode === 'live'){ txt = 'PILOT — saving for real'; bg = '#c62828'; }
+  else if (state === 'checking'){ txt = 'TEST MODE — nothing is saved (checking…)'; bg = '#ef6c00'; }
+  else { txt = 'TEST MODE — nothing is saved'; bg = '#ef6c00'; }
+  s.style.background = bg;
+  s.querySelector('.v4s-txt').textContent = APP_BUILD_LABEL + ' · ' + txt;
+  const b = document.getElementById('v4-held-btn');
+  if (b) b.style.display = (_v4Mode === 'live') ? 'none' : '';
+}
+function _v4PaintHeld(){
+  const b = document.getElementById('v4-held-btn');
+  if (b) b.textContent = '🧪 Would have sent (' + _v4Held.length + ')';
+  const list = document.getElementById('v4-held-list');
+  if (list && list.parentElement.style.display !== 'none') _v4RenderHeld();
+}
+function _v4RenderHeld(){
+  const list = document.getElementById('v4-held-list');
+  if (!list) return;
+  list.textContent = '';
+  if (!_v4Held.length){ list.textContent = 'Nothing yet. Writes the app tries to send will show here.'; return; }
+  _v4Held.forEach(h => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid #ddd;border-radius:8px;padding:8px;margin-bottom:8px;background:#fff';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-weight:700;font-size:12px;margin-bottom:4px;word-break:break-all';
+    head.textContent = h.method + ' ' + h.url + '  ·  ' + new Date(h.at).toLocaleTimeString('en-PH');
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'font-size:11px;white-space:pre-wrap;word-break:break-all;margin:0;max-height:260px;overflow:auto';
+    pre.textContent = (typeof h.body === 'string') ? h.body : JSON.stringify(h.body, null, 1);
+    card.appendChild(head); card.appendChild(pre); list.appendChild(card);
+  });
+}
+function _v4ToggleHeld(){
+  const p = document.getElementById('v4-held-panel');
+  if (!p) return;
+  const open = p.style.display === 'none';
+  p.style.display = open ? '' : 'none';
+  if (open) _v4RenderHeld();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const strip = document.createElement('div');
+  strip.id = 'v4-strip';
+  strip.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#ef6c00;color:#fff;' +
+    'font:700 11px/18px system-ui,sans-serif;text-align:center;letter-spacing:.3px;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top);white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  strip.innerHTML = '<span class="v4s-txt"></span>';
+  document.body.appendChild(strip);
+  document.body.style.paddingTop = 'calc(18px + env(safe-area-inset-top))';
+
+  const btn = document.createElement('button');
+  btn.id = 'v4-held-btn';
+  btn.type = 'button';
+  btn.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483000;background:#ef6c00;color:#fff;border:0;' +
+    'border-radius:16px;padding:6px 10px;font:700 12px system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.25)';
+  btn.onclick = _v4ToggleHeld;
+  document.body.appendChild(btn);
+
+  const panel = document.createElement('div');
+  panel.id = 'v4-held-panel';
+  panel.style.cssText = 'display:none;position:fixed;inset:40px 8px 52px 8px;z-index:2147483001;background:#f5f5f5;' +
+    'border:2px solid #ef6c00;border-radius:12px;padding:10px;overflow:auto;font-family:system-ui,sans-serif';
+  panel.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+    '<b style="font-size:14px">Would have sent (TEST MODE — not saved)</b>' +
+    '<button type="button" id="v4-held-close" style="border:0;background:#ef6c00;color:#fff;border-radius:8px;padding:4px 10px;font-weight:700">Close</button></div>' +
+    '<div id="v4-held-list"></div>';
+  document.body.appendChild(panel);
+  document.getElementById('v4-held-close').onclick = _v4ToggleHeld;
+
+  _v4PaintMode(); _v4PaintHeld();
+});
+
 const VENDOS_DATA = {}; // Migrated to Supabase
 
 const NAME_TO_BARANGAY = {};
@@ -1326,6 +1572,8 @@ async function downloadAllOffline(manual=false){
           return {
             ...item, status:(item.status==='pulled_out'?'pulled_out':'pending'),
             last_harvest_date:(cached && cached.last_harvest_date)||item.last_harvest_date,
+            last_harvest_any:(cached && cached.last_harvest_any)||null,
+            last_harvest_src:(cached && cached.last_harvest_src)||null,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -1554,34 +1802,7 @@ if('serviceWorker' in navigator){
     _swReloading = true;
     window.location.reload();
   });
-  // ── SCOPE ISOLATION (v4 must never fight v3 for control) ──────────
-  // sw-v3.js and sw-v4.js both registered at the DEFAULT scope,
-  // /VendoMonitor/. Only one service worker can control a page, and the
-  // last registration wins. On a phone with both apps installed, whichever
-  // was opened most recently took control of the whole folder and began
-  // answering the other app's asset requests out of its own cache.
-  // v4 now registers at the narrow scope /VendoMonitor/harvest_v4, so it
-  // only ever controls its own pages and v3 keeps the root scope to itself.
-  // A pre-existing broad-scope sw-v4 registration must be unregistered
-  // first: registering a NARROWER scope does not replace the wide one, it
-  // just adds a second registration and the fight continues.
-  // A real DIRECTORY scope, with the trailing slash. The previous value was
-  // '/VendoMonitor/harvest_v4' — a bare path prefix, not a directory. In a
-  // browser tab that is harmless, which is why v4 always worked in Chrome.
-  // Installed, Android bakes the scope into the WebAPK as an intent filter and
-  // Chrome re-checks it at launch; a prefix that isn't a directory does not
-  // survive that round trip, so the window opened, failed its own scope check
-  // and closed itself. That is the "flashes then closes" symptom.
-  const V4_SCOPE = '/VendoMonitor/v4/';
-  navigator.serviceWorker.getRegistrations()
-    .then(regs => Promise.all(regs.map(r => {
-      const sw = r.active || r.waiting || r.installing;
-      const isV4Script = sw && sw.scriptURL && sw.scriptURL.indexOf('sw-v4.js') !== -1;
-      const isBroad = !r.scope || r.scope.indexOf(V4_SCOPE) === -1;
-      return (isV4Script && isBroad) ? r.unregister().catch(()=>{}) : null;
-    })))
-    .catch(()=>{})
-    .then(()=> navigator.serviceWorker.register('/VendoMonitor/v4/sw-v4.js', { scope: V4_SCOPE }))
+  navigator.serviceWorker.register('sw-v4.js', { scope: './' })
     .then(reg=>{
       console.log('SW registered:', reg.scope);
       // If an updated SW is already waiting, activate it now
@@ -1610,51 +1831,36 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v12.9';
+const APP_VERSION = 'v13.9';
+/* v13.9: Spawn share = net × 75% rounded UP to the next peso (the office notebook rule; e.g. ₱1,874.25 → ₱1,875).
+   The database applies the same rule on save (trg_harvest_share_round_up), this keeps the screen in step with it. */
+function spawnShareOf(net){ const n = Number(net) || 0; return Math.ceil(Math.round(n * 75) / 100); }
+/* The badge used to be a hardcoded literal in the markup and had drifted to
+   v13.7 while APP_VERSION said v12.9 — so the number on screen told you
+   nothing about which build was actually running. Driven from APP_VERSION
+   now, so it cannot drift again. */
+try{
+  const _vb=document.getElementById('app-version-badge');
+  if(_vb) _vb.textContent=APP_BUILD_LABEL+' · from '+APP_VERSION;
+}catch(e){}
 
-// ── PERSISTENT SESSION (one shift = 3AM Manila to 3AM Manila) ──
-// The old rule logged people out two different ways, and both were wrong:
-//   1. at 9PM (SPAWN_CUTOFF_HOUR = 21), mid-shift for anyone working late
-//   2. at MIDNIGHT, because validity compared the stored calendar date
-//      against today's calendar date — so a collector signed in at 10PM was
-//      thrown out two hours later when the date rolled over
-// A shift is not a calendar day. We define a BUSINESS DAY that starts at 3AM:
-// shift the clock back 3 hours and take the date. Anything from 03:00 today
-// to 02:59 tomorrow is the same business day, so a reload at 1AM keeps you
-// signed in and 3AM is the single logout point.
-const SPAWN_CUTOFF_HOUR = 3;
-
+// ── PERSISTENT SESSION (stay logged in until 9PM Manila / new day) ──
+const SPAWN_CUTOFF_HOUR = 21;
 function spawnManilaNow(){
   const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hour12:false}).formatToParts(new Date());
   const g = t => parts.find(p=>p.type===t)?.value;
   return { date: `${g('year')}-${g('month')}-${g('day')}`, hour: parseInt(g('hour'),10) };
 }
-
-// The business day this instant belongs to. 02:30 Wed still returns Tuesday.
-function spawnBusinessDay(){
-  const shifted = new Date(Date.now() - SPAWN_CUTOFF_HOUR*3600*1000);
-  const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(shifted);
-  const g = t => parts.find(p=>p.type===t)?.value;
-  return `${g('year')}-${g('month')}-${g('day')}`;
-}
-
 function spawnSaveSession(col, team, pin){
-  try{ localStorage.setItem('spawn_session', JSON.stringify({
-    id: col.id||'', name: col.name||'', team: team||'', pin: pin||'',
-    day: spawnBusinessDay(),
-    date: spawnManilaNow().date,   // kept for older builds reading this key
-    ts: Date.now()
-  })); }catch(e){}
+  const now = spawnManilaNow();
+  try{ localStorage.setItem('spawn_session', JSON.stringify({ id: col.id||'', name: col.name||'', team: team||'', pin: pin||'', date: now.date, ts: Date.now() })); }catch(e){}
 }
-
 function spawnGetValidSession(){
   let s; try{ s = JSON.parse(localStorage.getItem('spawn_session')||'null'); }catch(e){ s=null; }
   if(!s || !s.name) return null;
-  // Sessions written by the previous build have no `day`. Fall back to their
-  // calendar date so nobody is kicked out by the upgrade itself.
-  const stamped = s.day || s.date;
-  if(!stamped) return null;
-  if(stamped !== spawnBusinessDay()) return null;
+  const now = spawnManilaNow();
+  if(s.date !== now.date) return null;
+  if(now.hour >= SPAWN_CUTOFF_HOUR) return null;
   return s;
 }
 function spawnClearSession(){ try{ localStorage.removeItem('spawn_session'); }catch(e){} }
@@ -1674,7 +1880,7 @@ window.addEventListener('DOMContentLoaded',()=>{
     localStorage.setItem('harvest_app_version', APP_VERSION);
   }
 
-  // ── Persistent login: stays signed in until 3AM Manila ──
+  // ── Persistent login: stay signed in until 9PM Manila / new day ──
   const _sess = spawnGetValidSession();
   if(_sess){
     selectedCollector = _sess.name;
@@ -1690,54 +1896,14 @@ window.addEventListener('DOMContentLoaded',()=>{
     const nm=document.getElementById('signedin-name');
     if(av) av.textContent=(_sess.name||'?').slice(0,2).toUpperCase();
     if(nm) nm.textContent=_sess.name||'Collector';
-    // Two different situations, two different landings:
-    //
-    //  FRESH LAUNCH  -> the signed-in card. showHomeScreen() runs the keys
-    //                   gate and the borrow check, so going there directly
-    //                   dropped the collector onto borrow-tags with no idea
-    //                   who was signed in. Show who it is; Continue proceeds.
-    //
-    //  REFRESH       -> back to the screen he was already on. Reloading
-    //                   mid-job and being thrown to the start is the thing
-    //                   that made refresh feel like a logout.
-    //
-    // navigation type separates them, and sessionStorage backs it up: a
-    // reload keeps it, closing and reopening the app does not.
-    let _wasReload = false;
-    try{
-      const _n = performance.getEntriesByType('navigation')[0];
-      _wasReload = !!(_n && _n.type === 'reload');
-    }catch(_){}
-    const _last = (()=>{ try{ return sessionStorage.getItem('last_screen')||''; }catch(_){ return ''; } })();
-
-    // Screens rebuilt from in-memory state that a reload destroys — the
-    // harvest form, the camera, the pickers mid-flow. Landing on these after
-    // a refresh shows an empty shell, so they fall back to home instead.
-    const _noRestore = ['screen-camera','screen-form','screen-collector','screen-signedin'];
-
-    if(_wasReload && _last && !_noRestore.includes(_last) && document.getElementById(_last)){
-      showScreen(_last);
-      try{ document.getElementById('bottom-nav').classList.add('show'); }catch(_){}
-      // Home is not just a screen — showHomeScreen() is what fills it in, and
-      // that is the ONLY caller of loadCrucialAreas(). Restoring with a bare
-      // showScreen() painted the shell with no stats, no held-keys banner and
-      // no Crucial Areas panel. Repaint those here.
-      // We deliberately do NOT call showHomeScreen() itself: it re-runs the
-      // keys gate and the borrow check, which would bounce a refresh straight
-      // back to the borrow screen — the thing refresh is supposed to avoid.
-      if(_last === 'screen-home'){
-        try{ document.getElementById('home-collector-name').textContent = selectedCollector||'—'; }catch(_){}
-        try{
-          document.querySelectorAll('.bnav-item').forEach(b=>b.classList.remove('active'));
-          const _hb = document.getElementById('bnav-home');
-          if(_hb) _hb.classList.add('active');
-        }catch(_){}
-        try{ loadHomeStats(); }catch(_){}
-        try{ bwRenderHeldBanner(); }catch(_){}
-        try{ loadCrucialAreas(); }catch(_){}
-      }
+    // On refresh: restore where the collector was, don't force a "continue" tap.
+    const _last = (()=>{ try{ return JSON.parse(localStorage.getItem('harvest_session')||'null'); }catch(_){ return null; } })();
+    if(_last && _last.groupId){
+      // was inside a group — reopen it directly (uses cache = instant)
+      try{ startGroup(_last.groupId); }
+      catch(_){ showHomeScreen(); }
     } else {
-      showScreen('screen-signedin');
+      showHomeScreen();
     }
   } else {
     spawnClearSession();
@@ -1809,13 +1975,31 @@ async function pinLoadCollectors(){
     // Never select `pin` or `area_pin` here — this runs BEFORE anyone authenticates,
     // so every column returned is public. It was fetching all 10 columns and caching
     // them to localStorage, which put every collector's PIN on the device.
-    const r=await fetch(`${SB}/rest/v1/collectors?active=eq.true&select=id,name,area,collector_code,photo_url&order=name.asc`,{headers:HDR,signal:ctrl.signal});
+    /* Roster comes from spawn-field-login, NOT the gateway. On a fresh install
+       there is no token yet, so a gateway fetch here would 401 and the picker
+       would silently fall back to the 4-name hardcoded list — dropping active
+       collectors from the screen. The login function serves names and areas
+       only, never PINs, and needs no token to do it. */
+    const r=await fetch(LOGIN_URL,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roster:true}), signal:ctrl.signal
+    });
     clearTimeout(tid);
-    const data=await r.json();
+    const _resp=await r.json();
+    const data=(_resp && _resp.ok && Array.isArray(_resp.collectors)) ? _resp.collectors : [];
     if(Array.isArray(data)&&data.length){
       // Defensive: strip credential fields before anything is cached, even though the
       // query above no longer requests them.
       const _safe=data.map(c=>{ const {pin,area_pin,...rest}=c; return rest; });
+      // Re-attach this device's own remembered PIN (set at last successful
+      // sign-in) so a roster refresh doesn't wipe offline login again.
+      try{
+        const _prev=JSON.parse(localStorage.getItem('spawn_collectors_cache')||'[]');
+        _safe.forEach(c=>{
+          const hit=Array.isArray(_prev)?_prev.find(p=>p.name===c.name&&p.pin):null;
+          if(hit) c.pin=hit.pin;
+        });
+      }catch(_){}
       _pinCollectors=_safe; render(_safe); _pinDbReady=true;
       try{ localStorage.setItem('spawn_collectors_cache', JSON.stringify(_safe)); }catch(e){}
     }
@@ -1906,23 +2090,19 @@ async function pinSubmit(){
     // Ask the server "is there a collector with this name AND this pin?" — it answers
     // with a row or nothing. The PIN is never sent back to the device, and the response
     // carries no `pin` column at all.
-    const r=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.${encodeURIComponent(pin)}&active=eq.true&select=id,name,area,collector_code,photo_url`,{headers:HDR,signal:ctrl.signal});
+    /* The PIN is now checked by spawn-field-login, which holds the gateway
+       token and only releases it on a match. Previously this was a gateway
+       query — i.e. the door was already open and the PIN was checked on the
+       far side of it. Now the PIN is what opens the door. */
+    const acct=await fieldLogin(pin);
     clearTimeout(tid);
-    if(!r.ok) throw new Error('Server error '+r.status);
-    const rows=await r.json();
-    // FAIL CLOSED. If the gateway ever drops the `pin=eq.` filter, this query would
-    // return the collector regardless of PIN. A deliberately wrong PIN must return
-    // nothing; if it doesn't, the filter is not being honoured and we refuse to log in.
-    if(rows.length){
-      const probe=await fetch(`${SB}/rest/v1/collectors?name=eq.${encodeURIComponent(_pinSelectedName)}&pin=eq.__nope__&active=eq.true&select=id&limit=1`,{headers:HDR});
-      const probeRows=await probe.json().catch(()=>[]);
-      if(Array.isArray(probeRows) && probeRows.length){
-        errEl.textContent='⚠️ Login unavailable — server misconfigured';
-        if(errEl){errEl.style.display='';}
-        if(btn){btn.disabled=false; btn.textContent='Login →';}
-        return;
-      }
-    }
+    // Name must match the one picked, so tapping "Gilbert" and typing Axcel's
+    // PIN does not sign you in as Axcel.
+    const rows=(acct && String(acct.name)===String(_pinSelectedName)) ? [acct] : [];
+    /* The old fail-closed probe checked that the gateway honoured `pin=eq.`.
+       There is no such query any more — a wrong PIN never yields a token — so
+       the probe would have tested nothing. Removed rather than left in place
+       looking like a safeguard. */
     if(!rows.length){
       errEl.textContent='❌ Wrong PIN — try again';
       if(errEl){errEl.style.display='';errEl.style.animation='none';void errEl.offsetWidth;errEl.style.animation='shake .4s ease';}
@@ -1943,6 +2123,16 @@ async function pinSubmit(){
     sessionStorage.setItem('col_team', selectedTeam||'');
     sessionStorage.setItem('col_pin', pin);
     localStorage.setItem('spawn_collector_name', collector.name||'');
+    /* Offline re-login was dead: the offline branch compares c.pin, but the
+       roster loader selects id,name,area,collector_code,photo_url — never pin
+       — so the match could never succeed. Remember this collector's own PIN,
+       on this collector's own phone, so a dead spot doesn't lock them out. */
+    try{
+      const _self=Object.assign({},collector,{pin:pin,team:selectedTeam});
+      const _list=(Array.isArray(_pinCollectors)?_pinCollectors:[]).filter(c=>c.name!==collector.name);
+      _list.push(_self); _pinCollectors=_list;
+      localStorage.setItem('spawn_collectors_cache', JSON.stringify(_list));
+    }catch(_){}
     // Auto-clear in-memory expenses if it's a new day
     const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
     const _lastDay = localStorage.getItem('spawn_last_active_date');
@@ -1981,26 +2171,9 @@ async function pinSubmit(){
   }
 }
 
-// Logout now requires the collector's PIN — so no one can log out (and re-lock
-// the app / drop the borrow state) without the collector authorizing it.
-async function pinLogoutConfirm(){
-  const who = selectedCollector || sessionStorage.getItem('col_name') || '';
-  const pin = await bwPinAsk('Confirm logout', who ? ('Enter '+who+"'s PIN to log out") : 'Enter your PIN to log out');
-  if(pin === null) return;                    // cancelled
-  const ok = await pulloutValidatePin(String(pin).trim());
-  if(!ok){ toast('❌ Wrong PIN — not logged out'); return; }
-  pinLogout();
-}
-
 function pinLogout(){
   selectedCollector=null; selectedTeam=null;
   _pinSelectedName=null;
-  // Logout re-locks everything: clear the admin bypass and the gate pass so
-  // the next login must borrow (scan) tags again — a bypass never carries over.
-  try{ _bwBypass=false; }catch(_){}
-  try{ _gateOK=false; }catch(_){}
-  try{ _bwRings=[]; _bwHeld=[]; }catch(_){}
-  try{ localStorage.removeItem('harvest_session'); }catch(_){}
   try{ sessionStorage.removeItem('col_name'); sessionStorage.removeItem('col_team'); sessionStorage.removeItem('col_id'); sessionStorage.removeItem('col_pin'); }catch(e){}
   spawnClearSession();
   document.querySelectorAll('#pin-name-list .collector-btn').forEach(b=>b.classList.remove('selected'));
@@ -2060,39 +2233,10 @@ function _ovdIsOverdue(row, dateMap, statusMap, now){
   return lhd ? Math.floor((now - new Date(lhd+'T12:00:00'))/86400000) : 9999;
 }
 
-// The snapshot used to live in sessionStorage, which Android throws away the
-// moment the app is closed. So every cold start recomputed from zero and the
-// group list painted 0 on every badge until the network came back — that is
-// the "everything shows zero on reload" problem. localStorage survives the
-// restart, so the last known numbers are on screen instantly and get
-// corrected in the background a moment later.
-const _OVD_KEY = 'ovd_snapshot';
-function _ovdRead(){
-  try{
-    const raw = localStorage.getItem(_OVD_KEY) || sessionStorage.getItem(_OVD_KEY);
-    return raw ? JSON.parse(raw) : null;
-  }catch(_){ return null; }
-}
-function _ovdWrite(obj){
-  try{ localStorage.setItem(_OVD_KEY, JSON.stringify(obj)); }catch(_){}
-  try{ sessionStorage.removeItem(_OVD_KEY); }catch(_){}   // retire the old copy
-}
-// Last known counts at ANY age. Used for the instant paint, never for truth.
-function _ovdLastKnownByArea(){
-  const c = _ovdRead();
-  if(!c || !c.data) return null;
-  try{ return _ovdRehydrate(c.data).byArea; }catch(_){ return null; }
-}
-function _ovdLastKnownByGroup(){
-  const c = _ovdRead();
-  if(!c || !c.data) return null;
-  try{ return _ovdRehydrate(c.data).byGroup; }catch(_){ return null; }
-}
-
 // Returns { byGroup:{id:{overdue,oldest}}, byArea:{AREA:{overdue,oldest,groups:Set}} }
 async function computeOverdue(){
   const cached = (()=>{ try{
-    const c = _ovdRead();
+    const c = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null');
     if(c && Date.now()-c.ts < _OVD_TTL) return c.data;
   }catch(_){} return null; })();
   if(cached) return _ovdRehydrate(cached);
@@ -2105,40 +2249,22 @@ async function computeOverdue(){
     const ids = groups.map(g=>g.id).filter(x=>x!=null);
     if(!ids.length) return out;
 
-    // Item rows. NOTE: `limit=8000` was a lie — PostgREST hard-caps every
-    // response at 1000 rows no matter what limit you ask for. There are 994
-    // item rows today, six short of silently losing data and undercounting
-    // every overdue badge in the app. Page with Range until exhausted.
-    const items = [];
-    for(let from=0; from<20000; from+=1000){
-      const rr = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})`+
-                             `&select=group_run_id,vendo_id,status,harvested_at`,
-                             {headers:{...HDR, Range:`${from}-${from+999}`}});
-      const page = await rr.json();
-      if(!Array.isArray(page) || !page.length) break;
-      items.push(...page);
-      if(page.length < 1000) break;
-    }
-    if(!items.length) return out;
+    // ONE fetch of item rows, with the fields the rules actually need.
+    const r1 = await fetch(`${SB}/rest/v1/harvest_group_items?group_run_id=in.(${ids.join(',')})`+
+                           `&select=group_run_id,vendo_id,status,harvested_at&limit=8000`,{headers:HDR});
+    const items = await r1.json();
+    if(!Array.isArray(items) || !items.length) return out;
 
     // ONE fetch of vendo state. Not _vendoCacheMap — that is an hourly cron snapshot and
     // is exactly why these numbers lagged behind reality.
     const vids = [...new Set(items.map(i=>i.vendo_id).filter(x=>x!=null))];
     const dateMap={}, statusMap={};
-    // These chunks used to run in series: 970 vendos = 4 round trips, each
-    // waiting on the one before it. On a phone that is most of the wait.
-    // They are independent, so fire them together.
-    const chunks = [];
-    for(let i=0;i<vids.length;i+=300) chunks.push(vids.slice(i,i+300));
-    const pages = await Promise.all(chunks.map(chunk =>
-      fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,status&limit=400`,
-            {headers:HDR})
-        .then(r=>r.json())
-        .catch(()=>[])
-    ));
-    pages.forEach(vs=>{
-      if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=v.last_harvest_date; statusMap[v.id]=v.status; });
-    });
+    for(let i=0;i<vids.length;i+=300){
+      const chunk = vids.slice(i,i+300);
+      const r2 = await fetch(`${SB}/rest/v1/vendos?id=in.(${chunk.join(',')})&select=id,last_harvest_date,last_harvest_any,status&limit=400`,{headers:HDR});
+      const vs = await r2.json();
+      if(Array.isArray(vs)) vs.forEach(v=>{ dateMap[v.id]=_lhdShow(v); statusMap[v.id]=v.status; });
+    }
 
     _ovdOverlay(items, dateMap, statusMap);
 
@@ -2168,7 +2294,9 @@ async function computeOverdue(){
       if(d<9999 && d>out.byArea[area].oldest) out.byArea[area].oldest=d;
     });
 
-    _ovdWrite({ts:Date.now(), data:_ovdDehydrate(out), counted});
+    try{
+      sessionStorage.setItem('ovd_snapshot', JSON.stringify({ts:Date.now(), data:_ovdDehydrate(out), counted}));
+    }catch(_){}
     return out;
   })();
 
@@ -2187,7 +2315,7 @@ function _ovdRehydrate(o){
   Object.entries(o.byArea||{}).forEach(([k,v])=>{ a[k]={overdue:v.overdue,oldest:v.oldest,groups:new Set(v.groups||[])}; });
   return {byGroup:o.byGroup||{}, byArea:a};
 }
-function invalidateOverdue(){ try{ localStorage.removeItem(_OVD_KEY); }catch(_){} try{ sessionStorage.removeItem(_OVD_KEY); }catch(_){} }
+function invalidateOverdue(){ try{ sessionStorage.removeItem('ovd_snapshot'); }catch(_){} }
 
 // A harvest or pull-out changes exactly ONE vendo. Refetching all ~1,050 items and
 // ~1,050 vendos to learn that (≈139 KB, and 4 MB across a 30-harvest shift) is absurd
@@ -2199,7 +2327,7 @@ function invalidateOverdue(){ try{ localStorage.removeItem(_OVD_KEY); }catch(_){
 function applyOverdueDelta(vendoId){
   if(vendoId==null) return;
   let snap;
-  try{ snap = _ovdRead(); }catch(_){ return; }
+  try{ snap = JSON.parse(sessionStorage.getItem('ovd_snapshot')||'null'); }catch(_){ return; }
   if(!snap || !snap.data || !snap.counted) return;
   const rows = snap.counted[vendoId];
   // Not counted (already harvested today, pulled out, or under 30 days) -> nothing moves.
@@ -2211,7 +2339,7 @@ function applyOverdueDelta(vendoId){
     if(a && a.overdue > 0) a.overdue--;
   });
   delete snap.counted[vendoId];
-  _ovdWrite(snap);
+  try{ sessionStorage.setItem('ovd_snapshot', JSON.stringify(snap)); }catch(_){}
 }
 
 async function loadCrucialAreas(){
@@ -2267,38 +2395,22 @@ function showAreasScreen(){
   sheet.classList.add('show');
   loadPermGroups().then(groups=>{
     const areas=getAreasFromGroups(groups);
-    // Same colour tiers as the Crucial Areas panel: 100+ red, 50-99 amber, under 50 green.
-    const _tier=n=>n>=100?'#DF1A35':n>=50?'#FEB30C':'#028867';
-    const paint=(byArea)=>{
-      listEl.innerHTML=areas.map((area,i)=>{
-        const cnt=groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase()).length;
-        const o=(byArea&&byArea[area.id.toUpperCase()])||null;
-        const n=o?o.overdue:0;
-        const meta=area.noGroups?'Tap to browse vendos':
-          (cnt===1?'1 group':cnt+' groups')+(n>0?' · '+n+' overdue':'');
-        const badge=n>0
-          ? `<span style="min-width:34px;height:28px;padding:0 9px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;background:${_tier(n)};margin-left:auto">${n}</span>`
-          : '';
-        return `<div class="picker-item" style="cursor:pointer" data-area-idx="${i}" data-area-id="${area.id}">
-          ${areaIconHtml(area.id,44)}
-          <div class="gi-left"><div style="font-size:15px;font-weight:700">${area.label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div></div>
-          ${badge}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#025AC6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:8px"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>`;
-      }).join('');
-      listEl.querySelectorAll('[data-area-idx]').forEach(el=>{
-        el.addEventListener('click',()=>{
-          const idx=parseInt(el.dataset.areaIdx);
-          closeAreaPicker();
-          openGroupPicker(JSON.stringify(areas[idx]));
-        });
+    listEl.innerHTML=areas.map((area,i)=>{
+      const cnt=groups.filter(g=>g.area.toUpperCase()===area.id.toUpperCase()).length;
+      const meta=area.noGroups?'Tap to browse vendos':cnt===1?'1 group':cnt+' groups';
+      return `<div class="picker-item" style="cursor:pointer" data-area-idx="${i}" data-area-id="${area.id}">
+        ${areaIconHtml(area.id,44)}
+        <div class="gi-left"><div style="font-size:15px;font-weight:700">${area.label}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${meta}</div></div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#025AC6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    }).join('');
+    listEl.querySelectorAll('[data-area-idx]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=parseInt(el.dataset.areaIdx);
+        closeAreaPicker();
+        openGroupPicker(JSON.stringify(areas[idx]));
       });
-    };
-    // Instant paint from the saved snapshot, then correct it in the background.
-    paint(_ovdLastKnownByArea());
-    computeOverdue().then(({byArea})=>{
-      if(document.getElementById('area-picker-sheet')?.classList.contains('show')) paint(byArea);
-    }).catch(()=>{});
+    });
   });
 }
 
@@ -2344,10 +2456,8 @@ async function showAllGroups(){
       el.addEventListener('click',()=>{ const i=parseInt(el.dataset.allgroupIdx); closeGroupPicker(); _sortMode='date'; startGroup(sorted[i].id); });
     });
   };
-  // 1) instant paint. Use the last known counts rather than null — null makes
-  //    every badge render 0, which reads as "nothing is overdue" when the real
-  //    answer is "not loaded yet". Stale numbers beat wrong ones.
-  renderList(withGroups, _ovdLastKnownByGroup());
+  // 1) instant paint using group order as-is
+  renderList(withGroups, null);
   // 2) warm caches right away so tapping is instant
   setTimeout(()=>prewarmGroups(withGroups),100);
   // 3) compute overdue in background, then re-sort + repaint badges
@@ -2530,6 +2640,8 @@ async function prewarmGroups(groupDefs){
           const base = {
             ...item,
             last_harvest_date:lhd,
+            last_harvest_any:(cached && cached.last_harvest_any)||null,
+            last_harvest_src:(cached && cached.last_harvest_src)||null,
             vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
             address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2679,17 +2791,17 @@ async function startGroup(groupId){
 
     // Use storage cache for vendo data — avoids slow batch DB fetches
     const vendoIds = allItems.filter(i=>i.vendo_id).map(i=>i.vendo_id);
-    let lhdMap = {};
+    let lhdMap = {}, anyMap = {}, srcMap = {};
     if(_vendoCacheMap && Object.keys(_vendoCacheMap).length > 0){
       // Fast path: use preloaded cache
-      vendoIds.forEach(id=>{ if(_vendoCacheMap[id]) lhdMap[id]=_vendoCacheMap[id].last_harvest_date; });
+      vendoIds.forEach(id=>{ if(_vendoCacheMap[id]){ lhdMap[id]=_vendoCacheMap[id].last_harvest_date; anyMap[id]=_vendoCacheMap[id].last_harvest_any||null; srcMap[id]=_vendoCacheMap[id].last_harvest_src||null; } });
       console.log('[VendoCache] Used cache for', vendoIds.length, 'vendos');
     } else {
       // Fallback: fetch from DB in batches
       for(let i=0;i<vendoIds.length;i+=200){
         try{
-          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,vendo_code`,{headers:HDR});
-          (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; if(!_vendoCacheMap) _vendoCacheMap={}; _vendoCacheMap[v.id]=v; });
+          const r = await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,last_harvest_any,last_harvest_src,vendo_code`,{headers:HDR});
+          (await r.json()).forEach(v=>{ lhdMap[v.id]=v.last_harvest_date; anyMap[v.id]=v.last_harvest_any||null; srcMap[v.id]=v.last_harvest_src||null; if(!_vendoCacheMap) _vendoCacheMap={}; _vendoCacheMap[v.id]=v; });
         }catch(e){}
       }
     }
@@ -2705,6 +2817,8 @@ async function startGroup(groupId){
         return {
           ...item, status:'harvested',
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2724,6 +2838,8 @@ async function startGroup(groupId){
           ...item, status:'pulled_out',
           _pulloutReason:_r, _pulloutDetails:_d, _pulloutAt:item.harvested_at||null,
           last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
           vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
           address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2734,6 +2850,8 @@ async function startGroup(groupId){
       return {
         ...item, status:'pending',
         last_harvest_date:(item.vendo_id&&lhdMap[item.vendo_id])||item.last_harvest_date,
+        last_harvest_any:(item.vendo_id&&anyMap[item.vendo_id])||null,
+        last_harvest_src:(item.vendo_id&&srcMap[item.vendo_id])||null,
         vendo_code: item.vendo_code || (cached && cached.vendo_code) || '',
         address: item.address || (cached && cached.address) || '',
             date_installed: item.date_installed || (cached && cached.date_installed) || null,
@@ -2870,17 +2988,20 @@ async function _refreshLHD(groupId){
     const cached=JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
     if(!cached) return;
     const vendoIds=cached.items.filter(i=>i.vendo_id).map(i=>i.vendo_id);
-    let lhdMap={};
+    let lhdMap={}, anyMap2={};
     for(let i=0;i<vendoIds.length;i+=200){
-      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date`,{headers:HDR});
-      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date;});
+      const r=await fetch(`${SB}/rest/v1/vendos?id=in.(${vendoIds.slice(i,i+200).join(',')})&select=id,last_harvest_date,last_harvest_any,last_harvest_src`,{headers:HDR});
+      (await r.json()).forEach(v=>{lhdMap[v.id]=v.last_harvest_date; anyMap2[v.id]=v;});
     }
     // Update cache and currentItems
     let changed=false;
     cached.items=cached.items.map(item=>{
       const fresh=item.vendo_id&&lhdMap[item.vendo_id];
-      if(fresh&&fresh!==item.last_harvest_date){changed=true;return{...item,last_harvest_date:fresh};}
-      return item;
+      const va=item.vendo_id&&anyMap2[item.vendo_id];
+      let out=item;
+      if(fresh&&fresh!==item.last_harvest_date){changed=true;out={...out,last_harvest_date:fresh};}
+      if(va&&(va.last_harvest_any||null)!==(item.last_harvest_any||null)){changed=true;out={...out,last_harvest_any:va.last_harvest_any||null,last_harvest_src:va.last_harvest_src||null};}
+      return out;
     });
     if(changed){
       localStorage.setItem(CACHE_KEY,JSON.stringify(cached));
@@ -2889,7 +3010,11 @@ async function _refreshLHD(groupId){
       if(currentGroupRun&&currentGroupRun.id===groupId){
         currentItems=currentItems.map(item=>{
           const fresh=item.vendo_id&&lhdMap[item.vendo_id];
-          return fresh&&fresh!==item.last_harvest_date?{...item,last_harvest_date:fresh}:item;
+          const va=item.vendo_id&&anyMap2[item.vendo_id];
+          let out=item;
+          if(fresh&&fresh!==item.last_harvest_date) out={...out,last_harvest_date:fresh};
+          if(va&&(va.last_harvest_any||null)!==(item.last_harvest_any||null)) out={...out,last_harvest_any:va.last_harvest_any||null,last_harvest_src:va.last_harvest_src||null};
+          return out;
         });
         renderVendoList();
       }
@@ -2917,7 +3042,7 @@ async function startAllVendos(areaJson){
     while(true){
       const r = await fetch(
         `${SB}/rest/v1/vendos?area=eq.${encodeURIComponent(area.id)}`+
-        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,contact_number,address`+
+        `&select=id,sheet_name,tg_name,vlan,lat,lng,last_harvest_date,last_harvest_any,last_harvest_src,contact_number,address`+
         `&order=sheet_name.asc&limit=500&offset=${offset}`,{headers:HDR}
       );
       const batch = await r.json();
@@ -2938,6 +3063,8 @@ async function startAllVendos(areaJson){
       lat: v.lat,
       lng: v.lng,
       last_harvest_date: v.last_harvest_date,
+      last_harvest_any: v.last_harvest_any||null,
+      last_harvest_src: v.last_harvest_src||null,
       contact_number: v.contact_number,
       address: v.address,
       status: 'pending'
@@ -3024,8 +3151,9 @@ function renderVendoList(){
   all.forEach((item,i)=>{item._origIdx=i;item._dist=(item.lat&&item.lng)?haversine(_initCentroid.lat,_initCentroid.lng,parseFloat(item.lat),parseFloat(item.lng)):null;});
 
   const pending=all.filter(i=>i.status==='pending').sort((a,b)=>{
-    const da=a.last_harvest_date?Math.floor((Date.now()-new Date(a.last_harvest_date+'T12:00:00'))/86400000):99999;
-    const db=b.last_harvest_date?Math.floor((Date.now()-new Date(b.last_harvest_date+'T12:00:00'))/86400000):99999;
+    const _la=_lhdShow(a), _lb=_lhdShow(b);
+    const da=_la?Math.floor((Date.now()-new Date(_la+'T12:00:00'))/86400000):99999;
+    const db=_lb?Math.floor((Date.now()-new Date(_lb+'T12:00:00'))/86400000):99999;
     return db-da;
   });
   const done=all.filter(i=>i.status==='harvested');
@@ -3068,7 +3196,7 @@ function renderVendoList(){
   // Sort respects collector-chosen _sortMode + toggle direction (_sortDir)
   let sorted=false; let _sortLabel='';
   const _nm=i=>(i.sheet_name||i.tg_name||'Unknown');
-  const _days=i=>i.last_harvest_date?Math.floor((Date.now()-new Date(i.last_harvest_date+'T12:00:00'))/86400000):99999;
+  const _days=i=>{ const l=_lhdShow(i); return l?Math.floor((Date.now()-new Date(l+'T12:00:00'))/86400000):99999; };
   const _vlanNum=i=>{ const v=parseInt(i.vlan); return isNaN(v)?null:v; };
   if(activeTab!=='done'){
     const dir=_sortDir[_sortMode]||1;
@@ -3126,8 +3254,9 @@ function renderVendoList(){
     const pill=item.status==='harvested'?'<span class="pill pill-green">✅ Done</span>':
       item.status==='skipped'?'<span class="pill pill-amber">⏸ Skipped</span>':
       item.status==='pulled_out'?'<span class="pill pill-red">📤 Pulled out</span>':'<span class="pill pill-gray">Tap to harvest</span>';
-    const lastH=item.last_harvest_date?new Date(item.last_harvest_date+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}):'—';
-    const daysSince=item.last_harvest_date?Math.floor((Date.now()-new Date(item.last_harvest_date+'T12:00:00'))/(86400000)):null;
+    const _lshow=_lhdShow(item);
+    const lastH=_lshow?new Date(_lshow+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})+(_lhdBook(item)?' 📒':''):'—';
+    const daysSince=_lshow?Math.floor((Date.now()-new Date(_lshow+'T12:00:00'))/(86400000)):null;
     const lhdColor=item.status==='harvested'?'#9ca3af':daysSince===null?'#6b7280':daysSince>45?'#dc2626':daysSince>30?'#d97706':daysSince>14?'#025AC6':'#15803d';
     const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince===null?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
     const _dLabel=daysSince===null?'Never':daysSince>=30?Math.floor(daysSince/30)+'mo '+Math.floor(daysSince%30)+'d':daysSince+'d';
@@ -3453,8 +3582,9 @@ function openItem(idx){
     else { _vcodeEl.style.display='none'; }
   }
   const fmtLastDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : '—';
-  document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(currentItem.last_harvest_date)}`;
-  const _ds=currentItem.last_harvest_date?Math.floor((Date.now()-new Date(currentItem.last_harvest_date+'T12:00:00'))/86400000):null;
+  const _lcur=_lhdShow(currentItem);
+  document.getElementById('form-vmeta').textContent=`${currentItem.address||currentItem.barangay||currentItem.area||'—'} · VLAN ${currentItem.vlan||'?'} · Last: ${fmtLastDate(_lcur)}${_lhdBook(currentItem)?' (book)':''}`;
+  const _ds=_lcur?Math.floor((Date.now()-new Date(_lcur+'T12:00:00'))/86400000):null;
   const _hdrColor=_ds===null?'#6b7280':_ds>45?'#dc2626':_ds>30?'#d97706':_ds>14?'#025AC6':'#15803d';
   document.getElementById('form-header-el').style.background=_hdrColor;
 
@@ -4034,7 +4164,7 @@ function doneCollectionSheet(){
   const bugi = parseFloat(document.getElementById('bugi-amount')?.value)||0;
   const cash = parseFloat(document.getElementById('cash-amount')?.value)||0;
   const packTotal = (p1k*1000)+(p300*300)+bugi+cash;
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const warn = document.getElementById('sheet-match-warning');
   const summaryBox = document.getElementById('pack-summary-box');
   const doneBtn = document.querySelector('#collection-sheet .btn-blue');
@@ -4090,7 +4220,7 @@ function calcNet(){
   const breakdownTotal = net + free + saloy + freeCoins;
   window._lastBreakdownTotal = breakdownTotal;
   window._lastNetCoins = net;
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const customer = net - spawn;
 
   // Write total to hidden field for submitHarvest()
@@ -4123,7 +4253,7 @@ function calcNet(){
   if(ctl) ctl.textContent = '₱'+fmt(net);
   // Show warning if pack total ≠ coin total
   const warn = document.getElementById('sheet-match-warning');
-  if(warn) warn.style.display = (packTotal > 0 && net > 0 && Math.round(packTotal) !== Math.round(net * 0.75)) ? 'block' : 'none';
+  if(warn) warn.style.display = (packTotal > 0 && net > 0 && Math.round(packTotal) !== spawnShareOf(net)) ? 'block' : 'none';
   const so = document.getElementById('sheet-owner');
   if(so) so.textContent = '₱'+fmt(customer);
 
@@ -4257,7 +4387,7 @@ async function submitHarvest(){
   const freeCoins=parseFloat(document.getElementById('coin-freecoins').value)||0;
   if(!net){toast('Enter Net Coins first');btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});return;}
   const total=net+free+saloy+freeCoins; // Total Coins = for TG reconciliation
-  const spawn=Math.round(net*0.75),customer=net-spawn;
+  const spawn=spawnShareOf(net),customer=net-spawn;
   const now=new Date().toISOString();
   // `harvested_at` stays UTC (a true instant). `harvest_date` is a calendar day and
   // MUST be Manila-local: a 6 AM Manila harvest is 22:00 UTC the previous day, so
@@ -4296,14 +4426,6 @@ async function submitHarvest(){
 
   // Also save to harvests table
   const harvestRecord={
-    // TRIAL FLAG — v4 writes to the SAME production tables as v3. Without this
-    // a harvest submitted while testing v4 is indistinguishable from a real
-    // one: it lands in reconciliation, in Spawn share, in the money. Every v4
-    // write is stamped is_test=true and must be filtered out of reporting.
-    // Flip spawn_settings.v4_trial_mode to 'false' when v4 becomes the real
-    // app — no push needed. This also covers the offline queue, which stores
-    // this same object and replays it later.
-    is_test: (typeof _V4_TRIAL==='undefined') ? true : !!_V4_TRIAL,
     harvest_date:today,harvest_window_start:currentItem.last_harvest_date||'2026-04-09',
     harvest_window_end:now,harvested_at:now,
     vendo_id:currentItem.vendo_id||null,
@@ -4312,7 +4434,8 @@ async function submitHarvest(){
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
     coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
-    net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
+    net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note,
+    app_build:APP_BUILD
   };
 
   // Upload photo if captured
@@ -4465,7 +4588,7 @@ async function submitHarvest(){
     }
 
     // Update in-memory
-    Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today});
+    Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today,last_harvest_any:today,last_harvest_src:'app'});
     if(capturedGPS){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
     if(ownerName) currentItems[currentItemIdx].sheet_name=ownerName;
     if(contact) currentItems[currentItemIdx].contact_number=contact;
@@ -4624,10 +4747,11 @@ function hardReset(){
   localStorage.setItem('harvest_app_version', APP_VERSION);
   // Unregister SW and clear SW caches so the newest version installs on reload
   if('serviceWorker' in navigator){
+    // V4: only v4's own service worker and caches. v3's must survive a v4 reset.
     navigator.serviceWorker.getRegistrations().then(regs=>{
-      regs.forEach(r=>r.unregister());
+      regs.filter(r=>r.scope && /\/v4\/$/.test(r.scope)).forEach(r=>r.unregister());
     });
-    caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))));
+    caches.keys().then(keys=>Promise.all(keys.filter(k=>k.indexOf('spawn-harvest-v4')===0).map(k=>caches.delete(k))));
   }
   const _pending = (JSON.parse(localStorage.getItem('hq')||'[]')).length;
   toast(_pending?('✅ Reset (kept '+_pending+' pending) — reloading…'):'✅ App reset — reloading…', 2000);
@@ -5182,7 +5306,7 @@ function showHarvestReceipt(){
   const saloy = parseFloat(document.getElementById('coin-saloy')?.value)||0;
   const freeCoins = parseFloat(document.getElementById('coin-freecoins')?.value)||0;
   const total = parseFloat(document.getElementById('coin-total')?.value) || (net + free + saloy + freeCoins);
-  const spawn = Math.round(net * 0.75);
+  const spawn = spawnShareOf(net);
   const owner = net - spawn;
   const vname = document.getElementById('form-vname')?.textContent || currentItem?.sheet_name || '—';
   const now = new Date();
@@ -5229,858 +5353,8 @@ function hrHome(){
 }
 
 // ── HOME SCREEN ───────────────────────────────────────────────────────
-// ══ SPAWN KEYS GATE ════════════════════════════════════════════
-// Yesterday's bag must be approved returned before today opens.
-//
-// DESIGN NOTES (read before changing):
-//  - The DB is the authority. spawn_harvest_gate() decides; this is
-//    only a display of that decision. Never decide locally.
-//  - FAIL OPEN on network error. If Supabase is unreachable at 6AM
-//    the gate cannot verify, and five collectors must not be stranded
-//    by our own outage. The DB-side rule stays fail-CLOSED for
-//    unknown collectors; the *client* just must not brick the morning.
-//  - The admin escape lives in the shell, not in here. If this whole
-//    block throws, the escape is still tappable.
-let _gateOK = false;        // has the gate passed this session?
-let _gateChecking = false;
-
-function gateShow(){ const o=document.getElementById('gate-overlay'); if(o) o.style.display='block'; }
-function gateHide(){ const o=document.getElementById('gate-overlay'); if(o) o.style.display='none'; }
-
-function gatePaint(icon, title, msg, ringsTxt, showActions){
-  try{
-    const $=id=>document.getElementById(id);
-    if($('gate-icon'))  $('gate-icon').textContent  = icon;
-    if($('gate-title')) $('gate-title').textContent = title;
-    if($('gate-msg'))   $('gate-msg').innerHTML     = msg;
-    const r=$('gate-rings');
-    if(r){ if(ringsTxt){ r.textContent=ringsTxt; r.style.display=''; } else { r.style.display='none'; } }
-    const a=$('gate-actions');
-    if(a) a.style.display = showActions ? '' : 'none';
-  }catch(e){ console.error('[Gate] paint failed', e); }
-}
-
-function gateCollectorName(){
-  return selectedCollector
-      || sessionStorage.getItem('col_name')
-      || localStorage.getItem('spawn_collector_name')
-      || '';
-}
-
-// Ask the DB. Returns the jsonb verdict, or null if we couldn't reach it.
-async function gateAsk(name){
-  const ctrl = new AbortController();
-  const t = setTimeout(()=>ctrl.abort(), 8000);
-  try{
-    const r = await _origFetchSafe(GW_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
-      body: JSON.stringify({kind:'rpc', fn:'spawn_harvest_gate', args:{p_collector:name}}),
-      signal: ctrl.signal
-    });
-    clearTimeout(t);
-    if(!r.ok) return null;
-    return await r.json();
-  }catch(e){
-    clearTimeout(t);
-    console.warn('[Gate] unreachable:', e && e.name);
-    return null;
-  }
-}
-
-// Use the untouched original fetch so the gw shim can't interfere.
-function _origFetchSafe(u,o){
-  const f = window._spawnOrigFetch || window.fetch;
-  return f(u,o);
-}
-
-// The main entry. Resolves true = let him through, false = blocked.
-async function gateCheck(){
-  if(_gateOK) return true;
-  if(_gateChecking) return false;
-  _gateChecking = true;
-  const name = gateCollectorName();
-  gateShow();
-  gatePaint('🔐','Checking…','Looking up today\'s approval.','',false);
-  let verdict = null;
-  try{ verdict = await gateAsk(name); }catch(e){ verdict = null; }
-  _gateChecking = false;
-
-  // ── Could not reach the DB → FAIL OPEN, but say so loudly.
-  if(!verdict){
-    console.warn('[Gate] no verdict — failing open');
-    _gateOK = true;
-    gateHide();
-    try{
-      const b=document.getElementById('offline-banner');
-      if(b){ b.textContent='⚠️ Key check skipped — no connection'; b.classList.add('show'); }
-    }catch(_){}
-    return true;
-  }
-
-  if(verdict.unlocked === true){
-    _gateOK = true;
-    gateHide();
-    if(verdict.is_override){
-      console.log('[Gate] opened by override —', verdict.approved_by);
-    }
-    return true;
-  }
-
-  // ── Blocked.
-  const rings = (typeof verdict.rings_out === 'number' && verdict.rings_out > 0)
-    ? `🔑 ${verdict.rings_out} ring${verdict.rings_out>1?'s':''} still marked OUT to you`
-    : '';
-  gatePaint(
-    '🔒',
-    'Bag not checked yet',
-    (verdict.reason || 'No approval today.') +
-      (verdict.collector ? `<br><br><b>${verdict.collector}</b>` : ''),
-    rings,
-    true
-  );
-  return false;
-}
-
-function gateRecheck(){ _gateOK=false; gateCheck().then(ok=>{ if(ok) showHomeScreen(); }); }
-function gateLogoutBack(){ gateHide(); _gateOK=false; try{ pinLogout(); }catch(_){ location.reload(); } }
-
-// ── ADMIN ESCAPE ───────────────────────────────────────────────
-// Wendell's bypass. Lives in the shell so it survives the gate
-// screen failing to render at all. Every use is logged and shows
-// red on the dashboard — that is the deterrent, not secrecy.
-// Styled admin sheet. This used to be three stacked native prompt() boxes,
-// which look like a browser error on Android and give no indication this is
-// a logged override. One card, one submit, same payload.
-function gateAdminAsk(needName){
-  return new Promise(resolve=>{
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(2,20,60,.66);backdrop-filter:blur(5px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
-    ov.innerHTML=`<div style="width:100%;max-width:340px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.38)">
-      <div style="background:linear-gradient(135deg,#DF1A35,#C01176);color:#fff;padding:17px 19px">
-        <div style="font-size:17px;font-weight:800">&#128273; Admin override</div>
-        <div style="font-size:11.5px;opacity:.9;margin-top:3px;line-height:1.45">This unlocks harvest without keys. It is logged and shows red on the dashboard.</div>
-      </div>
-      <div style="padding:18px">
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:7px">Admin code</div>
-        <input id="ga-code" type="password" inputmode="numeric" autocomplete="off" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;" style="width:100%;box-sizing:border-box;padding:13px 14px;border:2px solid #e0e4f0;border-radius:12px;font-size:20px;letter-spacing:4px;text-align:center;font-family:inherit;outline:none">
-        ${needName?`<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:14px 0 7px">Collector</div>
-        <input id="ga-name" type="text" autocomplete="off" placeholder="Name" style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid #e0e4f0;border-radius:12px;font-size:15px;font-family:inherit;outline:none">`:''}
-        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:14px 0 7px">Reason</div>
-        <input id="ga-why" type="text" autocomplete="off" placeholder="Why the keys were skipped" style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid #e0e4f0;border-radius:12px;font-size:15px;font-family:inherit;outline:none">
-        <div style="display:flex;gap:9px;margin-top:16px">
-          <button id="ga-x" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
-          <button id="ga-ok" style="flex:2;padding:12px;border-radius:12px;border:0;background:linear-gradient(135deg,#DF1A35,#C01176);color:#fff;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer">Unlock</button>
-        </div>
-      </div></div>`;
-    document.body.appendChild(ov);
-    const code=ov.querySelector('#ga-code');
-    const nm=ov.querySelector('#ga-name');
-    const why=ov.querySelector('#ga-why');
-    const done=v=>{ ov.remove(); resolve(v); };
-    ov.querySelector('#ga-x').onclick=()=>done(null);
-    ov.querySelector('#ga-ok').onclick=()=>done({code:code.value,name:nm?nm.value:'',reason:why.value});
-    ov.addEventListener('keydown',e=>{
-      if(e.key==='Enter') done({code:code.value,name:nm?nm.value:'',reason:why.value});
-      if(e.key==='Escape') done(null);
-    });
-    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
-    setTimeout(()=>code.focus(),80);
-  });
-}
-
-async function gateAdminPrompt(){
-  const known = gateCollectorName();
-  const res = await gateAdminAsk(!known);
-  if(!res || !res.code) return;
-  const code = res.code;
-  const name = known || res.name || '';
-  const reason = res.reason || '';
-  try{
-    const r = await _origFetchSafe(GW_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
-      body: JSON.stringify({kind:'rpc', fn:'spawn_harvest_override',
-        args:{p_admin_code:String(code).trim(), p_collector:name, p_reason:reason}})
-    });
-    const d = await r.json();
-    if(d && d.ok){
-      _gateOK = true;
-      gateHide();
-      alert('✅ Unlocked — logged as override.\n' + (d.warning||''));
-      try{ showHomeScreen(); }catch(_){ location.reload(); }
-    }else{
-      alert('❌ ' + ((d && d.error) || 'Override failed'));
-    }
-  }catch(e){
-    alert('❌ No connection — cannot log override.');
-  }
-}
-
-// ══ BORROW KEYS ═══════════════════════════════════════════════════════
-// Flow: scan area tags → Go Harvest → QR appears → Steph scans it in
-// SPAWN KEYS → rings go OUT to him → harvest opens.
-//
-// The QR carries ONLY an opaque token. No name, no ring list. A photo of it
-// is worthless: single-use, dead in 5 minutes, and generating a new one
-// cancels the old.
-let _bwRings = [];        // rings he has scanned, [{id,label,area,short_code}]
-let _bwBypass = false;    // admin bypassed borrowing this session
-let _bwScanner = null;
-let _bwToken = null;
-let _bwPoll = null;
-let _bwTick = null;
-// Scan debounce: the camera callback fires ~10x/sec while a tag is in frame.
-// Without this, one tag held steady hammers the DB and spams toasts every
-// frame. Ignore the same code for a short window, and never run two lookups
-// at once.
-let _bwLastCode = '';
-let _bwLastAt = 0;
-let _bwBusy = false;
-
-// ══ KEY TABLES: BYPASS THE GATEWAY ════════════════════════════════════
-// v4 routes all REST through spawn-gw, which keeps its own hardcoded table
-// allowlist. key_rings / key_handovers / spawn_settings are new tables and are
-// NOT on it, so every read 403s — confirmed live: "Cannot read keys (gateway
-// 403)". The borrow screen could never appear.
-//
-// spawn-keys.html already reads these tables directly with the ANON key and
-// works. We do the same, for these tables only, using the untouched fetch the
-// interceptor stashed at install time. Everything else still goes through the
-// gateway exactly as before.
-//
-// This is the anon key — the same public key spawn-keys ships. It is NOT the
-// service_role key, and it grants no more than the anon role already has.
-const _KEYS_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN2aXJhcWZocGhoc29uam1ydHZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2OTY2MTksImV4cCI6MjA5MTI3MjYxOX0.7xtCIZvwIOgYXvaj1fLokiOKXylnxhwbWC4PCwb_D1o';
-const _KEYS_HDR = {apikey:_KEYS_ANON, Authorization:'Bearer '+_KEYS_ANON, 'Content-Type':'application/json'};
-
-// Direct fetch that skips the gateway interceptor entirely.
-function _keysFetch(path){
-  const f = window._spawnOrigFetch || window.fetch;
-  return f(SB + '/rest/v1/' + path, {headers:_KEYS_HDR});
-}
-
-// ══ V4 TRIAL MODE ═════════════════════════════════════════════════════
-// v4 shares production tables with v3. Until v4 is promoted, every harvest it
-// writes is stamped is_test=true so it can never enter money reporting.
-//
-// FAILS SAFE TO TRIAL: if the settings fetch fails (offline at 6AM, gateway
-// down), _V4_TRIAL stays true. The worst case is a real harvest flagged as a
-// test — visible, recoverable with one UPDATE. The opposite default would let
-// a test harvest silently become real money, which is not recoverable by
-// inspection because nothing would distinguish it.
-let _V4_TRIAL = true;
-
-// Show the badge IMMEDIATELY, before any network call. It was previously only
-// drawn after the settings fetch resolved — so if spawn_settings is not on the
-// spawn-gw allowlist (it is a new table), the fetch 403s, the badge never
-// appears, and v4 looks exactly like the real app while still being trial.
-// The warning must not depend on the network succeeding.
-if(document.readyState==='loading'){
-  document.addEventListener('DOMContentLoaded', ()=>{ if(_V4_TRIAL) _v4TrialBadge(); });
-}else{
-  setTimeout(()=>{ if(_V4_TRIAL) _v4TrialBadge(); }, 0);
-}
-
-(async function loadTrialFlag(){
-  try{
-    const r = await _keysFetch('spawn_settings?select=value&key=eq.v4_trial_mode');
-    if(!r.ok){ console.warn('[v4] trial flag read failed ('+r.status+') — staying in TRIAL'); return; }
-    const d = await r.json();
-    if(Array.isArray(d) && d[0]) _V4_TRIAL = (d[0].value === 'true');
-    // Promoted to live: take the badge down.
-    if(!_V4_TRIAL){ const b=document.getElementById('v4-trial-badge'); if(b) b.remove(); }
-    else _v4TrialBadge();
-  }catch(e){ console.warn('[v4] trial flag read threw — staying in TRIAL', e); }
-})();
-
-// Make trial mode impossible to miss. A tester who forgets he is in trial
-// reports fake numbers as real; a collector who lands here by accident needs
-// to know his work is not being counted.
-function _v4TrialBadge(){
-  if(document.getElementById('v4-trial-badge')) return;
-  const b=document.createElement('div');
-  b.id='v4-trial-badge';
-  b.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99996;background:linear-gradient(90deg,#FFB725,#f59e0b);color:#5c3d00;font-size:11px;font-weight:800;text-align:center;padding:5px 8px;letter-spacing:.3px;font-family:inherit;pointer-events:none';
-  b.textContent='⚠ TRIAL MODE — harvests are NOT counted as real';
-  document.body.appendChild(b);
-}
-
-async function bwRpc(fn, args){
-  // Try the gateway first — the gate already proves kind:'rpc' works there.
-  try{
-    const r = await fetch(GW_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
-      body: JSON.stringify({kind:'rpc', fn, args})
-    });
-    if(r.ok){
-      const j = await r.json();
-      return (Array.isArray(j) && j.length===1 && typeof j[0]==='object' && !Array.isArray(j[0]))
-        ? j[0] : j;
-    }
-    console.warn('[Borrow] gateway rejected rpc '+fn+' ('+r.status+') — trying direct');
-  }catch(e){
-    console.warn('[Borrow] gateway threw on rpc '+fn+' — trying direct', e);
-  }
-  // Gateway does not know these new functions. Call PostgREST directly with the
-  // anon key, exactly as spawn-keys does. Same fallback reasoning as the table
-  // reads: a new function behind an old allowlist must not silently kill the
-  // whole borrow flow.
-  const f = window._spawnOrigFetch || window.fetch;
-  const r2 = await f(SB+'/rest/v1/rpc/'+fn, {
-    method:'POST', headers:_KEYS_HDR, body: JSON.stringify(args)
-  });
-  if(!r2.ok) throw new Error('rpc '+fn+' failed: '+r2.status);
-  const j2 = await r2.json();
-  return (Array.isArray(j2) && j2.length===1 && typeof j2[0]==='object' && !Array.isArray(j2[0]))
-    ? j2[0] : j2;
-}
-
-// Does he already hold rings? If yes, no borrow needed — he's mid-cycle.
-async function bwNeedsBorrow(){
-  if(!selectedCollector) return false;
-  if(_bwBypass) return false;   // admin bypassed borrowing this session
-  const r = await _keysFetch('key_rings?select=id,label,area,short_code&status=eq.out&out_to=eq.'
-                        +encodeURIComponent(selectedCollector));
-  if(!r.ok){
-    // key_rings is a NEW table. v4 routes REST through spawn-gw, which keeps its
-    // own table allowlist — if key_rings is not on it this 403s and, returning
-    // false, we would skip the borrow screen entirely and look like it works.
-    // Say so instead of hiding it.
-    console.error('[Borrow] key_rings read failed ('+r.status+') — is key_rings on the spawn-gw allowlist?');
-    toast('⚠ Cannot read keys (gateway '+r.status+')', 5000);
-    return false;
-  }
-  const held = await r.json();
-  if(Array.isArray(held) && held.length){
-    _bwHeld = held;      // he's carrying — show them on home, don't block
-    return false;
-  }
-  return true;
-}
-let _bwHeld = [];
-
-function bwShow(){
-  _bwRings = [];
-  const _ls=document.getElementById('bw-lastscan'); if(_ls) _ls.style.display='none';
-  document.getElementById('bw-who').textContent = (selectedCollector||'') + ' · scan the tags you are taking';
-  document.getElementById('bw-scan-card').style.display='';
-  document.getElementById('bw-qr-card').style.display='none';
-  document.getElementById('borrow-overlay').style.display='block';
-  bwRenderPicked();
-}
-function bwHide(){
-  bwStopScan();
-  bwCancelPoll();
-  document.getElementById('borrow-overlay').style.display='none';
-}
-
-// Title-case a key/ring name so it always shows as clean big letters
-// (e.g. "cogon" -> "Cogon", "egot / estaka" -> "Egot / Estaka"). Words that
-// are already all-caps short codes are left alone.
-function bwTitle(s){
-  s = String(s||'').trim();
-  if(!s) return '';
-  return s.replace(/\b([a-zA-Z][a-zA-Z]*)\b/g, function(w){
-    if(w.length<=1) return w.toUpperCase();
-    return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase();
-  });
-}
-
-function bwRenderPicked(){
-  const el = document.getElementById('bw-picked');
-  const go = document.getElementById('bw-go');
-  if(!_bwRings.length){
-    el.innerHTML = '<div style="text-align:center;color:#a8b0c2;font-size:13px;padding:14px 0">No tags scanned yet</div>';
-    go.style.display='none';
-    return;
-  }
-  el.innerHTML = _bwRings.map(r=>`
-    <div style="display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,#EEF1FA,#e6ecfa);border:2px solid #C7D2FE;border-radius:13px;padding:11px 13px;margin-bottom:8px">
-      <div style="width:34px;height:34px;border-radius:9px;background:#025AC6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none">${r.short_code||''}</div>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:15.5px;font-weight:800;color:#111">${bwTitle(r.label||'')}</div>
-        <div style="font-size:11px;color:#6b7a90;font-weight:600">${r.area||''}</div>
-      </div>
-      <div onclick="bwRemove(${r.id})" style="color:#DF1A35;font-weight:800;font-size:16px;cursor:pointer;padding:0 4px">✕</div>
-    </div>`).join('');
-  go.style.display='';
-  go.disabled = false;
-}
-function bwRemove(id){
-  _bwRings = _bwRings.filter(r=>r.id!==id);
-  bwRenderPicked();
-  const b=document.getElementById('bw-lastscan');
-  if(!_bwRings.length){ if(b) b.style.display='none'; }
-  else {
-    const last=_bwRings[_bwRings.length-1];
-    const a=document.getElementById('bw-lastscan-area');
-    const cc=document.getElementById('bw-lastscan-code');
-    if(a) a.textContent='✅ '+bwTitle(last.label||last.area||'');
-    if(cc) cc.textContent=(last.short_code? last.short_code+' · ':'')+(last.area||'')+'  ·  '+_bwRings.length+' key'+(_bwRings.length>1?'s':'')+' scanned';
-  }
-}
-
-async function bwAddCode(code){
-  const c = String(code||'').trim().toUpperCase();
-  if(!c) return;
-  // Debounce: same code within 2.5s, or a lookup already running → ignore.
-  // Stops the 10fps camera callback from spamming toasts and DB reads while
-  // one tag sits in the frame.
-  const now = Date.now();
-  if(_bwBusy) return;
-  if(c === _bwLastCode && (now - _bwLastAt) < 2500) return;
-  _bwLastCode = c; _bwLastAt = now;
-  if(_bwRings.some(r=>r.short_code===c || r.qr_code===c)){ toast('Already scanned'); return; }
-  _bwBusy = true;
-  try{
-  const r = await _keysFetch('key_rings?select=id,label,area,short_code,status,out_to&or=(short_code.eq.'
-            +encodeURIComponent(c)+',qr_code.eq.'+encodeURIComponent(c)+')');
-  const d = await r.json();
-  if(!Array.isArray(d) || !d.length){ toast('Unknown tag: '+c); return; }
-  const ring = d[0];
-  if(ring.status==='out' && ring.out_to && ring.out_to!==selectedCollector){
-    toast('⚠ '+ring.label+' is already out with '+ring.out_to);
-    return;
-  }
-  _bwRings.push(ring);
-  bwRenderPicked();
-  // Big, no-scroll confirmation of what was just scanned. Show the KEY NAME
-  // big (capitalized) — not the area — so it's obvious which key it is.
-  try{
-    const b=document.getElementById('bw-lastscan');
-    const a=document.getElementById('bw-lastscan-area');
-    const cc=document.getElementById('bw-lastscan-code');
-    if(a) a.textContent='✅ '+bwTitle(ring.label||ring.area||'');
-    if(cc) cc.textContent=(ring.short_code? ring.short_code+' · ':'')+(ring.area||'')+'  ·  '+_bwRings.length+' key'+(_bwRings.length>1?'s':'')+' scanned';
-    if(b) b.style.display='';
-  }catch(_){}
-  try{ navigator.vibrate && navigator.vibrate(40); }catch(e){}
-  toast('✅ '+ring.label);
-  }finally{ _bwBusy = false; }
-}
-
-function bwStartScan(){
-  const reader = document.getElementById('bw-reader');
-  // Show the reason ON SCREEN (not just a toast that vanishes before it's read).
-  const showErr = (human)=>{
-    if(reader){
-      reader.style.display='';
-      reader.style.minHeight='60px';
-      reader.innerHTML='<div style="padding:14px;color:#fff;background:#DF1A35;border-radius:12px;font-size:13px;font-weight:700;line-height:1.4">'+human+'</div>';
-    }
-    toast(human);
-  };
-
-  if(typeof Html5Qrcode==='undefined'){
-    showErr('Scanner library did not load (weak signal?). Reconnect and reload, or type the code.');
-    bwManualEntry();
-    return;
-  }
-  // No permission prompt ever appearing usually means one of these two:
-  if(!window.isSecureContext){
-    showErr('This page is not on HTTPS, so the browser blocks the camera. Open the https:// link.');
-    bwManualEntry(); return;
-  }
-  if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
-    showErr('This browser has no camera access (getUserMedia missing). Try Chrome, or type the code.');
-    bwManualEntry(); return;
-  }
-
-  reader.style.display='';
-  reader.style.minHeight='220px';        // give the video a real box BEFORE start
-  reader.innerHTML='';                    // clear any prior error text
-  document.getElementById('bw-scan-btn').style.display='none';
-  document.getElementById('bw-stop-btn').style.display='';
-  let cfg;
-  try{
-    const F = Html5QrcodeSupportedFormats;
-    cfg = {formatsToSupport:[F.CODE_128, F.QR_CODE, F.DATA_MATRIX]};
-  }catch(e){ cfg = undefined; }
-
-  const onHit = async txt=>{ await bwAddCode(txt); };
-  const box = {fps:10, qrbox:{width:220,height:140}};
-  const hd = {facingMode:'environment', width:{ideal:1920}, height:{ideal:1080},
-              advanced:[{focusMode:'continuous'}]};
-
-  function fail(err){
-    const msg = String(err && (err.name||err.message||err) || '');
-    console.error('[Borrow] camera start failed:', msg, err);
-    let human = 'Camera failed: '+(msg||'unknown')+' — type the code instead';
-    if(/NotAllowed|Permission/i.test(msg))          human = 'Camera permission was denied. Tap the 🔒/⚙ icon left of the address bar → Camera → Allow, then reload.';
-    else if(/NotFound|Overconstrained/i.test(msg))  human = 'No camera found on this device — type the code.';
-    else if(/NotReadable|TrackStart/i.test(msg))    human = 'Camera is busy (another app using it). Close it and retry.';
-    else if(/Insecure|secure/i.test(msg))           human = 'Needs HTTPS — open the https:// link.';
-    showErr(human);
-    document.getElementById('bw-stop-btn').style.display='none';
-    document.getElementById('bw-scan-btn').style.display='';
-    _bwScanner=null;
-  }
-
-  // Build + start on the NEXT frame so the container has a measured size
-  // (starting right after un-hiding a display:none box makes some browsers see
-  // 0×0 and fail before ever calling getUserMedia).
-  //
-  // IMPORTANT: html5-qrcode throws "Cannot transition to a new state, already
-  // under transition" if start() is called on an instance whose previous
-  // start() is still settling. So each attempt uses a FRESH instance and we
-  // fully tear the previous one down (stop+clear) before trying the next.
-  requestAnimationFrame(()=>{
-    setTimeout(()=>{ bwTryStart([hd, {facingMode:'environment'}, '__byId__'], 0, cfg, onHit, box, fail); }, 60);
-  });
-}
-
-// Attempt camera start with a fresh scanner per try; tear down cleanly between.
-async function bwTryStart(sources, i, cfg, onHit, box, fail){
-  if(i >= sources.length){ return fail(new Error('NotReadable: all camera attempts failed')); }
-
-  // Fresh instance every attempt — reusing one mid-transition is what throws
-  // the "already under transition" error.
-  let scanner;
-  try{
-    scanner = cfg ? new Html5Qrcode('bw-reader', cfg) : new Html5Qrcode('bw-reader');
-  }catch(e){ return fail(e); }
-  _bwScanner = scanner;
-
-  // Resolve source: deviceId lookup is async.
-  let source = sources[i];
-  try{
-    if(source === '__byId__'){
-      const cams = await Html5Qrcode.getCameras();
-      if(!cams || !cams.length) throw new Error('NotFound: no cameras');
-      const back = cams.find(c=>/back|rear|environment/i.test(c.label)) || cams[cams.length-1];
-      source = back.id;
-    }
-  }catch(e){
-    console.warn('[Borrow] getCameras failed:', e && e.name);
-    return fail(e);   // if we can't even enumerate, surface it
-  }
-
-  try{
-    await scanner.start(source, box, onHit, ()=>{});
-    return;   // success — camera live
-  }catch(err){
-    console.warn('[Borrow] attempt '+i+' failed:', err && (err.name||err.message));
-    // Fully tear this instance down before the next attempt.
-    try{ await scanner.stop(); }catch(_){}
-    try{ scanner.clear(); }catch(_){}
-    _bwScanner = null;
-    // NotAllowed / permission → no point retrying other constraints.
-    const nm = String(err && (err.name||err.message||''));
-    if(/NotAllowed|Permission/i.test(nm)) return fail(err);
-    return bwTryStart(sources, i+1, cfg, onHit, box, fail);
-  }
-}
-async function bwStopScan(){
-  if(_bwScanner){ try{ await _bwScanner.stop(); _bwScanner.clear(); }catch(e){} _bwScanner=null; }
-  const rd=document.getElementById('bw-reader');   if(rd) rd.style.display='none';
-  const sb=document.getElementById('bw-scan-btn'); if(sb) sb.style.display='';
-  const tb=document.getElementById('bw-stop-btn'); if(tb) tb.style.display='none';
-}
-// Branded code entry. Replaces prompt(), which on a cracked 6AM phone screen
-// is a grey box that half of them will dismiss by accident.
-function bwCodeAsk(){
-  return new Promise(resolve=>{
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
-    ov.innerHTML=`<div style="width:100%;max-width:330px;background:#fff;border-radius:19px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.34)">
-      <div style="background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;padding:17px 19px">
-        <div style="font-size:16.5px;font-weight:800">Type the tag code</div>
-        <div style="font-size:12px;opacity:.82;margin-top:2px">It is printed under the barcode, e.g. SK04</div>
-      </div>
-      <div style="padding:18px">
-        <input data-in maxlength="6" autocapitalize="characters" autocomplete="off"
-          style="width:100%;box-sizing:border-box;padding:14px;border:2px solid #C7D2FE;border-radius:13px;font-size:22px;font-weight:800;font-family:inherit;text-align:center;letter-spacing:3px;color:#025AC6;text-transform:uppercase" placeholder="SK__">
-        <button data-ok style="width:100%;margin-top:12px;padding:14px;border:0;border-radius:13px;background:linear-gradient(135deg,#025AC6,#1565c0);color:#fff;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer">Add tag</button>
-        <button data-cancel style="width:100%;margin-top:8px;padding:11px;border:2px solid #e6eaf4;border-radius:12px;background:#fff;color:#7a869c;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
-      </div>
-    </div>`;
-    const inp=ov.querySelector('[data-in]');
-    const done=v=>{ ov.remove(); resolve(v); };
-    ov.querySelector('[data-ok]').onclick=()=>done(inp.value.trim().toUpperCase()||null);
-    ov.querySelector('[data-cancel]').onclick=()=>done(null);
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') done(inp.value.trim().toUpperCase()||null); });
-    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
-    document.body.appendChild(ov);
-    setTimeout(()=>inp.focus(),80);
-  });
-}
-async function bwManualEntry(){
-  const c = await bwCodeAsk();
-  if(c) bwAddCode(c);
-}
-
-// ── ADMIN BYPASS (borrow screen) ───────────────────────────────
-// Small "admin" link on the Borrow screen. PIN 101510 lets the collector
-// through WITHOUT borrowing/scanning keys — for when the keeper isn't there
-// or a fob is unreadable. The bypass lasts only this session; it is logged
-// on the dashboard as a manual override so it isn't silent.
-// PIN 101510 lets the collector through WITHOUT borrowing/scanning keys — for
-// when the keeper isn't there or a fob is unreadable. The bypass lasts only
-// this session; it is logged on the dashboard as a manual override.
-async function bwAdminBypass(){
-  const pin = await bwPinAsk('Admin bypass', 'Enter admin PIN to skip borrowing');
-  if(pin === null) return;
-  if(String(pin).trim() !== '101510'){ toast('❌ Wrong admin PIN'); return; }
-  _bwBypass = true;
-  // log it (best-effort, non-blocking) so the bypass isn't invisible.
-  // Uses the anon key path (_KEYS_HDR) — key_logs is not on the gateway allowlist.
-  try{
-    const f = window._spawnOrigFetch || window.fetch;
-    await f(SB+'/rest/v1/key_logs', {
-      method:'POST',
-      headers:{..._KEYS_HDR, Prefer:'return=minimal'},
-      body: JSON.stringify([{
-        collector_name: selectedCollector || 'unknown',
-        area: 'ADMIN BYPASS', keys_taken: 0,
-        taken_at: new Date().toISOString(),
-        key_date: new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),
-        returned: true, record_type: 'collector',
-        is_test: (typeof _V4_TRIAL==='undefined') ? true : !!_V4_TRIAL,
-        notes: 'Admin bypass (PIN) — borrow skipped'
-      }])
-    });
-  }catch(_){}
-  bwHide();
-  toast('✅ Bypass — proceeding');
-  try{ showHomeScreen(); }catch(_){ location.reload(); }
-}
-
-// Branded PIN prompt (reuses the tag-code modal style). Returns the string
-// entered, or null if cancelled.
-function bwPinAsk(title, subtitle){
-  return new Promise(resolve=>{
-    const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(2,20,60,.62);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;font-family:inherit';
-    ov.innerHTML=`<div style="width:100%;max-width:320px;background:#fff;border-radius:19px;overflow:hidden;box-shadow:0 14px 44px rgba(0,0,0,.34)">
-      <div style="background:linear-gradient(135deg,#311A8E,#025AC6);color:#fff;padding:17px 19px">
-        <div style="font-size:16.5px;font-weight:800">${title}</div>
-        <div style="font-size:12px;opacity:.82;margin-top:2px">${subtitle}</div>
-      </div>
-      <div style="padding:18px">
-        <input id="bw-pin-in" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••" style="width:100%;box-sizing:border-box;padding:13px 14px;border:2px solid #e0e4f0;border-radius:12px;font-size:20px;letter-spacing:4px;text-align:center;font-family:inherit;outline:none">
-        <div style="display:flex;gap:9px;margin-top:14px">
-          <button id="bw-pin-x" style="flex:1;padding:12px;border-radius:12px;border:2px solid #e0e4f0;background:#fff;color:#5a6478;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer">Cancel</button>
-          <button id="bw-pin-ok" style="flex:2;padding:12px;border-radius:12px;border:0;background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;font-size:14px;font-weight:800;font-family:inherit;cursor:pointer">Enter</button>
-        </div>
-      </div></div>`;
-    document.body.appendChild(ov);
-    const inp=ov.querySelector('#bw-pin-in');
-    const done=(v)=>{ ov.remove(); resolve(v); };
-    ov.querySelector('#bw-pin-x').onclick=()=>done(null);
-    ov.querySelector('#bw-pin-ok').onclick=()=>done(inp.value);
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') done(inp.value); if(e.key==='Escape') done(null); });
-    ov.addEventListener('click',e=>{ if(e.target===ov) done(null); });
-    setTimeout(()=>inp.focus(),80);
-  });
-}
-
-// ══ RETURN KEYS ═══════════════════════════════════════════════════════
-// End of day: he raises a returning QR, Steph scans it, keys mark IN and
-// tomorrow's gate opens. Same token mechanics as borrow — nothing secret on
-// his phone, single-use, 5-minute life.
-async function bwReturnQR(){
-  if(!selectedCollector) return;
-  try{
-    const res = await bwRpc('spawn_handover_create', {
-      p_collector: selectedCollector, p_kind: 'return', p_ring_ids: []
-    });
-    if(!res || !res.ok){ toast(res && res.error ? res.error : 'Could not create'); return; }
-    _bwToken = res.token;
-
-    document.getElementById('bw-who').textContent = selectedCollector + ' · returning keys';
-    document.getElementById('bw-scan-card').style.display='none';
-    document.getElementById('bw-qr-card').style.display='';
-    document.getElementById('borrow-overlay').style.display='block';
-
-    const box=document.getElementById('bw-qr'); box.innerHTML='';
-    if(typeof QRCode!=='undefined'){
-      new QRCode(box,{text:_bwToken,width:200,height:200,colorDark:'#028867',colorLight:'#ffffff'});
-    }else{
-      box.innerHTML='<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:200px;color:#028867">'+_bwToken+'</div>';
-    }
-    document.getElementById('bw-qr-rings').innerHTML =
-      _bwHeld.length ? '↩ Returning: ' + _bwHeld.map(r=>`<b>${r.label}</b>`).join(' · ')
-                     : '↩ Returning everything you are holding';
-    document.getElementById('bw-qr-status').innerHTML='⏳ Waiting for Steph…';
-    bwStartPollReturn(res.expires_in_sec||300);
-  }catch(e){ toast('Error: '+e.message); }
-}
-
-function bwStartPollReturn(secs){
-  let left=secs;
-  const tEl=document.getElementById('bw-qr-timer');
-  bwCancelPoll();
-  _bwTick=setInterval(()=>{
-    left--;
-    const m=Math.floor(left/60), s=left%60;
-    if(tEl) tEl.textContent = left>0 ? `expires in ${m}:${String(s).padStart(2,'0')}` : 'expired';
-    if(left<=0){ bwCancelPoll();
-      document.getElementById('bw-qr-status').innerHTML='<span style="color:#DF1A35">⌛ Expired — tap Back and retry</span>'; }
-  },1000);
-  _bwPoll=setInterval(async ()=>{
-    try{
-      const st=await bwRpc('spawn_handover_status',{p_token:_bwToken});
-      if(st && st.status==='approved'){
-        bwCancelPoll();
-        document.getElementById('bw-qr-status').innerHTML=
-          '<span style="color:#028867">✅ Keys returned — approved by '+(st.approved_by||'keeper')+'</span>';
-        try{ navigator.vibrate && navigator.vibrate([60,40,60]); }catch(e){}
-        _bwHeld=[];
-        setTimeout(()=>{ bwHide(); bwRenderHeldBanner(); }, 1300);
-      }
-    }catch(e){}
-  },2500);
-}
-
-// Ask the server for a token, render it as a QR, then poll until Steph approves.
-async function bwRequestQR(){
-  if(!_bwRings.length){ toast('Scan at least one tag'); return; }
-  await bwStopScan();
-  const go = document.getElementById('bw-go');
-  go.disabled = true; go.textContent = 'Creating…';
-  try{
-    const res = await bwRpc('spawn_handover_create', {
-      p_collector: selectedCollector, p_kind: 'borrow',
-      p_ring_ids: _bwRings.map(r=>r.id)
-    });
-    if(!res || !res.ok){ toast(res && res.error ? res.error : 'Could not create request'); return; }
-    _bwToken = res.token;
-
-    document.getElementById('bw-scan-card').style.display='none';
-    document.getElementById('bw-qr-card').style.display='';
-    const box = document.getElementById('bw-qr');
-    box.innerHTML='';
-    if(typeof QRCode!=='undefined'){
-      new QRCode(box, {text:_bwToken, width:200, height:200,
-                       colorDark:'#025AC6', colorLight:'#ffffff'});
-    }else{
-      // No QR lib: show the token so Steph can type it. Ugly but not stranded.
-      box.innerHTML = '<div style="font-family:monospace;font-size:11px;word-break:break-all;max-width:200px;color:#025AC6">'+_bwToken+'</div>';
-    }
-    document.getElementById('bw-qr-rings').innerHTML =
-      '🔑 ' + _bwRings.map(r=>`<b>${r.label}</b>`).join(' · ');
-
-    bwStartPoll(res.expires_in_sec||300);
-  }catch(e){
-    toast('Error: '+e.message);
-  }finally{
-    go.disabled=false; go.textContent='Go Harvest →';
-  }
-}
-
-function bwStartPoll(secs){
-  let left = secs;
-  const tEl = document.getElementById('bw-qr-timer');
-  bwCancelPoll();
-  _bwTick = setInterval(()=>{
-    left--;
-    const m = Math.floor(left/60), s = left%60;
-    if(tEl) tEl.textContent = left>0 ? `expires in ${m}:${String(s).padStart(2,'0')}` : 'expired';
-    if(left<=0){
-      bwCancelPoll();
-      document.getElementById('bw-qr-status').innerHTML='<span style="color:#DF1A35">⌛ Expired — go back and try again</span>';
-    }
-  },1000);
-  _bwPoll = setInterval(async ()=>{
-    try{
-      const st = await bwRpc('spawn_handover_status', {p_token:_bwToken});
-      if(st && st.status==='approved'){
-        bwCancelPoll();
-        document.getElementById('bw-qr-status').innerHTML =
-          '<span style="color:#028867">✅ Approved by '+(st.approved_by||'keeper')+'</span>';
-        try{ navigator.vibrate && navigator.vibrate([60,40,60]); }catch(e){}
-        setTimeout(async ()=>{
-          bwHide();
-          _bwHeld = _bwRings.slice();
-          showScreen('screen-home');
-          bwRenderHeldBanner();
-        }, 1100);
-      }
-    }catch(e){}
-  }, 2500);
-}
-function bwCancelPoll(){
-  if(_bwPoll){ clearInterval(_bwPoll); _bwPoll=null; }
-  if(_bwTick){ clearInterval(_bwTick); _bwTick=null; }
-}
-function bwCancelQR(){
-  bwCancelPoll();
-  document.getElementById('bw-qr-card').style.display='none';
-  document.getElementById('bw-scan-card').style.display='';
-}
-
-// Reminder banner on the home screen: what he is carrying today.
-function bwRenderHeldBanner(){
-  let el = document.getElementById('bw-held-banner');
-  if(!_bwHeld || !_bwHeld.length){ if(el) el.remove(); return; }
-  if(!el){
-    el = document.createElement('div');
-    el.id = 'bw-held-banner';
-    const home = document.getElementById('screen-home');
-    if(home) home.insertBefore(el, home.firstChild);
-  }
-  el.style.cssText='background:linear-gradient(135deg,#025AC6,#311A8E);color:#fff;border-radius:15px;padding:13px 15px;margin:0 0 13px;box-shadow:0 4px 16px rgba(2,90,198,.26)';
-  el.innerHTML = `<div style="font-size:11px;font-weight:700;opacity:.8;letter-spacing:.4px">🔑 KEYS YOU ARE CARRYING</div>
-    <div style="font-size:14.5px;font-weight:800;margin-top:4px;line-height:1.5">${_bwHeld.map(r=>r.label).join(' · ')}</div>
-    <button onclick="bwReturnQR()" style="width:100%;margin-top:11px;padding:11px;border:0;border-radius:11px;background:rgba(255,255,255,.18);color:#fff;font-size:13.5px;font-weight:800;font-family:inherit;cursor:pointer;backdrop-filter:blur(4px)">↩ Return keys — show QR to Steph</button>`;
-}
-
-// ══ 3AM AUTO-CLOSE ════════════════════════════════════════════════════
-// The app locks between 22:00 and 05:00 Manila. Nobody harvests at 3am, and a
-// phone left logged in overnight is an open door.
-//
-// HONEST LIMIT: this reads the PHONE's clock. Change the device time and it is
-// gone. It keeps honest people honest and closes the "left it logged in on the
-// jeep" case — it is not a security control, and should not be sold as one.
-function bwNightCheck(){
-  const now = new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Manila'}));
-  const h = now.getHours();
-  const closed = (h >= 22 || h < 5);
-  let el = document.getElementById('bw-night');
-  if(!closed){ if(el) el.remove(); return false; }
-  if(!el){
-    el = document.createElement('div');
-    el.id = 'bw-night';
-    el.style.cssText='position:fixed;inset:0;z-index:99997;background:linear-gradient(160deg,#0d1b3e,#311A8E);display:flex;align-items:center;justify-content:center;padding:26px;font-family:inherit';
-    el.innerHTML=`<div style="text-align:center;color:#fff;max-width:330px">
-      <div style="font-size:52px;margin-bottom:12px">🌙</div>
-      <div style="font-size:21px;font-weight:800;margin-bottom:7px">Closed for the night</div>
-      <div style="font-size:14px;opacity:.8;line-height:1.6">Spawn Harvest is available from <b style="color:#FFB725">5:00 AM</b> to <b style="color:#FFB725">10:00 PM</b>.<br>Get some rest.</div>
-      <div id="bw-night-clock" style="font-size:13px;opacity:.55;margin-top:16px;font-weight:700"></div>
-    </div>`;
-    document.body.appendChild(el);
-  }
-  const c=document.getElementById('bw-night-clock');
-  if(c) c.textContent = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}) + ' Manila';
-  return true;
-}
-setInterval(bwNightCheck, 30000);
-
 async function showHomeScreen(){
   if(window._swPendingReload){window._swPendingReload=false;window.location.reload();return;}
-  // Gate: yesterday must be closed before today opens.
-  try{
-    const ok = await gateCheck();
-    if(!ok) return;   // gate overlay is showing; stop here
-  }catch(e){
-    // Gate itself exploded. Do not strand the collector — let him in,
-    // but leave a trail. The admin link is still in the shell.
-    console.error('[Gate] check threw, failing open', e);
-    _gateOK = true;
-    gateHide();
-  }
-  // Yesterday's keys are cleared. Now: is he carrying today's?
-  // If he holds no rings, he must borrow before harvesting.
-  try{
-    if(bwNightCheck()) return;    // 22:00–05:00 Manila: closed
-    const needBorrow = await bwNeedsBorrow();
-    if(needBorrow){ bwShow(); return; }
-  }catch(e){
-    // Same rule as the gate: never strand him on our own bug.
-    console.error('[Borrow] check threw, skipping', e);
-  }
   showScreen('screen-home');
   document.getElementById('home-collector-name').textContent = selectedCollector||'—';
   // Always persist collector name
@@ -6091,7 +5365,6 @@ async function showHomeScreen(){
   const hb = document.getElementById('bnav-home');
   if(hb) hb.classList.add('active');
   loadHomeStats();
-  bwRenderHeldBanner();   // if he is already carrying, remind him on home
   loadCrucialAreas();
 }
 
@@ -6384,7 +5657,7 @@ function resetPackForm(){
     const free = parseFloat(document.getElementById('coin-free').value)||0;
     const saloy = parseFloat(document.getElementById('coin-saloy').value)||0;
     const freeCoins = parseFloat(document.getElementById('coin-freecoins').value)||0;
-    const spawn = Math.round(net * 0.75);
+    const spawn = spawnShareOf(net);
 
     // Get pack total from _packData (set when collection sheet is saved)
     const _pd = currentItem ? _packData[currentItem.vendo_id||currentItem.id] : null;
@@ -7768,12 +7041,3 @@ async function submitEodSession(){
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-

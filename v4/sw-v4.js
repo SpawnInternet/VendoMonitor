@@ -2,19 +2,22 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-folder-v2';
-const APP_HTML = '/VendoMonitor/v4/harvest_v4.html';
+const CACHE = 'spawn-harvest-v4-b1';
+// Paths are relative to where this worker lives (the v4 folder), so the same
+// file works on spawninternet.github.io/VendoMonitor/v4/ and on a test link.
+const BASE = new URL('./', self.location.href).href;
+const APP_HTML = BASE + 'harvest_v4.html';
 const APP_SHELL = [
-  '/VendoMonitor/v4/harvest_v4.html',
-  '/VendoMonitor/v4/manifest-v4.json',
-  '/VendoMonitor/v4/index.html',
+  BASE + 'harvest_v4.html',
+  BASE + 'manifest-v4.json',
+  BASE + 'index.html',
   // v4's OWN icons. These were the shared icon-192/icon-512 until v4 got its
   // own TRIAL artwork. Precaching the shared pair was the last place v4's
   // cache held a file v3 also requests — the only remaining overlap surface
   // between the two apps. v4 now caches nothing that isn't v4's.
-  '/VendoMonitor/v4/icon-v4-192.png',
-  '/VendoMonitor/v4/icon-v4-512.png',
-  '/VendoMonitor/v4/icon-v4-maskable-512.png',
+  BASE + 'icon-v4-192.png',
+  BASE + 'icon-v4-512.png',
+  BASE + 'icon-v4-maskable-512.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
@@ -83,7 +86,7 @@ self.addEventListener('fetch', e => {
   if (req.mode === 'navigate') {
     // Scope guard by FOLDER, so the bare /VendoMonitor/v4/ URL is covered too,
     // not just the .html filename.
-    if (url.pathname.indexOf('/VendoMonitor/v4/') === -1) return;
+    if (url.href.indexOf(BASE) !== 0) return;
     e.respondWith(
       fetch(req).then(response => {
         if (response && response.status === 200) {
