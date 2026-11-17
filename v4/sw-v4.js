@@ -18,6 +18,8 @@ const APP_SHELL = [
   BASE + 'icon-v4-192.png',
   BASE + 'icon-v4-512.png',
   BASE + 'icon-v4-maskable-512.png',
+  BASE + 'spawn-brand-512.png',
+  BASE + 'spawn-brand-160.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
