@@ -72,9 +72,9 @@ test('phone: PH mobile formats normalize to 09XXXXXXXXX, junk is null', () => {
 
 const blank = { lat: null, lng: null, owner_name: '', contact_number: '', barangay: '' };
 const full = { lat: 8.58, lng: 123.34, owner_name: 'Maria Santos', contact_number: '09171234567', barangay: 'Dicayas' };
-test('identity: blank vendo, nothing entered → all four missing in order', () => {
+test('identity: blank vendo, nothing entered → GPS, owner, contact missing in order (barangay optional)', () => {
   assert.deepEqual(v4IdentityMissing(blank, { owner: '', contact: '', barangay: '' }, true, null),
-    ['GPS', 'Owner name', 'Contact number', 'Barangay']);
+    ['GPS', 'Owner name', 'Contact number']);
 });
 test('identity: blank vendo, everything entered, weak GPS this harvest → nothing missing', () => {
   assert.deepEqual(v4IdentityMissing(blank, { owner: 'Maria Santos', contact: '09171234567', barangay: 'Dicayas' }, true, 'weak'), []);
@@ -101,4 +101,10 @@ test('gps on file: real coords → true; null, 0,0 or junk → false', () => {
   assert.equal(v4HasGpsOnFile({ lat: 8.58, lng: 123.34 }), true);
   assert.equal(v4HasGpsOnFile({ lat: '8.58', lng: '123.34' }), true);
   for (const it of [{ lat: null, lng: null }, { lat: 0, lng: 0 }, { lat: 'x', lng: 123 }, {}]) assert.equal(v4HasGpsOnFile(it), false, JSON.stringify(it));
+});
+
+// Soft undo (Wendell, 2026-11-17): barangay is never required. The guard is GPS + owner + contact.
+test('identity: barangay is optional even when the area has a list', () => {
+  assert.deepEqual(v4IdentityMissing(blank, { owner: 'Maria Santos', contact: '09171234567', barangay: '' }, true, 'ok'), []);
+  assert.deepEqual(v4IdentityMissing(blank, { owner: '', contact: '', barangay: '' }, true, null), ['GPS', 'Owner name', 'Contact number']);
 });

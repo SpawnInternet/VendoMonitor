@@ -1287,8 +1287,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b8';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 8';
+const APP_BUILD = 'v4-b9';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 9';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -1474,10 +1474,9 @@ async function v4RenderIdentityBox(){
   const forItem = currentItem.id;
   box.textContent = ''; box.style.display = 'none'; _v4BrgyRequired = false;   // never show the previous vendo's fields
   if (!(await v4GuardOn())) return;                                            // guard off: behave like v3
-  const list = await v4BarangayList(currentItem.area);
   if (!currentItem || currentItem.id !== forItem) return;                      // collector moved on
   box.style.display = '';
-  _v4BrgyRequired = list.length > 0;
+  _v4BrgyRequired = false;   // barangay optional — no menu on the card
   { const gb = document.getElementById('v4-get-gps-btn');
     if (gb) gb.textContent = v4HasGpsOnFile(currentItem) ? '📍 Update GPS (optional)' : '📍 Get GPS (required)'; }
   const missing = v4IdentityMissing(currentItem, { owner: '', contact: '', barangay: '' }, _v4BrgyRequired, null);
@@ -1508,12 +1507,6 @@ async function v4RenderIdentityBox(){
   if (missing.indexOf('Contact number') !== -1){
     const i = document.createElement('input'); i.id = 'v4-id-contact'; i.className = 'text-input'; i.type = 'tel'; i.placeholder = '09XX XXX XXXX'; i.autocomplete = 'off'; i.inputMode = 'tel';
     field('Contact number', i);
-  }
-  if (missing.indexOf('Barangay') !== -1){
-    const sel = document.createElement('select'); sel.id = 'v4-id-brgy'; sel.className = 'text-input';
-    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Pick the barangay…'; sel.appendChild(o0);
-    list.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
-    field('Barangay', sel);
   }
   if (missing.indexOf('GPS') !== -1){
     const g = document.createElement('div'); g.className = 'v4-idbox-gps'; g.textContent = '📍 GPS: tap Get GPS below while standing at the vendo';
@@ -1642,7 +1635,9 @@ function v4IdentityMissing(item, entered, brgyRequired, gpsFlag){
   if (!v4HasGpsOnFile(it) && !(gpsFlag === 'ok' || gpsFlag === 'weak')) missing.push('GPS');
   if (!v4ValidOwnerName(it.owner_name) && !v4ValidOwnerName(en.owner)) missing.push('Owner name');
   if (!v4NormalizePhone(it.contact_number) && !v4NormalizePhone(en.contact)) missing.push('Contact number');
-  if (brgyRequired && !String(it.barangay || '').trim() && !String(en.barangay || '').trim()) missing.push('Barangay');
+  // Barangay is optional (Wendell, 2026-11-17): BASHANG only tracks it for Dipolog, so there is no source of
+  // truth elsewhere. The route list still groups by it where it is known. brgyRequired is kept for compatibility.
+  void brgyRequired;
   return missing;
 }
 /* V4-GUARD-PURE:END */
