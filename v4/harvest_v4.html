@@ -337,6 +337,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pin-display{display:flex;gap:12px;justify-content:center;margin:16px 0}
 .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s}
 .pin-dot.filled{background:#025AC6}
+/* V4 login (design A): gradient hero with the logo; names + keypad on white */
+.v4-login{background:#fff;min-height:100vh}
+.v4-hero{background:var(--brand-backdrop);color:#fff;text-align:center;padding:22px 16px 24px;position:relative}
+.v4-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--brand-bands)}
+.v4-hero img{width:92px;height:92px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid #fff;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.v4-hero .t{font-size:24px;font-weight:900;letter-spacing:.2px}
+.v4-hero .s{font-size:12px;opacity:.85;margin-top:3px}
+.v4-login-body{max-width:360px;margin:0 auto;padding:18px 16px 24px}
+#pin-name-list .collector-btn{border-color:#dbe3f2 !important;color:var(--brand-navy) !important}
+#pin-name-list .collector-btn.selected,#pin-name-list .collector-btn[data-on="1"]{background:var(--brand-deep) !important;color:#fff !important;border-color:var(--brand-deep) !important}
+.v4-remembered{display:none;text-align:center;margin:2px 0 18px}
+.v4-remembered .w{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.v4-remembered .n{font-size:26px;font-weight:900;color:var(--brand-navy);margin:2px 0 6px}
+.v4-remembered .sw{display:inline-block;font-size:12px;font-weight:700;color:var(--brand-deep);border:1.5px solid #c7d6f5;border-radius:999px;padding:5px 12px;cursor:pointer;background:#fff}
+.pin-key{color:var(--brand-navy)}
 .pin-pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;max-width:280px;margin:0 auto}
 .pin-key{background:#F7F8FC;border:1.5px solid var(--border);border-radius:12px;padding:16px;text-align:center;font-size:20px;font-weight:700;cursor:pointer;font-family:inherit;transition:.1s;color:var(--text)}
 .pin-key:active{background:#EEF1FA;border-color:#025AC6}
@@ -439,16 +454,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <!-- ── SCREEN 1: PIN LOGIN ────────────────────────────── -->
-<div class="screen active" id="screen-collector" style="background:#eef1fa;min-height:100vh">
+<div class="screen active v4-login" id="screen-collector">
 
-  <div style="max-width:360px;margin:0 auto;padding:28px 16px 24px">
+  <div class="v4-hero">
+    <img src="spawn-brand-512.png" alt="Spawn Internet">
+    <div class="t">Spawn Harvest</div>
+    <div class="s" id="v4-hero-sub">Select your name, then enter your PIN</div>
+  </div>
 
-    <!-- Hero -->
-    <div style="text-align:center;margin-bottom:24px">
-      <img src="spawn-brand-512.png" alt="Spawn Internet"
-        style="width:112px;height:112px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 12px;box-shadow:0 6px 18px rgba(14,71,196,.28)">
-      <div style="font-size:26px;font-weight:900;color:#025AC6;letter-spacing:.3px">Spawn Harvest</div>
-      <div style="font-size:12px;color:#8b99b8;margin-top:4px">Select your name then enter PIN</div>
+  <div class="v4-login-body">
+
+    <!-- Remembered collector (v4): opens on the last name used on this phone -->
+    <div class="v4-remembered" id="v4-remembered">
+      <div class="w">Welcome back</div>
+      <div class="n" id="v4-remembered-name">—</div>
+      <span class="sw" onclick="v4SwitchName()">Not you? Switch name</span>
     </div>
 
     <!-- Name pills -->
@@ -456,10 +476,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- PIN dots -->
     <div style="display:flex;justify-content:center;gap:14px;margin-bottom:18px">
-      <div id="pd1" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd2" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd3" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd4" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
+      <div id="pd1" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd2" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd3" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd4" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
     </div>
 
     <!-- Hidden input (keeps existing JS working) -->
@@ -1267,8 +1287,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b5';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 5';
+const APP_BUILD = 'v4-b6';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 6';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -2188,15 +2208,46 @@ function hvPinKey(k){
 
 let _pinCollectors = [];
 
+/* V4 remember-me (level 1): the phone already stores the last collector who signed in
+   (spawn_collector_name). Open the PIN screen on that name — one tap saved — but the PIN
+   is still required every shift and the session still ends at 9 PM. "Switch name" shows
+   the full list again. */
+let _v4Switched = false;
+function v4ApplyRemembered(){
+  const box = document.getElementById('v4-remembered'), list = document.getElementById('pin-name-list'), sub = document.getElementById('v4-hero-sub');
+  if (!box || !list) return;
+  let name = ''; try { name = localStorage.getItem('spawn_collector_name') || ''; } catch (_) {}
+  const btn = name ? [...list.querySelectorAll('.collector-btn')].find(b => b.dataset.name === name) : null;
+  if (btn && !_v4Switched){
+    document.getElementById('v4-remembered-name').textContent = name;
+    box.style.display = 'block'; list.style.display = 'none';
+    if (sub) sub.textContent = 'Enter your PIN to start';
+    if (_pinSelectedName !== name) pinSelectName(btn, name);
+    btn.dataset.on = '1';
+  } else {
+    box.style.display = 'none'; list.style.display = 'flex';
+    if (sub) sub.textContent = 'Select your name, then enter your PIN';
+  }
+}
+function v4SwitchName(){
+  _v4Switched = true;
+  _pinSelectedName = null;
+  document.querySelectorAll('#pin-name-list .collector-btn').forEach(b => { b.dataset.on = ''; b.style.borderColor=''; b.style.background=''; b.style.color=''; });
+  const inp = document.getElementById('pin-inp'); if (inp){ inp.value = ''; pinOnInput(inp); }
+  pinCheckReady();
+  v4ApplyRemembered();
+}
+
+function v4RenderNames(list, el){
+  el.innerHTML = list.map(c => '<button class="collector-btn" data-name="' + String(c.name).replace(/"/g,'&quot;') + '" style="padding:10px 20px;border-radius:22px;border:2px solid #dbe3f2;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#0B1E63;transition:.15s">' + String(c.name).replace(/</g,'&lt;') + '</button>').join('');
+  el.querySelectorAll('.collector-btn').forEach(b => b.onclick = () => { _v4Switched = true; el.querySelectorAll('.collector-btn').forEach(x => x.dataset.on=''); b.dataset.on='1'; pinSelectName(b, b.dataset.name); });
+  v4ApplyRemembered();
+}
 async function pinLoadCollectors(){
   const FALLBACK=[{name:'Ailyn',team:'TeamA'},{name:'Axcel',team:'TeamA'},{name:'Gilbert',team:'TeamA'},{name:'Tandoy',team:'TeamB'}];
   const el=document.getElementById('pin-name-list');
   if(!el) return;
-  const render=(list)=>{
-    el.innerHTML=list.map(c=>`
-      <button style="padding:10px 20px;border-radius:22px;border:2px solid #e0e4f0;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#025AC6;transition:.15s" class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">${c.name}</button>`
-    ).join('');
-  };
+  const render=(list)=>{ v4RenderNames(list, el);   };
   // Seed from cached collectors (with PINs) so offline re-login works after app close
   let _seeded=false;
   try{
@@ -2426,6 +2477,7 @@ function pinLogout(){
   document.getElementById('topbar-sub').textContent='Collector PWA';
   pinCheckReady();
   showScreen('screen-collector');
+  _v4Switched = false; try{ v4ApplyRemembered(); }catch(_){}
 }
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
