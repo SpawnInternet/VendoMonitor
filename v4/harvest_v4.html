@@ -174,6 +174,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .vi-last{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;font-weight:800;border-radius:8px;padding:3px 8px;color:#fff}
 .vi-last.age-fresh{background:#1B9A6C}.vi-last.age-ok{background:#0E47C4}.vi-last.age-due{background:#F08A1A}.vi-last.age-late{background:#D62839}.vi-last.age-never{background:#B52383}.vi-last.age-unlinked{background:#64748b}
 .vi-last small{font-weight:600;opacity:.9}
+.vi-src{display:block;margin-top:4px;font-size:10px;color:#475569}
+.vi-src b{color:#0B1E63}
+.vi-fb{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;color:#7A2A9E;background:#f3e8ff;border:1px solid #e9d5ff;border-radius:999px;padding:3px 9px;cursor:pointer}
+.v4-fb-opt{display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:12px;border:1.5px solid #dbe3f2;background:#fff;font:700 14px/1.3 inherit;color:#0B1E63;cursor:pointer}
+.v4-fb-opt.on{border-color:#0E47C4;background:#eef3fd}
+.v4-fb-opt small{display:block;font-weight:500;color:#64748b;font-size:12px;margin-top:2px}
 .vi-unlinked{display:block;margin-top:4px;font-size:10px;font-weight:700;color:#7c2d12;background:#ffedd5;border-radius:6px;padding:3px 7px}
 .vi-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100vw - 160px)}
 .vi-sub{font-size:10px;color:var(--muted);margin-top:2px}
@@ -982,6 +988,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b45309;color:#fff;padding:6px 16px;font-size:12px;font-weight:700;align-items:center;justify-content:center;gap:8px">
   📴 You are offline — harvests will sync when back online
 </div>
+<!-- V4: collector reports a wrong / missing date on a vendo card -->
+<div class="confirm-overlay" id="v4-fb-overlay" onclick="if(event.target===this)v4FbClose()">
+  <div class="confirm-sheet">
+    <div class="confirm-handle"></div>
+    <div class="confirm-title">⚠ Report this vendo's date</div>
+    <div class="confirm-sub" id="v4-fb-sub">—</div>
+    <div id="v4-fb-opts">
+      <button type="button" class="v4-fb-opt" data-kind="other_card" onclick="v4FbPick(this)">Harvested on another card<small>The same box has another card in this or another group</small></button>
+      <button type="button" class="v4-fb-opt" data-kind="wrong_date" onclick="v4FbPick(this)">The date shown is wrong<small>I know it was harvested on a different day</small></button>
+      <button type="button" class="v4-fb-opt" data-kind="not_this_vendo" onclick="v4FbPick(this)">This is not the vendo<small>Wrong name, wrong place, or this box no longer exists</small></button>
+      <button type="button" class="v4-fb-opt" data-kind="other" onclick="v4FbPick(this)">Something else<small>Explain below</small></button>
+    </div>
+    <textarea class="text-input" id="v4-fb-note" rows="2" placeholder="Note for the office (optional)" style="resize:none;margin-top:4px"></textarea>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn btn-gray" style="flex:1" onclick="v4FbClose()">Cancel</button>
+      <button class="btn" id="v4-fb-send" style="flex:2;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff" onclick="v4FbSend()">Send to office</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1287,8 +1312,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b9';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 9';
+const APP_BUILD = 'v4-b10';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 10';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -1467,6 +1492,54 @@ function v4IdentityEntered(){
   return { owner: g('v4-id-owner').trim(), contact: g('v4-id-contact').trim(), barangay: g('v4-id-brgy').trim() };
 }
 let _v4BrgyRequired = false;
+
+/* ── V4 "Date wrong?" report. The collector standing at the box corrects the record; the office confirms.
+   Saved through spawn_harvest_feedback_v1 with the public key (no gateway change). Offline → queued like a
+   harvest and sent by flushQueue. In TEST mode the write is held like every other write. */
+const V4_FB_URL = SB + '/rest/v1/rpc/spawn_harvest_feedback_v1';
+let _v4FbItem = null, _v4FbKind = null;
+function v4ReportDate(idx){
+  const it = currentItems && currentItems[idx]; if (!it) return;
+  _v4FbItem = it; _v4FbKind = null;
+  const ds = v4DateSources(it);
+  const fd = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}) : 'none';
+  document.getElementById('v4-fb-sub').textContent = (it.sheet_name || it.tg_name || 'Vendo') + ' · App: ' + fd(ds.app) + ' · Book: ' + fd(ds.book) + (it.vendo_id ? '' : ' · not linked to a vendo');
+  document.querySelectorAll('#v4-fb-opts .v4-fb-opt').forEach(b => b.classList.remove('on'));
+  document.getElementById('v4-fb-note').value = '';
+  document.getElementById('v4-fb-overlay').classList.add('show');
+}
+function v4FbPick(btn){
+  document.querySelectorAll('#v4-fb-opts .v4-fb-opt').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on'); _v4FbKind = btn.dataset.kind;
+}
+function v4FbClose(){ document.getElementById('v4-fb-overlay').classList.remove('show'); _v4FbItem = null; _v4FbKind = null; }
+function v4FbBody(d){
+  return JSON.stringify({ p_collector: d.collector, p_vendo_id: d.vendo_id, p_item_id: d.item_id, p_kind: d.kind, p_note: d.note,
+    p_shown_app: d.shown_app, p_shown_book: d.shown_book, p_app_build: d.app_build, p_reported_at: d.reported_at });
+}
+async function v4SendFeedback(d){
+  const r = await fetch(V4_FB_URL, { method: 'POST', headers: { apikey: V4_PUBLISHABLE_KEY, 'Content-Type': 'application/json' }, body: v4FbBody(d) });
+  if (!r.ok) throw new Error('feedback ' + r.status);
+  return r;
+}
+async function v4FbSend(){
+  if (!_v4FbItem) return;
+  if (!_v4FbKind){ toast('Pick what is wrong first', 2500); return; }
+  const it = _v4FbItem, ds = v4DateSources(it);
+  const d = { collector: selectedCollector || '', vendo_id: it.vendo_id || null, item_id: it.id || null, kind: _v4FbKind,
+    note: (document.getElementById('v4-fb-note').value || '').trim() || null, shown_app: ds.app, shown_book: ds.book,
+    app_build: APP_BUILD, reported_at: new Date().toISOString() };
+  const btn = document.getElementById('v4-fb-send'); btn.disabled = true; btn.textContent = 'Sending…';
+  let sent = false;
+  if (navigator.onLine){ try { await v4SendFeedback(d); sent = true; } catch (e) { console.warn('[v4 feedback]', e && e.message); } }
+  if (!sent){
+    offlineQueue.push({ type: 'feedback', uid: 'fb_' + (it.id||0) + '_' + Date.now(), itemId: it.id, data: d, ts: Date.now() });
+    localStorage.setItem('hq', JSON.stringify(offlineQueue));
+  }
+  btn.disabled = false; btn.textContent = 'Send to office';
+  v4FbClose();
+  toast(sent ? (_v4Mode !== 'live' ? '🧪 TEST — report held (see Would have sent)' : '✅ Report sent to the office') : '📴 Report saved — will send when online', 3000);
+}
 // Draw the box for the open vendo: only the missing fields, or "Identity complete".
 async function v4RenderIdentityBox(){
   const box = document.getElementById('v4-identity-box');
@@ -1639,6 +1712,16 @@ function v4IdentityMissing(item, entered, brgyRequired, gpsFlag){
   // truth elsewhere. The route list still groups by it where it is known. brgyRequired is kept for compatibility.
   void brgyRequired;
   return missing;
+}
+// Date sources for a card. app = the app's own last harvest; book = BASHANG's, known only when the book
+// supplied the newest date (last_harvest_src contains 'book'). newest = the later of the two.
+function v4DateSources(item){
+  const it = item || {};
+  const app = it.last_harvest_date || null, any = it.last_harvest_any || null, src = it.last_harvest_src || null;
+  const book = (any && src && String(src).indexOf('book') !== -1) ? any : null;
+  const newest = (app && any) ? (app > any ? app : any) : (app || any);
+  const newestSrc = newest ? (any && newest === any && src ? src : 'app') : null;
+  return { app, book, newest, newestSrc };
 }
 /* V4-GUARD-PURE:END */
 const VENDOS_DATA = {}; // Migrated to Supabase
@@ -3560,6 +3643,10 @@ function renderVendoList(){
     const ageChip = item.status==='harvested' ? '' :
       _unlinked ? '<span class="vi-last age-unlinked">⚠ Not linked to a vendo <small>· office must fix</small></span>' :
       '<span class="vi-last '+ageCls+'">'+(daysSince===null?'Never harvested':_dLabel+' ago')+' <small>· '+lastH+'</small></span>';
+    const _ds = v4DateSources(item);
+    const _fd = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'}) : '—';
+    const srcLine = (item.status!=='harvested' && !_unlinked) ? '<span class="vi-src">App: <b>'+_fd(_ds.app)+'</b> · Book: <b>'+_fd(_ds.book)+(_ds.book?' 📒':'')+'</b></span>' : '';
+    const fbBtn = item.status!=='harvested' ? '<span class="vi-fb" onclick="event.stopPropagation();v4ReportDate('+item._origIdx+')">⚠ Date wrong?</span>' : '';
     const unlinkedNote = _unlinked && item.status!=='harvested' ? '<span class="vi-unlinked">This name is not linked to any vendo record, so its harvest date cannot be known. Ask the office before harvesting.</span>' : '';
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
@@ -3582,7 +3669,7 @@ function renderVendoList(){
         <div class="vi-name">${item.sheet_name||item.tg_name||'Unknown'}</div>
         <div class="vi-sub">${item.address||item.barangay||item.area||'—'}</div>
         ${distBadge}
-        ${ageChip}${unlinkedNote}
+        ${ageChip}${unlinkedNote}${srcLine}${fbBtn}
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${contactBadge}</div>
         ${netLine}${noteLine}${gpsBtn}
       </div>
@@ -5249,6 +5336,8 @@ async function flushQueue(){
         // Landed. Drop the local pending copy so loadAndRenderExpenses doesn't
         // rehydrate it alongside the real DB row.
         if(typeof _expenses!=='undefined') _expenses=_expenses.filter(e=>e._uid!==q.uid);
+      } else if(q.type==='feedback'){
+        await v4SendFeedback(q.data);   // throws on failure → stays queued
       } else if(q.type==='job_order'){
         // job_orders has no unique constraint, so a replayed queue item silently
         // inserts a SECOND card on the dispatch board. Check first. Scoped to

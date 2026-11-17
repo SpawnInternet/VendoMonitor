@@ -108,3 +108,21 @@ test('identity: barangay is optional even when the area has a list', () => {
   assert.deepEqual(v4IdentityMissing(blank, { owner: 'Maria Santos', contact: '09171234567', barangay: '' }, true, 'ok'), []);
   assert.deepEqual(v4IdentityMissing(blank, { owner: '', contact: '', barangay: '' }, true, null), ['GPS', 'Owner name', 'Contact number']);
 });
+
+// Build 10: date sources shown on every card (App vs Book), from the item's own fields.
+const { v4DateSources } = new Function(html.slice(a, b) + '; return {v4DateSources};')();
+test('date sources: app and book both present', () => {
+  const r = v4DateSources({ last_harvest_date: '2026-10-05', last_harvest_any: '2026-11-12', last_harvest_src: 'book' });
+  assert.deepEqual(r, { app: '2026-10-05', book: '2026-11-12', newest: '2026-11-12', newestSrc: 'book' });
+});
+test('date sources: app only', () => {
+  const r = v4DateSources({ last_harvest_date: '2026-10-05', last_harvest_any: '2026-10-05', last_harvest_src: 'app' });
+  assert.deepEqual(r, { app: '2026-10-05', book: null, newest: '2026-10-05', newestSrc: 'app' });
+});
+test('date sources: nothing on file', () => {
+  assert.deepEqual(v4DateSources({}), { app: null, book: null, newest: null, newestSrc: null });
+});
+test('date sources: app+book same day counts as both', () => {
+  const r = v4DateSources({ last_harvest_date: '2026-11-12', last_harvest_any: '2026-11-12', last_harvest_src: 'app+book' });
+  assert.deepEqual(r, { app: '2026-11-12', book: '2026-11-12', newest: '2026-11-12', newestSrc: 'app+book' });
+});
