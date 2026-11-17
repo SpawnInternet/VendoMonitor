@@ -368,6 +368,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .rcpt-zigzag{height:12px;background:repeating-linear-gradient(90deg,#f0f4f8 0,#f0f4f8 8px,transparent 8px,transparent 16px);margin:0 -1px}
 /* Sticky bottom bar for receipt screen */
 .rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
+/* V4 identity box */
+.v4-idbox{border-radius:14px;padding:14px 16px;margin-bottom:12px;border:1.5px solid var(--border);background:#fff}
+.v4-idbox.need{border-color:#fdba74;background:linear-gradient(180deg,#fff7ed,#fff)}
+.v4-idbox.ok{border-color:var(--green-mid);background:var(--green-light)}
+.v4-idbox-h{font-size:14px;font-weight:800;color:#9a3412;margin-bottom:4px}
+.v4-idbox-p{font-size:12px;color:#7c2d12;line-height:1.45;margin-bottom:8px}
+.v4-idbox-need{display:inline-block;font-size:11px;font-weight:700;color:#c2410c;background:#ffedd5;border-radius:999px;padding:3px 10px;margin-bottom:10px}
+.v4-idbox-f{display:block;margin-bottom:9px}
+.v4-idbox-f span{display:block;font-size:11px;font-weight:700;color:#9a3412;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.v4-idbox-f .text-input{border-color:#fdba74}
+.v4-idbox-f .text-input:focus{border-color:#ea580c;box-shadow:0 0 0 3px #ffedd5}
+.v4-idbox-gps{font-size:12px;font-weight:700;color:#025AC6;background:#eef1fa;border-radius:8px;padding:8px 10px}
+.v4-idbox-ok{font-size:13px;font-weight:700;color:var(--green)}
 </style>
 </head>
 <body>
@@ -713,6 +726,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="form-vmeta" id="form-vmeta">—</div>
   </div>
 
+  <div id="v4-identity-box" class="v4-idbox" style="display:none"></div>
   <div id="form-directions" style="display:none;background:#e0f2fe;border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center"></div>
 
   <!-- Owner info -->
@@ -1327,6 +1341,118 @@ function _v4PaintMode(state){
   s.querySelector('.v4s-txt').textContent = APP_BUILD_LABEL + ' · ' + txt;
   const b = document.getElementById('v4-held-btn');
   if (b) b.style.display = (_v4Mode === 'live') ? 'none' : '';
+}
+/* ── V4 IDENTITY GUARD: data helpers + the box on the harvest form ────── */
+const V4_BRGY_URL = SB + '/rest/v1/rpc/spawn_barangay_list';
+const V4_GUARD_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_guard';
+const _v4BrgyMem = {};
+let _v4GuardCache = null;
+// Barangay names for an area (GET → passes the TEST write guard). Cached on the
+// phone for offline use. Before the migration exists this 404s → [] (not required).
+async function v4BarangayList(area){
+  const A = String(area || '').trim().toUpperCase();
+  if (!A) return [];
+  if (_v4BrgyMem[A]) return _v4BrgyMem[A];
+  const key = 'brgy_' + A;
+  let list = null;
+  try {
+    const r = await window._v4InnerFetch(V4_BRGY_URL + '?p_area=' + encodeURIComponent(A), { headers: { apikey: V4_PUBLISHABLE_KEY } });
+    if (r.ok){ const j = await r.json(); if (Array.isArray(j)) list = j.map(String); }
+  } catch (_) {}
+  if (list){ try { localStorage.setItem(key, JSON.stringify(list)); } catch (_) {} }
+  else { try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) { list = []; } }
+  _v4BrgyMem[A] = list;
+  return list;
+}
+// TEST mode: the gate always runs (nothing is saved anyway). LIVE: follows the
+// server switch harvest_v4_guard, so Wendell can turn it off without a redeploy.
+async function v4GuardOn(){
+  if (_v4Mode !== 'live') return true;
+  if (_v4GuardCache !== null) return _v4GuardCache;
+  let on = false;
+  try {
+    const r = await window._v4InnerFetch(V4_GUARD_URL, { headers: { apikey: V4_PUBLISHABLE_KEY } });
+    if (r.ok) on = (await r.json()) === true;
+  } catch (_) {}
+  _v4GuardCache = on;
+  return on;
+}
+// Pull owner_name + barangay for the open group's vendos (tolerant: before the
+// migration, vendos.barangay does not exist, so retry without it).
+async function v4IdentityRefresh(items){
+  const ids = (items || []).filter(i => i && i.vendo_id).map(i => i.vendo_id);
+  if (!ids.length || !navigator.onLine) return;
+  const got = {};
+  for (let i = 0; i < ids.length; i += 200){
+    const chunk = ids.slice(i, i + 200).join(',');
+    let rows = null;
+    for (const sel of ['id,owner_name,barangay', 'id,owner_name']){
+      try {
+        const r = await fetch(SB + '/rest/v1/vendos?id=in.(' + chunk + ')&select=' + sel, { headers: HDR });
+        if (r.ok){ rows = await r.json(); break; }
+      } catch (_) {}
+    }
+    (rows || []).forEach(v => { got[v.id] = v; });
+  }
+  (items || []).forEach(it => {
+    const v = it && it.vendo_id && got[it.vendo_id];
+    if (!v) return;
+    if (v.owner_name != null) it.owner_name = v.owner_name;
+    if ('barangay' in v) it.barangay = v.barangay;
+  });
+  try { if (typeof currentGroupRun !== 'undefined' && currentGroupRun) localStorage.setItem('cached_items_' + currentGroupRun.id, JSON.stringify(items)); } catch (_) {}
+  if (typeof currentItem !== 'undefined' && currentItem && document.getElementById('v4-identity-box')) v4RenderIdentityBox();
+}
+function v4IdentityEntered(){
+  const g = id => (document.getElementById(id) || {}).value || '';
+  return { owner: g('v4-id-owner').trim(), contact: g('v4-id-contact').trim(), barangay: g('v4-id-brgy').trim() };
+}
+let _v4BrgyRequired = false;
+// Draw the box for the open vendo: only the missing fields, or "Identity complete".
+async function v4RenderIdentityBox(){
+  const box = document.getElementById('v4-identity-box');
+  if (!box || !currentItem) return;
+  const list = await v4BarangayList(currentItem.area);
+  _v4BrgyRequired = list.length > 0;
+  const missing = v4IdentityMissing(currentItem, { owner: '', contact: '', barangay: '' }, _v4BrgyRequired, null);
+  box.textContent = '';
+  if (!missing.length){
+    box.className = 'v4-idbox ok';
+    const d = document.createElement('div'); d.className = 'v4-idbox-ok'; d.textContent = '✓ Identity complete — harvest as usual (GPS still required)';
+    box.appendChild(d);
+    return;
+  }
+  box.className = 'v4-idbox need';
+  const h = document.createElement('div'); h.className = 'v4-idbox-h'; h.textContent = '🪪 Complete this vendo\'s details';
+  const p = document.createElement('div'); p.className = 'v4-idbox-p';
+  p.textContent = "Get the owner's name and number before opening the box. No owner details, no harvest — call the office.";
+  box.appendChild(h); box.appendChild(p);
+  const need = document.createElement('div'); need.className = 'v4-idbox-need';
+  need.textContent = 'Missing: ' + missing.join(', ');
+  box.appendChild(need);
+  const field = (label, el) => {
+    const w = document.createElement('label'); w.className = 'v4-idbox-f';
+    const l = document.createElement('span'); l.textContent = label + ' *';
+    w.appendChild(l); w.appendChild(el); box.appendChild(w);
+  };
+  if (missing.indexOf('Owner name') !== -1){
+    const i = document.createElement('input'); i.id = 'v4-id-owner'; i.className = 'text-input'; i.placeholder = 'e.g. Maria Santos'; i.autocomplete = 'off';
+    field('Owner name', i);
+  }
+  if (missing.indexOf('Contact number') !== -1){
+    const i = document.createElement('input'); i.id = 'v4-id-contact'; i.className = 'text-input'; i.type = 'tel'; i.placeholder = '09XX XXX XXXX'; i.autocomplete = 'off'; i.inputMode = 'tel';
+    field('Contact number', i);
+  }
+  if (missing.indexOf('Barangay') !== -1){
+    const sel = document.createElement('select'); sel.id = 'v4-id-brgy'; sel.className = 'text-input';
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Pick the barangay…'; sel.appendChild(o0);
+    list.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+    field('Barangay', sel);
+  }
+  if (missing.indexOf('GPS') !== -1){
+    const g = document.createElement('div'); g.className = 'v4-idbox-gps'; g.textContent = '📍 GPS: tap Get GPS below while standing at the vendo';
+    box.appendChild(g);
+  }
 }
 function _v4PaintHeld(){
   const b = document.getElementById('v4-held-btn');
@@ -2928,6 +3054,7 @@ async function startGroup(groupId){
       };
     });
 
+    v4IdentityRefresh(currentItems).catch(()=>{});   // v4: owner_name + barangay, tolerant
     // Save to cache (only if we actually got items)
     if(currentItems.length > 0){
       localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
@@ -3639,6 +3766,7 @@ async function submitPullOut(){
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
 function openItem(idx){
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
+  { const _b=document.getElementById('v4-identity-box'); if(_b){ _b.style.display=''; v4RenderIdentityBox(); } }
   _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
