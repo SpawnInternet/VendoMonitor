@@ -438,6 +438,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .v4-idsheet-f span{display:block;font-size:11px;font-weight:700;color:#5B3FB8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
 .v4-idsheet-gps{background:#eef3fd;border:1.5px solid #c7d6f5;border-radius:12px;padding:10px;margin-bottom:10px}
 .v4-idsheet-gps .st{font-size:12px;font-weight:700;color:#0B1E63;margin-top:6px;min-height:16px}
+/* V4 floating vendo search */
+.v4-fab{position:fixed;right:14px;bottom:76px;z-index:120;width:56px;height:56px;border-radius:50%;border:0;color:#fff;font-size:24px;
+  background:linear-gradient(135deg,#0E47C4,#7A2A9E);box-shadow:0 6px 18px rgba(14,71,196,.35);display:none;align-items:center;justify-content:center;cursor:pointer}
+.v4-fab.show{display:flex}
+.v4-fab:active{transform:scale(.96)}
+.v4-srch-sheet{max-height:86vh;display:flex;flex-direction:column}
+.v4-srch-inp{width:100%;padding:13px 14px;border:1.5px solid #c7d6f5;border-radius:12px;font-size:16px;font-family:inherit;outline:none;color:var(--text)}
+.v4-srch-inp:focus{border-color:#0E47C4;box-shadow:0 0 0 3px #dbe7fb}
+.v4-srch-list{overflow:auto;margin-top:10px;flex:1}
+.v4-srow{display:flex;align-items:center;gap:10px;padding:10px 6px;border-top:1px solid #eef2f7;cursor:pointer}
+.v4-srow:active{background:#eef3fd}
+.v4-srow .code{flex-shrink:0;min-width:46px;text-align:center;background:#0E47C4;color:#fff;font-size:11px;font-weight:900;padding:4px 7px;border-radius:6px;letter-spacing:.05em}
+.v4-srow .code.none{background:#e2e8f0;color:#64748b}
+.v4-srow .nm{font-size:14px;font-weight:700;color:#0B1E63}
+.v4-srow .meta{font-size:11px;color:#64748b;margin-top:1px}
+.v4-srow .last{flex-shrink:0;font-size:10px;font-weight:800;border-radius:999px;padding:3px 8px;color:#fff}
+.v4-srch-hint{font-size:12px;color:#64748b;padding:14px 6px;text-align:center}
 .v4-idbox-ok{font-size:13px;font-weight:700;color:var(--brand-green)}
 </style>
 </head>
@@ -1029,6 +1046,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 </div>
+<!-- V4: floating vendo search — find any vendo and jump to its card -->
+<button class="v4-fab" id="v4-fab" type="button" onclick="v4SearchOpen()" aria-label="Search vendo">🔍</button>
+<div class="confirm-overlay" id="v4-srch-overlay" onclick="if(event.target===this)v4SearchClose()">
+  <div class="confirm-sheet v4-srch-sheet">
+    <div class="confirm-handle"></div>
+    <div class="confirm-title">🔍 Find a vendo</div>
+    <div class="confirm-sub">Name, code, VLAN, owner or address. Tap a result to open its card.</div>
+    <input class="v4-srch-inp" id="v4-srch-inp" placeholder="e.g. Papa, PX5, 23, Dicayas" autocomplete="off" oninput="v4SearchType()">
+    <div class="v4-srch-list" id="v4-srch-list"><div class="v4-srch-hint">Type at least 2 letters or a number.</div></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1174,8 +1202,13 @@ async function preloadVendoCache(){
       _vendoCacheMap = {};
       data.vendos.forEach(v => { _vendoCacheMap[v.id] = v; });
       console.log('[VendoCache] Loaded', data.vendos.length, 'vendos from storage cache');
+      try{ localStorage.setItem('vendo_cache', JSON.stringify({ts:Date.now(), vendos:data.vendos})); }catch(_){}   // v4: offline search
     }
-  }catch(e){ console.warn('[VendoCache] Failed to preload:', e.message); }
+  }catch(e){
+    console.warn('[VendoCache] Failed to preload:', e.message);
+    // v4: offline → use the last saved copy so search still works
+    try{ const c=JSON.parse(localStorage.getItem('vendo_cache')||'null'); if(c && Array.isArray(c.vendos) && !_vendoCacheMap){ _vendoCacheMap={}; c.vendos.forEach(v=>{ _vendoCacheMap[v.id]=v; }); } }catch(_){}
+  }
 }
 // Start preloading immediately on script load
 preloadVendoCache();
@@ -1334,8 +1367,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b14';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 14';
+const APP_BUILD = 'v4-b15';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 15';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -1516,6 +1549,89 @@ function v4IdentityEntered(){
   return r;
 }
 let _v4BrgyRequired = false;
+
+/* ── V4 floating search: search the phone's vendo list (works offline), then jump to the vendo's card ── */
+let _v4SrchTimer = null, _v4SrchBusy = false;
+function v4SearchOpen(){
+  const o = document.getElementById('v4-srch-overlay'); if (!o) return;
+  o.classList.add('show');
+  const i = document.getElementById('v4-srch-inp'); i.value = ''; v4SearchType();
+  setTimeout(() => i.focus(), 250);
+}
+function v4SearchClose(){ const o = document.getElementById('v4-srch-overlay'); if (o) o.classList.remove('show'); }
+function v4SearchType(){ clearTimeout(_v4SrchTimer); _v4SrchTimer = setTimeout(v4SearchRun, 120); }
+function v4SearchRun(){
+  const q = (document.getElementById('v4-srch-inp').value || '').trim().toLowerCase();
+  const list = document.getElementById('v4-srch-list'); list.textContent = '';
+  const hint = t => { const d = document.createElement('div'); d.className = 'v4-srch-hint'; d.textContent = t; list.appendChild(d); };
+  if (q.length < 2 && !/^\d+$/.test(q)){ hint('Type at least 2 letters or a number.'); return; }
+  if (!_vendoCacheMap){ hint(navigator.onLine ? 'Vendo list still loading — try again in a moment.' : '📴 No vendo list saved on this phone yet.'); return; }
+  const isNum = /^\d+$/.test(q);
+  const hits = [];
+  for (const id in _vendoCacheMap){
+    const v = _vendoCacheMap[id]; if (!v || v.status === 'merged') continue;
+    const hay = [v.sheet_name, v.tg_name, v.vendo_code, v.owner_name, v.address].map(x => String(x || '').toLowerCase());
+    let score = 0;
+    if (isNum){ if (String(v.vlan || '') === q) score = 3; else if (hay[2].indexOf(q) !== -1) score = 2; }
+    else {
+      if (hay[0].startsWith(q) || hay[2] === q) score = 4;
+      else if (hay[0].indexOf(q) !== -1 || hay[2].indexOf(q) !== -1) score = 3;
+      else if (hay[1].indexOf(q) !== -1 || hay[3].indexOf(q) !== -1) score = 2;
+      else if (hay[4].indexOf(q) !== -1) score = 1;
+    }
+    if (score) hits.push({ v, score });
+  }
+  hits.sort((a, b) => b.score - a.score || (a.v.status === 'active' ? -1 : 1) || String(a.v.sheet_name).localeCompare(String(b.v.sheet_name)));
+  if (!hits.length){ hint('No vendo matches "' + q + '".'); return; }
+  hits.slice(0, 25).forEach(({ v }) => {
+    const row = document.createElement('div'); row.className = 'v4-srow'; row.onclick = () => v4SearchGo(v.id);
+    const code = document.createElement('div'); code.className = 'code' + (v.vendo_code ? '' : ' none'); code.textContent = v.vendo_code ? String(v.vendo_code).toUpperCase() : ('VLAN ' + (v.vlan || '—'));
+    const mid = document.createElement('div'); mid.style.flex = '1'; mid.style.minWidth = '0';
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = v.sheet_name || v.tg_name || '(no name)';
+    const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = [v.area, v.address, v.vlan ? 'VLAN ' + v.vlan : null, v.status !== 'active' ? v.status : null].filter(Boolean).join(' · ');
+    mid.appendChild(nm); mid.appendChild(meta);
+    const ds = v4DateSources(v); const days = ds.newest ? Math.floor((Date.now() - new Date(ds.newest + 'T12:00:00')) / 86400000) : null;
+    const last = document.createElement('div'); last.className = 'last';
+    last.style.background = days === null ? '#B52383' : days > 45 ? '#D62839' : days > 30 ? '#F08A1A' : days > 14 ? '#0E47C4' : '#1B9A6C';
+    last.textContent = days === null ? 'never' : days + 'd';
+    row.appendChild(code); row.appendChild(mid); row.appendChild(last); list.appendChild(row);
+  });
+  if (hits.length > 25) hint('Showing 25 of ' + hits.length + ' — type more to narrow.');
+}
+// Find the route group that holds the vendo (phone caches first, then the server), start it, open the card.
+async function v4SearchGo(vendoId){
+  if (_v4SrchBusy) return; _v4SrchBusy = true;
+  try {
+    let groupId = null, itemId = null;
+    try {
+      for (const k of Object.keys(localStorage)){
+        if (k.indexOf('grp_cache_') !== 0 || k.indexOf('grp_cache_ts_') === 0) continue;
+        const c = JSON.parse(localStorage.getItem(k) || 'null'); const it = c && c.items && c.items.find(x => x.vendo_id === vendoId);
+        if (it){ groupId = parseInt(k.slice('grp_cache_'.length), 10); itemId = it.id; break; }
+      }
+    } catch (_) {}
+    if (!groupId && navigator.onLine){
+      try {
+        const r = await fetch(SB + '/rest/v1/harvest_group_items?vendo_id=eq.' + vendoId + '&select=id,group_run_id&order=id.desc&limit=5', { headers: HDR });
+        const rows = r.ok ? await r.json() : [];
+        if (Array.isArray(rows) && rows.length){ groupId = rows[0].group_run_id; itemId = rows[0].id; }
+      } catch (_) {}
+    }
+    if (!groupId){ toast(navigator.onLine ? 'This vendo is not in any route group — tell the office.' : '📴 Offline: open its group first, then search again.', 3500); return; }
+    v4SearchClose();
+    toast('Opening…', 1200);
+    await startGroup(groupId);
+    let idx = (currentItems || []).findIndex(x => x.id === itemId);
+    if (idx === -1) idx = (currentItems || []).findIndex(x => x.vendo_id === vendoId);
+    if (idx === -1){ toast('Group opened — the vendo is not on its list right now.', 3000); return; }
+    openItem(idx);
+  } finally { _v4SrchBusy = false; }
+}
+function v4FabPaint(id){
+  const b = document.getElementById('v4-fab'); if (!b) return;
+  const on = ['screen-home', 'screen-areas', 'screen-groups', 'screen-route', 'screen-signedin'].indexOf(id) !== -1 && !!selectedCollector;
+  b.classList.toggle('show', on);
+}
 
 let _v4SheetEntered = null;          // values typed in the submit sheet when the top card has no inputs
 let _v4SheetTimer = null;
@@ -2125,6 +2241,7 @@ function showScreen(id){
   }
   if(logoutBtn) logoutBtn.style.display=noBack.includes(id)?'none':'inline-block';
   { const tb=document.querySelector('.topbar'); if(tb) tb.style.display=(id==='screen-collector')?'none':''; }   // v4: no top bar on the PIN screen
+  try{ v4FabPaint(id); }catch(_){}
   // Show bottom nav on harvest screens
   const navScreens=['screen-route','screen-form','screen-gate','screen-receipt'];
   const bnav=document.getElementById('bottom-nav');
