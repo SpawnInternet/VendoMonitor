@@ -1414,11 +1414,13 @@ async function v4RenderIdentityBox(){
   if (!box || !currentItem) return;
   const list = await v4BarangayList(currentItem.area);
   _v4BrgyRequired = list.length > 0;
+  { const gb = document.getElementById('v4-get-gps-btn');
+    if (gb) gb.textContent = v4HasGpsOnFile(currentItem) ? '📍 Update GPS (optional)' : '📍 Get GPS (required)'; }
   const missing = v4IdentityMissing(currentItem, { owner: '', contact: '', barangay: '' }, _v4BrgyRequired, null);
   box.textContent = '';
   if (!missing.length){
     box.className = 'v4-idbox ok';
-    const d = document.createElement('div'); d.className = 'v4-idbox-ok'; d.textContent = '✓ Identity complete — harvest as usual (GPS still required)';
+    const d = document.createElement('div'); d.className = 'v4-idbox-ok'; d.textContent = '✓ Identity complete — harvest as usual';
     box.appendChild(d);
     return;
   }
@@ -1564,11 +1566,16 @@ function v4NormalizePhone(s){
   if (/^0(\d)\1{9}$/.test(d)) return null;          // 0 + one digit repeated
   return d;
 }
+function v4HasGpsOnFile(item){
+  const it = item || {};
+  if (it.lat == null || it.lng == null) return false;
+  const la = Number(it.lat), lg = Number(it.lng);
+  return isFinite(la) && isFinite(lg) && !(la === 0 && lg === 0);
+}
 function v4IdentityMissing(item, entered, brgyRequired, gpsFlag){
   const it = item || {}, en = entered || {};
   const missing = [];
-  const onFileGps = it.lat != null && it.lng != null && isFinite(Number(it.lat)) && isFinite(Number(it.lng)) && (Number(it.lat) || Number(it.lng));
-  if (!onFileGps && !(gpsFlag === 'ok' || gpsFlag === 'weak')) missing.push('GPS');
+  if (!v4HasGpsOnFile(it) && !(gpsFlag === 'ok' || gpsFlag === 'weak')) missing.push('GPS');
   if (!v4ValidOwnerName(it.owner_name) && !v4ValidOwnerName(en.owner)) missing.push('Owner name');
   if (!v4NormalizePhone(it.contact_number) && !v4NormalizePhone(en.contact)) missing.push('Contact number');
   if (brgyRequired && !String(it.barangay || '').trim() && !String(en.barangay || '').trim()) missing.push('Barangay');
@@ -4577,6 +4584,28 @@ async function submitHarvest(){
       _dupConfirmed = true;
     }
   }
+  // ── V4 GPS GATE + IDENTITY GUARD (before anything is disabled or built) ──
+  // No override, by decision. Coin entries stay on screen while the collector fixes it.
+  let _v4Verdict = { ok: true, flag: null, distM: null, msg: null };
+  const _v4Entered = v4IdentityEntered();
+  if (await v4GuardOn()){
+    // Rule (Wendell, 2026-11-17): a fresh GPS reading is required only when the vendo
+    // has no GPS on file. If GPS exists, don't ask — but all details must be complete.
+    if (!v4HasGpsOnFile(currentItem)){
+      _v4Verdict = v4GpsVerdict(capturedGPS, currentItem, Date.now(), v4GpsWeakTries[currentItem.id] || 0);
+      if (!_v4Verdict.ok){ toast(_v4Verdict.msg, 4500); return; }
+    } else if (capturedGPS && capturedGPS.itemId === currentItem.id){
+      // Optional re-reading at a vendo that already has GPS: keep it only if it is good.
+      const _opt = v4GpsVerdict(capturedGPS, currentItem, Date.now(), V4_GPS_WEAK_TRIES);
+      if (_opt.ok) _v4Verdict = _opt; else capturedGPS = null;
+    }
+    const _v4Missing = v4IdentityMissing(currentItem, _v4Entered, _v4BrgyRequired, _v4Verdict.flag);
+    if (_v4Missing.length){ toast('Complete the vendo details first: ' + _v4Missing.join(', '), 4500); return; }
+    if (_v4Verdict.flag === 'far') toast('GPS is ' + _v4Verdict.distM + ' m from this vendo\'s saved spot — saved and flagged for the office.', 4500);
+  }
+  const _v4Owner = v4ValidOwnerName(_v4Entered.owner) ? _v4Entered.owner.trim() : '';
+  const _v4Contact = v4NormalizePhone(_v4Entered.contact) || '';
+  const _v4Brgy = (_v4Entered.barangay || '').trim();
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
 
@@ -4613,14 +4642,21 @@ async function submitHarvest(){
   if(ownerName) itemUpdate.sheet_name=ownerName;
   if(contact) itemUpdate.contact_number=contact;
   if(ownerRealName) itemUpdate.owner_name=ownerRealName;
+  if(_v4Owner) itemUpdate.owner_name=_v4Owner;
+  if(_v4Contact) itemUpdate.contact_number=_v4Contact;
+  if(_v4Brgy) itemUpdate.barangay=_v4Brgy;
   if(capturedGPS){itemUpdate.lat_captured=capturedGPS.lat;itemUpdate.lng_captured=capturedGPS.lng;}
 
   // Update vendos table
   const vendoUpdate={last_harvest_date:today};
-  if(capturedGPS){vendoUpdate.lat=capturedGPS.lat;vendoUpdate.lng=capturedGPS.lng;}
+  // v4: a weak or far fix never overwrites the vendo's GPS on file.
+  if(capturedGPS && _v4Verdict.flag==='ok'){vendoUpdate.lat=capturedGPS.lat;vendoUpdate.lng=capturedGPS.lng;}
   if(ownerName&&ownerName!==currentItem.sheet_name) vendoUpdate.sheet_name=ownerName;
   if(contact) vendoUpdate.contact_number=contact;
   if(ownerRealName) vendoUpdate.owner_name=ownerRealName;
+  if(_v4Owner) vendoUpdate.owner_name=_v4Owner;
+  if(_v4Contact) vendoUpdate.contact_number=_v4Contact;
+  if(_v4Brgy) vendoUpdate.barangay=_v4Brgy;
   const addressSubmit=(document.getElementById('address-inp')?.value||'').trim();
   if(addressSubmit) vendoUpdate.address=addressSubmit;
 
@@ -4635,7 +4671,10 @@ async function submitHarvest(){
     route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
     coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
     net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note,
-    app_build:APP_BUILD
+    app_build:APP_BUILD,
+    harvest_lat:capturedGPS?capturedGPS.lat:null, harvest_lng:capturedGPS?capturedGPS.lng:null,
+    harvest_gps_at:capturedGPS?capturedGPS.at:null, harvest_gps_accuracy:capturedGPS?capturedGPS.acc:null,
+    harvest_gps_flag:_v4Verdict.flag, harvest_gps_dist_m:_v4Verdict.distM
   };
 
   // Upload photo if captured
@@ -4685,7 +4724,7 @@ async function submitHarvest(){
           method:'POST',
           headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
           body:JSON.stringify({
-            action:'submit-harvest',
+            action:'submit-harvest', require_gps:true,
             item_id:currentItem.id, vendo_id:currentItem.vendo_id||null,
             group_run_id:currentGroupRun?currentGroupRun.id:null,
             coins:{net,free,saloy,free_coins:freeCoins},
@@ -4789,7 +4828,10 @@ async function submitHarvest(){
 
     // Update in-memory
     Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today,last_harvest_any:today,last_harvest_src:'app'});
-    if(capturedGPS){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
+    if(capturedGPS && _v4Verdict.flag==='ok'){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
+    if(_v4Owner) currentItems[currentItemIdx].owner_name=_v4Owner;
+    if(_v4Contact) currentItems[currentItemIdx].contact_number=_v4Contact;
+    if(_v4Brgy) currentItems[currentItemIdx].barangay=_v4Brgy;
     if(ownerName) currentItems[currentItemIdx].sheet_name=ownerName;
     if(contact) currentItems[currentItemIdx].contact_number=contact;
     if(ownerRealName) currentItems[currentItemIdx].owner_name=ownerRealName;

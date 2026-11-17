@@ -92,3 +92,13 @@ test('identity: junk on file does not count', () => {
 test('identity: entered junk is refused', () => {
   assert.deepEqual(v4IdentityMissing(blank, { owner: 'none', contact: '00000000000', barangay: 'Dicayas' }, true, 'ok'), ['Owner name', 'Contact number']);
 });
+
+// Rule change (Wendell, 2026-11-17): a fresh GPS reading is required only when the
+// vendo has no GPS on file. If GPS exists, don't ask; all four details must be complete.
+const { v4HasGpsOnFile } =
+  new Function(html.slice(a, b) + '; return {v4HasGpsOnFile};')();
+test('gps on file: real coords → true; null, 0,0 or junk → false', () => {
+  assert.equal(v4HasGpsOnFile({ lat: 8.58, lng: 123.34 }), true);
+  assert.equal(v4HasGpsOnFile({ lat: '8.58', lng: '123.34' }), true);
+  for (const it of [{ lat: null, lng: null }, { lat: 0, lng: 0 }, { lat: 'x', lng: 123 }, {}]) assert.equal(v4HasGpsOnFile(it), false, JSON.stringify(it));
+});
