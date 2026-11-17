@@ -1389,6 +1389,65 @@ document.addEventListener('DOMContentLoaded', () => {
   _v4PaintMode(); _v4PaintHeld();
 });
 
+/* V4-GUARD-PURE:BEGIN */
+/* GPS gate + vendo identity rules. Pure functions: no DOM, no globals, no
+   storage, so v4/tests/guard.test.mjs can run them under node. */
+const V4_GPS_FRESH_MS = 15 * 60 * 1000;
+const V4_GPS_WEAK_M = 100, V4_GPS_FAR_M = 300, V4_GPS_WEAK_TRIES = 2;
+function v4DistanceM(lat1, lng1, lat2, lng2){
+  const R = 6371000, r = Math.PI / 180;
+  const dLat = (lat2 - lat1) * r, dLng = (lng2 - lng1) * r;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function v4GpsVerdict(gps, item, nowMs, weakTries){
+  const no = msg => ({ ok: false, flag: null, distM: null, msg });
+  if (!gps || typeof gps.lat !== 'number' || typeof gps.lng !== 'number') return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  if (!item || gps.itemId !== item.id) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  const age = nowMs - Date.parse(gps.at || '');
+  if (!(age >= 0 && age <= V4_GPS_FRESH_MS)) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  if (!(gps.lat >= 4 && gps.lat <= 22 && gps.lng >= 116 && gps.lng <= 127)) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  const acc = Number(gps.acc) || 0;
+  let flag = 'ok';
+  if (acc > V4_GPS_WEAK_M){
+    if ((weakTries || 0) < V4_GPS_WEAK_TRIES) return no('Weak GPS (±' + Math.round(acc) + ' m) — step outside and tap Get GPS again');
+    flag = 'weak';
+  }
+  let distM = null;
+  const fl = Number(item.lat), fg = Number(item.lng);
+  if (item.lat != null && item.lng != null && isFinite(fl) && isFinite(fg) && (fl || fg)){
+    distM = Math.round(v4DistanceM(gps.lat, gps.lng, fl, fg));
+    if (flag === 'ok' && distM > V4_GPS_FAR_M) flag = 'far';
+  }
+  return { ok: true, flag, distM, msg: null };
+}
+const V4_JUNK_NAMES = ['none', 'n/a', 'na', 'wala', 'unknown', 'walay', '-', 'no', 'null'];
+function v4ValidOwnerName(s){
+  const t = String(s == null ? '' : s).trim();
+  if (t.length < 2) return false;
+  if (!/[A-Za-zÀ-ɏ]/.test(t)) return false;
+  if (V4_JUNK_NAMES.indexOf(t.toLowerCase()) !== -1) return false;
+  return true;
+}
+function v4NormalizePhone(s){
+  let d = String(s == null ? '' : s).replace(/\D/g, '');
+  if (d.startsWith('63') && d.length === 12) d = '0' + d.slice(2);
+  if (!/^09\d{9}$/.test(d)) return null;
+  if (/^(\d)\1{10}$/.test(d)) return null;          // one digit repeated
+  if (/^0(\d)\1{9}$/.test(d)) return null;          // 0 + one digit repeated
+  return d;
+}
+function v4IdentityMissing(item, entered, brgyRequired, gpsFlag){
+  const it = item || {}, en = entered || {};
+  const missing = [];
+  const onFileGps = it.lat != null && it.lng != null && isFinite(Number(it.lat)) && isFinite(Number(it.lng)) && (Number(it.lat) || Number(it.lng));
+  if (!onFileGps && !(gpsFlag === 'ok' || gpsFlag === 'weak')) missing.push('GPS');
+  if (!v4ValidOwnerName(it.owner_name) && !v4ValidOwnerName(en.owner)) missing.push('Owner name');
+  if (!v4NormalizePhone(it.contact_number) && !v4NormalizePhone(en.contact)) missing.push('Contact number');
+  if (brgyRequired && !String(it.barangay || '').trim() && !String(en.barangay || '').trim()) missing.push('Barangay');
+  return missing;
+}
+/* V4-GUARD-PURE:END */
 const VENDOS_DATA = {}; // Migrated to Supabase
 
 const NAME_TO_BARANGAY = {};
