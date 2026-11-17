@@ -429,6 +429,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .v4-idbox-gps{font-size:12px;font-weight:700;color:var(--brand-blue);background:#eef3fd;border-radius:8px;padding:8px 10px}
 .v4-gpscard{padding:12px 14px}
 .v4-gpscard .gps-status{display:block;margin-top:0}
+.v4-idsum{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:8px;font-size:12px}
+.v4-idsum b{display:block;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
+.v4-idsum span{display:block;font-weight:700;color:#0B1E63}
+.v4-idsum .full{grid-column:1/-1}
+.v4-idedit{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;color:#0E47C4;border:1px solid #c7d6f5;border-radius:999px;padding:3px 10px;cursor:pointer;background:#fff}
+.v4-idsheet-f{display:block;margin-bottom:10px}
+.v4-idsheet-f span{display:block;font-size:11px;font-weight:700;color:#5B3FB8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.v4-idsheet-gps{background:#eef3fd;border:1.5px solid #c7d6f5;border-radius:12px;padding:10px;margin-bottom:10px}
+.v4-idsheet-gps .st{font-size:12px;font-weight:700;color:#0B1E63;margin-top:6px;min-height:16px}
 .v4-idbox-ok{font-size:13px;font-weight:700;color:var(--brand-green)}
 </style>
 </head>
@@ -788,8 +797,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
   <div id="form-directions" style="display:none;background:#e0f2fe;border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center"></div>
 
-  <!-- Owner info -->
-  <div class="card">
+  <!-- Owner info (v4: hidden; the identity card on top replaces it. "Edit details" reveals it) -->
+  <div class="card" id="v4-owner-card" style="display:none">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
       👤 Owner info
       <button id="edit-details-btn" onclick="toggleOwnerEdit()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--blue-mid);border-radius:6px;background:#fff;color:var(--blue);cursor:pointer;font-family:inherit;font-weight:700">✏️ Edit</button>
@@ -1004,6 +1013,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div style="display:flex;gap:10px;margin-top:12px">
       <button class="btn btn-gray" style="flex:1" onclick="v4FbClose()">Cancel</button>
       <button class="btn" id="v4-fb-send" style="flex:2;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff" onclick="v4FbSend()">Send to office</button>
+    </div>
+  </div>
+</div>
+<!-- V4: missing details at submit → fill them here, then the harvest goes through (coins stay) -->
+<div class="confirm-overlay" id="v4-id-overlay">
+  <div class="confirm-sheet">
+    <div class="confirm-handle"></div>
+    <div class="confirm-title">🪪 Complete the vendo first</div>
+    <div class="confirm-sub" id="v4-idsheet-sub">Your coin entries are kept. Fill in what is missing and the harvest will be saved.</div>
+    <div id="v4-idsheet-body"></div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn btn-gray" style="flex:1" onclick="v4IdSheetClose()">Back</button>
+      <button class="btn" id="v4-idsheet-go" style="flex:2;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff" onclick="v4IdSheetGo()">Save &amp; submit harvest</button>
     </div>
   </div>
 </div>
@@ -1312,8 +1334,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b10';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 10';
+const APP_BUILD = 'v4-b11';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 11';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -1489,9 +1511,57 @@ async function v4IdentityRefresh(items){
 }
 function v4IdentityEntered(){
   const g = id => (document.getElementById(id) || {}).value || '';
-  return { owner: g('v4-id-owner').trim(), contact: g('v4-id-contact').trim(), barangay: g('v4-id-brgy').trim() };
+  const r = { owner: g('v4-id-owner').trim(), contact: g('v4-id-contact').trim(), barangay: g('v4-id-brgy').trim() };
+  if (_v4SheetEntered){ r.owner = r.owner || _v4SheetEntered.owner || ''; r.contact = r.contact || _v4SheetEntered.contact || ''; }
+  return r;
 }
 let _v4BrgyRequired = false;
+let _v4SheetEntered = null;          // values typed in the submit sheet when the top card has no inputs
+let _v4SheetTimer = null;
+function v4IdSheetOpen(missing, gpsMsg){
+  const body = document.getElementById('v4-idsheet-body'); if (!body || !currentItem) return;
+  body.textContent = '';
+  const en = v4IdentityEntered();
+  const field = (label, id, type, ph, val) => {
+    const w = document.createElement('label'); w.className = 'v4-idsheet-f';
+    const l = document.createElement('span'); l.textContent = label + ' *';
+    const i = document.createElement('input'); i.id = id; i.className = 'text-input'; i.type = type; i.placeholder = ph; i.autocomplete = 'off'; if (type==='tel') i.inputMode='tel'; i.value = val || '';
+    w.appendChild(l); w.appendChild(i); body.appendChild(w);
+  };
+  if (missing.indexOf('Owner name') !== -1) field('Owner name', 'v4-sh-owner', 'text', 'e.g. Maria Santos', en.owner);
+  if (missing.indexOf('Contact number') !== -1) field('Contact number', 'v4-sh-contact', 'tel', '09XX XXX XXXX', en.contact);
+  if (missing.indexOf('GPS') !== -1){
+    const g = document.createElement('div'); g.className = 'v4-idsheet-gps';
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.style.cssText = 'background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff;padding:12px';
+    b.textContent = '📍 Get GPS — stand at the vendo'; b.onclick = () => { v4GetGps(); };
+    const st = document.createElement('div'); st.className = 'st'; st.id = 'v4-sh-gps-st'; st.textContent = gpsMsg || 'No GPS yet';
+    g.appendChild(b); g.appendChild(st); body.appendChild(g);
+    clearInterval(_v4SheetTimer);
+    _v4SheetTimer = setInterval(() => {
+      const el = document.getElementById('v4-sh-gps-st'); if (!el){ clearInterval(_v4SheetTimer); return; }
+      const lbl = document.getElementById('gps-status-lbl');
+      if (capturedGPS && capturedGPS.itemId === currentItem.id) el.textContent = '✅ GPS captured (±' + capturedGPS.acc + ' m)';
+      else if (lbl && /Getting GPS/.test(lbl.textContent)) el.textContent = lbl.textContent;
+    }, 500);
+  }
+  const first = body.querySelector('input');
+  document.getElementById('v4-id-overlay').classList.add('show');
+  if (first) setTimeout(() => first.focus(), 250);
+}
+function v4IdSheetClose(){ clearInterval(_v4SheetTimer); document.getElementById('v4-id-overlay').classList.remove('show'); }
+async function v4IdSheetGo(){
+  const o = document.getElementById('v4-sh-owner'), c = document.getElementById('v4-sh-contact');
+  if (o && !v4ValidOwnerName(o.value)){ toast('Enter the owner\'s real name', 2500); o.focus(); return; }
+  if (c && !v4NormalizePhone(c.value)){ toast('Enter a Philippine mobile number (09XX XXX XXXX)', 2500); c.focus(); return; }
+  if (document.getElementById('v4-sh-gps-st') && !(capturedGPS && capturedGPS.itemId === currentItem.id)){ toast('Tap 📍 Get GPS first', 2500); return; }
+  // Hand the values to the top card (or keep them if the card has no inputs)
+  const bo = document.getElementById('v4-id-owner'), bc = document.getElementById('v4-id-contact');
+  _v4SheetEntered = { owner: o ? o.value.trim() : (bo ? bo.value : ''), contact: c ? c.value.trim() : (bc ? bc.value : ''), barangay: '' };
+  if (bo && o) bo.value = o.value.trim();
+  if (bc && c) bc.value = c.value.trim();
+  v4IdSheetClose();
+  await submitHarvest();
+}
 
 /* ── V4 "Date wrong?" report. The collector standing at the box corrects the record; the office confirms.
    Saved through spawn_harvest_feedback_v1 with the public key (no gateway change). Offline → queued like a
@@ -1558,6 +1628,13 @@ async function v4RenderIdentityBox(){
     box.className = 'v4-idbox ok';
     const d = document.createElement('div'); d.className = 'v4-idbox-ok'; d.textContent = '✓ Identity complete — harvest as usual';
     box.appendChild(d);
+    const g = document.createElement('div'); g.className = 'v4-idsum';
+    const cell = (label, val, full) => { const c = document.createElement('div'); if (full) c.className='full'; const b=document.createElement('b'); b.textContent=label; const v=document.createElement('span'); v.textContent=val||'—'; c.appendChild(b); c.appendChild(v); g.appendChild(c); };
+    cell('Owner', currentItem.owner_name); cell('Contact', currentItem.contact_number); cell('Address', currentItem.address, true);
+    box.appendChild(g);
+    const e = document.createElement('span'); e.className = 'v4-idedit'; e.textContent = '✏️ Edit details';
+    e.onclick = () => { const oc = document.getElementById('v4-owner-card'); if (oc){ oc.style.display = ''; oc.scrollIntoView({behavior:'smooth', block:'start'}); try{ toggleOwnerEdit(); }catch(_){} } };
+    box.appendChild(e);
     return;
   }
   box.className = 'v4-idbox need';
@@ -3959,7 +4036,7 @@ async function submitPullOut(){
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
 function openItem(idx){
   if(window._v4GpsWatch!==undefined && window._v4GpsWatch!==null){ try{ navigator.geolocation.clearWatch(window._v4GpsWatch); }catch(_){} window._v4GpsWatch=null; }
-  currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
+  currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null; _v4SheetEntered=null;
   v4RenderIdentityBox();
   _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
@@ -4790,14 +4867,19 @@ async function submitHarvest(){
     // has no GPS on file. If GPS exists, don't ask — but all details must be complete.
     if (!v4HasGpsOnFile(currentItem)){
       _v4Verdict = v4GpsVerdict(capturedGPS, currentItem, Date.now(), v4GpsWeakTries[currentItem.id] || 0);
-      if (!_v4Verdict.ok){ toast(_v4Verdict.msg, 4500); return; }
+      if (!_v4Verdict.ok){
+        // Open the fill-in sheet with GPS plus whatever else is missing; coins stay on the form.
+        const _m0 = v4IdentityMissing(currentItem, _v4Entered, _v4BrgyRequired, null);
+        if (_m0.indexOf('GPS') === -1) _m0.unshift('GPS');
+        v4IdSheetOpen(_m0, _v4Verdict.msg); return;
+      }
     } else if (capturedGPS && capturedGPS.itemId === currentItem.id){
       // Optional re-reading at a vendo that already has GPS: keep it only if it is good.
       const _opt = v4GpsVerdict(capturedGPS, currentItem, Date.now(), V4_GPS_WEAK_TRIES);
       if (_opt.ok) _v4Verdict = _opt; else capturedGPS = null;
     }
     const _v4Missing = v4IdentityMissing(currentItem, _v4Entered, _v4BrgyRequired, _v4Verdict.flag);
-    if (_v4Missing.length){ toast('Complete the vendo details first: ' + _v4Missing.join(', '), 4500); return; }
+    if (_v4Missing.length){ v4IdSheetOpen(_v4Missing, null); return; }
     if (_v4Verdict.flag === 'far') toast('GPS is ' + _v4Verdict.distM + ' m from this vendo\'s saved spot — saved and flagged for the office.', 4500);
   }
   const _v4Owner = v4ValidOwnerName(_v4Entered.owner) ? _v4Entered.owner.trim() : '';
