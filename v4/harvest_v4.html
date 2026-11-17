@@ -1292,7 +1292,7 @@ const _v4Held = [];              // "Would have sent" entries (newest first)
     _v4Held.unshift({ at: new Date().toISOString(), method, url: url.replace(SB, ''), body: _bodyOf(init) });
     if (_v4Held.length > 60) _v4Held.length = 60;
     _v4PaintHeld();
-    const payload = _wantsRows(init) ? [] : { ok: true, harvest_id: null };
+    const payload = _wantsRows(init) ? [{ id: 'TEST' }] : { ok: true, harvest_id: 'TEST' };
     return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
   };
 })();
@@ -4734,9 +4734,12 @@ async function submitHarvest(){
         });
         if(_bResp.ok){
           const _bJson = await _bResp.json().catch(()=>({}));
-          if(_bJson && _bJson.ok){
+          // v4: spawn-ops answers ok:true even when the harvests insert failed; only a
+          // row id proves the harvest is in the database. No id → direct path → queue.
+          if(_bJson && _bJson.ok && _bJson.harvest_id != null){
             _bOk = true;
             _submitted = true;
+            window._v4LastHarvestId = _bJson.harvest_id;
             window._pendingPackItems=[];
             if(currentGroupRun){
               currentGroupRun.harvested_count++;
@@ -4755,6 +4758,7 @@ async function submitHarvest(){
       const _hResp = await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(harvestRecord)});
       const _hRows = await _hResp.json().catch(()=>[]);
       const _hId = (_hRows&&_hRows[0]&&_hRows[0].id)||null;
+      if(_hId) window._v4LastHarvestId = _hId;
       // Only claim the write landed if it demonstrably did. A silent failure here
       // used to be reported as "synced" and the coins vanished from the tally.
       // NOTE: do NOT throw — the outer catch just toasts and drops the harvest.
@@ -4858,7 +4862,10 @@ async function submitHarvest(){
     }
 
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
-    if(_submitted) toast('✅ Saved!');
+    if(_submitted){
+      if(_v4Mode !== 'live') toast('🧪 TEST — not saved (see Would have sent)', 3000);
+      else toast('✅ Saved to database' + (window._v4LastHarvestId && window._v4LastHarvestId !== 'TEST' ? ' (#' + window._v4LastHarvestId + ')' : ''), 3000);
+    }
     setTimeout(()=>showHarvestReceipt(),600);
   } catch(e){
     toast('❌ '+e.message,4000);
@@ -5080,6 +5087,7 @@ async function flushQueue(){
         } else {
           const _hrows=await _hr.json().catch(()=>[]);
           _hId=_hrows&&_hrows[0]&&_hrows[0].id;
+          if(!_hId) throw new Error('harvest POST answered without a row id — kept in queue');
         }
         // Sync pack items if any
         if(_hId && q.packItems && q.packItems.length){
