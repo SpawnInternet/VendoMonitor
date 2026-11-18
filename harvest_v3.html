@@ -1276,7 +1276,15 @@ function hvOn(k){ return hvFlag(k) === 'on'; }
 async function hvRefreshFlags(){
   try {
     const r = await fetch(HV_FLAGS_URL, { headers: { apikey: HV_PUBLISHABLE_KEY }, signal: v4Deadline(6000) });
-    if (!r.ok) return;
+    if (r.status === 404){
+      // The flags function is gone (rollback SQL applied): that means every switch is OFF, not "keep
+      // what this phone last saw". Clear the cache so the app is v13.9 again on this very run.
+      _hvFlags = {};
+      try { localStorage.removeItem('harvest_flags'); } catch (_) {}
+      try { hvApplyLogin(); } catch (_) {}
+      return;
+    }
+    if (!r.ok) return;                       // other server trouble / no answer: keep the last flags (offline shifts)
     const j = await r.json();
     if (j && typeof j === 'object' && !Array.isArray(j)){
       _hvFlags = j;
@@ -2072,7 +2080,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v14.0';
+const APP_VERSION = 'v14.0';   // flag loader: 404 = all off (2026-11-18 review)
 /* v13.9: Spawn share = net × 75% rounded UP to the next peso (the office notebook rule; e.g. ₱1,874.25 → ₱1,875).
    The database applies the same rule on save (trg_harvest_share_round_up), this keeps the screen in step with it. */
 function spawnShareOf(net){ const n = Number(net) || 0; return Math.ceil(Math.round(n * 75) / 100); }
