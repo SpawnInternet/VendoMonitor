@@ -1193,14 +1193,21 @@ const _lhdBook=i=>!!(i&&i.last_harvest_any&&i.last_harvest_src==='book'&&(!i.las
 
 // Preloaded vendo data from storage cache — avoids batch DB fetches
 let _vendoCacheMap = null; // {id: vendoObj}
+// v4 b18: a fetch that gives up. navigator.onLine only says an interface is attached;
+// on a dead network the browser can wait minutes before it fails. We don't.
+function v4Deadline(ms){ const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 async function preloadVendoCache(){
+  // v4 b18: the saved copy first, so search and cards work the moment the app opens —
+  // even when the phone says "online" but nothing gets through. The fetch replaces it.
+  try{ const c=JSON.parse(localStorage.getItem('vendo_cache')||'null'); if(c && Array.isArray(c.vendos) && c.vendos.length && !_vendoCacheMap){ _vendoCacheMap={}; c.vendos.forEach(v=>{ _vendoCacheMap[v.id]=v; }); console.log('[VendoCache] Using saved copy:', c.vendos.length); } }catch(_){}
   try{
-    const r = await fetch(VENDO_CACHE_URL + '?t=' + Math.floor(Date.now()/300000));
+    const r = await fetch(VENDO_CACHE_URL + '?t=' + Math.floor(Date.now()/300000), { signal: v4Deadline(15000) });
     if(!r.ok) return;
     const data = await r.json();
     if(data && Array.isArray(data.vendos)){
       _vendoCacheMap = {};
       data.vendos.forEach(v => { _vendoCacheMap[v.id] = v; });
+      _vendoCacheMap = Object.assign({}, _vendoCacheMap);   // fresh object for anything holding the old one
       console.log('[VendoCache] Loaded', data.vendos.length, 'vendos from storage cache');
       try{ localStorage.setItem('vendo_cache', JSON.stringify({ts:Date.now(), vendos:data.vendos})); }catch(_){}   // v4: offline search
     }
@@ -1367,8 +1374,8 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
 
    This wrapper is installed after the gateway interceptor, so it is the
    outermost fetch and sees every call first. */
-const APP_BUILD = 'v4-b17';
-const APP_BUILD_LABEL = 'V4 TRIAL · build 17';
+const APP_BUILD = 'v4-b18';
+const APP_BUILD_LABEL = 'V4 TRIAL · build 18';
 const V4_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const V4_MODE_URL = SB + '/rest/v1/rpc/spawn_harvest_v4_mode';
 const V4_LOGIN_URL = SB + '/functions/v1/spawn-field-login';
@@ -3330,9 +3337,20 @@ async function startGroup(groupId){
   // ── Cold load ─────────────────────────────────────────────────
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
   try {
-    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR});
+    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR, signal:v4Deadline(10000)});
     const gRows = await rG.json();
-    if(!gRows.length){toast('Group not found');return;}
+    if(!Array.isArray(gRows)) throw new Error('No signal — the server did not answer properly');   // v4 b18: gateway/portal reply → rescue below
+    if(!gRows.length){
+      toast('Group not found');
+      listEl.innerHTML='';
+      const nf=document.createElement('div'); nf.className='loading';
+      nf.innerHTML='<span style="color:var(--red);text-align:center;line-height:1.8">This group no longer exists — tell the office.</span>';
+      const nb=document.createElement('button'); nb.textContent='← Back';
+      nb.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+      nb.onclick=function(){ showHomeScreen(); };
+      nf.appendChild(nb); listEl.appendChild(nf);
+      return;
+    }
     const g = gRows[0];
     currentGroupDef = g;
 
@@ -3350,10 +3368,11 @@ async function startGroup(groupId){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
         `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,date_installed,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
-        `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR}
+        `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR, signal:v4Deadline(15000)}
       );
       const batch = await r.json();
-      if(!Array.isArray(batch)||!batch.length) break;
+      if(!Array.isArray(batch)) throw new Error('No signal — the vendo list did not arrive');   // v4 b18
+      if(!batch.length) break;
       allItems.push(...batch);
       if(batch.length<2000) break;
       offset+=2000;
@@ -3495,7 +3514,8 @@ async function startGroup(groupId){
     listEl.innerHTML='';
     const div=document.createElement('div');
     div.className='loading';
-    div.innerHTML='<span style="color:var(--red);text-align:center;line-height:2">❌ '+e.message+'</span>';
+    if(/abort|fetch|signal/i.test(e.message||'')) div.innerHTML='<span style="color:var(--red);text-align:center;line-height:1.8">📴 No signal, and this group is not saved on this phone yet.<br>Connect to WiFi and tap "Download for offline" on the home screen.</span>';
+    else { const sp=document.createElement('span'); sp.style.cssText='color:var(--red);text-align:center;line-height:1.8'; sp.textContent='❌ '+e.message; div.appendChild(sp); }
     const btn=document.createElement('button');
     btn.textContent='← Back';
     btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
