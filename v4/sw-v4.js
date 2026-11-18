@@ -2,7 +2,7 @@
 // Strictly isolated from v3: own cache name, own manifest, own HTML.
 // It must never read, write, or evict anything belonging to v3, because
 // v3 is the app live in collectors' hands.
-const CACHE = 'spawn-harvest-v4-b16';
+const CACHE = 'spawn-harvest-v4-b17';
 // Paths are relative to where this worker lives (the v4 folder), so the same
 // file works on spawninternet.github.io/VendoMonitor/v4/ and on a test link.
 const BASE = new URL('./', self.location.href).href;
