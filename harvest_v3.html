@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<!-- v3.0 · SECURITY: service_role removed, routed via spawn-gw gateway (from v2.9) -->
+<!-- v14.0 · v13.9 + the Harvest v4 features (2026-11-18). Every new behaviour is behind a spawn_settings
+     switch read through spawn_harvest_flags(): harvest_login_v2, harvest_card_colors, harvest_search,
+     harvest_save_v2, harvest_v4_guard (off | shadow | on). All off = v13.9 behaviour. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -40,6 +42,10 @@
   --red:#dc2626;--red-light:#fef2f2;
   --amber:#d97706;--amber-light:#fffbeb;
   --orange:#ea580c;--orange-light:#fff7ed;
+  /* Spawn Internet brand (logo bands + wordmark) */
+  --brand-yellow:#F9B91C;--brand-green:#1B9A6C;--brand-blue:#2A6FD6;--brand-purple:#5B3FB8;--brand-magenta:#B8238F;--brand-red:#D62839;--brand-navy:#0B1E63;--brand-deep:#0E47C4;--brand-violet:#7A2A9E;--brand-orange:#F08A1A;
+  --brand-backdrop:linear-gradient(172deg,#0B1E63 0%,#0E47C4 38%,#2457D8 62%,#4A3FBE 84%,#6A2F9F 100%);
+  --brand-bands:linear-gradient(90deg,#F9B91C 0%,#1B9A6C 20%,#2A6FD6 40%,#5B3FB8 60%,#B8238F 80%,#D62839 100%);
   --purple:var(--spawn-purple);
   --teal:var(--spawn-teal);--teal-light:var(--spawn-teal-light);
   --gray:#6b7280;--border:#e5e7eb;--bg:#F7F8FC;
@@ -152,6 +158,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .vendo-item.done .vi-seq{background:#86efac;color:#15803d}
 .vendo-item.issue .vi-seq{background:#fca5a5;color:var(--red)}
 .vi-left{flex:1;min-width:0}
+/* V4: harvest-age colour on the card. fresh ≤14d · ok ≤30d · due ≤45d · late >45d · never / not linked */
+.vendo-item.age-fresh,.vendo-item.age-ok,.vendo-item.age-due,.vendo-item.age-late,.vendo-item.age-never,.vendo-item.age-unlinked{border-left:6px solid #cbd5e1}
+.vendo-item.age-fresh{border-left-color:#1B9A6C}
+.vendo-item.age-ok{border-left-color:#0E47C4}
+.vendo-item.age-due{border-left-color:#F08A1A}
+.vendo-item.age-late{border-left-color:#D62839}
+.vendo-item.age-never{border-left-color:#B52383}
+.vendo-item.age-unlinked{border-left-color:#64748b;background:#f8fafc}
+.vendo-item.age-fresh .vi-seq{background:#1B9A6C}
+.vendo-item.age-ok .vi-seq{background:#0E47C4}
+.vendo-item.age-due .vi-seq{background:#F08A1A}
+.vendo-item.age-late .vi-seq{background:#D62839}
+.vendo-item.age-never .vi-seq{background:#B52383}
+.vendo-item.age-unlinked .vi-seq{background:#64748b}
+.vi-last{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;font-weight:800;border-radius:8px;padding:3px 8px;color:#fff}
+.vi-last.age-fresh{background:#1B9A6C}.vi-last.age-ok{background:#0E47C4}.vi-last.age-due{background:#F08A1A}.vi-last.age-late{background:#D62839}.vi-last.age-never{background:#B52383}.vi-last.age-unlinked{background:#64748b}
+.vi-last small{font-weight:600;opacity:.9}
+.vi-src{display:block;margin-top:4px;font-size:10px;color:#475569}
+.vi-src b{color:#0B1E63}
+.vi-fb{display:inline-block;margin-top:5px;font-size:10px;font-weight:700;color:#7A2A9E;background:#f3e8ff;border:1px solid #e9d5ff;border-radius:999px;padding:3px 9px;cursor:pointer}
+.v4-fb-opt{display:block;width:100%;text-align:left;padding:12px 14px;margin-bottom:8px;border-radius:12px;border:1.5px solid #dbe3f2;background:#fff;font:700 14px/1.3 inherit;color:#0B1E63;cursor:pointer}
+.v4-fb-opt.on{border-color:#0E47C4;background:#eef3fd}
+.v4-fb-opt small{display:block;font-weight:500;color:#64748b;font-size:12px;margin-top:2px}
+.vi-unlinked{display:block;margin-top:4px;font-size:10px;font-weight:700;color:#7c2d12;background:#ffedd5;border-radius:6px;padding:3px 7px}
 .vi-name{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:calc(100vw - 160px)}
 .vi-sub{font-size:10px;color:var(--muted);margin-top:2px}
 .vi-dist{font-size:9px;color:#025AC6;background:#e0f2fe;border-radius:5px;padding:2px 6px;display:inline-block;margin-top:3px}
@@ -186,13 +216,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .gps-status.err{background:var(--red-light);border-color:#fca5a5;color:var(--red)}
 
 /* RECEIPT */
-.receipt-card{background:#fff;border-radius:12px;border:1px solid var(--border);padding:20px;margin-bottom:12px;text-align:center}
+.receipt-card{background:#fff;border-radius:14px;border:1px solid var(--border);padding:20px;margin-bottom:12px;text-align:center;position:relative;overflow:hidden}
+.receipt-card::before{content:'';position:absolute;left:0;top:0;right:0;height:6px;background:var(--brand-bands)}
 .receipt-icon{font-size:48px;margin-bottom:8px}
-.receipt-title{font-size:18px;font-weight:700;color:var(--green)}
+.receipt-title{font-size:18px;font-weight:800;color:var(--brand-green)}
 .receipt-sub{font-size:12px;color:var(--muted);margin-top:4px}
 .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
 .stat-box{background:var(--bg);border-radius:8px;padding:12px;text-align:center}
-.stat-val{font-size:22px;font-weight:700;color:var(--blue)}
+.stat-val{font-size:22px;font-weight:800;color:var(--brand-blue)}
 .stat-lbl{font-size:10px;color:var(--muted);margin-top:2px}
 
 /* LOADING / TOAST */
@@ -313,6 +344,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pin-display{display:flex;gap:12px;justify-content:center;margin:16px 0}
 .pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s}
 .pin-dot.filled{background:#025AC6}
+/* V4 login (design A): gradient hero with the logo; names + keypad on white */
+.v4-login{background:#fff;min-height:100vh}
+.v4-hero{background:var(--brand-backdrop);color:#fff;text-align:center;padding:22px 16px 24px;position:relative}
+.v4-hero::after{content:'';position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--brand-bands)}
+.v4-hero img{width:92px;height:92px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;border:3px solid #fff;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.v4-hero .t{font-size:24px;font-weight:900;letter-spacing:.2px}
+.v4-hero .s{font-size:12px;opacity:.85;margin-top:3px}
+.v4-login-body{max-width:360px;margin:0 auto;padding:18px 16px 24px}
+.v4-login #pin-name-list .collector-btn{border-color:#dbe3f2 !important;color:var(--brand-navy) !important}
+.v4-login #pin-name-list .collector-btn.selected,.v4-login #pin-name-list .collector-btn[data-on="1"]{background:var(--brand-deep) !important;color:#fff !important;border-color:var(--brand-deep) !important}
+.v4-remembered{display:none;text-align:center;margin:2px 0 18px}
+.v4-remembered .w{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.v4-remembered .n{font-size:34px;font-weight:900;color:var(--brand-navy);margin:2px 0 6px;letter-spacing:.2px}
+.v4-remembered .sw{display:inline-block;font-size:10px;font-weight:600;color:#64748b;border:1px solid #dbe3f2;border-radius:999px;padding:3px 9px;cursor:pointer;background:#fff}
+.v4-login .pin-key{color:var(--brand-navy)}
 .pin-pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;max-width:280px;margin:0 auto}
 .pin-key{background:#F7F8FC;border:1.5px solid var(--border);border-radius:12px;padding:16px;text-align:center;font-size:20px;font-weight:700;cursor:pointer;font-family:inherit;transition:.1s;color:var(--text)}
 .pin-key:active{background:#EEF1FA;border-color:#025AC6}
@@ -338,7 +384,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* ── EOD RECEIPT SCREEN ── */
 .rcpt-screen{background:#f0f4f8;min-height:100vh;padding-bottom:80px}
 .rcpt-paper{background:#fff;margin:0 auto;max-width:420px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:relative}
-.rcpt-header{background:linear-gradient(135deg,#0146A0,#025AC6);color:#fff;padding:20px 20px 16px;text-align:center}
+.rcpt-header{background:var(--brand-backdrop);color:#fff;padding:20px 20px 16px;text-align:center;position:relative}
+.rcpt-header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--brand-bands)}
+.rcpt-logo img{width:56px;height:56px;object-fit:cover;border-radius:50%;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.3);display:block;margin:0 auto 8px}
 .rcpt-logo{font-size:11px;font-weight:800;letter-spacing:.12em;opacity:.8;text-transform:uppercase;margin-bottom:4px}
 .rcpt-title{font-size:18px;font-weight:900;letter-spacing:.02em}
 .rcpt-subtitle{font-size:11px;opacity:.75;margin-top:3px}
@@ -348,38 +396,80 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .rcpt-section{padding:14px 18px}
 .rcpt-section-title{font-size:9px;font-weight:800;color:#9ca3af;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
 .rcpt-vendo{border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin-bottom:8px;position:relative}
-.rcpt-vendo-code{display:inline-block;background:#025AC6;color:#fff;font-size:10px;font-weight:900;padding:2px 8px;border-radius:4px;letter-spacing:.06em;margin-bottom:4px}
+.rcpt-vendo-code{display:inline-block;background:#7A2A9E;color:#fff;font-size:10px;font-weight:900;padding:2px 8px;border-radius:4px;letter-spacing:.06em;margin-bottom:4px}
 .rcpt-vendo-name{font-size:13px;font-weight:800;color:#1e293b}
 .rcpt-vendo-addr{font-size:10px;color:#9ca3af;margin-top:1px;margin-bottom:6px}
 .rcpt-vendo-packs{font-size:10px;color:#6b7280;background:#f8fafc;border-radius:5px;padding:3px 7px;display:inline-block;margin-bottom:6px}
 .rcpt-vendo-row{display:flex;justify-content:space-between;align-items:center}
 .rcpt-vendo-coins{font-size:11px;color:#6b7280}
-.rcpt-vendo-spawn{font-size:14px;font-weight:900;color:#15803d}
+.rcpt-vendo-spawn{font-size:14px;font-weight:900;color:#1B9A6C}
 .rcpt-exp-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:13px}
 .rcpt-exp-lbl{color:#374151}
-.rcpt-exp-amt{color:#dc2626;font-weight:700}
-.rcpt-total-box{background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #86efac;border-radius:12px;padding:14px 16px;margin:14px 18px 0}
+.rcpt-exp-amt{color:#D62839;font-weight:700}
+.rcpt-total-box{background:linear-gradient(135deg,#eaf7f1,#d7f0e4);border:2px solid #1B9A6C;border-radius:12px;padding:14px 16px;margin:14px 18px 0}
 .rcpt-total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
-.rcpt-total-row.big{padding:8px 0 0;border-top:2px solid #16a34a;margin-top:6px}
-.rcpt-net{font-size:28px;font-weight:900;color:#025AC6;text-align:center;margin-top:4px}
+.rcpt-total-row.big{padding:8px 0 0;border-top:2px solid #1B9A6C;margin-top:6px}
+.rcpt-net{font-size:28px;font-weight:900;color:#0E47C4;text-align:center;margin-top:4px}
 .rcpt-footer{text-align:center;padding:14px 18px 18px;border-top:2px dashed #e5e7eb;margin-top:14px}
 .rcpt-footer-note{font-size:10px;color:#9ca3af;line-height:1.5}
 .rcpt-zigzag{height:12px;background:repeating-linear-gradient(90deg,#f0f4f8 0,#f0f4f8 8px,transparent 8px,transparent 16px);margin:0 -1px}
 /* Sticky bottom bar for receipt screen */
 .rcpt-actions{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px;z-index:100;max-width:420px;margin:0 auto}
+/* V4 identity box */
+.v4-idbox{border-radius:14px;padding:14px 16px;margin-bottom:12px;border:1.5px solid var(--border);background:#fff}
+.v4-idbox.need{border-color:var(--brand-deep);background:linear-gradient(180deg,#eef3fd,#fff);position:relative;overflow:hidden}
+.v4-idbox.need::before{content:'';position:absolute;left:0;top:0;right:0;height:5px;background:var(--brand-bands)}
+.v4-idbox.ok{border-color:var(--brand-green);background:#eaf7f1}
+.v4-idbox-h{font-size:14px;font-weight:800;color:var(--brand-navy);margin-bottom:4px;margin-top:4px}
+.v4-idbox-p{font-size:12px;color:#3b4a66;line-height:1.45;margin-bottom:8px}
+.v4-idbox-need{display:inline-block;font-size:11px;font-weight:700;color:#fff;background:var(--brand-magenta);border-radius:999px;padding:3px 10px;margin-bottom:10px}
+.v4-idbox-f{display:block;margin-bottom:9px}
+.v4-idbox-f span{display:block;font-size:11px;font-weight:700;color:var(--brand-purple);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.v4-idbox-f .text-input{border-color:#c7d2fe}
+.v4-idbox-f .text-input:focus{border-color:var(--brand-blue);box-shadow:0 0 0 3px #dbe7fb}
+.v4-idbox-gps{font-size:12px;font-weight:700;color:var(--brand-blue);background:#eef3fd;border-radius:8px;padding:8px 10px}
+.v4-gpscard{padding:12px 14px}
+.v4-gpscard .gps-status{display:block;margin-top:0}
+.v4-idsum{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:8px;font-size:12px}
+.v4-idsum b{display:block;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
+.v4-idsum span{display:block;font-weight:700;color:#0B1E63}
+.v4-idsum .full{grid-column:1/-1}
+.v4-idedit{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;color:#0E47C4;border:1px solid #c7d6f5;border-radius:999px;padding:3px 10px;cursor:pointer;background:#fff}
+.v4-idsheet-f{display:block;margin-bottom:10px}
+.v4-idsheet-f span{display:block;font-size:11px;font-weight:700;color:#5B3FB8;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.v4-idsheet-gps{background:#eef3fd;border:1.5px solid #c7d6f5;border-radius:12px;padding:10px;margin-bottom:10px}
+.v4-idsheet-gps .st{font-size:12px;font-weight:700;color:#0B1E63;margin-top:6px;min-height:16px}
+/* V4 floating vendo search */
+.v4-fab{position:fixed;right:14px;bottom:76px;z-index:120;width:56px;height:56px;border-radius:50%;border:0;color:#fff;font-size:24px;
+  background:linear-gradient(135deg,#0E47C4,#7A2A9E);box-shadow:0 6px 18px rgba(14,71,196,.35);display:none;align-items:center;justify-content:center;cursor:pointer}
+.v4-fab.show{display:flex}
+.v4-fab:active{transform:scale(.96)}
+.v4-srch-sheet{max-height:86vh;display:flex;flex-direction:column}
+.v4-srch-inp{width:100%;padding:13px 14px;border:1.5px solid #c7d6f5;border-radius:12px;font-size:16px;font-family:inherit;outline:none;color:var(--text)}
+.v4-srch-inp:focus{border-color:#0E47C4;box-shadow:0 0 0 3px #dbe7fb}
+.v4-srch-list{overflow:auto;margin-top:10px;flex:1}
+.v4-srow{display:flex;align-items:center;gap:10px;padding:10px 6px;border-top:1px solid #eef2f7;cursor:pointer}
+.v4-srow:active{background:#eef3fd}
+.v4-srow .code{flex-shrink:0;min-width:46px;text-align:center;background:#0E47C4;color:#fff;font-size:11px;font-weight:900;padding:4px 7px;border-radius:6px;letter-spacing:.05em}
+.v4-srow .code.none{background:#e2e8f0;color:#64748b}
+.v4-srow .nm{font-size:14px;font-weight:700;color:#0B1E63}
+.v4-srow .meta{font-size:11px;color:#64748b;margin-top:1px}
+.v4-srow .last{flex-shrink:0;font-size:10px;font-weight:800;border-radius:999px;padding:3px 8px;color:#fff}
+.v4-srch-hint{font-size:12px;color:#64748b;padding:14px 6px;text-align:center}
+.v4-idbox-ok{font-size:13px;font-weight:700;color:var(--brand-green)}
 </style>
 </head>
 <body>
 
 <div class="offline-banner" id="offline-banner">🔴 No internet — harvests will sync when back online</div>
 
-<div class="topbar">
+<div class="topbar" id="v4-topbar">
   <div style="display:flex;align-items:center">
     <button class="topbar-back" id="topbar-back" onclick="topbarBack()">← Back</button>
     <div>
       <div class="topbar-logo" style="display:flex;align-items:center;gap:7px">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);flex-shrink:0">
-          <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet" style="width:26px;height:26px;object-fit:contain">
+          <img src="/VendoMonitor/spawn-brand-160.png" alt="Spawn Internet" style="width:28px;height:28px;border-radius:50%;object-fit:cover">
         </span>
         Spawn Harvest
       </div>
@@ -399,14 +489,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <!-- ── SCREEN 1: PIN LOGIN ────────────────────────────── -->
 <div class="screen active" id="screen-collector" style="background:#eef1fa;min-height:100vh">
 
-  <div style="max-width:360px;margin:0 auto;padding:28px 16px 24px">
+  <div class="v4-hero" id="v4-hero" style="display:none">
+    <img src="/VendoMonitor/spawn-brand-512.png" alt="Spawn Internet">
+    <div class="t">Spawn Harvest</div>
+    <div class="s" id="v4-hero-sub">Select your name, then enter your PIN</div>
+  </div>
 
-    <!-- Hero -->
-    <div style="text-align:center;margin-bottom:24px">
+  <div class="v4-login-body">
+
+    <!-- Classic hero (v13.9) — shown while harvest_login_v2 is off -->
+    <div id="hv-hero-classic" style="text-align:center;margin:10px 0 24px">
       <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
         style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
       <div style="font-size:26px;font-weight:900;color:#025AC6;letter-spacing:.3px">Spawn Harvest</div>
       <div style="font-size:12px;color:#8b99b8;margin-top:4px">Select your name then enter PIN</div>
+    </div>
+
+    <!-- Remembered collector (v4): opens on the last name used on this phone -->
+    <div class="v4-remembered" id="v4-remembered">
+      <div class="w">Welcome back</div>
+      <div class="n" id="v4-remembered-name">—</div>
+      <span class="sw" onclick="v4SwitchName()">Not you? Switch name</span>
     </div>
 
     <!-- Name pills -->
@@ -414,10 +517,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- PIN dots -->
     <div style="display:flex;justify-content:center;gap:14px;margin-bottom:18px">
-      <div id="pd1" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd2" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd3" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
-      <div id="pd4" style="width:16px;height:16px;border-radius:50%;border:2px solid #025AC6;background:transparent;transition:.15s"></div>
+      <div id="pd1" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd2" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd3" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
+      <div id="pd4" style="width:16px;height:16px;border-radius:50%;border:2px solid #0E47C4;background:transparent;transition:.15s"></div>
     </div>
 
     <!-- Hidden input (keeps existing JS working) -->
@@ -457,8 +560,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="screen" id="screen-signedin" style="background:#eef1fa;min-height:100vh">
   <div style="max-width:360px;margin:0 auto;padding:36px 16px 24px">
     <div style="text-align:center;margin-bottom:22px">
-      <img src="/VendoMonitor/spawn-logo.png" alt="Spawn Internet"
-        style="width:108px;height:108px;object-fit:contain;display:block;margin:0 auto 10px">
+      <img src="/VendoMonitor/spawn-brand-512.png" alt="Spawn Internet"
+        style="width:112px;height:112px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 12px;box-shadow:0 6px 18px rgba(14,71,196,.28)">
       <div style="font-size:26px;font-weight:900;color:#025AC6;letter-spacing:.3px">Spawn Harvest</div>
     </div>
     <div style="background:#fff;border:1px solid #e5e9f2;border-radius:16px;padding:26px 20px;text-align:center">
@@ -712,10 +815,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="form-vmeta" id="form-vmeta">—</div>
   </div>
 
+  <div id="v4-identity-box" class="v4-idbox" style="display:none"></div>
+  <!-- V4: GPS lives outside the Edit panel so it is always reachable -->
+  <div class="card v4-gpscard">
+    <button class="btn" id="v4-get-gps-btn" onclick="v4GetGps()" style="margin-bottom:8px;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff">📍 Get GPS</button>
+    <div id="gps-status-lbl" class="gps-status">No GPS yet — tap 📍 Get GPS</div>
+  </div>
   <div id="form-directions" style="display:none;background:#e0f2fe;border-radius:10px;padding:10px 14px;margin-bottom:12px;text-align:center"></div>
 
-  <!-- Owner info -->
-  <div class="card">
+  <!-- Owner info (v4: hidden; the identity card on top replaces it. "Edit details" reveals it) -->
+  <div class="card" id="v4-owner-card" style="display:none">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
       👤 Owner info
       <button id="edit-details-btn" onclick="toggleOwnerEdit()" style="font-size:11px;padding:4px 10px;border:1.5px solid var(--blue-mid);border-radius:6px;background:#fff;color:var(--blue);cursor:pointer;font-family:inherit;font-weight:700">✏️ Edit</button>
@@ -802,9 +911,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="photo-gps-badge" style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600"></div>
       </div>
       <!-- Open camera button -->
-      <button class="btn btn-teal" id="camera-open-btn" onclick="openCamera()" style="margin-bottom:8px">📷 Open Camera &amp; Capture GPS</button>
-      <!-- GPS status display -->
-      <div id="gps-status-lbl" class="gps-status">No GPS yet — tap Open Camera</div>
+      <button class="btn btn-teal" id="camera-open-btn" onclick="openCamera()" style="margin-bottom:8px">📷 Open Camera (optional)</button>
       <!-- GPS action buttons (copy + maps) -->
       <div id="gps-actions" style="display:none;margin-top:6px;gap:8px;flex-wrap:wrap">
         <button onclick="copyGPS()" style="flex:1;padding:8px 10px;background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:8px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;font-family:inherit">📋 Copy coords</button>
@@ -916,6 +1023,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b45309;color:#fff;padding:6px 16px;font-size:12px;font-weight:700;align-items:center;justify-content:center;gap:8px">
   📴 You are offline — harvests will sync when back online
 </div>
+<!-- V4: missing details at submit → fill them here, then the harvest goes through (coins stay) -->
+<div class="confirm-overlay" id="v4-id-overlay">
+  <div class="confirm-sheet">
+    <div class="confirm-handle"></div>
+    <div class="confirm-title">🪪 Complete the vendo first</div>
+    <div class="confirm-sub" id="v4-idsheet-sub">Your coin entries are kept. Fill in what is missing and the harvest will be saved.</div>
+    <div id="v4-idsheet-body"></div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn btn-gray" style="flex:1" onclick="v4IdSheetClose()">Back</button>
+      <button class="btn" id="v4-idsheet-go" style="flex:2;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff" onclick="v4IdSheetGo()">Save &amp; submit harvest</button>
+    </div>
+  </div>
+</div>
+<!-- V4: floating vendo search — find any vendo and jump to its card -->
+<button class="v4-fab" id="v4-fab" type="button" onclick="v4SearchOpen()" aria-label="Search vendo">🔍</button>
+<div class="confirm-overlay" id="v4-srch-overlay" onclick="if(event.target===this)v4SearchClose()">
+  <div class="confirm-sheet v4-srch-sheet">
+    <div class="confirm-handle"></div>
+    <div class="confirm-title">🔍 Find a vendo</div>
+    <div class="confirm-sub">Name, code, VLAN, owner or address. Tap a result to open its card.</div>
+    <input class="v4-srch-inp" id="v4-srch-inp" placeholder="e.g. Papa, PX5, 23, Dicayas" autocomplete="off" oninput="v4SearchType()">
+    <div class="v4-srch-list" id="v4-srch-list"><div class="v4-srch-hint">Type at least 2 letters or a number.</div></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -960,17 +1091,29 @@ const _lhdBook=i=>!!(i&&i.last_harvest_any&&i.last_harvest_src==='book'&&(!i.las
 
 // Preloaded vendo data from storage cache — avoids batch DB fetches
 let _vendoCacheMap = null; // {id: vendoObj}
+// v4 b18: a fetch that gives up. navigator.onLine only says an interface is attached;
+// on a dead network the browser can wait minutes before it fails. We don't.
+function v4Deadline(ms){ const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
 async function preloadVendoCache(){
+  // v4 b18: the saved copy first, so search and cards work the moment the app opens —
+  // even when the phone says "online" but nothing gets through. The fetch replaces it.
+  try{ const c=JSON.parse(localStorage.getItem('vendo_cache')||'null'); if(c && Array.isArray(c.vendos) && c.vendos.length && !_vendoCacheMap){ _vendoCacheMap={}; c.vendos.forEach(v=>{ _vendoCacheMap[v.id]=v; }); console.log('[VendoCache] Using saved copy:', c.vendos.length); } }catch(_){}
   try{
-    const r = await fetch(VENDO_CACHE_URL + '?t=' + Math.floor(Date.now()/300000));
+    const r = await fetch(VENDO_CACHE_URL + '?t=' + Math.floor(Date.now()/300000), { signal: v4Deadline(15000) });
     if(!r.ok) return;
     const data = await r.json();
     if(data && Array.isArray(data.vendos)){
       _vendoCacheMap = {};
       data.vendos.forEach(v => { _vendoCacheMap[v.id] = v; });
+      _vendoCacheMap = Object.assign({}, _vendoCacheMap);   // fresh object for anything holding the old one
       console.log('[VendoCache] Loaded', data.vendos.length, 'vendos from storage cache');
+      try{ localStorage.setItem('vendo_cache', JSON.stringify({ts:Date.now(), vendos:data.vendos})); }catch(_){}   // v4: offline search
     }
-  }catch(e){ console.warn('[VendoCache] Failed to preload:', e.message); }
+  }catch(e){
+    console.warn('[VendoCache] Failed to preload:', e.message);
+    // v4: offline → use the last saved copy so search still works
+    try{ const c=JSON.parse(localStorage.getItem('vendo_cache')||'null'); if(c && Array.isArray(c.vendos) && !_vendoCacheMap){ _vendoCacheMap={}; c.vendos.forEach(v=>{ _vendoCacheMap[v.id]=v; }); } }catch(_){}
+  }
 }
 // Start preloading immediately on script load
 preloadVendoCache();
@@ -1111,6 +1254,373 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
     return _origFetch(input, init);
   };
 })();
+
+/* ══ v14 SWITCHES ═══════════════════════════════════════════════════════
+   Every behaviour that came from the Harvest v4 lane is off until its key in
+   spawn_settings says otherwise. Read with the public key through
+   spawn_harvest_flags() (read-only, SECURITY DEFINER), cached on the phone so
+   the last answer holds offline. No answer ever = everything off = v13.9.
+     harvest_login_v2     on  → brand hero + remembered name on the PIN screen
+     harvest_card_colors  on  → route cards coloured by harvest age + "not linked" note
+     harvest_search       on  → floating vendo search button
+     harvest_save_v2      on  → save through spawn-ops submit-harvest-v2 (v1 fallback)
+     harvest_v4_guard     shadow → log what the GPS/identity guard would block, block nothing
+                          on  → enforce (fill-in sheet; no owner details, no harvest)       */
+const APP_BUILD = 'v14.0';
+const HV_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
+const HV_FLAGS_URL = SB + '/rest/v1/rpc/spawn_harvest_flags';
+let _hvFlags = null;
+try { _hvFlags = JSON.parse(localStorage.getItem('harvest_flags') || 'null'); } catch (_) { _hvFlags = null; }
+function hvFlag(k){ const v = _hvFlags && _hvFlags[k]; return (v == null) ? 'off' : String(v).trim().toLowerCase(); }
+function hvOn(k){ return hvFlag(k) === 'on'; }
+async function hvRefreshFlags(){
+  try {
+    const r = await fetch(HV_FLAGS_URL, { headers: { apikey: HV_PUBLISHABLE_KEY }, signal: v4Deadline(6000) });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && typeof j === 'object' && !Array.isArray(j)){
+      _hvFlags = j;
+      try { localStorage.setItem('harvest_flags', JSON.stringify(j)); } catch (_) {}
+      try { hvApplyLogin(); } catch (_) {}
+    }
+  } catch (_) {}
+}
+hvRefreshFlags();
+setInterval(hvRefreshFlags, 5 * 60 * 1000);
+// PIN screen look: classic (v13.9) or the v4 hero + remembered name. Re-applied whenever the flags arrive.
+function hvApplyLogin(){
+  const sc = document.getElementById('screen-collector'), hv = document.getElementById('v4-hero'), hc = document.getElementById('hv-hero-classic');
+  if (!sc) return;
+  const on = hvOn('harvest_login_v2');
+  sc.classList.toggle('v4-login', on);
+  sc.style.background = on ? '' : '#eef1fa';
+  if (hv) hv.style.display = on ? '' : 'none';
+  if (hc) hc.style.display = on ? 'none' : '';
+  const tb = document.querySelector('.topbar');
+  if (tb && sc.classList.contains('active')) tb.style.display = on ? 'none' : '';
+  try { v4ApplyRemembered(); } catch (_) {}
+}
+document.addEventListener('DOMContentLoaded', () => { try { hvApplyLogin(); } catch (_) {} });
+
+/* ── V4 IDENTITY GUARD: data helpers + the box on the harvest form ────── */
+const V4_BRGY_URL = SB + '/rest/v1/rpc/spawn_barangay_list';
+const V4_PUBLISHABLE_KEY = HV_PUBLISHABLE_KEY;
+const _v4BrgyMem = {};
+// Barangay names for an area (GET → passes the TEST write guard). Cached on the
+// phone for offline use. Before the migration exists this 404s → [] (not required).
+async function v4BarangayList(area){
+  const A = String(area || '').trim().toUpperCase();
+  if (!A) return [];
+  if (_v4BrgyMem[A]) return _v4BrgyMem[A];
+  const key = 'brgy_' + A;
+  let list = null;
+  try {
+    const r = await fetch(V4_BRGY_URL + '?p_area=' + encodeURIComponent(A), { headers: { apikey: V4_PUBLISHABLE_KEY } });
+    if (r.ok){ const j = await r.json(); if (Array.isArray(j)) list = j.map(String); }
+  } catch (_) {}
+  if (list){ try { localStorage.setItem(key, JSON.stringify(list)); } catch (_) {} }
+  else { try { list = JSON.parse(localStorage.getItem(key) || '[]'); } catch (_) { list = []; } }
+  _v4BrgyMem[A] = list;
+  return list;
+}
+// v14: the guard follows spawn_settings harvest_v4_guard — off | shadow | on.
+function v4GuardMode(){ const v = hvFlag('harvest_v4_guard'); return (v === 'on' || v === 'shadow') ? v : 'off'; }
+async function v4GuardOn(){ return v4GuardMode() === 'on'; }
+// Pull owner_name + barangay for the open group's vendos (tolerant: before the
+// migration, vendos.barangay does not exist, so retry without it).
+async function v4IdentityRefresh(items){
+  const ids = (items || []).filter(i => i && i.vendo_id).map(i => i.vendo_id);
+  if (!ids.length || !navigator.onLine) return;
+  const got = {};
+  for (let i = 0; i < ids.length; i += 200){
+    const chunk = ids.slice(i, i + 200).join(',');
+    let rows = null;
+    for (const sel of ['id,owner_name,barangay', 'id,owner_name']){
+      try {
+        const r = await fetch(SB + '/rest/v1/vendos?id=in.(' + chunk + ')&select=' + sel, { headers: HDR });
+        if (r.ok){ rows = await r.json(); break; }
+      } catch (_) {}
+    }
+    (rows || []).forEach(v => { got[v.id] = v; });
+  }
+  (items || []).forEach(it => {
+    const v = it && it.vendo_id && got[it.vendo_id];
+    if (!v) return;
+    if (v.owner_name != null) it.owner_name = v.owner_name;
+    if ('barangay' in v) it.barangay = v.barangay;
+  });
+  try { if (typeof currentGroupRun !== 'undefined' && currentGroupRun) localStorage.setItem('cached_items_' + currentGroupRun.id, JSON.stringify(items)); } catch (_) {}
+  if (typeof currentItem !== 'undefined' && currentItem && document.getElementById('v4-identity-box')) v4RenderIdentityBox();
+}
+function v4IdentityEntered(){
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const r = { owner: g('v4-id-owner').trim(), contact: g('v4-id-contact').trim(), barangay: g('v4-id-brgy').trim() };
+  if (_v4SheetEntered){ r.owner = r.owner || _v4SheetEntered.owner || ''; r.contact = r.contact || _v4SheetEntered.contact || ''; }
+  return r;
+}
+let _v4BrgyRequired = false;
+
+/* ── V4 floating search: search the phone's vendo list (works offline), then jump to the vendo's card ── */
+let _v4SrchTimer = null, _v4SrchBusy = false;
+function v4SearchOpen(){
+  const o = document.getElementById('v4-srch-overlay'); if (!o) return;
+  o.classList.add('show');
+  const i = document.getElementById('v4-srch-inp'); i.value = ''; v4SearchType();
+  setTimeout(() => i.focus(), 250);
+}
+function v4SearchClose(){ const o = document.getElementById('v4-srch-overlay'); if (o) o.classList.remove('show'); }
+function v4SearchType(){ clearTimeout(_v4SrchTimer); _v4SrchTimer = setTimeout(v4SearchRun, 120); }
+function v4SearchRun(){
+  const q = (document.getElementById('v4-srch-inp').value || '').trim().toLowerCase();
+  const list = document.getElementById('v4-srch-list'); list.textContent = '';
+  const hint = t => { const d = document.createElement('div'); d.className = 'v4-srch-hint'; d.textContent = t; list.appendChild(d); };
+  if (q.length < 2 && !/^\d+$/.test(q)){ hint('Type at least 2 letters or a number.'); return; }
+  if (!_vendoCacheMap){ hint(navigator.onLine ? 'Vendo list still loading — try again in a moment.' : '📴 No vendo list saved on this phone yet.'); return; }
+  const isNum = /^\d+$/.test(q);
+  const hits = [];
+  for (const id in _vendoCacheMap){
+    const v = _vendoCacheMap[id]; if (!v || v.status === 'merged') continue;
+    const hay = [v.sheet_name, v.tg_name, v.vendo_code, v.owner_name, v.address].map(x => String(x || '').toLowerCase());
+    let score = 0;
+    if (isNum){ if (String(v.vlan || '') === q) score = 3; else if (hay[2].indexOf(q) !== -1) score = 2; }
+    else {
+      if (hay[0].startsWith(q) || hay[2] === q) score = 4;
+      else if (hay[0].indexOf(q) !== -1 || hay[2].indexOf(q) !== -1) score = 3;
+      else if (hay[1].indexOf(q) !== -1 || hay[3].indexOf(q) !== -1) score = 2;
+      else if (hay[4].indexOf(q) !== -1) score = 1;
+    }
+    if (score) hits.push({ v, score });
+  }
+  hits.sort((a, b) => b.score - a.score || (a.v.status === 'active' ? -1 : 1) || String(a.v.sheet_name).localeCompare(String(b.v.sheet_name)));
+  if (!hits.length){ hint('No vendo matches "' + q + '".'); return; }
+  hits.slice(0, 25).forEach(({ v }) => {
+    const row = document.createElement('div'); row.className = 'v4-srow'; row.onclick = () => v4SearchGo(v.id);
+    const code = document.createElement('div'); code.className = 'code' + (v.vendo_code ? '' : ' none'); code.textContent = v.vendo_code ? String(v.vendo_code).toUpperCase() : ('VLAN ' + (v.vlan || '—'));
+    const mid = document.createElement('div'); mid.style.flex = '1'; mid.style.minWidth = '0';
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = v.sheet_name || v.tg_name || '(no name)';
+    const meta = document.createElement('div'); meta.className = 'meta'; meta.textContent = [v.area, v.address, v.vlan ? 'VLAN ' + v.vlan : null, v.status !== 'active' ? v.status : null].filter(Boolean).join(' · ');
+    mid.appendChild(nm); mid.appendChild(meta);
+    const ds = v4DateSources(v); const days = ds.newest ? Math.floor((Date.now() - new Date(ds.newest + 'T12:00:00')) / 86400000) : null;
+    const last = document.createElement('div'); last.className = 'last';
+    last.style.background = days === null ? '#B52383' : days > 45 ? '#D62839' : days > 30 ? '#F08A1A' : days > 14 ? '#0E47C4' : '#1B9A6C';
+    last.textContent = days === null ? 'never' : days + 'd';
+    row.appendChild(code); row.appendChild(mid); row.appendChild(last); list.appendChild(row);
+  });
+  if (hits.length > 25) hint('Showing 25 of ' + hits.length + ' — type more to narrow.');
+}
+// Find the route group that holds the vendo (phone caches first, then the server), start it, open the card.
+async function v4SearchGo(vendoId){
+  if (_v4SrchBusy) return; _v4SrchBusy = true;
+  try {
+    let groupId = null, itemId = null;
+    try {
+      for (const k of Object.keys(localStorage)){
+        if (k.indexOf('grp_cache_') !== 0 || k.indexOf('grp_cache_ts_') === 0) continue;
+        const c = JSON.parse(localStorage.getItem(k) || 'null'); const it = c && c.items && c.items.find(x => x.vendo_id === vendoId);
+        if (it){ groupId = parseInt(k.slice('grp_cache_'.length), 10); itemId = it.id; break; }
+      }
+    } catch (_) {}
+    if (!groupId && navigator.onLine){
+      try {
+        const r = await fetch(SB + '/rest/v1/harvest_group_items?vendo_id=eq.' + vendoId + '&select=id,group_run_id&order=id.desc&limit=5', { headers: HDR });
+        const rows = r.ok ? await r.json() : [];
+        if (Array.isArray(rows) && rows.length){ groupId = rows[0].group_run_id; itemId = rows[0].id; }
+      } catch (_) {}
+    }
+    if (!groupId){ toast(navigator.onLine ? 'This vendo is not in any route group — tell the office.' : '📴 Offline: open its group first, then search again.', 3500); return; }
+    v4SearchClose();
+    toast('Opening…', 1200);
+    await startGroup(groupId);
+    let idx = (currentItems || []).findIndex(x => x.id === itemId);
+    if (idx === -1) idx = (currentItems || []).findIndex(x => x.vendo_id === vendoId);
+    if (idx === -1){ toast('Group opened — the vendo is not on its list right now.', 3000); return; }
+    openItem(idx);
+  } finally { _v4SrchBusy = false; }
+}
+function v4FabPaint(id){
+  const b = document.getElementById('v4-fab'); if (!b) return;
+  const on = hvOn('harvest_search') && ['screen-home', 'screen-areas', 'screen-groups', 'screen-route', 'screen-signedin'].indexOf(id) !== -1 && !!selectedCollector;
+  b.classList.toggle('show', on);
+}
+
+let _v4SheetEntered = null;          // values typed in the submit sheet when the top card has no inputs
+let _v4SheetTimer = null;
+function v4IdSheetOpen(missing, gpsMsg){
+  const body = document.getElementById('v4-idsheet-body'); if (!body || !currentItem) return;
+  body.textContent = '';
+  const en = v4IdentityEntered();
+  const field = (label, id, type, ph, val) => {
+    const w = document.createElement('label'); w.className = 'v4-idsheet-f';
+    const l = document.createElement('span'); l.textContent = label + ' *';
+    const i = document.createElement('input'); i.id = id; i.className = 'text-input'; i.type = type; i.placeholder = ph; i.autocomplete = 'off'; if (type==='tel') i.inputMode='tel'; i.value = val || '';
+    w.appendChild(l); w.appendChild(i); body.appendChild(w);
+  };
+  if (missing.indexOf('Owner name') !== -1) field('Owner name', 'v4-sh-owner', 'text', 'e.g. Maria Santos', en.owner);
+  if (missing.indexOf('Contact number') !== -1) field('Contact number', 'v4-sh-contact', 'tel', '09XX XXX XXXX', en.contact);
+  if (missing.indexOf('GPS') !== -1){
+    const g = document.createElement('div'); g.className = 'v4-idsheet-gps';
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.style.cssText = 'background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff;padding:12px';
+    b.textContent = '📍 Get GPS — stand at the vendo'; b.onclick = () => { v4GetGps(); };
+    const st = document.createElement('div'); st.className = 'st'; st.id = 'v4-sh-gps-st'; st.textContent = gpsMsg || 'No GPS yet';
+    g.appendChild(b); g.appendChild(st); body.appendChild(g);
+    clearInterval(_v4SheetTimer);
+    _v4SheetTimer = setInterval(() => {
+      const el = document.getElementById('v4-sh-gps-st'); if (!el){ clearInterval(_v4SheetTimer); return; }
+      const lbl = document.getElementById('gps-status-lbl');
+      if (capturedGPS && capturedGPS.itemId === currentItem.id) el.textContent = '✅ GPS captured (±' + capturedGPS.acc + ' m)';
+      else if (lbl && /Getting GPS/.test(lbl.textContent)) el.textContent = lbl.textContent;
+    }, 500);
+  }
+  const first = body.querySelector('input');
+  document.getElementById('v4-id-overlay').classList.add('show');
+  if (first) setTimeout(() => first.focus(), 250);
+}
+function v4IdSheetClose(){ clearInterval(_v4SheetTimer); document.getElementById('v4-id-overlay').classList.remove('show'); }
+async function v4IdSheetGo(){
+  const o = document.getElementById('v4-sh-owner'), c = document.getElementById('v4-sh-contact');
+  if (o && !v4ValidOwnerName(o.value)){ toast('Enter the owner\'s real name', 2500); o.focus(); return; }
+  if (c && !v4NormalizePhone(c.value)){ toast('Enter a Philippine mobile number (09XX XXX XXXX)', 2500); c.focus(); return; }
+  if (document.getElementById('v4-sh-gps-st') && !(capturedGPS && capturedGPS.itemId === currentItem.id)){ toast('Tap 📍 Get GPS first', 2500); return; }
+  // Hand the values to the top card (or keep them if the card has no inputs)
+  const bo = document.getElementById('v4-id-owner'), bc = document.getElementById('v4-id-contact');
+  _v4SheetEntered = { owner: o ? o.value.trim() : (bo ? bo.value : ''), contact: c ? c.value.trim() : (bc ? bc.value : ''), barangay: '' };
+  if (bo && o) bo.value = o.value.trim();
+  if (bc && c) bc.value = c.value.trim();
+  v4IdSheetClose();
+  await submitHarvest();
+}
+
+// Draw the box for the open vendo: only the missing fields, or "Identity complete".
+async function v4RenderIdentityBox(){
+  const box = document.getElementById('v4-identity-box');
+  if (!box || !currentItem) return;
+  const forItem = currentItem.id;
+  box.textContent = ''; box.style.display = 'none'; _v4BrgyRequired = false;   // never show the previous vendo's fields
+  const _oc = document.getElementById('v4-owner-card');
+  if (!(await v4GuardOn())){ if (_oc) _oc.style.display = ''; return; }        // guard off/shadow: v13.9 owner card, as before
+  if (!currentItem || currentItem.id !== forItem) return;                      // collector moved on
+  if (_oc) _oc.style.display = 'none';                                         // the identity box replaces it ("Edit details" reveals it)
+  box.style.display = '';
+  _v4BrgyRequired = false;   // barangay optional — no menu on the card
+  { const gb = document.getElementById('v4-get-gps-btn');
+    if (gb) gb.textContent = v4HasGpsOnFile(currentItem) ? '📍 Update GPS (optional)' : '📍 Get GPS (required)'; }
+  const missing = v4IdentityMissing(currentItem, { owner: '', contact: '', barangay: '' }, _v4BrgyRequired, null);
+  box.textContent = '';
+  if (!missing.length){
+    box.className = 'v4-idbox ok';
+    const d = document.createElement('div'); d.className = 'v4-idbox-ok'; d.textContent = '✓ Identity complete — harvest as usual';
+    box.appendChild(d);
+    const g = document.createElement('div'); g.className = 'v4-idsum';
+    const cell = (label, val, full) => { const c = document.createElement('div'); if (full) c.className='full'; const b=document.createElement('b'); b.textContent=label; const v=document.createElement('span'); v.textContent=val||'—'; c.appendChild(b); c.appendChild(v); g.appendChild(c); };
+    cell('Owner', currentItem.owner_name); cell('Contact', currentItem.contact_number); cell('Address', currentItem.address, true);
+    box.appendChild(g);
+    const e = document.createElement('span'); e.className = 'v4-idedit'; e.textContent = '✏️ Edit details';
+    e.onclick = () => { const oc = document.getElementById('v4-owner-card'); if (oc){ oc.style.display = ''; oc.scrollIntoView({behavior:'smooth', block:'start'}); try{ toggleOwnerEdit(); }catch(_){} } };
+    box.appendChild(e);
+    return;
+  }
+  box.className = 'v4-idbox need';
+  const h = document.createElement('div'); h.className = 'v4-idbox-h'; h.textContent = '🪪 Complete this vendo\'s details';
+  const p = document.createElement('div'); p.className = 'v4-idbox-p';
+  p.textContent = "Get the owner's name and number before opening the box. No owner details, no harvest — call the office.";
+  box.appendChild(h); box.appendChild(p);
+  const need = document.createElement('div'); need.className = 'v4-idbox-need';
+  need.textContent = 'Missing: ' + missing.join(', ');
+  box.appendChild(need);
+  const field = (label, el) => {
+    const w = document.createElement('label'); w.className = 'v4-idbox-f';
+    const l = document.createElement('span'); l.textContent = label + ' *';
+    w.appendChild(l); w.appendChild(el); box.appendChild(w);
+  };
+  if (missing.indexOf('Owner name') !== -1){
+    const i = document.createElement('input'); i.id = 'v4-id-owner'; i.className = 'text-input'; i.placeholder = 'e.g. Maria Santos'; i.autocomplete = 'off';
+    field('Owner name', i);
+  }
+  if (missing.indexOf('Contact number') !== -1){
+    const i = document.createElement('input'); i.id = 'v4-id-contact'; i.className = 'text-input'; i.type = 'tel'; i.placeholder = '09XX XXX XXXX'; i.autocomplete = 'off'; i.inputMode = 'tel';
+    field('Contact number', i);
+  }
+  if (missing.indexOf('GPS') !== -1){
+    const g = document.createElement('div'); g.className = 'v4-idbox-gps'; g.textContent = '📍 GPS: tap Get GPS below while standing at the vendo';
+    box.appendChild(g);
+  }
+}
+/* V4-GUARD-PURE:BEGIN */
+/* GPS gate + vendo identity rules. Pure functions: no DOM, no globals, no
+   storage, so v4/tests/guard.test.mjs can run them under node. */
+const V4_GPS_FRESH_MS = 15 * 60 * 1000;
+const V4_GPS_WEAK_M = 100, V4_GPS_FAR_M = 300, V4_GPS_WEAK_TRIES = 2;
+function v4DistanceM(lat1, lng1, lat2, lng2){
+  const R = 6371000, r = Math.PI / 180;
+  const dLat = (lat2 - lat1) * r, dLng = (lng2 - lng1) * r;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+function v4GpsVerdict(gps, item, nowMs, weakTries){
+  const no = msg => ({ ok: false, flag: null, distM: null, msg });
+  if (!gps || typeof gps.lat !== 'number' || typeof gps.lng !== 'number') return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  if (!item || gps.itemId !== item.id) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  const age = nowMs - Date.parse(gps.at || '');
+  if (!(age >= 0 && age <= V4_GPS_FRESH_MS)) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  if (!(gps.lat >= 4 && gps.lat <= 22 && gps.lng >= 116 && gps.lng <= 127)) return no('GPS required. Tap 📍 Get GPS while standing at the vendo.');
+  const acc = Number(gps.acc) || 0;
+  let flag = 'ok';
+  if (acc > V4_GPS_WEAK_M){
+    if ((weakTries || 0) < V4_GPS_WEAK_TRIES) return no('Weak GPS (±' + Math.round(acc) + ' m) — step outside and tap Get GPS again');
+    flag = 'weak';
+  }
+  let distM = null;
+  const fl = Number(item.lat), fg = Number(item.lng);
+  if (item.lat != null && item.lng != null && isFinite(fl) && isFinite(fg) && (fl || fg)){
+    distM = Math.round(v4DistanceM(gps.lat, gps.lng, fl, fg));
+    if (flag === 'ok' && distM > V4_GPS_FAR_M) flag = 'far';
+  }
+  return { ok: true, flag, distM, msg: null };
+}
+const V4_JUNK_NAMES = ['none', 'n/a', 'na', 'wala', 'unknown', 'walay', '-', 'no', 'null'];
+function v4ValidOwnerName(s){
+  const t = String(s == null ? '' : s).trim();
+  if (t.length < 2) return false;
+  if (!/[A-Za-zÀ-ɏ]/.test(t)) return false;
+  if (V4_JUNK_NAMES.indexOf(t.toLowerCase()) !== -1) return false;
+  return true;
+}
+function v4NormalizePhone(s){
+  let d = String(s == null ? '' : s).replace(/\D/g, '');
+  if (d.startsWith('63') && d.length === 12) d = '0' + d.slice(2);
+  if (!/^09\d{9}$/.test(d)) return null;
+  if (/^(\d)\1{10}$/.test(d)) return null;          // one digit repeated
+  if (/^0(\d)\1{9}$/.test(d)) return null;          // 0 + one digit repeated
+  return d;
+}
+function v4HasGpsOnFile(item){
+  const it = item || {};
+  if (it.lat == null || it.lng == null) return false;
+  const la = Number(it.lat), lg = Number(it.lng);
+  return isFinite(la) && isFinite(lg) && !(la === 0 && lg === 0);
+}
+function v4IdentityMissing(item, entered, brgyRequired, gpsFlag){
+  const it = item || {}, en = entered || {};
+  const missing = [];
+  if (!v4HasGpsOnFile(it) && !(gpsFlag === 'ok' || gpsFlag === 'weak')) missing.push('GPS');
+  if (!v4ValidOwnerName(it.owner_name) && !v4ValidOwnerName(en.owner)) missing.push('Owner name');
+  if (!v4NormalizePhone(it.contact_number) && !v4NormalizePhone(en.contact)) missing.push('Contact number');
+  // Barangay is optional (Wendell, 2026-11-17): BASHANG only tracks it for Dipolog, so there is no source of
+  // truth elsewhere. The route list still groups by it where it is known. brgyRequired is kept for compatibility.
+  void brgyRequired;
+  return missing;
+}
+// Date sources for a card. app = the app's own last harvest; book = BASHANG's, known only when the book
+// supplied the newest date (last_harvest_src contains 'book'). newest = the later of the two.
+function v4DateSources(item){
+  const it = item || {};
+  const app = it.last_harvest_date || null, any = it.last_harvest_any || null, src = it.last_harvest_src || null;
+  const book = (any && src && String(src).indexOf('book') !== -1) ? any : null;
+  const newest = (app && any) ? (app > any ? app : any) : (app || any);
+  const newestSrc = newest ? (any && newest === any && src ? src : 'app') : null;
+  return { app, book, newest, newestSrc };
+}
+/* V4-GUARD-PURE:END */
 const VENDOS_DATA = {}; // Migrated to Supabase
 
 const NAME_TO_BARANGAY = {};
@@ -1136,6 +1646,13 @@ let _dupConfirmed = false;   // reset on every vendo open; see submitHarvest
 let currentItem = null;
 let currentItemIdx = null;
 let capturedGPS = null;
+const v4GpsWeakTries = {};   // item id → weak readings this visit (v4 GPS gate)
+function v4GetGps(){
+  const lbl=document.getElementById('gps-status-lbl');
+  lbl.style.display=''; lbl.className='gps-status'; lbl.style.background='';lbl.style.borderColor='';lbl.style.color='';
+  lbl.textContent='📍 Getting GPS… hold still (up to 30 s)';
+  bestOfThreeGPS(lbl, null);
+}
 let offlineQueue = JSON.parse(localStorage.getItem('hq')||'[]');
 let syncLog = JSON.parse(localStorage.getItem('hs')||'[]');
 // ── One-time repair (pre-v13.1) ──────────────────────────────────────────────
@@ -1426,6 +1943,8 @@ function showScreen(id){
     backBtn.textContent = (id==='screen-form') ? '← Back' : '⌂ Home';
   }
   if(logoutBtn) logoutBtn.style.display=noBack.includes(id)?'none':'inline-block';
+  { const tb=document.querySelector('.topbar'); if(tb) tb.style.display=(id==='screen-collector' && hvOn('harvest_login_v2'))?'none':''; }   // v14: no top bar on the PIN screen (login switch)
+  try{ v4FabPaint(id); }catch(_){}
   // Show bottom nav on harvest screens
   const navScreens=['screen-route','screen-form','screen-gate','screen-receipt'];
   const bnav=document.getElementById('bottom-nav');
@@ -1553,7 +2072,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v13.9';
+const APP_VERSION = 'v14.0';
 /* v13.9: Spawn share = net × 75% rounded UP to the next peso (the office notebook rule; e.g. ₱1,874.25 → ₱1,875).
    The database applies the same rule on save (trg_harvest_share_round_up), this keeps the screen in step with it. */
 function spawnShareOf(net){ const n = Number(net) || 0; return Math.ceil(Math.round(n * 75) / 100); }
@@ -1666,15 +2185,47 @@ function hvPinKey(k){
 
 let _pinCollectors = [];
 
+/* V4 remember-me (level 1): the phone already stores the last collector who signed in
+   (spawn_collector_name). Open the PIN screen on that name — one tap saved — but the PIN
+   is still required every shift and the session still ends at 9 PM. "Switch name" shows
+   the full list again. */
+let _v4Switched = false;
+function v4ApplyRemembered(){
+  const box = document.getElementById('v4-remembered'), list = document.getElementById('pin-name-list'), sub = document.getElementById('v4-hero-sub');
+  if (!box || !list) return;
+  if (!hvOn('harvest_login_v2')){ box.style.display = 'none'; list.style.display = 'flex'; return; }   // v14: classic login
+  let name = ''; try { name = localStorage.getItem('spawn_collector_name') || ''; } catch (_) {}
+  const btn = name ? [...list.querySelectorAll('.collector-btn')].find(b => b.dataset.name === name) : null;
+  if (btn && !_v4Switched){
+    document.getElementById('v4-remembered-name').textContent = name;
+    box.style.display = 'block'; list.style.display = 'none';
+    if (sub) sub.textContent = 'Enter your PIN to start';
+    if (_pinSelectedName !== name) pinSelectName(btn, name);
+    btn.dataset.on = '1';
+  } else {
+    box.style.display = 'none'; list.style.display = 'flex';
+    if (sub) sub.textContent = 'Select your name, then enter your PIN';
+  }
+}
+function v4SwitchName(){
+  _v4Switched = true;
+  _pinSelectedName = null;
+  document.querySelectorAll('#pin-name-list .collector-btn').forEach(b => { b.dataset.on = ''; b.style.borderColor=''; b.style.background=''; b.style.color=''; });
+  const inp = document.getElementById('pin-inp'); if (inp){ inp.value = ''; pinOnInput(inp); }
+  pinCheckReady();
+  v4ApplyRemembered();
+}
+
+function v4RenderNames(list, el){
+  el.innerHTML = list.map(c => '<button class="collector-btn" data-name="' + String(c.name).replace(/"/g,'&quot;') + '" style="padding:10px 20px;border-radius:22px;border:2px solid #dbe3f2;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#0B1E63;transition:.15s">' + String(c.name).replace(/</g,'&lt;') + '</button>').join('');
+  el.querySelectorAll('.collector-btn').forEach(b => b.onclick = () => { _v4Switched = true; el.querySelectorAll('.collector-btn').forEach(x => x.dataset.on=''); b.dataset.on='1'; pinSelectName(b, b.dataset.name); });
+  v4ApplyRemembered();
+}
 async function pinLoadCollectors(){
   const FALLBACK=[{name:'Ailyn',team:'TeamA'},{name:'Axcel',team:'TeamA'},{name:'Gilbert',team:'TeamA'},{name:'Tandoy',team:'TeamB'}];
   const el=document.getElementById('pin-name-list');
   if(!el) return;
-  const render=(list)=>{
-    el.innerHTML=list.map(c=>`
-      <button style="padding:10px 20px;border-radius:22px;border:2px solid #e0e4f0;background:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;color:#025AC6;transition:.15s" class="collector-btn" data-name="${c.name}" onclick="pinSelectName(this,'${c.name}')">${c.name}</button>`
-    ).join('');
-  };
+  const render=(list)=>{ v4RenderNames(list, el);   };
   // Seed from cached collectors (with PINs) so offline re-login works after app close
   let _seeded=false;
   try{
@@ -1904,6 +2455,7 @@ function pinLogout(){
   document.getElementById('topbar-sub').textContent='Collector PWA';
   pinCheckReady();
   showScreen('screen-collector');
+  _v4Switched = false; try{ v4ApplyRemembered(); }catch(_){}
 }
 
 // ── AREA SELECT SCREEN ────────────────────────────────────────────
@@ -2482,9 +3034,20 @@ async function startGroup(groupId){
   // ── Cold load ─────────────────────────────────────────────────
   listEl.innerHTML='<div class="loading"><div class="spinner"></div><span>Loading group…</span></div>';
   try {
-    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR});
+    const rG = await fetch(`${SB}/rest/v1/harvest_groups?id=eq.${groupId}&limit=1`,{headers:HDR, signal:v4Deadline(10000)});
     const gRows = await rG.json();
-    if(!gRows.length){toast('Group not found');return;}
+    if(!Array.isArray(gRows)) throw new Error('No signal — the server did not answer properly');   // v4 b18: gateway/portal reply → rescue below
+    if(!gRows.length){
+      toast('Group not found');
+      listEl.innerHTML='';
+      const nf=document.createElement('div'); nf.className='loading';
+      nf.innerHTML='<span style="color:var(--red);text-align:center;line-height:1.8">This group no longer exists — tell the office.</span>';
+      const nb=document.createElement('button'); nb.textContent='← Back';
+      nb.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
+      nb.onclick=function(){ showHomeScreen(); };
+      nf.appendChild(nb); listEl.appendChild(nf);
+      return;
+    }
     const g = gRows[0];
     currentGroupDef = g;
 
@@ -2502,10 +3065,11 @@ async function startGroup(groupId){
       const r = await fetch(
         `${SB}/rest/v1/harvest_group_items?group_run_id=eq.${groupId}`+
         `&select=id,vendo_id,vendo_code,sheet_name,tg_name,vlan,area,barangay,lat,lng,last_harvest_date,owner_name,contact_number,address,date_installed,status,coins_total,coins_free_time,coins_free_coins,coins_old,coins_saloy,net_collectible,harvested_at,collector_note`+
-        `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR}
+        `&order=id.asc&limit=2000&offset=${offset}`,{headers:HDR, signal:v4Deadline(15000)}
       );
       const batch = await r.json();
-      if(!Array.isArray(batch)||!batch.length) break;
+      if(!Array.isArray(batch)) throw new Error('No signal — the vendo list did not arrive');   // v4 b18
+      if(!batch.length) break;
       allItems.push(...batch);
       if(batch.length<2000) break;
       offset+=2000;
@@ -2583,6 +3147,7 @@ async function startGroup(groupId){
       };
     });
 
+    v4IdentityRefresh(currentItems).catch(()=>{});   // v4: owner_name + barangay, tolerant
     // Save to cache (only if we actually got items)
     if(currentItems.length > 0){
       localStorage.setItem(CACHE_KEY, JSON.stringify({g, items:currentItems}));
@@ -2646,7 +3211,8 @@ async function startGroup(groupId){
     listEl.innerHTML='';
     const div=document.createElement('div');
     div.className='loading';
-    div.innerHTML='<span style="color:var(--red);text-align:center;line-height:2">❌ '+e.message+'</span>';
+    if(/abort|fetch|signal/i.test(e.message||'')) div.innerHTML='<span style="color:var(--red);text-align:center;line-height:1.8">📴 No signal, and this group is not saved on this phone yet.<br>Connect to WiFi and tap "Download for offline" on the home screen.</span>';
+    else { const sp=document.createElement('span'); sp.style.cssText='color:var(--red);text-align:center;line-height:1.8'; sp.textContent='❌ '+e.message; div.appendChild(sp); }
     const btn=document.createElement('button');
     btn.textContent='← Back';
     btn.style.cssText='margin-top:12px;padding:10px 20px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer';
@@ -2983,6 +3549,21 @@ function renderVendoList(){
     const daysBadgeCls=item.status==='harvested'?'pill-gray':daysSince===null?'pill-gray':daysSince>45?'pill-red':daysSince>30?'pill-amber':daysSince>14?'pill-blue':'pill-green';
     const _dLabel=daysSince===null?'Never':daysSince>=30?Math.floor(daysSince/30)+'mo '+Math.floor(daysSince%30)+'d':daysSince+'d';
     const lhdBadge=item.status!=='harvested'?'<span class="pill '+daysBadgeCls+'" style="font-size:10px;font-weight:900;padding:2px 7px">'+_dLabel+'</span>':'';
+    // v4: one colour for the whole card, from the accurate last harvest (app or BASHANG, whichever is newer)
+    const _unlinked = !item.vendo_id;
+    const ageCls = item.status==='harvested' ? '' : _unlinked ? 'age-unlinked' : daysSince===null ? 'age-never' : daysSince>45 ? 'age-late' : daysSince>30 ? 'age-due' : daysSince>14 ? 'age-ok' : 'age-fresh';
+    const ageChip = item.status==='harvested' ? '' :
+      _unlinked ? '<span class="vi-last age-unlinked">⚠ Not linked to a vendo <small>· office must fix</small></span>' :
+      '<span class="vi-last '+ageCls+'">'+(daysSince===null?'Never harvested':_dLabel+' ago')+' <small>· '+lastH+'</small></span>';
+    const _ds = v4DateSources(item);
+    const _fd = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-PH',{month:'short',day:'numeric'}) : '—';
+    const srcLine = '';   // App/Book breakdown removed (2026-11-18): one latest date for the collector; details stay on the dashboard
+    const fbBtn = '';   // "Date wrong?" removed on Wendell's phone test (2026-11-17); the report sheet stays in the code, unused
+    const unlinkedNote = _unlinked && item.status!=='harvested' ? '<span class="vi-unlinked">This name is not linked to any vendo record, so its harvest date cannot be known. Ask the office before harvesting.</span>' : '';
+    // v14: harvest_card_colors off → the v13.9 "Last: <date> <badge>" line and no age colouring
+    const _hvColors = hvOn('harvest_card_colors');
+    const ageClsUse = _hvColors ? ageCls : '';
+    const lastLine = _hvColors ? (ageChip + unlinkedNote) : ('<div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:' + lhdColor + '">' + lastH + '</b> ' + lhdBadge + '</div>');
     const legD=item._legDist!=null?item._legDist:item._dist;
     const distBadge=legD!=null&&activeTab!=='done'?`<span class="vi-dist">📍 ${fmtDist(legD)} from prev</span>`:'';
     const mapsUrl=item.lat&&item.lng?`https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`:'';
@@ -2997,14 +3578,14 @@ function renderVendoList(){
       ? `<div style="display:inline-block;background:#025AC6;color:#fff;font-size:13px;font-weight:900;padding:3px 10px;border-radius:6px;letter-spacing:.08em;margin-bottom:4px">${item.vendo_code.toUpperCase()}</div>`
       : '';
     const vlanHtml = `<div style="display:inline-block;background:${item.vlan?'#e6f1fb':'#f1f1f1'};color:${item.vlan?'#0c447c':'#9ca3af'};font-size:12px;font-weight:700;padding:3px 9px;border-radius:6px;margin-bottom:4px;margin-left:6px">VLAN ${item.vlan||'—'}</div>`;
-    return `<div class="vendo-item ${cls}" ${item.status==='pulled_out'?`data-pullout-idx="${item._origIdx}"`:''} onclick="${item.status==='pulled_out'?`showPulloutDetail(${item._origIdx})`:`openItem(${item._origIdx})`}">
+    return `<div class="vendo-item ${cls} ${ageClsUse}" ${item.status==='pulled_out'?`data-pullout-idx="${item._origIdx}"`:''} onclick="${item.status==='pulled_out'?`showPulloutDetail(${item._origIdx})`:`openItem(${item._origIdx})`}">
       <div class="vi-seq">${seqIdx+1}</div>
       <div class="vi-left">
         ${vcodeHtml}${vlanHtml}
         <div class="vi-name">${item.sheet_name||item.tg_name||'Unknown'}</div>
         <div class="vi-sub">${item.address||item.barangay||item.area||'—'}</div>
         ${distBadge}
-        <div style="font-size:10px;color:#9ca3af;margin-top:1px">Last: <b style="color:${lhdColor}">${lastH}</b> ${lhdBadge}</div>
+        ${lastLine}
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:3px">${contactBadge}</div>
         ${netLine}${noteLine}${gpsBtn}
       </div>
@@ -3293,7 +3874,9 @@ async function submitPullOut(){
 
 // ── OPEN ITEM FORM ────────────────────────────────────────────────
 function openItem(idx){
-  currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null;
+  if(window._v4GpsWatch!==undefined && window._v4GpsWatch!==null){ try{ navigator.geolocation.clearWatch(window._v4GpsWatch); }catch(_){} window._v4GpsWatch=null; }
+  currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null; _v4SheetEntered=null;
+  v4RenderIdentityBox();
   _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
@@ -3376,12 +3959,12 @@ function openItem(idx){
   } else {
     gpsLbl.className='gps-status';
     gpsLbl.style.background='';gpsLbl.style.borderColor='';gpsLbl.style.color='';
-    gpsLbl.textContent='No GPS yet — tap Capture';
+    gpsLbl.textContent='No GPS yet — tap 📍 Get GPS';
   }
   document.getElementById('gps-verify-link').style.display='none';
   // Show GPS label if coords already exist, hide otherwise until Edit
   const _hasGps = !!(currentItem.lat && currentItem.lng);
-  document.getElementById('gps-status-lbl').style.display = _hasGps ? '' : 'none';
+  document.getElementById('gps-status-lbl').style.display = '';   // v4: always shown
   document.getElementById('gps-actions').style.display='none';
   // Update camera button to reflect GPS state
   const _camBtn = document.getElementById('camera-open-btn');
@@ -3457,7 +4040,6 @@ function _closeOwnerEdit(){
   document.getElementById('contact-display').textContent=document.getElementById('contact-inp').value.trim()||'—';
   const orn=document.getElementById('owner-real-name-inp');const ornd=document.getElementById('owner-name-real-display');if(orn&&ornd)ornd.textContent=orn.value.trim()||'—';
   ed.style.display='none';dp.style.display='';btn.textContent='✏️ Edit';btn.style.color='';
-  document.getElementById('gps-status-lbl').style.display='none';
   document.getElementById('gps-actions').style.display='none';
 }
 
@@ -3478,7 +4060,9 @@ async function saveVendoDetails(){
 
     // Build update
     const vendoUpdate={};
-    if(capturedGPS){vendoUpdate.lat=capturedGPS.lat; vendoUpdate.lng=capturedGPS.lng;}
+    // v4: same rule as submit — only a good fix (flag ok) may set the vendo's position.
+    const _v4EditOk = !!(capturedGPS && v4GpsVerdict(capturedGPS, currentItem, Date.now(), V4_GPS_WEAK_TRIES).flag === 'ok');
+    if(_v4EditOk){vendoUpdate.lat=capturedGPS.lat; vendoUpdate.lng=capturedGPS.lng;}
     if(photoUrl) vendoUpdate.photo_url=photoUrl;
     if(contact) vendoUpdate.contact_number=contact;
     if(ownerName) vendoUpdate.owner_name=ownerName;
@@ -3515,7 +4099,7 @@ async function saveVendoDetails(){
     }
 
     // Also save to current item in memory
-    if(capturedGPS){currentItem.lat_captured=capturedGPS.lat; currentItem.lng_captured=capturedGPS.lng; currentItem.lat=capturedGPS.lat; currentItem.lng=capturedGPS.lng;}
+    if(_v4EditOk){currentItem.lat_captured=capturedGPS.lat; currentItem.lng_captured=capturedGPS.lng; currentItem.lat=capturedGPS.lat; currentItem.lng=capturedGPS.lng;}
     if(photoUrl) currentItem.photo_url=photoUrl;
     if(contact) currentItem.contact_number=contact;
     if(ownerName) currentItem.owner_name=ownerName;
@@ -3681,27 +4265,36 @@ function bestOfThreeGPS(lbl, onFinalized){
     lbl.className='gps-status err'; lbl.textContent='❌ GPS not supported'; return;
   }
   const readings=[];
+  const startId = currentItem ? currentItem.id : null;   // v4: the vendo this reading is for
   let watchId=null, done=false;
+  if(window._v4GpsWatch!==undefined && window._v4GpsWatch!==null){ try{ navigator.geolocation.clearWatch(window._v4GpsWatch); }catch(_){} }
   const GOOD_ACC=20;
-  const MAX_WAIT=4000;
+  const MAX_WAIT=30000;   // v4: cold fix with no data can take 30 s
+  let denied=false;
 
   function finalize(){
     if(done) return;
     done=true;
     if(watchId!==null){ navigator.geolocation.clearWatch(watchId); watchId=null; }
+    window._v4GpsWatch=null;
+    if(!currentItem || currentItem.id!==startId){ return; }   // v4: collector moved to another vendo — drop it
     if(!readings.length){
       lbl.className='gps-status err';
-      lbl.textContent='❌ Could not get GPS — try outdoors or retry';
+      lbl.textContent=denied
+        ? 'Location is blocked. Chrome → ⋮ → Settings → Site settings → Location → Allow, then tap 📍 Get GPS again.'
+        : 'Cannot save without GPS. Call the office.';
+      toast(denied?'📍 Location is blocked — allow it in Chrome site settings':'❌ Cannot save without GPS. Call the office.',4000);
       document.getElementById('photo-gps-badge').textContent='No GPS';
       if(onFinalized) onFinalized(null);
       return;
     }
     const best=readings.reduce((a,b)=>a.acc<b.acc?a:b);
-    capturedGPS={lat:best.lat,lng:best.lng};
+    capturedGPS={lat:best.lat,lng:best.lng,acc:Math.round(best.acc),at:new Date().toISOString(),itemId:currentItem?currentItem.id:null};
+    if(best.acc>V4_GPS_WEAK_M && currentItem){ v4GpsWeakTries[currentItem.id]=(v4GpsWeakTries[currentItem.id]||0)+1; }
     const accStr='±'+Math.round(best.acc)+'m';
     const coordStr=`${best.lat.toFixed(6)}, ${best.lng.toFixed(6)}`;
     lbl.className='gps-status got';
-    lbl.textContent=`✅ ${coordStr} (${accStr})`;
+    lbl.textContent=(best.acc>V4_GPS_WEAK_M?'⚠️ Weak ':'✅ ')+`${coordStr} (${accStr})`;
     document.getElementById('photo-gps-badge').textContent=`📍 ${coordStr} ${accStr}`;
     const actionsEl=document.getElementById('gps-actions');
     actionsEl.style.display='flex';
@@ -3721,16 +4314,17 @@ function bestOfThreeGPS(lbl, onFinalized){
         finalize();
       }
     },
-    err=>{ },
-    {enableHighAccuracy:true, timeout:4000, maximumAge:3000}
+    err=>{ if(err&&err.code===1){ denied=true; clearTimeout(deadline); finalize(); } },
+    {enableHighAccuracy:true, timeout:30000, maximumAge:0}
   );
+  window._v4GpsWatch=watchId;
 }
 
 function retakePhoto(){
   capturedPhotoBlob=null; capturedGPS=null;
   document.getElementById('photo-thumb-wrap').style.display='none';
   document.getElementById('gps-status-lbl').className='gps-status';
-  document.getElementById('gps-status-lbl').textContent='No GPS yet — tap Open Camera';
+  document.getElementById('gps-status-lbl').textContent='No GPS yet — tap 📍 Get GPS';
   document.getElementById('gps-actions').style.display='none';
   openCamera();
 }
@@ -4099,6 +4693,45 @@ async function submitHarvest(){
       _dupConfirmed = true;
     }
   }
+  // ── V4 GPS GATE + IDENTITY GUARD (before anything is disabled or built) ──
+  // No override, by decision. Coin entries stay on screen while the collector fixes it.
+  let _v4Verdict = { ok: true, flag: null, distM: null, msg: null };
+  const _v4Entered = v4IdentityEntered();
+  const _v4GuardIsOn = await v4GuardOn();
+  // v14 shadow mode: say what the guard would have blocked, then save exactly as v13.9 did.
+  if (v4GuardMode() === 'shadow'){
+    try {
+      const _shGps = (capturedGPS && capturedGPS.itemId === currentItem.id) ? v4GpsVerdict(capturedGPS, currentItem, Date.now(), V4_GPS_WEAK_TRIES).flag : null;
+      const _shMiss = v4IdentityMissing(currentItem, _v4Entered, false, _shGps);
+      if (_shMiss.length) pwLog('guard-shadow', 'would block: ' + _shMiss.join(', '), { item_id: currentItem.id, vendo_id: currentItem.vendo_id || null, missing: _shMiss, gps_on_file: v4HasGpsOnFile(currentItem), app_build: APP_BUILD });
+    } catch (_) {}
+  }
+  if (!_v4GuardIsOn && capturedGPS && capturedGPS.itemId === currentItem.id){
+    _v4Verdict = { ok: true, flag: 'ok', distM: null, msg: null };   // v3 behaviour: a reading updates the vendo
+  }
+  if (_v4GuardIsOn){
+    // Rule (Wendell, 2026-11-17): a fresh GPS reading is required only when the vendo
+    // has no GPS on file. If GPS exists, don't ask — but all details must be complete.
+    if (!v4HasGpsOnFile(currentItem)){
+      _v4Verdict = v4GpsVerdict(capturedGPS, currentItem, Date.now(), v4GpsWeakTries[currentItem.id] || 0);
+      if (!_v4Verdict.ok){
+        // Open the fill-in sheet with GPS plus whatever else is missing; coins stay on the form.
+        const _m0 = v4IdentityMissing(currentItem, _v4Entered, _v4BrgyRequired, null);
+        if (_m0.indexOf('GPS') === -1) _m0.unshift('GPS');
+        v4IdSheetOpen(_m0, _v4Verdict.msg); return;
+      }
+    } else if (capturedGPS && capturedGPS.itemId === currentItem.id){
+      // Optional re-reading at a vendo that already has GPS: keep it only if it is good.
+      const _opt = v4GpsVerdict(capturedGPS, currentItem, Date.now(), V4_GPS_WEAK_TRIES);
+      if (_opt.ok) _v4Verdict = _opt; else capturedGPS = null;
+    }
+    const _v4Missing = v4IdentityMissing(currentItem, _v4Entered, _v4BrgyRequired, _v4Verdict.flag);
+    if (_v4Missing.length){ v4IdSheetOpen(_v4Missing, null); return; }
+    if (_v4Verdict.flag === 'far') toast('GPS is ' + _v4Verdict.distM + ' m from this vendo\'s saved spot — saved and flagged for the office.', 4500);
+  }
+  const _v4Owner = v4ValidOwnerName(_v4Entered.owner) ? _v4Entered.owner.trim() : '';
+  const _v4Contact = v4NormalizePhone(_v4Entered.contact) || '';
+  const _v4Brgy = (_v4Entered.barangay || '').trim();
   const btns=document.querySelectorAll('.action-row .btn-green');
   btns.forEach(b=>{b.disabled=true;b.textContent='Saving…';});
 
@@ -4135,14 +4768,21 @@ async function submitHarvest(){
   if(ownerName) itemUpdate.sheet_name=ownerName;
   if(contact) itemUpdate.contact_number=contact;
   if(ownerRealName) itemUpdate.owner_name=ownerRealName;
+  if(_v4Owner) itemUpdate.owner_name=_v4Owner;
+  if(_v4Contact) itemUpdate.contact_number=_v4Contact;
+  if(_v4Brgy) itemUpdate.barangay=_v4Brgy;
   if(capturedGPS){itemUpdate.lat_captured=capturedGPS.lat;itemUpdate.lng_captured=capturedGPS.lng;}
 
   // Update vendos table
   const vendoUpdate={last_harvest_date:today};
-  if(capturedGPS){vendoUpdate.lat=capturedGPS.lat;vendoUpdate.lng=capturedGPS.lng;}
+  // v4: a weak or far fix never overwrites the vendo's GPS on file.
+  if(capturedGPS && _v4Verdict.flag==='ok'){vendoUpdate.lat=capturedGPS.lat;vendoUpdate.lng=capturedGPS.lng;}
   if(ownerName&&ownerName!==currentItem.sheet_name) vendoUpdate.sheet_name=ownerName;
   if(contact) vendoUpdate.contact_number=contact;
   if(ownerRealName) vendoUpdate.owner_name=ownerRealName;
+  if(_v4Owner) vendoUpdate.owner_name=_v4Owner;
+  if(_v4Contact) vendoUpdate.contact_number=_v4Contact;
+  if(_v4Brgy) vendoUpdate.barangay=_v4Brgy;
   const addressSubmit=(document.getElementById('address-inp')?.value||'').trim();
   if(addressSubmit) vendoUpdate.address=addressSubmit;
 
@@ -4156,7 +4796,11 @@ async function submitHarvest(){
     area:currentItem.area||null,collector:selectedCollector,
     route_code:'GRP-'+((currentGroupDef&&(currentGroupDef.group_id||currentGroupDef.id))||''),
     coins_total:total,coins_free:free+freeCoins,coins_free_time:free,coins_free_coins:freeCoins,coins_saloy:saloy,
-    net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note
+    net_collectible:net,spawn_share:spawn,customer_share:customer,collector_note:note,
+    app_build:APP_BUILD,
+    harvest_lat:capturedGPS?capturedGPS.lat:null, harvest_lng:capturedGPS?capturedGPS.lng:null,
+    harvest_gps_at:capturedGPS?capturedGPS.at:null, harvest_gps_accuracy:capturedGPS?capturedGPS.acc:null,
+    harvest_gps_flag:_v4Verdict.flag, harvest_gps_dist_m:_v4Verdict.distM
   };
 
   // Upload photo if captured
@@ -4189,7 +4833,7 @@ async function submitHarvest(){
       // If it succeeds, skip the passthrough calls below. If it fails
       // for ANY reason, _bOk stays false and the original A-passthrough
       // path runs as fallback — collector never gets stuck.
-      let _bOk = false;
+      let _bOk = false, _bReject = null;   // v4 b16: a server rejection must escape the fallback catch below
       try {
         const _packB = (window._pendingPackItems||[]).map(p=>({
           vendo_id:currentItem.vendo_id||null, vendo_code:p.vendo_code||'',
@@ -4202,23 +4846,48 @@ async function submitHarvest(){
           contacts_added:(currentGroupRun.contacts_added||0)+((contact&&!prevHadContact)?1:0),
           total_net:(parseFloat(currentGroupRun.total_net)||0)+net
         } : null;
-        const _bResp = await fetch(`${SB}/functions/v1/spawn-ops`,{
+        // v4 build 16: submit-harvest-v2 (honest answer, app rounding, GPS checked on the
+        // server, replays answered with the existing id). If the server does not know v2
+        // yet ("unknown action"), send the same payload to v1 — exactly what build 15 did.
+        const _bBody = {
+          action:(hvOn('harvest_save_v2') ? 'submit-harvest-v2' : 'submit-harvest'), require_gps:(_v4GuardIsOn && !v4HasGpsOnFile(currentItem)),
+          item_id:currentItem.id, vendo_id:currentItem.vendo_id||null,
+          group_run_id:currentGroupRun?currentGroupRun.id:null,
+          coins:{net,free,saloy,free_coins:freeCoins},
+          item_update:itemUpdate, vendo_update:vendoUpdate,
+          harvest_record:harvestRecord, pack_items:_packB, group_counts:_gc
+        };
+        const _bSend = () => fetch(`${SB}/functions/v1/spawn-ops`,{
           method:'POST',
           headers:{'Content-Type':'application/json','x-gw-token':GW_TOKEN},
-          body:JSON.stringify({
-            action:'submit-harvest',
-            item_id:currentItem.id, vendo_id:currentItem.vendo_id||null,
-            group_run_id:currentGroupRun?currentGroupRun.id:null,
-            coins:{net,free,saloy,free_coins:freeCoins},
-            item_update:itemUpdate, vendo_update:vendoUpdate,
-            harvest_record:harvestRecord, pack_items:_packB, group_counts:_gc
-          })
+          body:JSON.stringify(_bBody)
         });
+        let _bResp = await _bSend();
+        let _bJson = await _bResp.clone().json().catch(()=>({}));
+        if(_bResp.status===400 && _bJson && _bJson.error==='unknown action'){
+          window._v4OpsVersion = 'v1';
+          _bBody.action = 'submit-harvest';
+          _bResp = await _bSend();
+          _bJson = await _bResp.clone().json().catch(()=>({}));
+        } else { window._v4OpsVersion = (_bBody.action === 'submit-harvest-v2') ? 'v2' : 'v1'; }
+        // A v2 rejection (422, rejected:true) is final: the server refused the harvest
+        // (bad coins, GPS required, reading outside PH). Stop here — coins stay on the form,
+        // nothing is queued, and the old passthrough writes are NOT attempted.
+        if(_bResp.status===422 && _bJson && _bJson.rejected){
+          _bReject = 'Not saved — ' + (_bJson.error || 'rejected by server');
+          throw new Error(_bReject);
+        }
+        if(Array.isArray(_bJson && _bJson.warnings) && _bJson.warnings.length){
+          window._v4LastWarnings = _bJson.warnings;
+          try{ pwLog('sync','spawn-ops v2 warnings',{item_id:currentItem.id, warnings:_bJson.warnings}); }catch(_){}
+        } else { window._v4LastWarnings = null; }
         if(_bResp.ok){
-          const _bJson = await _bResp.json().catch(()=>({}));
-          if(_bJson && _bJson.ok){
+          // v4: spawn-ops answers ok:true even when the harvests insert failed; only a
+          // row id proves the harvest is in the database. No id → direct path → queue.
+          if(_bJson && _bJson.ok && _bJson.harvest_id != null){
             _bOk = true;
             _submitted = true;
+            window._v4LastHarvestId = _bJson.harvest_id;
             window._pendingPackItems=[];
             if(currentGroupRun){
               currentGroupRun.harvested_count++;
@@ -4229,6 +4898,7 @@ async function submitHarvest(){
           }
         }
       } catch(_e){ console.warn('[spawn-ops] submit-harvest fallback to passthrough:', _e && _e.message); }
+      if(_bReject) throw new Error(_bReject);   // outer catch toasts it; coins stay on the form, nothing queued
 
       if(!_bOk){
       // Update group item
@@ -4237,6 +4907,7 @@ async function submitHarvest(){
       const _hResp = await fetch(`${SB}/rest/v1/harvests`,{method:'POST',headers:{...HDR,'Prefer':'return=representation'},body:JSON.stringify(harvestRecord)});
       const _hRows = await _hResp.json().catch(()=>[]);
       const _hId = (_hRows&&_hRows[0]&&_hRows[0].id)||null;
+      if(_hId) window._v4LastHarvestId = _hId;
       // Only claim the write landed if it demonstrably did. A silent failure here
       // used to be reported as "synced" and the coins vanished from the tally.
       // NOTE: do NOT throw — the outer catch just toasts and drops the harvest.
@@ -4310,7 +4981,10 @@ async function submitHarvest(){
 
     // Update in-memory
     Object.assign(currentItems[currentItemIdx],itemUpdate,{status:'harvested',last_harvest_date:today,last_harvest_any:today,last_harvest_src:'app'});
-    if(capturedGPS){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
+    if(capturedGPS && _v4Verdict.flag==='ok'){currentItems[currentItemIdx].lat=capturedGPS.lat;currentItems[currentItemIdx].lng=capturedGPS.lng;}
+    if(_v4Owner) currentItems[currentItemIdx].owner_name=_v4Owner;
+    if(_v4Contact) currentItems[currentItemIdx].contact_number=_v4Contact;
+    if(_v4Brgy) currentItems[currentItemIdx].barangay=_v4Brgy;
     if(ownerName) currentItems[currentItemIdx].sheet_name=ownerName;
     if(contact) currentItems[currentItemIdx].contact_number=contact;
     if(ownerRealName) currentItems[currentItemIdx].owner_name=ownerRealName;
@@ -4337,7 +5011,18 @@ async function submitHarvest(){
     }
 
     btns.forEach(b=>{b.disabled=false;b.textContent='✅ Submit harvest';});
-    if(_submitted) toast('✅ Saved!');
+    if(_submitted) toast('✅ Saved to database' + (window._v4LastHarvestId ? ' (#' + window._v4LastHarvestId + ')' : ''), 3000);
+    // v4: the receipt shows what really happened to this harvest, not just the numbers.
+    window._v4Receipt = {
+      status: _submitted ? 'saved' : 'queued',
+      via: _submitted ? (window._v4OpsVersion || 'direct') : null,
+      warnings: window._v4LastWarnings || null,
+      id: (_submitted && window._v4LastHarvestId) ? window._v4LastHarvestId : null,
+      gps: capturedGPS ? { lat: capturedGPS.lat, lng: capturedGPS.lng, acc: capturedGPS.acc, flag: _v4Verdict.flag, distM: _v4Verdict.distM } : null,
+      gpsOnFile: v4HasGpsOnFile(currentItem),
+      owner: _v4Owner || '', contact: _v4Contact || '', brgy: _v4Brgy || '',
+      at: now
+    };
     setTimeout(()=>showHarvestReceipt(),600);
   } catch(e){
     toast('❌ '+e.message,4000);
@@ -4558,6 +5243,7 @@ async function flushQueue(){
         } else {
           const _hrows=await _hr.json().catch(()=>[]);
           _hId=_hrows&&_hrows[0]&&_hrows[0].id;
+          if(!_hId) throw new Error('harvest POST answered without a row id — kept in queue');
         }
         // Sync pack items if any
         if(_hId && q.packItems && q.packItems.length){
@@ -5060,6 +5746,35 @@ function showHarvestReceipt(){
   else if(brRow){ brRow.style.display='none'; }
   const refNum = 'HRV-' + Date.now().toString(36).toUpperCase().slice(-8);
   const refEl = document.getElementById('hr-ref'); if(refEl) refEl.textContent = 'Ref No. ' + refNum;
+  // v4: save status + what was recorded (GPS, identity)
+  try{
+    const R = window._v4Receipt || null; window._v4Receipt = null;
+    const st = document.getElementById('hr-save-status');
+    const dr = document.getElementById('hr-details-row'), dd = document.getElementById('hr-details');
+    if(st){
+      if(!R){ st.style.display='none'; }
+      else {
+        st.style.display='';
+        if(R.status==='saved'){ st.style.background='#eaf7f1'; st.style.color='#1B9A6C'; st.textContent='✅ Saved to database' + (R.id ? ' · #' + R.id : ''); }
+        else if(R.status==='queued'){ st.style.background='#fff4e5'; st.style.color='#b45309'; st.textContent='📴 Saved on this phone — will sync when online'; }
+        else { st.style.display='none'; }
+      }
+    }
+    if(dr && dd){
+      dd.textContent='';
+      const lines=[];
+      if(R && R.gps){
+        const fl = R.gps.flag==='weak' ? ' · weak' : R.gps.flag==='far' ? (' · ' + R.gps.distM + ' m from saved spot') : '';
+        lines.push('📍 GPS ' + Number(R.gps.lat).toFixed(5) + ', ' + Number(R.gps.lng).toFixed(5) + ' (±' + R.gps.acc + ' m)' + fl);
+      } else if(R && R.gpsOnFile){ lines.push('📍 GPS already on file'); }
+      if(R && R.owner) lines.push('👤 Owner: ' + R.owner);
+      if(R && R.contact) lines.push('📞 Contact: ' + R.contact);
+      if(R && R.brgy) lines.push('🏘️ Barangay: ' + R.brgy);
+      if(R && R.status==='saved' && Array.isArray(R.warnings) && R.warnings.length) lines.push('⚠️ Saved, but ' + R.warnings.length + ' side update(s) did not land — the office will see it in the audit.');
+      if(lines.length){ dr.style.display=''; lines.forEach(t=>{ const d=document.createElement('div'); d.textContent=t; dd.appendChild(d); }); }
+      else dr.style.display='none';
+    }
+  }catch(e){ console.warn('[v4 receipt]', e); }
   document.getElementById('harvest-receipt-overlay').classList.add('show');
 }
 
@@ -6570,19 +7285,20 @@ async function submitEodSession(){
 
   <!-- Harvest Receipt Popup Overlay -->
   <div class="confirm-overlay" id="harvest-receipt-overlay">
-    <div style="background:#1a73e8;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 48px;overflow-y:auto;">
+    <div style="background:var(--brand-backdrop);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:24px 16px 48px;overflow-y:auto;">
       <div style="background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:400px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.22);">
-        <div style="background:#28a745;padding:30px 20px 22px;text-align:center;">
-          <div style="width:58px;height:58px;background:rgba(255,255,255,0.22);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
-            <svg width="34" height="34" viewBox="0 0 36 36" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 18 14 25 29 11"/></svg>
-          </div>
+        <div style="height:6px;background:var(--brand-bands)"></div>
+        <div style="background:linear-gradient(135deg,#0E47C4,#7A2A9E);padding:24px 20px 20px;text-align:center;">
+          <img src="/VendoMonitor/spawn-brand-160.png" alt="" style="width:72px;height:72px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 10px;box-shadow:0 3px 10px rgba(0,0,0,.3);border:3px solid #fff">
+          <div style="color:rgba(255,255,255,.9);font-size:10px;font-weight:800;letter-spacing:.14em;margin-bottom:6px">SPAWN INTERNET · ✓ HARVESTED</div>
           <div id="hr-vendo-name" style="color:#fff;font-size:1.18rem;font-weight:700;letter-spacing:.2px;line-height:1.3;margin-bottom:3px;">—</div>
           <div id="hr-collector" style="color:rgba(255,255,255,0.82);font-size:0.82rem;margin-bottom:1px;">—</div>
-          <div style="color:rgba(255,255,255,0.68);font-size:0.78rem;">Harvest Remittance</div>
+          <div style="color:rgba(255,255,255,0.78);font-size:0.78rem;">Harvest Remittance</div>
         </div>
+        <div id="hr-save-status" style="display:none;padding:10px 16px;text-align:center;font-size:13px;font-weight:800;letter-spacing:.2px"></div>
         <div style="text-align:center;padding:20px 20px 14px;border-bottom:1.5px solid #eee;">
           <div style="color:#888;font-size:0.78rem;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;">Spawn Share to Remit</div>
-          <div id="hr-spawn-share" style="color:#1a73e8;font-size:2.3rem;font-weight:800;letter-spacing:-1.5px;line-height:1;">₱0</div>
+          <div id="hr-spawn-share" style="color:#0E47C4;font-size:2.3rem;font-weight:800;letter-spacing:-1.5px;line-height:1;">₱0</div>
         </div>
         <div style="padding:4px 24px 0;">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f2f2f2;">
@@ -6595,18 +7311,22 @@ async function submitEodSession(){
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #f2f2f2;">
             <span style="color:#999;font-size:0.82rem;">Owner Share (25%)</span>
-            <span id="hr-owner" style="color:#025AC6;font-weight:600;font-size:0.93rem;">₱0</span>
+            <span id="hr-owner" style="color:#7A2A9E;font-weight:700;font-size:0.93rem;">₱0</span>
           </div>
           <div id="hr-breakdown-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
             <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Pack Breakdown</div>
             <div id="hr-packs" style="color:#333;font-size:0.88rem;line-height:1.6;"></div>
+          </div>
+          <div id="hr-details-row" style="padding:12px 0;border-bottom:1px solid #f2f2f2;display:none;">
+            <div style="color:#999;font-size:0.82rem;margin-bottom:5px;">Recorded with this harvest</div>
+            <div id="hr-details" style="color:#333;font-size:0.86rem;line-height:1.7;"></div>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 0;">
             <span id="hr-ref" style="color:#bbb;font-size:0.76rem;letter-spacing:.3px;">Ref No. —</span>
             <span style="color:#bbb;font-size:0.76rem;"><span id="hr-date">—</span> <span id="hr-time">—</span></span>
           </div>
         </div>
-        <div style="height:20px;background:radial-gradient(circle at 50% 100%,#1a73e8 10px,#fff 10px) bottom/20px 20px repeat-x;"></div>
+        <div style="height:20px;background:radial-gradient(circle at 50% 100%,#5A2FA0 10px,#fff 10px) bottom/20px 20px repeat-x;"></div>
       </div>
       <div style="display:flex;gap:10px;margin-top:16px;width:100%;max-width:400px;">
         <button class="btn btn-blue" onclick="hrNextVendo()" style="flex:2;border-radius:12px;background:rgba(255,255,255,0.18);color:#fff;border:1.5px solid rgba(255,255,255,0.45);">→ Next Vendo</button>
@@ -6621,7 +7341,7 @@ async function submitEodSession(){
 
     <!-- Header -->
     <div class="rcpt-header">
-      <div class="rcpt-logo">🌐 Spawn Internetan</div>
+      <div class="rcpt-logo"><img src="/VendoMonitor/spawn-brand-160.png" alt="">Spawn Internet</div>
       <div class="rcpt-title">Daily Harvest Receipt</div>
       <div class="rcpt-subtitle" id="rcpt-collector-name">—</div>
       <div class="rcpt-subtitle" id="rcpt-date">—</div>
