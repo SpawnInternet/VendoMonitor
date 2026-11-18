@@ -104,14 +104,25 @@ h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-s
   const KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';
   const STORE = 'spawnhq.session';
   const TZ = 'Asia/Manila';
-  const VIEWS = ['today', 'employees', 'health', 'log'];
-  const LABEL = { today: 'Today', employees: 'Employees', health: 'Health', log: 'Log' };
+  const VIEWS = ['today', 'accuracy', 'employees', 'health', 'log'];
+  const LABEL = { today: 'Today', accuracy: 'Accuracy', employees: 'Employees', health: 'Health', log: 'Log' };
+  // Accuracy tab (2026-11-18): the accuracy_check employee's seven rules, each with the fix it expects and its item list.
+  const ACC_RULES = [
+    { key: 'acc_guard_shadow',   fix: 'Nothing was blocked. These are the saves the GPS/identity guard would have stopped. Clean the owner, contact or GPS on these vendos; when a day shows none, the guard can go on.' },
+    { key: 'acc_unlinked_cards', fix: 'Office identifies the card and links it to its vendo (or retires it). Until then the collector sees "Not linked" and its harvests carry no vendo.' },
+    { key: 'acc_dup_cards',      fix: 'Same vendo twice in one group. Keep the card with the latest harvest; retire the other (money already sits in harvests, never delete).' },
+    { key: 'acc_book_newer',     fix: 'BASHANG has a newer harvest than the app. Either it was saved on the wrong card in the app, or missed in the app. Check the book row and the collector.' },
+    { key: 'acc_no_tg_name',     fix: 'Coins were harvested but no Telegram name is on the vendo, so income cannot be reconciled. Confirm the TG name (the card\'s own name is a hint) or flag the box no_tg.' },
+    { key: 'acc_tg_silent',      fix: 'Harvested recently but the Telegram bot has been quiet 14+ days. Bot or group check at the vendo, or move the box to a SpawnFi link.' },
+    { key: 'acc_feedback_open',  fix: 'A collector reported a wrong date from the box. Confirm, reject or mark fixed.' }
+  ];
+  const ACC_HIDE = new Set(['fix', 'group_run_id', 'vendo_id', 'item_id', 'id', 'app_build']);
   const AREA = { apps: 'Apps', jobs: 'Digital employees', security: 'Security', data: 'Data', storage: 'Storage', feeds: 'Feeds' };
   const COLOR = { red: 'var(--bad)', amber: 'var(--warn)', green: 'var(--ok)', off: 'var(--off)' };
 
   const app = document.getElementById('app');
   const state = { view: 'today', status: null, health: null, runs: null, actions: null, approvals: null,
-                  loadedAt: null, error: null, open: {}, jobs: {} };
+                  loadedAt: null, error: null, open: {}, jobs: {}, acc: null, accOpen: {}, accItems: {} };
   let timer = null;
 
   // ---------- helpers ----------
@@ -201,10 +212,11 @@ h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-s
   // ---------- data ----------
   async function load() {
     try {
-      const [status, health, runs, actions, approvals] = await Promise.all([
-        call('status'), call('health'), call('runs', { limit: 60 }), call('actions', { limit: 60 }), call('approvals')
+      const [status, health, runs, actions, approvals, acc] = await Promise.all([
+        call('status'), call('health'), call('runs', { limit: 60 }), call('actions', { limit: 60 }), call('approvals'),
+        call('health', { employee: 'accuracy_check' }).catch(() => null)
       ]);
-      Object.assign(state, { status, health, runs, actions, approvals, loadedAt: new Date().toISOString(), error: null });
+      Object.assign(state, { status, health, runs, actions, approvals, acc, loadedAt: new Date().toISOString(), error: null });
     } catch (e) {
       if (e.message === 'signed_out') return;
       state.error = 'Couldn’t refresh: ' + e.message;
@@ -259,7 +271,7 @@ h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-s
     if (upd) upd.textContent = state.loadedAt ? 'Updated ' + fmtTime(state.loadedAt) : '';
     if (!state.status) { main.innerHTML = state.error ? `<div class="banner">${esc(state.error)}</div>` : '<p class="muted" style="padding:28px 0">Loading…</p>'; return; }
     const banner = state.error ? `<div class="banner">${esc(state.error)}</div>` : '';
-    main.innerHTML = banner + ({ today, employees, health, log }[state.view])();
+    main.innerHTML = banner + ({ today, accuracy, employees, health, log }[state.view])();
     wire(main);
   }
 
@@ -356,6 +368,63 @@ h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-s
       order.map(a => `<h2>${esc(AREA[a])}</h2><div class="list">${groups[a].map(f => row(f.status, f.label, f.value, f.detail, '')).join('')}</div>`).join('');
   }
 
+  // ---------- accuracy ----------
+  function accuracy() {
+    const a = state.acc;
+    if (!a || !a.run) return '<h2>Accuracy</h2><div class="list"><div class="empty">The Accuracy check hasn’t run yet. It runs every morning at 06:30.</div></div>';
+    const byKey = {}; (a.findings || []).forEach(f => byKey[f.check_key] = f);
+    const rows = ACC_RULES.filter(r => byKey[r.key]).map(r => {
+      const f = byKey[r.key], open = !!state.accOpen[r.key], it = state.accItems[r.key];
+      let detail = '';
+      if (open) {
+        if (!it) detail = '<div class="detail muted">Loading the list…</div>';
+        else if (it.error) detail = `<div class="detail err">${esc(it.error)}</div>`;
+        else detail = `<div class="detail scroll">${accTable(it.data)}</div>`;
+      }
+      return `<div class="row click" data-acc="${esc(r.key)}" tabindex="0" role="button" aria-expanded="${open}" id="acc-${esc(r.key)}">
+        <span class="dot" style="--c:${COLOR[f.status] || COLOR.off}"></span>
+        <div class="title">${esc(f.label)}</div>
+        <div class="meta num">${esc(f.value)}</div>
+        <div class="sub">${esc(r.fix)}</div>
+        ${f.detail && !open ? `<div class="why ${esc(f.status)}">${esc(f.detail)}</div>` : ''}
+        ${detail}
+      </div>`;
+    }).join('');
+    const extra = (a.findings || []).filter(f => !ACC_RULES.some(r => r.key === f.check_key)).map(f => row(f.status, f.label, f.value, f.detail, '')).join('');
+    return `<section class="hero">
+        <h1>${esc(a.run.summary)}</h1>
+        <p>Accuracy check · ran ${esc(fmtTime(a.run.finished_at))} (${esc(ago(a.run.finished_at))}). Reads only; every line names the fix it expects. Tap a rule for its list.</p>
+      </section>
+      <h2>Rules</h2><div class="list">${rows || '<div class="empty">No findings in the last run.</div>'}${extra}</div>`;
+  }
+  function accTable(list) {
+    if (!list || !list.length) return '<div class="muted">Nothing on this list right now.</div>';
+    const cols = Object.keys(list[0]).filter(k => !ACC_HIDE.has(k) && list.some(r => r[k] !== null && r[k] !== ''));
+    const fmt = (k, v) => {
+      if (v === null || v === undefined || v === '') return '';
+      if (/_at$/.test(k) && /^\d{4}-\d{2}-\d{2}T/.test(String(v))) return fmtTime(v);
+      if (typeof v === 'boolean') return v ? 'yes' : 'no';
+      return String(v);
+    };
+    return `<table class="jobs"><thead><tr>${cols.map(c => `<th>${esc(c.replace(/_/g, ' '))}</th>`).join('')}</tr></thead><tbody>${
+      list.map(r => `<tr>${cols.map(c => `<td class="${typeof r[c] === 'number' ? 'num' : ''}">${esc(fmt(c, r[c]))}</td>`).join('')}</tr>`).join('')
+    }</tbody></table>${list.length >= 100 ? '<div class="muted" style="margin-top:6px">Showing the first 100.</div>' : ''}`;
+  }
+  async function openAcc(key, open) {
+    state.accOpen[key] = open;
+    render();
+    if (open && !state.accItems[key]) {
+      const s = session.get(); if (!s) { showLogin(); return; }
+      try {
+        const res = await rpc('hq_acc_items', { p_token: s.token, p_rule: key, p_limit: 100 });
+        if (!res.ok) { if (res.error === 'signed_out') { session.clear(); showLogin('Your session ended. Sign in again.'); return; } throw new Error(res.error || 'unknown error'); }
+        state.accItems[key] = { data: res.data };
+      } catch (e) { state.accItems[key] = { error: 'Couldn’t load the list: ' + e.message }; }
+      render();
+      const el = document.getElementById('acc-' + key); if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
   function log() {
     const runs = state.runs || [], acts = state.actions || [];
     const runRows = runs.map(r => row(r.result === 'running' ? 'off' : r.result, r.name, r.summary || (r.result === 'running' ? 'Running now' : ''), '', fmtTime(r.started_at))).join('');
@@ -372,6 +441,11 @@ h2{font-size:13px;font-weight:600;color:var(--muted);margin:30px 0 10px;letter-s
       const go = () => { state.view = 'employees'; history.replaceState(null, '', '#employees'); openEmp(el.dataset.goto, true); };
       el.addEventListener('click', go);
       el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+    root.querySelectorAll('[data-acc]').forEach(el => {
+      const t = () => openAcc(el.dataset.acc, !state.accOpen[el.dataset.acc]);
+      el.addEventListener('click', e => { if (e.target.closest('.detail')) return; t(); });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); t(); } });
     });
     root.querySelectorAll('[data-emp]').forEach(el => {
       const t = () => openEmp(el.dataset.emp, !state.open[el.dataset.emp]);
