@@ -165,6 +165,7 @@
     const j = await chatReply({ p_employee: chatEmp, p_note: t });
     if (j) { inp.value = ''; chatOpen(chatEmp); }
   }
+  window.employeesOpenThread = emp => chatOpen(emp);
   window.employeesTabShown = async function(){
     await chatSummary(); chatListRender();
     const S = window.__empChatSummary || [];
@@ -189,3 +190,87 @@
   window.employeeStripLoad = load;
   document.addEventListener('DOMContentLoaded', () => { load(); setInterval(load, 5 * 60 * 1000); });
 })();
+
+/* ── Merged nav tabs (2026-11-19): 15 top buttons → 9. The original buttons stay in the DOM (class "sub", hidden)
+   so role-based hiding and every onclick keep working; a hub button per group + a sub-tab row re-use them. ── */
+(function(){
+  const GROUPS = {
+    reports:   { hub: 'reports',   tabs: [['reports', '📄 Reports'], ['analytics', '📊 Analytics']] },
+    vendos:    { hub: 'vendos',    tabs: [['vendos', '📟 Telegram vendos'], ['vmap-top', '📍 Map'], ['spawncloud', '☁ Cloud'], ['suspicious', '⚠️ Suspicious'], ['notsus', '✅ Not Sus'], ['skipped', '⏭ Skipped']] },
+    system:    { hub: 'system',    tabs: [['health', '🩺 Health'], ['status', '🖥 System']] },
+    employees: { hub: 'employees', tabs: [['employees', '💬 Chat'], ['agents', '🤖 Agents']] }
+  };
+  const groupOf = id => Object.keys(GROUPS).find(g => GROUPS[g].tabs.some(t => t[0] === id));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  function origBtn(id){ return document.querySelector('.nav-bar button.sub[data-panel="' + id + '"]') || document.querySelector('.nav-bar button[data-panel="' + id + '"]:not([data-hub])'); }
+  function render(id){
+    const bar = document.getElementById('subnav'); if (!bar) return;
+    const g = groupOf(id);
+    document.querySelectorAll('.nav-bar button[data-hub]').forEach(b => b.classList.toggle('active', !!g && b.dataset.hub === g));
+    if (!g) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    bar.style.display = 'flex';
+    bar.innerHTML = GROUPS[g].tabs.map(([pid, label]) => {
+      const ob = origBtn(pid); const hidden = ob && ob.offsetParent === null && getComputedStyle(ob).display === 'none' && !ob.classList.contains('sub');
+      const badge = ob && ob.querySelector('.nbadge') && ob.querySelector('.nbadge').textContent.trim();
+      return `<button data-sub="${esc(pid)}" ${hidden ? 'style="display:none"' : ''} class="subnav-btn${pid === id ? ' on' : ''}" style="padding:5px 12px;border:1px solid ${pid === id ? '#025AC6' : '#dbe3f4'};border-radius:999px;background:${pid === id ? '#025AC6' : '#fff'};color:${pid === id ? '#fff' : '#334155'};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">${label}${badge ? ` <span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 6px;font-size:10px">${esc(badge)}</span>` : ''}</button>`;
+    }).join('');
+    bar.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
+      const pid = b.dataset.sub;
+      if (pid === 'agents') { window.showP('agents', null); return; }
+      const ob = origBtn(pid); if (ob) ob.click(); else window.showP(pid, null);
+    });
+  }
+  function hookShowP(){
+    if (typeof window.showP !== 'function' || window.showP.__hub) return false;
+    const orig = window.showP;
+    const wrapped = function(id, btn){
+      const r = orig.apply(this, arguments);
+      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); } catch (_) {}
+      return r;
+    };
+    wrapped.__hub = true; window.showP = wrapped; return true;
+  }
+  function mirrorBadges(){
+    const sus = document.getElementById('nav-sus-badge'), hb = document.getElementById('hub-vendos-badge');
+    if (sus && hb) { const t = sus.textContent.trim(); hb.textContent = t; hb.style.display = t && t !== '0' ? 'block' : 'none'; }
+    const e1 = document.getElementById('nav-employees-badge'), e2 = document.getElementById('nav-employees-badge2');
+    if (e1 && e2) { e2.textContent = e1.textContent; e2.style.display = e1.style.display; }
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    hookShowP();
+    // the Health tab is injected by dash.17.health.js a moment later; fold it into the System group when it appears
+    const fold = () => { const h = document.querySelector('.nav-bar button[data-panel="health"]:not([data-hub])'); if (h) h.classList.add('sub'); };
+    fold(); setTimeout(fold, 800); setTimeout(fold, 3000);
+    const act = document.querySelector('.panel.active'); if (act) render(act.id.replace('panel-', ''));
+    mirrorBadges(); setInterval(mirrorBadges, 3000);
+  });
+})();
+
+/* ── Employees → Agents: the roll call of every digital employee (reads v_hq_employees_v1) ── */
+window.agentsTabShown = async function(){
+  const host = document.getElementById('agents-roll'); if (!host) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  let rows = [];
+  try { rows = await sb('v_hq_employees_v1', 'select=*&order=active.desc,name.asc', 100); } catch (_) {}
+  if (!rows || !rows.length) { host.innerHTML = '<p style="color:var(--mu,#6b7280);font-size:12px;padding:8px 12px">No employee status yet (needs gateway v85).</p>'; return; }
+  const C = { red: '#dc2626', amber: '#d97706', green: '#059669' };
+  const ago = iso => { if (!iso) return 'never'; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  const n = { red: 0, amber: 0, green: 0 }; rows.forEach(r => { if (n[r.light] != null) n[r.light]++; });
+  host.innerHTML = `<div style="display:flex;gap:10px;align-items:center;padding:0 12px 8px;flex-wrap:wrap">
+      <span style="font-weight:800;font-size:15px">🤖 Digital employees · ${rows.length}</span>
+      <span style="font-size:12px;color:${C.red};font-weight:700">● ${n.red} red</span><span style="font-size:12px;color:${C.amber};font-weight:700">● ${n.amber} amber</span><span style="font-size:12px;color:${C.green};font-weight:700">● ${n.green} green</span>
+      <span style="font-size:11px;color:var(--mu,#6b7280)">Tap a row to open its chat. Decisions are made in the Chat tab; this is the roll call.</span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;padding:0 12px">${rows.map(r => `
+      <div data-agent="${esc(r.id)}" style="padding:10px 12px;border-radius:10px;border:1px solid ${C[r.light] || '#e5e7eb'};border-left-width:5px;background:#fff;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:6px"><span style="font-weight:800;font-size:13px;flex:1">${esc(r.name)}</span>
+          <span style="font-size:10px;padding:0 6px;border-radius:999px;border:1px solid #e5e7eb;color:#6b7280">${esc(r.permission)}</span>
+          ${Number(r.open_questions) ? `<span style="font-size:10px;padding:0 6px;border-radius:999px;background:#fde68a;color:#92400e;font-weight:800">${r.open_questions}❓</span>` : ''}
+          ${!r.active ? '<span style="font-size:10px;color:#9ca3af">off</span>' : ''}</div>
+        <div style="font-size:11px;color:var(--mu,#6b7280);margin-top:2px">${esc(r.job)}</div>
+        <div style="font-size:11px;margin-top:4px">seen ${esc(ago(r.last_seen))} · ${r.runs_24h} runs / ${r.fails_24h} failed in 24 h</div>
+        ${r.reason ? `<div style="font-size:11px;color:${C[r.light] || '#6b7280'};font-weight:700;margin-top:2px">${esc(r.reason)}</div>` : ''}
+        ${r.last_summary ? `<div style="font-size:11px;color:var(--mu,#6b7280);margin-top:2px">${esc(r.last_summary)}</div>` : ''}
+        ${r.last_error ? `<div style="font-size:11px;color:#b91c1c;margin-top:2px">${esc(r.last_error).slice(0, 160)}</div>` : ''}
+      </div>`).join('')}</div>`;
+  host.querySelectorAll('[data-agent]').forEach(el => el.onclick = () => { window.showP('employees', null); setTimeout(() => { if (typeof window.employeesOpenThread === 'function') window.employeesOpenThread(el.dataset.agent); }, 300); });
+};
