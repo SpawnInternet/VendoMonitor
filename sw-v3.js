@@ -1,5 +1,5 @@
 // sw-v3.js — Spawn Harvest v3 Service Worker (separate from v2's sw.js)
-const CACHE = 'spawn-harvest-v3-v14.0';
+const CACHE = 'spawn-harvest-v3-v12.9.0';
 const APP_HTML = '/VendoMonitor/harvest_v3.html';
 const APP_SHELL = [
   '/VendoMonitor/harvest_v3.html',
@@ -8,9 +8,6 @@ const APP_SHELL = [
   // its icon and splash offline from the first launch.
   '/VendoMonitor/icon-192.png',
   '/VendoMonitor/icon-512.png',
-  // v14: brand mark used by the login hero and receipts
-  '/VendoMonitor/spawn-brand-160.png',
-  '/VendoMonitor/spawn-brand-512.png',
 ];
 
 // ── INSTALL: cache app shell ──────────────────────────────────────
