@@ -74,7 +74,7 @@
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱' };
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡' };
   let chatEmp = null, chatBusy = false, chatTimer = null;
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
@@ -125,13 +125,14 @@
     }
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
       <div style="${style}">${esc(m.text)}${foot}</div>
-      <div style="font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}</div></div>`;
+      <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
   }
   async function chatOpen(emp){
     chatEmp = emp; chatListRender();
     const head = document.getElementById('emp-chat-head'), box = document.getElementById('emp-chat-msgs'); if (!box) return;
     const S = (window.__empChatSummary || []).find(x => x.employee_id === emp) || {};
-    head.innerHTML = `${ICON[emp] || '🤖'} ${esc(S.employee || emp)} <span style="font-weight:400;font-size:12px;color:var(--mu,#6b7280)">· ${esc(S.reason || S.light || '')}</span>`;
+    head.innerHTML = `${ICON[emp] || '🤖'} ${esc(S.employee || emp)} <span style="font-weight:400;font-size:12px;color:var(--mu,#6b7280)">· ${esc(S.reason || S.light || '')}</span>
+      <button id="emp-copy-all" title="Copy today's messages from this agent" style="float:right;border:1px solid #c7d2fe;background:#fff;color:#1B6BE0;border-radius:7px;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer">📋 Copy today</button>`;
     box.innerHTML = '<div style="color:var(--mu,#6b7280);font-size:12px">Loading…</div>';
     let rows = [];
     try { rows = await sb('v_hq_chat_v1', 'select=*&employee_id=eq.' + encodeURIComponent(emp) + '&order=id.desc', 200); } catch (_) {}
@@ -143,6 +144,19 @@
     box.scrollTop = box.scrollHeight;
     box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
+    box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+      const m = rows.find(r => Number(r.id) === Number(b.dataset.copy)); if (!m) return;
+      const txt = `${m.employee} · ${tmFull(m.at)}\n${m.text}`;
+      try { await navigator.clipboard.writeText(txt); } catch (e) { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
+      b.textContent = '✓ Copied'; setTimeout(() => b.textContent = '📋 Copy', 1500);
+    });
+    const ca = document.getElementById('emp-copy-all'); if (ca) ca.onclick = async () => {
+      const day = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+      const txt = rows.filter(m => m.role === 'agent' && new Date(m.at).toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) === day)
+                      .map(m => `${m.employee} · ${tmFull(m.at)}\n${m.text}`).join('\n\n');
+      try { await navigator.clipboard.writeText(txt || 'No messages today.'); } catch (e) {}
+      ca.textContent = '✓ Copied'; setTimeout(() => ca.textContent = '📋 Copy today', 1500);
+    };
     const maxAgent = rows.filter(m => m.role === 'agent').reduce((a, m) => Math.max(a, Number(m.id)), 0);
     if (maxAgent) markSeen(emp, maxAgent);
     chatSummary().then(chatListRender);
@@ -279,7 +293,7 @@ window.agentsTabShown = async function(){
 /* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
 (function(){
   let i = 0, items = [], timer = null;
-  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter' };
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', poller_dapitan: '📡 Dapitan poller' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   function build(){
     const S = window.__empChatSummary || [];
