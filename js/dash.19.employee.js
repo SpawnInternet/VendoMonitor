@@ -350,7 +350,7 @@
 (function(){
   const GROUPS = {
     reports:   { hub: 'reports',   tabs: [['reports', '📄 Reports'], ['analytics', '📊 Analytics']] },
-    vendos:    { hub: 'vendos',    tabs: [['vendos', '📟 Telegram vendos'], ['vmap-top', '📍 Map'], ['spawncloud', '☁ Cloud'], ['suspicious', '⚠️ Suspicious'], ['notsus', '✅ Not Sus'], ['skipped', '⏭ Skipped']] },
+    vendos:    { hub: 'vendos',    tabs: [['vendos', '📟 Telegram vendos'], ['spawnfi', '📶 SpawnFi'], ['vmap-top', '📍 Map'], ['spawncloud', '☁ Cloud'], ['suspicious', '⚠️ Suspicious'], ['notsus', '✅ Not Sus'], ['skipped', '⏭ Skipped']] },
     system:    { hub: 'system',    tabs: [['health', '🩺 Health'], ['status', '🖥 System']] },
     employees: { hub: 'employees', tabs: [['needsyou', '🧾 Needs you'], ['employees', '💬 Chat'], ['agents', '🤖 Agents']] }   // needsyou: shown only when spawn_settings.hq_needs_you = on (dash.23)
   };
@@ -372,7 +372,7 @@
     }).join('');
     bar.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
       const pid = b.dataset.sub;
-      if (pid === 'agents' || pid === 'needsyou') { window.showP(pid, null); return; }
+      if (pid === 'agents' || pid === 'needsyou' || pid === 'spawnfi') { window.showP(pid, null); return; }
       const ob = origBtn(pid); if (ob) ob.click(); else window.showP(pid, null);
     });
   }
@@ -382,7 +382,7 @@
     const orig = window.showP;
     const wrapped = function(id, btn){
       const r = orig.apply(this, arguments);
-      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); if (id === 'needsyou' && typeof window.needsYouTabShown === 'function') window.needsYouTabShown(); } catch (_) {}
+      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); if (id === 'needsyou' && typeof window.needsYouTabShown === 'function') window.needsYouTabShown(); if (id === 'spawnfi' && typeof window.spawnfiTabShown === 'function') window.spawnfiTabShown(); } catch (_) {}
       return r;
     };
     wrapped.__hub = true; window.showP = wrapped; return true;
@@ -505,3 +505,51 @@ async function companionsCard(justIssued){
   window.navTickerRefresh = build;
   document.addEventListener('DOMContentLoaded', () => { setTimeout(build, 2500); timer = setInterval(show, 7000); setInterval(build, 60000); });
 })();
+
+/* ── Vendos → SpawnFi (2026-11-19): our copy of the panel's coin sales per router/VLAN, with the vendo identity.
+   Read-only (gateway v86: v_spawnfi_sales_v1, v_spawnfi_feed_v1). Linking is done in Employees → Harvest agent. ── */
+window.spawnfiTabShown = async function(){
+  const host = document.getElementById('spawnfi-root'); if (!host) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  const peso = n => '₱' + Number(n || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 });
+  const tm = t => t ? new Date(t).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+  const ago = t => { if (!t) return 'never'; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  host.innerHTML = '<p style="color:var(--mu,#6b7280);font-size:12px;padding:8px 12px">Loading…</p>';
+  let feed = null, rows = [];
+  try { const f = await sb('v_spawnfi_feed_v1', 'select=*', 1); feed = Array.isArray(f) ? f[0] : f; } catch (_) {}
+  try { rows = await sb('v_spawnfi_sales_v1', 'select=*&order=d7_pesos.desc.nullslast,vlan.asc', 1000); } catch (_) {}
+  if (!feed && !(rows || []).length) { host.innerHTML = '<p style="color:var(--mu,#6b7280);font-size:12px;padding:8px 12px">SpawnFi data not reachable (needs gateway v86).</p>'; return; }
+  rows = rows || [];
+  const stale = feed && feed.newest_sale && (Date.now() - new Date(feed.newest_sale)) > 3 * 3600e3;
+  const err = feed && feed.last_error;
+  const light = err ? ['#D81E2C', 'Feed error'] : stale ? ['#F5A623', 'Feed quiet'] : ['#0E8A5F', 'Feed live'];
+  const todayTot = rows.reduce((a, r) => a + Number(r.today_pesos || 0), 0), d7Tot = rows.reduce((a, r) => a + Number(r.d7_pesos || 0), 0);
+  const linked = rows.filter(r => r.link_status === 'linked').length;
+  let filter = window.__sfiFilter || 'all';
+  const head = `
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line,#e5e7eb)">
+      <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;font-size:13px"><span style="width:10px;height:10px;border-radius:50%;background:${light[0]};display:inline-block"></span>${light[1]}</span>
+      <span style="font-size:12px;color:var(--mu,#6b7280)">newest sale ${esc(tm(feed && feed.newest_sale))} (${esc(ago(feed && feed.newest_sale))}) · last pull ${esc(ago(feed && feed.last_ok_at))}${err ? ' · <b style="color:#D81E2C">' + esc(String(err).slice(0, 80)) + '</b>' : ''}</span>
+      <span style="flex:1"></span>
+      <span style="font-size:12px"><b>Today</b> ${peso(todayTot)}</span><span style="font-size:12px"><b>7 d</b> ${peso(d7Tot)}</span>
+      <span style="font-size:12px"><b>${linked}</b> linked · <b>${rows.length - linked}</b> unlinked</span>
+    </div>
+    <div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap">
+      ${[['all', 'All'], ['linked', 'Linked to a vendo'], ['unlinked', 'Not linked yet'], ['today', 'Sold today']].map(([k, l]) => `<button data-sfif="${k}" style="padding:4px 10px;border:1px solid ${filter === k ? '#1B6BE0' : '#dbe3f4'};border-radius:999px;background:${filter === k ? '#1B6BE0' : '#fff'};color:${filter === k ? '#fff' : '#334155'};font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}
+      <span style="flex:1"></span>
+      <span style="font-size:11px;color:var(--mu,#6b7280)">Link / unlink in Employees → 🧺 Harvest agent. Rows are our own copy — the panel cannot delete them.</span>
+    </div>`;
+  const vis = rows.filter(r => filter === 'all' || (filter === 'linked' && r.link_status === 'linked') || (filter === 'unlinked' && r.link_status !== 'linked') || (filter === 'today' && Number(r.today_pesos) > 0));
+  const tbl = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="text-align:left;color:var(--mu,#6b7280)"><th style="padding:6px 12px">VLAN</th><th>Panel site</th><th>Vendo (ours)</th><th style="text-align:right">Today</th><th style="text-align:right">7 d</th><th style="text-align:right">30 d</th><th>Last sale</th></tr></thead>
+    <tbody>${vis.map(r => `<tr style="border-top:1px solid var(--line,#eef2f7)">
+      <td style="padding:6px 12px;font-weight:700">${esc(r.vlan)}</td>
+      <td title="${esc(r.site_name)}" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.site_name)}</td>
+      <td>${r.link_status === 'linked' ? `<span style="color:#0E8A5F;font-weight:700">✓</span> #${esc(r.vendo_id)} ${esc(r.vendo_name || '')}${r.tg_name ? ` <span style="color:var(--mu,#6b7280)">· TG ${esc(r.tg_name)}</span>` : ''}` : `<span style="color:#F5A623;font-weight:700">unlinked</span>${r.suggested_vendo_id ? ` <span style="color:var(--mu,#6b7280)">(agent suggests #${esc(r.suggested_vendo_id)})</span>` : ''}`}</td>
+      <td style="text-align:right;font-weight:${Number(r.today_pesos) > 0 ? 700 : 400}">${peso(r.today_pesos)}</td>
+      <td style="text-align:right">${peso(r.d7_pesos)}</td>
+      <td style="text-align:right">${peso(r.d30_pesos)}</td>
+      <td style="white-space:nowrap">${esc(tm(r.last_sale))}</td></tr>`).join('') || '<tr><td colspan="7" style="padding:12px;color:var(--mu,#6b7280)">Nothing in this filter.</td></tr>'}</tbody></table></div>`;
+  host.innerHTML = head + tbl;
+  host.querySelectorAll('[data-sfif]').forEach(b => b.onclick = () => { window.__sfiFilter = b.dataset.sfif; window.spawnfiTabShown(); });
+};
