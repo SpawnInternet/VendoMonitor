@@ -37,8 +37,7 @@
     host.querySelectorAll('details[data-hk]').forEach(d => d.addEventListener('toggle', () => { d.open ? OPEN.add(d.dataset.hk) : OPEN.delete(d.dataset.hk); }));
   }
 
-  /* 🧺 Harvest agent (2026-11-19, eod_harvest): live every 30 min 09:00–18:30, final report 18:30.
-     Reads the harvest_* columns appended to v_employee_counts_v1. Reports only; nothing here writes. */
+  /* 🧺 Harvest agent (2026-11-19, eod_harvest): card on the home strip; the report itself is a chat in the Employees tab. */
   const OPEN = new Set();                      // which <details> stay open across the 5-minute refresh
   const tm = iso => iso ? new Date(iso).toLocaleTimeString('en-PH', { hour:'numeric', minute:'2-digit', timeZone:'Asia/Manila' }) : '';
   const det = (key, summary, body, style) => `<details data-hk="${esc(key)}" ${OPEN.has(key) ? 'open' : ''} style="margin-top:6px;${style || ''}">
@@ -52,47 +51,134 @@
                  (R.final ? 'final · ' : 'so far · ') + n(T.collectors) + ' collectors' + (last ? ' · last ' + last : '') + (warn ? ' · ' + warn + ' ⚠' : ''),
                  'Harvests saved today and Spawn share · live every 30 min, final at 18:30 · open the Harvest agent report below');
   }
+  /* Home page shows only the notification line; the full report lives in the Employees tab (chat). */
   function harvestPanel(r){
-    const R = r.harvest_report; if (!R) return '';
-    const T = R.totals || {}, O = R.overdue || {}, B = O.buckets || {}, L = R.learned || {};
-    const adv = R.advice || [], qs = R.questions || [], cols = R.collectors || [];
-    const mu = 'color:var(--mu,#6b7280)', cell = 'padding:3px 6px;border-bottom:1px solid var(--line,#e5e7eb);vertical-align:top';
-    const advHtml = adv.length ? adv.map(a => `<div style="font-size:12px;padding:3px 0;${a.level === 'warn' ? 'color:#b45309;font-weight:600' : mu}">${a.level === 'warn' ? '⚠' : 'ℹ'} ${esc(a.text)}</div>`).join('')
-                               : `<div style="font-size:12px;${mu}">Nothing unusual against what it has learned.</div>`;
-    const colHtml = cols.map(c => {
-      const u = c.usual;
-      const vs = u ? `usual ${u.harvests} · ${peso(u.spawn)} · starts ${esc(u.first)}` : 'no history yet';
-      const rows = (c.items || []).map(i => {
-        const note = [i.late_min ? `synced ${i.late_min} min late (offline)` : '', i.office ? 'office entry' : '', i.unlinked ? 'card has no vendo' : '', i.low ? `low · usually ${peso(i.low)}` : ''].filter(Boolean).join(' · ');
-        return `<tr><td style="${cell};font-variant-numeric:tabular-nums">${esc(i.time)}</td><td style="${cell}">${esc(i.vendo)}</td><td style="${cell}">${esc(i.area || '')}</td>
-          <td style="${cell};text-align:right">${peso(i.spawn)}</td><td style="${cell}">${esc(i.gps || '—')}</td>
-          <td style="${cell};text-align:right;${i.gap_min >= 120 ? 'color:#b91c1c;font-weight:700' : ''}">${i.gap_min != null ? i.gap_min + 'm' : ''}</td>
-          <td style="${cell};${i.low || i.unlinked ? 'color:#b91c1c' : mu}">${esc(note)}</td></tr>`;
-      }).join('');
-      return det('c:' + c.collector,
-        `${esc(c.collector)} · ${n(c.harvests)} harvests · ${peso(c.spawn)} <span style="font-weight:400;${mu}">· ${esc(c.first || '—')}–${esc(c.last || '—')} · longest gap ${c.longest_gap_min != null ? c.longest_gap_min + ' min' : '—'} · GPS ${n(c.gps_n)}/${n(c.harvests)} · ${vs}</span>`,
-        `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px"><thead><tr style="${mu}">
-           <th style="${cell};text-align:left">Saved</th><th style="${cell};text-align:left">Vendo</th><th style="${cell};text-align:left">Area</th><th style="${cell};text-align:right">Spawn</th>
-           <th style="${cell};text-align:left">GPS</th><th style="${cell};text-align:right">Gap</th><th style="${cell};text-align:left">Note</th></tr></thead><tbody>${rows}</tbody></table></div>`);
-    }).join('') || `<div style="font-size:12px;${mu};margin-top:6px">No harvests saved yet today.</div>`;
-    const qHtml = qs.length ? det('q', `❓ Questions for you · ${n(qs.length)}`,
-        qs.map(q => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--line,#e5e7eb)">${esc(q.q)}</div>`).join('')) : '';
-    const areas = Object.entries(O.by_area || {}).sort((a, b) => b[1] - a[1]).map(([a, k]) => esc(a) + ' ' + n(k)).join(' · ');
-    const top = (O.top || []).slice(0, 40).map(t => `<tr><td style="${cell}">${esc(t.vendo)}</td><td style="${cell}">${esc(t.area)}</td><td style="${cell};text-align:right">${n(t.days)}d</td>
-        <td style="${cell};${mu}">${t.usual_cycle != null ? 'usually every ' + t.usual_cycle + 'd' : ''}</td><td style="${cell}">${t.online ? '🟢' : '⚪'}</td></tr>`).join('');
-    const oHtml = det('o', `⏳ Overdue · ${n(O.over30)} over 30 days · ${n(O.over30_online)} online · ${n(O.never)} never harvested`,
-        `<div style="font-size:11px;${mu};margin:4px 0">31–44d ${n(B.d31_44)} · 45–59d ${n(B.d45_59)} · 60–89d ${n(B.d60_89)} · 90+d ${n(B.d90)} · ${n(O.past_own_cycle)} past twice their own cycle${areas ? '<br>' + areas : ''}</div>
-         <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><tbody>${top}</tbody></table></div>
-         <div style="font-size:10px;${mu};margin-top:3px">Online first, then oldest · top 40 · same list as the Overdue tab</div>`);
-    const head = `🧺 Harvest agent report · ${R.final ? 'final' : 'so far today'} · ${n(T.harvests)} harvests · ${peso(T.spawn)} Spawn · ${n(adv.filter(a => a.level === 'warn').length)} ⚠ · ${n(qs.length)} ❓
-      <span style="font-weight:400;${mu}">· as of ${tm(R.as_of || r.harvest_built_at)}</span>`;
-    return det('panel', head,
-      `<div style="padding:6px 2px 2px">${advHtml}
-         <div style="font-size:11px;font-weight:700;${mu};margin-top:8px;text-transform:uppercase;letter-spacing:.04em">Collectors · tap one for every save time</div>${colHtml}
-         ${qHtml}${oHtml}
-         <div style="font-size:10px;${mu};margin-top:8px">Learned from ${n(L.collector_days)} collector-days and ${n(L.book_rows)} book rows · ${n(L.vendos_with_cycle)} vendos with their own cycle · relearns every run · reports only</div></div>`,
-      'padding:6px 10px;border-radius:8px;border:1px solid var(--line,#e5e7eb);background:var(--bg2,#f8fafc)');
+    const S = window.__empChatSummary || [];
+    const open = S.reduce((a, x) => a + Number(x.open_questions || 0), 0);
+    const unread = S.filter(x => x.last_agent_msg_id && Number(x.last_agent_msg_id) > seenId(x.employee_id)).length;
+    const R = r.harvest_report; if (!R && !S.length) return '';
+    const T = (R && R.totals) || {};
+    const last = S.filter(x => x.last_text).sort((a, b) => new Date(b.last_at) - new Date(a.last_at))[0];
+    return `<div style="margin-top:6px;padding:7px 10px;border-radius:8px;border:1px solid var(--line,#e5e7eb);background:var(--bg2,#f8fafc);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
+      <span style="font-weight:800">💬 Employees</span>
+      ${unread ? `<span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 7px;font-weight:800">${unread} new</span>` : '<span style="color:var(--mu,#6b7280)">nothing new</span>'}
+      ${open ? `<span style="color:#b45309;font-weight:700">❓ ${open} question${open === 1 ? '' : 's'} for you</span>` : ''}
+      <span style="color:var(--mu,#6b7280);flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${last ? esc(last.employee) + ': ' + esc(last.last_text) : ''}</span>
+      <button onclick="showP('employees')" style="padding:4px 12px;border:1px solid #c4b5fd;border-radius:7px;background:#fff;color:#7c3aed;font-weight:700;cursor:pointer">Open chat</button>
+    </div>`;
   }
+
+  /* ── Employees tab: the chat (2026-11-19). Reads v_hq_chat_summary_v1 + v_hq_chat_v1 through the admin gateway;
+     answers go through spawn_hq_chat_reply. Seen-state is per browser (localStorage). ── */
+  const SEEN_KEY = 'spawn_emp_seen';
+  const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
+  const seenId = id => Number(seen()[id] || 0);
+  const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱' };
+  let chatEmp = null, chatBusy = false, chatTimer = null;
+  const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
+
+  async function chatSummary(){
+    try { const rows = await sb('v_hq_chat_summary_v1', 'select=*&order=last_at.desc.nullslast', 50); window.__empChatSummary = Array.isArray(rows) ? rows : []; }
+    catch (_) { window.__empChatSummary = []; }
+    const S = window.__empChatSummary;
+    const unread = S.filter(x => x.last_agent_msg_id && Number(x.last_agent_msg_id) > seenId(x.employee_id)).length;
+    const open = S.reduce((a, x) => a + Number(x.open_questions || 0), 0);
+    const b = document.getElementById('nav-employees-badge');
+    if (b) { const n = unread + open; b.textContent = n; b.style.display = n ? 'block' : 'none'; }
+    return S;
+  }
+  function chatListRender(){
+    const host = document.getElementById('emp-chat-list'); if (!host) return;
+    const S = window.__empChatSummary || [];
+    if (!S.length) { host.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--mu,#6b7280)">No employee has written yet. The Harvest agent posts from 09:00; the Supervisor at 07:10, 12:10 and 18:40.</div>'; return; }
+    host.innerHTML = S.map(x => {
+      const unread = x.last_agent_msg_id && Number(x.last_agent_msg_id) > seenId(x.employee_id);
+      const dot = { red: '#dc2626', amber: '#d97706', green: '#059669' }[x.light] || '#9ca3af';
+      return `<div data-emp="${esc(x.employee_id)}" style="padding:10px 12px;border-bottom:1px solid var(--line,#e5e7eb);cursor:pointer;background:${chatEmp === x.employee_id ? '#ede9fe' : 'transparent'}">
+        <div style="display:flex;align-items:center;gap:6px;font-weight:${unread ? 800 : 600};font-size:13px"><span>${ICON[x.employee_id] || '🤖'}</span><span style="flex:1">${esc(x.employee)}</span>
+          <span title="${esc(x.reason || x.light || '')}" style="width:8px;height:8px;border-radius:50%;background:${dot}"></span>
+          ${Number(x.open_questions) ? `<span style="background:#fde68a;color:#92400e;border-radius:999px;padding:0 6px;font-size:10px;font-weight:800">${x.open_questions}❓</span>` : ''}
+          ${unread ? '<span style="width:8px;height:8px;border-radius:50%;background:#7c3aed"></span>' : ''}</div>
+        <div style="font-size:11px;color:var(--mu,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc((x.last_text || '').split('\n')[0])}</div>
+        <div style="font-size:10px;color:var(--mu,#6b7280)">${x.last_at ? tmFull(x.last_at) : ''}</div>
+      </div>`;
+    }).join('');
+    host.querySelectorAll('[data-emp]').forEach(el => el.onclick = () => chatOpen(el.dataset.emp));
+  }
+  function bubble(m){
+    const mine = m.role === 'owner';
+    const base = 'max-width:78%;padding:8px 12px;border-radius:14px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word;';
+    const style = mine ? base + 'align-self:flex-end;background:#7c3aed;color:#fff;border-bottom-right-radius:4px'
+                       : base + 'align-self:flex-start;background:var(--bg2,#f1f5f9);border:1px solid var(--line,#e5e7eb);border-bottom-left-radius:4px'
+                              + (m.kind === 'question' && m.status === 'open' ? ';border-color:#f59e0b;background:#fffbeb' : '');
+    let foot = '';
+    if (m.kind === 'question') {
+      if (m.status === 'open') {
+        const btns = (m.options || []).map(o => `<button data-ans="${esc(o.v)}" data-id="${m.id}" style="padding:4px 10px;border:1px solid #c4b5fd;border-radius:7px;background:#fff;color:#5b21b6;font-size:12px;font-weight:700;cursor:pointer">${esc(o.label)}</button>`).join(' ');
+        const free = m.free_text ? `<input data-free="${m.id}" placeholder="or type the vendo…" style="padding:4px 8px;border:1px solid var(--bd,#e5e7eb);border-radius:7px;font-size:12px;min-width:160px">` : '';
+        foot = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">${btns}${free}</div>`;
+      } else {
+        foot = `<div style="margin-top:4px;font-size:11px;color:var(--mu,#6b7280)">${m.status === 'answered' ? '✓ answered' : 'skipped'}${m.answered_at ? ' · ' + tmFull(m.answered_at) : ''}</div>`;
+      }
+    }
+    return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
+      <div style="${style}">${esc(m.text)}${foot}</div>
+      <div style="font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}</div></div>`;
+  }
+  async function chatOpen(emp){
+    chatEmp = emp; chatListRender();
+    const head = document.getElementById('emp-chat-head'), box = document.getElementById('emp-chat-msgs'); if (!box) return;
+    const S = (window.__empChatSummary || []).find(x => x.employee_id === emp) || {};
+    head.innerHTML = `${ICON[emp] || '🤖'} ${esc(S.employee || emp)} <span style="font-weight:400;font-size:12px;color:var(--mu,#6b7280)">· ${esc(S.reason || S.light || '')}</span>`;
+    box.innerHTML = '<div style="color:var(--mu,#6b7280);font-size:12px">Loading…</div>';
+    let rows = [];
+    try { rows = await sb('v_hq_chat_v1', 'select=*&employee_id=eq.' + encodeURIComponent(emp) + '&order=id.desc', 200); } catch (_) {}
+    rows = (rows || []).slice().reverse();
+    // open questions last so they sit by the reply box
+    const openQ = rows.filter(m => m.kind === 'question' && m.status === 'open'), rest = rows.filter(m => !(m.kind === 'question' && m.status === 'open'));
+    box.innerHTML = (rest.map(bubble).join('') + (openQ.length ? `<div style="font-size:11px;color:#92400e;font-weight:700;margin-top:6px">❓ Waiting for your answer · ${openQ.length}</div>` + openQ.map(bubble).join('') : ''))
+                 || '<div style="color:var(--mu,#6b7280);font-size:12px">No messages yet.</div>';
+    box.scrollTop = box.scrollHeight;
+    box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
+    box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
+    const maxAgent = rows.filter(m => m.role === 'agent').reduce((a, m) => Math.max(a, Number(m.id)), 0);
+    if (maxAgent) markSeen(emp, maxAgent);
+    chatSummary().then(chatListRender);
+  }
+  async function chatReply(body){
+    if (chatBusy) return null; chatBusy = true;
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/rpc/spawn_hq_chat_reply`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      return j;
+    } catch (e) { alert('Could not send: ' + e.message); return null; }
+    finally { chatBusy = false; }
+  }
+  async function chatAnswer(id, answer, note){
+    const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
+    if (j) chatOpen(chatEmp);
+  }
+  async function chatSend(){
+    const inp = document.getElementById('emp-chat-input'); const t = (inp.value || '').trim(); if (!t || !chatEmp) return;
+    const j = await chatReply({ p_employee: chatEmp, p_note: t });
+    if (j) { inp.value = ''; chatOpen(chatEmp); }
+  }
+  window.employeesTabShown = async function(){
+    await chatSummary(); chatListRender();
+    const S = window.__empChatSummary || [];
+    if (!chatEmp && S.length) chatOpen((S.find(x => Number(x.open_questions) > 0) || S[0]).employee_id);
+    else if (chatEmp) chatOpen(chatEmp);
+    clearInterval(chatTimer);
+    chatTimer = setInterval(() => { const p = document.getElementById('panel-employees'); if (p && p.classList.contains('active') && document.visibilityState === 'visible') { chatSummary().then(chatListRender); } }, 60000);
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    const f = document.getElementById('emp-chat-form'); if (f) f.addEventListener('submit', e => { e.preventDefault(); chatSend(); });
+    chatSummary();
+    setInterval(chatSummary, 5 * 60 * 1000);
+  });
+
   async function load(){
     if (!el()) return;
     try {
