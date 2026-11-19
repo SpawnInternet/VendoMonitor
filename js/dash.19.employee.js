@@ -84,6 +84,7 @@
     const S = window.__empChatSummary;
     const unread = S.filter(x => x.last_agent_msg_id && Number(x.last_agent_msg_id) > seenId(x.employee_id)).length;
     const open = S.reduce((a, x) => a + Number(x.open_questions || 0), 0);
+    if (typeof window.navTickerRefresh === 'function') setTimeout(window.navTickerRefresh, 0);
     const b = document.getElementById('nav-employees-badge');
     if (b) { const n = unread + open; b.textContent = n; b.style.display = n ? 'block' : 'none'; }
     return S;
@@ -274,3 +275,31 @@ window.agentsTabShown = async function(){
       </div>`).join('')}</div>`;
   host.querySelectorAll('[data-agent]').forEach(el => el.onclick = () => { window.showP('employees', null); setTimeout(() => { if (typeof window.employeesOpenThread === 'function') window.employeesOpenThread(el.dataset.agent); }, 300); });
 };
+
+/* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
+(function(){
+  let i = 0, items = [], timer = null;
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter' };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  function build(){
+    const S = window.__empChatSummary || [];
+    items = S.filter(x => x.last_text).map(x => ({ who: ICON2[x.employee_id] || ('🤖 ' + x.employee), text: String(x.last_text).split('\n').filter(Boolean).slice(0, 2).join(' · '), light: x.light, q: Number(x.open_questions || 0) }));
+    const open = S.reduce((a, x) => a + Number(x.open_questions || 0), 0);
+    const el = document.getElementById('nav-ticker'); if (!el) return;
+    if (!items.length) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    const n = document.getElementById('nav-ticker-n'); n.textContent = open ? open + ' ❓' : 'all read'; n.style.display = 'inline-block';
+    show();
+  }
+  function show(){
+    if (!items.length) return;
+    const it = items[i % items.length]; i++;
+    const t = document.getElementById('nav-ticker-text'), w = document.getElementById('nav-ticker-who'), d = document.getElementById('nav-ticker-dot');
+    if (!t) return;
+    t.style.opacity = 0;
+    setTimeout(() => { w.textContent = it.who; t.textContent = it.text; t.style.opacity = 1;
+      const c = { red: '#D81E2C', amber: '#F5A623', green: '#0E8A5F' }[it.light] || '#1B6BE0'; d.style.background = c; d.style.boxShadow = '0 0 0 0 ' + c + '80'; }, 350);
+  }
+  window.navTickerRefresh = build;
+  document.addEventListener('DOMContentLoaded', () => { setTimeout(build, 2500); timer = setInterval(show, 7000); setInterval(build, 60000); });
+})();
