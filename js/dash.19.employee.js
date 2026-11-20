@@ -102,7 +102,7 @@
           <span title="${esc(x.reason || x.light || '')}" style="width:8px;height:8px;border-radius:50%;background:${dot}"></span>
           ${Number(x.open_questions) ? `<span style="background:#fde68a;color:#92400e;border-radius:999px;padding:0 6px;font-size:10px;font-weight:800">${x.open_questions}❓</span>` : ''}
           ${unread ? '<span style="width:8px;height:8px;border-radius:50%;background:#7c3aed"></span>' : ''}</div>
-        <div style="font-size:11px;color:var(--mu,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc((x.last_text || '').split('\n')[0])}</div>
+        <div style="font-size:11px;color:var(--mu,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc((window.spawnTo12h ? spawnTo12h(x.last_text || '') : (x.last_text || '')).split('\n')[0])}</div>
         <div style="font-size:10px;color:var(--mu,#6b7280)">${x.last_at ? tmFull(x.last_at) : ''}</div>
       </div>`;
     }).join('');
@@ -128,10 +128,13 @@
     const parent = (m.topic === 'reply' && m.reply_to) ? chatRows.find(r => Number(r.id) === Number(m.reply_to)) : null;
     const pre = parent ? `<div style="font-size:11px;opacity:.8;margin-bottom:2px">↩ re: ${esc(String(parent.text || '').slice(0, 40))}…</div>` : '';
     const canReply = !mine && COMPANIONS.has(m.employee_id) && !(m.kind === 'question' && m.status === 'open');
+    // 2026-11-20: "Fix it ›" opens the tab where this employee's problems get fixed; ↗ opens it in a new window (dash.22.nav.js)
+    const F = !mine && window.SPAWN_FIX ? window.SPAWN_FIX[m.employee_id] : null;
+    const fix = F ? `<div style="margin-top:6px;font-size:11px;display:flex;gap:10px;align-items:center"><a href="#" data-fix="${esc(m.employee_id)}" style="color:#1B6BE0;text-decoration:none;font-weight:700">${esc(F.label)} ›</a><a href="#" data-fixwin="${esc(m.employee_id)}" title="Open in a new window" style="color:#1B6BE0;text-decoration:none">↗</a></div>` : '';
     const reply = canReply ? `<div style="margin-top:6px;font-size:11px"><a href="#" data-reply-to="${m.id}" style="color:#5b21b6;text-decoration:none;font-weight:700">↩ Reply</a>
         <input data-reply-inp="${m.id}" placeholder="type and press Enter…" style="display:none;margin-top:4px;width:100%;padding:4px 8px;border:1px solid var(--bd,#e5e7eb);border-radius:7px;font-size:12px"></div>` : '';
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
-      <div style="${style}">${pre}${esc(m.text)}${foot}${reply}</div>
+      <div style="${style}">${pre}${esc(window.spawnTo12h ? spawnTo12h(m.text) : m.text)}${foot}${reply}${fix}</div>
       <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
   }
   async function chatOpen(emp){
@@ -154,6 +157,8 @@
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
     box.querySelectorAll('[data-reply-to]').forEach(a => a.onclick = e => { e.preventDefault(); const i = box.querySelector(`[data-reply-inp="${a.dataset.replyTo}"]`); if (!i) return; i.style.display = i.style.display === 'none' ? 'block' : 'none'; if (i.style.display === 'block') i.focus(); });
     box.querySelectorAll('[data-reply-inp]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatReplyTo(Number(i.dataset.replyInp), i.value.trim()); });
+    box.querySelectorAll('[data-fix]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fix]; if (F && window.spawnOpenPanel) spawnOpenPanel(F.panel, F.sub); });
+    box.querySelectorAll('[data-fixwin]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fixwin]; if (F && window.spawnOpenNewWindow) spawnOpenNewWindow(F.panel, F.sub); });
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
       const m = rows.find(r => Number(r.id) === Number(b.dataset.copy)); if (!m) return;
       const txt = `${m.employee} · ${tmFull(m.at)}\n${m.text}`;
