@@ -74,8 +74,8 @@
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡' };
-  let chatEmp = null, chatBusy = false, chatTimer = null;
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗' };
+  let chatEmp = null, chatBusy = false, chatTimer = null, chatRows = [];
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
   async function chatSummary(){
@@ -123,8 +123,14 @@
         foot = `<div style="margin-top:4px;font-size:11px;color:var(--mu,#6b7280)">${m.status === 'answered' ? '✓ answered' : 'skipped'}${m.answered_at ? ' · ' + tmFull(m.answered_at) : ''}</div>`;
       }
     }
+    // 2026-11-21 (companions): an owner reply quotes the bubble it answers; every agent bubble takes a reply
+    const parent = (m.kind === 'reply' && m.reply_to) ? chatRows.find(r => Number(r.id) === Number(m.reply_to)) : null;
+    const pre = parent ? `<div style="font-size:11px;opacity:.8;margin-bottom:2px">↩ re: ${esc(String(parent.text || '').slice(0, 40))}…</div>` : '';
+    const canReply = !mine && !(m.kind === 'question' && m.status === 'open');
+    const reply = canReply ? `<div style="margin-top:6px;font-size:11px"><a href="#" data-reply-to="${m.id}" style="color:#5b21b6;text-decoration:none;font-weight:700">↩ Reply</a>
+        <input data-reply-inp="${m.id}" placeholder="type and press Enter…" style="display:none;margin-top:4px;width:100%;padding:4px 8px;border:1px solid var(--bd,#e5e7eb);border-radius:7px;font-size:12px"></div>` : '';
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
-      <div style="${style}">${esc(m.text)}${foot}</div>
+      <div style="${style}">${pre}${esc(m.text)}${foot}${reply}</div>
       <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
   }
   async function chatOpen(emp){
@@ -137,6 +143,7 @@
     let rows = [];
     try { rows = await sb('v_hq_chat_v1', 'select=*&employee_id=eq.' + encodeURIComponent(emp) + '&order=id.desc', 200); } catch (_) {}
     rows = (rows || []).slice().reverse();
+    chatRows = rows;
     // open questions last so they sit by the reply box
     const openQ = rows.filter(m => m.kind === 'question' && m.status === 'open'), rest = rows.filter(m => !(m.kind === 'question' && m.status === 'open'));
     box.innerHTML = (rest.map(bubble).join('') + (openQ.length ? `<div style="font-size:11px;color:#92400e;font-weight:700;margin-top:6px">❓ Waiting for your answer · ${openQ.length}</div>` + openQ.map(bubble).join('') : ''))
@@ -144,6 +151,8 @@
     box.scrollTop = box.scrollHeight;
     box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
+    box.querySelectorAll('[data-reply-to]').forEach(a => a.onclick = e => { e.preventDefault(); const i = box.querySelector(`[data-reply-inp="${a.dataset.replyTo}"]`); if (!i) return; i.style.display = i.style.display === 'none' ? 'block' : 'none'; if (i.style.display === 'block') i.focus(); });
+    box.querySelectorAll('[data-reply-inp]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatReplyTo(Number(i.dataset.replyInp), i.value.trim()); });
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
       const m = rows.find(r => Number(r.id) === Number(b.dataset.copy)); if (!m) return;
       const txt = `${m.employee} · ${tmFull(m.at)}\n${m.text}`;
@@ -164,7 +173,7 @@
   async function chatReply(body){
     if (chatBusy) return null; chatBusy = true;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/rpc/spawn_hq_chat_reply`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await fetch(`${SB_URL}/rest/v1/rpc/spawn_hq_chat_reply_v2`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
       return j;
@@ -173,6 +182,10 @@
   }
   async function chatAnswer(id, answer, note){
     const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
+    if (j) chatOpen(chatEmp);
+  }
+  async function chatReplyTo(id, text){
+    const j = await chatReply({ p_reply_to: id, p_note: text });
     if (j) chatOpen(chatEmp);
   }
   async function chatSend(){
@@ -293,7 +306,7 @@ window.agentsTabShown = async function(){
 /* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
 (function(){
   let i = 0, items = [], timer = null;
-  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', poller_dapitan: '📡 Dapitan poller' };
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', poller_dapitan: '📡 Dapitan poller', name_matcher: '🔗 Name matcher' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   function build(){
     const S = window.__empChatSummary || [];
