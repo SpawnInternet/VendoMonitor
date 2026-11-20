@@ -29,7 +29,7 @@ test('times that already say AM/PM, and things that only look like times, stay a
 
 test('every employee has a "Fix it" destination; GCash goes to the Exceptions sub-tab', () => {
   for (const emp of ['eod_harvest', 'harvest_auditor', 'accuracy_check', 'name_matcher', 'supervisor', 'job_dispatcher',
-                     'gcash_autopay', 'spawn_remind', 'poller_dicayas', 'poller_dapitan']) {
+                     'gcash_autopay', 'spawn_remind', 'poller_dicayas', 'poller_dapitan', 'audit_harvest']) {
     assert.ok(nav.FIX[emp] && nav.FIX[emp].panel && nav.FIX[emp].label, emp);
   }
   assert.deepEqual({ panel: nav.FIX.gcash_autopay.panel, sub: nav.FIX.gcash_autopay.sub }, { panel: 'subscribers', sub: 'exc' });

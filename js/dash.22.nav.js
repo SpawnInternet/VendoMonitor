@@ -30,7 +30,8 @@
     job_dispatcher:  { label: '📋 Open job orders',         panel: 'spawnjobs' },
     supervisor:      { label: '🖥 Open System',             panel: 'status' },
     poller_dicayas:  { label: '🖥 Open System',             panel: 'status' },
-    poller_dapitan:  { label: '🖥 Open System',             panel: 'status' }
+    poller_dapitan:  { label: '🖥 Open System',             panel: 'status' },
+    audit_harvest:   { label: '🧺 Open Harvest',            panel: 'harvest' }
   };
 
   const clean = s => String(s == null ? '' : s).replace(/[^a-z0-9_-]/gi, '');
