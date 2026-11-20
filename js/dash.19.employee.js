@@ -68,14 +68,17 @@
     </div>`;
   }
 
-  /* ── Employees tab: the chat (2026-11-19). Reads v_hq_chat_summary_v1 + v_hq_chat_v1 through the admin gateway;
-     answers go through spawn_hq_chat_reply. Seen-state is per browser (localStorage). ── */
+  /* ── Employees tab: the chat (2026-11-19). Reads v_hq_chat_summary_v1 + v_hq_chat_v2 through the admin gateway;
+     answers go through spawn_hq_chat_reply_v2. Seen-state is per browser (localStorage).
+     2026-11-20 (companions framework): ↩ Reply on any bubble (not on an open question — that is answered with its buttons),
+     the reply shows the line it answers; ✦ Claude tag on notes written by the companion routine. Falls back to
+     v_hq_chat_v1 / spawn_hq_chat_reply if the gateway does not have the v2 names yet. ── */
   const SEEN_KEY = 'spawn_emp_seen';
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡' };
-  let chatEmp = null, chatBusy = false, chatTimer = null;
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗' };
+  let chatEmp = null, chatBusy = false, chatTimer = null, replyTo = null;   // replyTo = { id, text } while replying to a bubble
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
   async function chatSummary(){
@@ -123,11 +126,16 @@
         foot = `<div style="margin-top:4px;font-size:11px;color:var(--mu,#6b7280)">${m.status === 'answered' ? '✓ answered' : 'skipped'}${m.answered_at ? ' · ' + tmFull(m.answered_at) : ''}</div>`;
       }
     }
+    // an owner reply quotes the line it answers
+    const quote = (m.topic === 'reply' && m.reply_to_text)
+      ? `<div style="font-size:11px;opacity:.85;border-left:3px solid ${mine ? 'rgba(255,255,255,.6)' : '#c4b5fd'};padding:1px 0 1px 7px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↩ ${esc(String(m.reply_to_text).split('\n')[0])}</div>` : '';
+    const canReply = !(m.kind === 'question' && m.status === 'open');
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
-      <div style="${style}">${esc(m.text)}${foot}</div>
-      <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
+      <div style="${style}">${quote}${esc(m.text)}${foot}</div>
+      <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${m.is_claude ? ' <span title="Written by the Claude companion routine" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:999px;padding:0 6px;font-weight:700">✦ Claude</span>' : ''}${canReply ? ` <button data-reply="${m.id}" title="Reply to this message" style="border:0;background:none;color:#7c3aed;cursor:pointer;font-size:11px;padding:0 2px">↩ Reply</button>` : ''}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
   }
   async function chatOpen(emp){
+    if (chatEmp !== emp) setReply(null);
     chatEmp = emp; chatListRender();
     const head = document.getElementById('emp-chat-head'), box = document.getElementById('emp-chat-msgs'); if (!box) return;
     const S = (window.__empChatSummary || []).find(x => x.employee_id === emp) || {};
@@ -135,7 +143,9 @@
       <button id="emp-copy-all" title="Copy today's messages from this agent" style="float:right;border:1px solid #c7d2fe;background:#fff;color:#1B6BE0;border-radius:7px;font-size:11px;font-weight:700;padding:3px 8px;cursor:pointer">📋 Copy today</button>`;
     box.innerHTML = '<div style="color:var(--mu,#6b7280);font-size:12px">Loading…</div>';
     let rows = [];
-    try { rows = await sb('v_hq_chat_v1', 'select=*&employee_id=eq.' + encodeURIComponent(emp) + '&order=id.desc', 200); } catch (_) {}
+    const q = 'select=*&employee_id=eq.' + encodeURIComponent(emp) + '&order=id.desc';
+    try { rows = await sb('v_hq_chat_v2', q, 200); } catch (_) {}
+    if (!rows || !rows.length) { try { rows = await sb('v_hq_chat_v1', q, 200); } catch (_) {} }   // gateway without v2 yet
     rows = (rows || []).slice().reverse();
     // open questions last so they sit by the reply box
     const openQ = rows.filter(m => m.kind === 'question' && m.status === 'open'), rest = rows.filter(m => !(m.kind === 'question' && m.status === 'open'));
@@ -144,6 +154,10 @@
     box.scrollTop = box.scrollHeight;
     box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
+    box.querySelectorAll('[data-reply]').forEach(b => b.onclick = () => {
+      const m = rows.find(r => Number(r.id) === Number(b.dataset.reply)); if (!m) return;
+      setReply({ id: Number(m.id), text: (m.role === 'owner' ? 'You: ' : '') + String(m.text || '').split('\n')[0] });
+    });
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
       const m = rows.find(r => Number(r.id) === Number(b.dataset.copy)); if (!m) return;
       const txt = `${m.employee} · ${tmFull(m.at)}\n${m.text}`;
@@ -161,15 +175,36 @@
     if (maxAgent) markSeen(emp, maxAgent);
     chatSummary().then(chatListRender);
   }
+  async function callReply(fn, body){
+    const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    return { r, j };
+  }
   async function chatReply(body){
     if (chatBusy) return null; chatBusy = true;
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/rpc/spawn_hq_chat_reply`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await r.json().catch(() => ({}));
+      let { r, j } = await callReply('spawn_hq_chat_reply_v2', body);
+      // gateway still on v86 (no v2 name): answers and new messages still work through v1; replies need v2
+      if (!r.ok && /rpc not allowed/.test(String(j.error || '')) && !body.p_reply_to) ({ r, j } = await callReply('spawn_hq_chat_reply', body));
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
       return j;
-    } catch (e) { alert('Could not send: ' + e.message); return null; }
+    } catch (e) { chatNotice('Could not send: ' + e.message); return null; }
     finally { chatBusy = false; }
+  }
+  /* inline notice above the reply box (no pop-up) */
+  function chatNotice(msg){
+    const n = document.getElementById('emp-chat-notice'); if (!n) { alert(msg); return; }
+    n.textContent = msg; n.style.display = msg ? 'block' : 'none';
+    clearTimeout(chatNotice.t); if (msg) chatNotice.t = setTimeout(() => { n.style.display = 'none'; }, 6000);
+  }
+  /* reply mode: a strip above the input says what is being answered; ✕ or Esc cancels */
+  function setReply(rt){
+    replyTo = rt;
+    const bar = document.getElementById('emp-chat-replying'), inp = document.getElementById('emp-chat-input');
+    if (!bar || !inp) return;
+    if (!rt) { bar.style.display = 'none'; inp.placeholder = 'Write to this employee… (saved with the thread)'; return; }
+    bar.querySelector('[data-rt]').textContent = rt.text;
+    bar.style.display = 'flex'; inp.placeholder = 'Your reply…'; inp.focus();
   }
   async function chatAnswer(id, answer, note){
     const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
@@ -177,8 +212,9 @@
   }
   async function chatSend(){
     const inp = document.getElementById('emp-chat-input'); const t = (inp.value || '').trim(); if (!t || !chatEmp) return;
-    const j = await chatReply({ p_employee: chatEmp, p_note: t });
-    if (j) { inp.value = ''; chatOpen(chatEmp); }
+    const j = replyTo ? await chatReply({ p_reply_to: replyTo.id, p_note: t })
+                      : await chatReply({ p_employee: chatEmp, p_note: t });
+    if (j) { inp.value = ''; setReply(null); chatOpen(chatEmp); }
   }
   window.employeesOpenThread = emp => chatOpen(emp);
   window.employeesTabShown = async function(){
@@ -190,7 +226,22 @@
     chatTimer = setInterval(() => { const p = document.getElementById('panel-employees'); if (p && p.classList.contains('active') && document.visibilityState === 'visible') { chatSummary().then(chatListRender); } }, 60000);
   };
   document.addEventListener('DOMContentLoaded', () => {
-    const f = document.getElementById('emp-chat-form'); if (f) f.addEventListener('submit', e => { e.preventDefault(); chatSend(); });
+    const f = document.getElementById('emp-chat-form');
+    if (f) {
+      f.addEventListener('submit', e => { e.preventDefault(); chatSend(); });
+      if (!document.getElementById('emp-chat-replying')) {
+        f.insertAdjacentHTML('beforebegin',
+          `<div id="emp-chat-notice" style="display:none;margin:0 12px;padding:5px 10px;border-radius:7px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700"></div>
+           <div id="emp-chat-replying" style="display:none;align-items:center;gap:8px;margin:0 12px;padding:5px 10px;border-left:3px solid #7c3aed;background:#f5f3ff;border-radius:6px;font-size:12px">
+             <span style="font-weight:800;color:#6d28d9">↩ Replying to</span>
+             <span data-rt style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#4b5563"></span>
+             <button type="button" data-rt-x title="Cancel the reply (Esc)" style="border:0;background:none;color:#6b7280;font-size:14px;cursor:pointer;padding:0 4px">✕</button>
+           </div>`);
+        document.querySelector('#emp-chat-replying [data-rt-x]').onclick = () => setReply(null);
+        const inp = document.getElementById('emp-chat-input');
+        if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Escape' && replyTo) setReply(null); });
+      }
+    }
     chatSummary();
     setInterval(chatSummary, 5 * 60 * 1000);
   });
@@ -271,7 +322,7 @@ window.agentsTabShown = async function(){
   const C = { red: '#dc2626', amber: '#d97706', green: '#059669' };
   const ago = iso => { if (!iso) return 'never'; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
   const n = { red: 0, amber: 0, green: 0 }; rows.forEach(r => { if (n[r.light] != null) n[r.light]++; });
-  host.innerHTML = `<div style="display:flex;gap:10px;align-items:center;padding:0 12px 8px;flex-wrap:wrap">
+  host.innerHTML = `<div id="agents-companions" style="padding:0 12px 10px"></div><div style="display:flex;gap:10px;align-items:center;padding:0 12px 8px;flex-wrap:wrap">
       <span style="font-weight:800;font-size:15px">🤖 Digital employees · ${rows.length}</span>
       <span style="font-size:12px;color:${C.red};font-weight:700">● ${n.red} red</span><span style="font-size:12px;color:${C.amber};font-weight:700">● ${n.amber} amber</span><span style="font-size:12px;color:${C.green};font-weight:700">● ${n.green} green</span>
       <span style="font-size:11px;color:var(--mu,#6b7280)">Tap a row to open its chat. Decisions are made in the Chat tab; this is the roll call.</span></div>
@@ -288,12 +339,58 @@ window.agentsTabShown = async function(){
         ${r.last_error ? `<div style="font-size:11px;color:#b91c1c;margin-top:2px">${esc(r.last_error).slice(0, 160)}</div>` : ''}
       </div>`).join('')}</div>`;
   host.querySelectorAll('[data-agent]').forEach(el => el.onclick = () => { window.showP('employees', null); setTimeout(() => { if (typeof window.employeesOpenThread === 'function') window.employeesOpenThread(el.dataset.agent); }, 300); });
+  companionsCard();
 };
+
+/* ── Employees → Agents: companions card (2026-11-20, companions framework). Reads hq_companion_status (switches, the
+   routine key's dates — never the key — and the last Claude note). "New routine key" calls hq_companion_key_new: the key
+   is shown ONCE here, inline, and the previous key stops working at that moment. Both RPCs: admin gateway only. ── */
+async function companionsCard(justIssued){
+  const box = document.getElementById('agents-companions'); if (!box) return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  const day = iso => new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+  const ago = iso => { if (!iso) return 'never'; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + ' min ago' : m < 2880 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
+  const rpc = async (fn, body) => { const r = await fetch(`${SB_URL}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { ...HDR, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }); const j = await r.json().catch(() => ({})); if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; };
+  let st;
+  try { st = await rpc('hq_companion_status'); }
+  catch (e) { box.innerHTML = `<div style="font-size:11px;color:var(--mu,#6b7280)">Companions: status not reachable (${esc(e.message)}) — needs gateway v87.</div>`; return; }
+  const SW = { on: ['#059669', 'on — links exact matches, asks the rest (max 10/day)'], watch: ['#d97706', 'watch — findings only, no links, no questions'], off: ['#9ca3af', 'off — nothing runs'] };
+  const [swC, swW] = SW[st.name_matcher] || SW.off;
+  const k = st.key, daysLeft = k ? Math.floor((new Date(k.expires_at) - Date.now()) / 86400000) : null;
+  const keyLine = !k ? '<span style="color:#b45309;font-weight:700">no key — the morning routine cannot write notes</span>'
+    : `<span style="color:${daysLeft < 14 ? '#b45309' : '#059669'};font-weight:700">active</span> · expires ${esc(day(k.expires_at))} (${daysLeft} d) · last used ${esc(ago(k.last_used))}`;
+  const row = (label, val) => `<div style="display:flex;gap:8px;font-size:12px;margin-top:3px"><span style="width:118px;flex:0 0 118px;color:var(--mu,#6b7280)">${label}</span><span style="flex:1">${val}</span></div>`;
+  box.innerHTML = `<div style="padding:10px 12px;border-radius:10px;border:1px solid #ddd6fe;background:#faf5ff">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-weight:800;font-size:13px">✦ Companions</span>
+        <span style="font-size:11px;color:var(--mu,#6b7280);flex:1">the morning routine that writes notes into the agents' chats</span>
+        <button id="cmp-key-btn" style="padding:4px 12px;border:1px solid #c4b5fd;border-radius:7px;background:#fff;color:#6d28d9;font-weight:700;font-size:12px;cursor:pointer">🔑 ${k ? 'Replace routine key' : 'New routine key'}</button></div>
+      ${row('🔗 Name matcher', `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${swC};margin-right:5px"></span>${esc(swW)}`)}
+      ${row('Notes written by', st.companion_model === 'claude' ? 'Claude routine (scheduled)' : esc('API worker (' + (st.companion_model || '?') + ') — the routine is refused'))}
+      ${row('Routine key', keyLine)}
+      ${row('Last Claude note', st.last_note_at ? esc(ago(st.last_note_at)) : 'none yet')}
+      <div id="cmp-key-new" style="${justIssued ? '' : 'display:none;'}margin-top:8px;padding:8px 10px;border-radius:8px;background:#fff;border:1px dashed #7c3aed">
+        <div style="font-size:11px;font-weight:700;color:#6d28d9">New key — shown once. Paste it into the companion routine's settings as HQ_COMPANION_KEY. The old key stopped working.</div>
+        <div style="display:flex;gap:6px;margin-top:5px"><input id="cmp-key-val" readonly value="${esc(justIssued || '')}" style="flex:1;min-width:0;padding:5px 8px;border:1px solid #e5e7eb;border-radius:6px;font-family:monospace;font-size:12px">
+          <button id="cmp-key-copy" style="padding:4px 10px;border:1px solid #c7d2fe;border-radius:6px;background:#fff;color:#1B6BE0;font-weight:700;font-size:12px;cursor:pointer">📋 Copy</button></div></div>
+      <div id="cmp-key-err" style="display:none;margin-top:6px;font-size:12px;color:#b91c1c;font-weight:700"></div>
+    </div>`;
+  const btn = document.getElementById('cmp-key-btn');
+  let armed = false, t = null;
+  btn.onclick = async () => {
+    // replacing a working key breaks the routine until the new one is pasted in: second tap confirms (no pop-up)
+    if (k && !armed) { armed = true; btn.textContent = 'Tap again to replace — the old key stops working'; btn.style.background = '#fef3c7'; t = setTimeout(() => { armed = false; btn.textContent = '🔑 Replace routine key'; btn.style.background = '#fff'; }, 5000); return; }
+    clearTimeout(t); btn.disabled = true; btn.textContent = 'Issuing…';
+    try { const j = await rpc('hq_companion_key_new', { p_days: 90, p_label: 'companion routine' }); companionsCard(j.token); }
+    catch (e) { const er = document.getElementById('cmp-key-err'); er.textContent = 'Could not issue a key: ' + e.message; er.style.display = 'block'; btn.disabled = false; btn.textContent = '🔑 Try again'; }
+  };
+  const cp = document.getElementById('cmp-key-copy');
+  if (cp) cp.onclick = async () => { const v = document.getElementById('cmp-key-val').value; try { await navigator.clipboard.writeText(v); } catch (e) { const i = document.getElementById('cmp-key-val'); i.select(); document.execCommand('copy'); } cp.textContent = '✓ Copied'; setTimeout(() => cp.textContent = '📋 Copy', 1500); };
+}
 
 /* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
 (function(){
   let i = 0, items = [], timer = null;
-  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', poller_dapitan: '📡 Dapitan poller' };
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', name_matcher: '🔗 Name matcher', poller_dapitan: '📡 Dapitan poller' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   function build(){
     const S = window.__empChatSummary || [];
