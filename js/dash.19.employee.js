@@ -220,16 +220,20 @@
      works only through the admin gateway this dashboard is logged in to; it writes the same fields as the Recon tab's buttons. */
   async function chatDecide(m, choice, label){
     if (chatBusy) return;
+    // the button label is "Charge <collector> ₱<amount>"; that amount is what the owner confirms, and decide refuses if the
+    // shortfall moved since (late sales rows) — the button is then refreshed with the new amount
+    const amt = String(label || '').replace(/^\s*Charge\s*/i, '') || 'this shortfall';
+    const num = (String(label || '').match(/₱\s*([\d,]+(?:\.\d+)?)/) || [])[1];
+    const expect = choice === 'charge' && num ? Number(num.replace(/,/g, '')) : null;
     if (choice === 'charge') {
-      const amt = String(label || '').replace(/^\s*Charge\s*/i, '') || 'this shortfall';
       const go = typeof window.askConfirm === 'function'
-        ? await window.askConfirm({ title: '💳 Charge as utang', body: 'Charge ' + esc(amt) + " to the collector's account? You can undo it in the Recon tab.", ok: 'Charge ' + amt, danger: true })
-        : confirm('Charge ' + amt + " to the collector's account? You can undo it in the Recon tab.");
+        ? await window.askConfirm({ title: '💳 Charge as utang', body: 'Charge ' + esc(amt) + ' as utang? You can undo it in the Recon tab.', ok: 'Charge ' + esc(amt), danger: true })
+        : confirm('Charge ' + amt + ' as utang? You can undo it in the Recon tab.');
       if (!go) return;
     }
     chatBusy = true;
     try {
-      const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
+      const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null, p_expect: expect });
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
     } catch (e) { chatNotice('Not saved: ' + e.message); }
     finally { chatBusy = false; }

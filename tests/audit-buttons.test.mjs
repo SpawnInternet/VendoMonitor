@@ -19,4 +19,11 @@ test('Charge asks for a confirm showing the amount and the undo place before wri
   assert.match(d, /choice === 'charge'/);
   assert.match(d, /askConfirm\(/);
   assert.match(d, /undo it in the Recon tab/);
+  assert.match(d, /ok: 'Charge ' \+ esc\(amt\)/);
+});
+
+test('the confirmed amount is sent, so the database refuses if the shortfall moved meanwhile', () => {
+  const d = src.split('async function chatDecide(')[1].split('\n  async function ')[0];
+  assert.match(d, /p_expect: expect/);
+  assert.match(d, /const expect = /);
 });
