@@ -63,7 +63,7 @@
       <span style="font-weight:800">💬 Employees</span>
       ${unread ? `<span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 7px;font-weight:800">${unread} new</span>` : '<span style="color:var(--mu,#6b7280)">nothing new</span>'}
       ${open ? `<span style="color:#b45309;font-weight:700">❓ ${open} question${open === 1 ? '' : 's'} for you</span>` : ''}
-      <span style="color:var(--mu,#6b7280);flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${last ? esc(last.employee) + ': ' + esc(last.last_text) : ''}</span>
+      <span style="color:var(--mu,#6b7280);flex:1;min-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${last ? esc(last.employee) + ': ' + esc(window.spawnTo12h ? spawnTo12h(last.last_text) : last.last_text) : ''}</span>
       <button onclick="showP('employees')" style="padding:4px 12px;border:1px solid #c4b5fd;border-radius:7px;background:#fff;color:#7c3aed;font-weight:700;cursor:pointer">Open chat</button>
     </div>`;
   }
@@ -104,7 +104,7 @@
           <span title="${esc(x.reason || x.light || '')}" style="width:8px;height:8px;border-radius:50%;background:${dot}"></span>
           ${Number(x.open_questions) ? `<span style="background:#fde68a;color:#92400e;border-radius:999px;padding:0 6px;font-size:10px;font-weight:800">${x.open_questions}❓</span>` : ''}
           ${unread ? '<span style="width:8px;height:8px;border-radius:50%;background:#7c3aed"></span>' : ''}</div>
-        <div style="font-size:11px;color:var(--mu,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc((x.last_text || '').split('\n')[0])}</div>
+        <div style="font-size:11px;color:var(--mu,#6b7280);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px">${esc((window.spawnTo12h ? spawnTo12h(x.last_text || '') : (x.last_text || '')).split('\n')[0])}</div>
         <div style="font-size:10px;color:var(--mu,#6b7280)">${x.last_at ? tmFull(x.last_at) : ''}</div>
       </div>`;
     }).join('');
@@ -130,8 +130,11 @@
     const quote = (m.topic === 'reply' && m.reply_to_text)
       ? `<div style="font-size:11px;opacity:.85;border-left:3px solid ${mine ? 'rgba(255,255,255,.6)' : '#c4b5fd'};padding:1px 0 1px 7px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">↩ ${esc(String(m.reply_to_text).split('\n')[0])}</div>` : '';
     const canReply = !(m.kind === 'question' && m.status === 'open');
+    // 2026-11-20: "Fix it ›" opens the tab where this employee's problems get fixed; ↗ opens it in a new window (dash.22.nav.js)
+    const F = !mine && window.SPAWN_FIX ? window.SPAWN_FIX[m.employee_id] : null;
+    const fix = F ? `<div style="margin-top:6px;font-size:11px;display:flex;gap:10px;align-items:center"><a href="#" data-fix="${esc(m.employee_id)}" style="color:#1B6BE0;text-decoration:none;font-weight:700">${esc(F.label)} ›</a><a href="#" data-fixwin="${esc(m.employee_id)}" title="Open in a new window" style="color:#1B6BE0;text-decoration:none">↗</a></div>` : '';
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
-      <div style="${style}">${quote}${esc(m.text)}${foot}</div>
+      <div style="${style}">${quote}${esc(window.spawnTo12h ? spawnTo12h(m.text) : m.text)}${foot}${fix}</div>
       <div style="display:flex;gap:8px;align-items:center;font-size:10px;color:var(--mu,#6b7280);margin:2px 6px;align-self:${mine ? 'flex-end' : 'flex-start'}">${mine ? 'You' : esc(m.employee)} · ${tmFull(m.at)}${m.is_claude ? ' <span title="Written by the Claude companion routine" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:999px;padding:0 6px;font-weight:700">✦ Claude</span>' : ''}${canReply ? ` <button data-reply="${m.id}" title="Reply to this message" style="border:0;background:none;color:#7c3aed;cursor:pointer;font-size:11px;padding:0 2px">↩ Reply</button>` : ''}${mine ? '' : ` <button data-copy="${m.id}" title="Copy this message" style="border:0;background:none;color:#1B6BE0;cursor:pointer;font-size:11px;padding:0 2px">📋 Copy</button>`}</div></div>`;
   }
   async function chatOpen(emp){
@@ -154,6 +157,8 @@
     box.scrollTop = box.scrollHeight;
     box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
+    box.querySelectorAll('[data-fix]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fix]; if (F && window.spawnOpenPanel) spawnOpenPanel(F.panel, F.sub); });
+    box.querySelectorAll('[data-fixwin]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fixwin]; if (F && window.spawnOpenNewWindow) spawnOpenNewWindow(F.panel, F.sub); });
     box.querySelectorAll('[data-reply]').forEach(b => b.onclick = () => {
       const m = rows.find(r => Number(r.id) === Number(b.dataset.reply)); if (!m) return;
       setReply({ id: Number(m.id), text: (m.role === 'owner' ? 'You: ' : '') + String(m.text || '').split('\n')[0] });

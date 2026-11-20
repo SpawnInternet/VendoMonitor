@@ -1280,5 +1280,6 @@
 
   // The tab button calls subscribersInit(); route it through the sections.
   window.subscribersInit = function(){ stGo(stTab); };
+  window.subGoTab = k => stGo(k);   // 2026-11-20: deep links / "Fix it" (dash.22.nav.js) open a sub-tab, e.g. 'exc'
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', liveStart); else liveStart();
 })();
