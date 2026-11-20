@@ -155,7 +155,12 @@
     box.innerHTML = (rest.map(bubble).join('') + (openQ.length ? `<div style="font-size:11px;color:#92400e;font-weight:700;margin-top:6px">❓ Waiting for your answer · ${openQ.length}</div>` + openQ.map(bubble).join('') : ''))
                  || '<div style="color:var(--mu,#6b7280);font-size:12px">No messages yet.</div>';
     box.scrollTop = box.scrollHeight;
-    box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
+    box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => {
+      const m = rows.find(r => Number(r.id) === Number(b.dataset.id));
+      // 2026-11-21: Audit harvest money questions go through hq_audit_decide (admin gateway only), never the chat reply
+      return m && m.topic === 'audit_money' ? chatDecide(m, b.dataset.ans, b.textContent)
+        : chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || '');
+    });
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
     box.querySelectorAll('[data-fix]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fix]; if (F && window.spawnOpenPanel) spawnOpenPanel(F.panel, F.sub); });
     box.querySelectorAll('[data-fixwin]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fixwin]; if (F && window.spawnOpenNewWindow) spawnOpenNewWindow(F.panel, F.sub); });
@@ -210,6 +215,25 @@
     if (!rt) { bar.style.display = 'none'; inp.placeholder = 'Write to this employee… (saved with the thread)'; return; }
     bar.querySelector('[data-rt]').textContent = rt.text;
     bar.style.display = 'flex'; inp.placeholder = 'Your reply…'; inp.focus();
+  }
+  /* 🔎 Audit harvest: Charge / It's OK / Later on a money question. hq_audit_decide is granted to the service role only, so it
+     works only through the admin gateway this dashboard is logged in to; it writes the same fields as the Recon tab's buttons. */
+  async function chatDecide(m, choice, label){
+    if (chatBusy) return;
+    if (choice === 'charge') {
+      const amt = String(label || '').replace(/^\s*Charge\s*/i, '') || 'this shortfall';
+      const go = typeof window.askConfirm === 'function'
+        ? await window.askConfirm({ title: '💳 Charge as utang', body: 'Charge ' + esc(amt) + " to the collector's account? You can undo it in the Recon tab.", ok: 'Charge ' + amt, danger: true })
+        : confirm('Charge ' + amt + " to the collector's account? You can undo it in the Recon tab.");
+      if (!go) return;
+    }
+    chatBusy = true;
+    try {
+      const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (e) { chatNotice('Not saved: ' + e.message); }
+    finally { chatBusy = false; }
+    chatOpen(chatEmp);
   }
   async function chatAnswer(id, answer, note){
     const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
