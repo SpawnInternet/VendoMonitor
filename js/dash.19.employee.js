@@ -75,6 +75,7 @@
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
   const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗' };
+  const COMPANIONS = new Set(['name_matcher']);   // employees whose judgment layer reads owner replies (companions design §5)
   let chatEmp = null, chatBusy = false, chatTimer = null, chatRows = [];
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
@@ -124,9 +125,9 @@
       }
     }
     // 2026-11-21 (companions): an owner reply quotes the bubble it answers; every agent bubble takes a reply
-    const parent = (m.kind === 'reply' && m.reply_to) ? chatRows.find(r => Number(r.id) === Number(m.reply_to)) : null;
+    const parent = (m.topic === 'reply' && m.reply_to) ? chatRows.find(r => Number(r.id) === Number(m.reply_to)) : null;
     const pre = parent ? `<div style="font-size:11px;opacity:.8;margin-bottom:2px">↩ re: ${esc(String(parent.text || '').slice(0, 40))}…</div>` : '';
-    const canReply = !mine && !(m.kind === 'question' && m.status === 'open');
+    const canReply = !mine && COMPANIONS.has(m.employee_id) && !(m.kind === 'question' && m.status === 'open');
     const reply = canReply ? `<div style="margin-top:6px;font-size:11px"><a href="#" data-reply-to="${m.id}" style="color:#5b21b6;text-decoration:none;font-weight:700">↩ Reply</a>
         <input data-reply-inp="${m.id}" placeholder="type and press Enter…" style="display:none;margin-top:4px;width:100%;padding:4px 8px;border:1px solid var(--bd,#e5e7eb);border-radius:7px;font-size:12px"></div>` : '';
     return `<div style="display:flex;flex-direction:column;align-self:${mine ? 'flex-end' : 'flex-start'};max-width:100%">
