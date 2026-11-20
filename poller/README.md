@@ -64,6 +64,40 @@ Deliberately, backwards:
 
 Only a clean exit (`rc == 0`) promotes a build to `.last_good`.
 
+## Watchdog: restart the poller by itself (2026-11-20)
+
+`watchdog.ps1` runs every 5 minutes from its own Task Scheduler entry. If the poller task stopped, it starts it.
+If the task says Running but the Python poller process is gone on two checks in a row, it restarts the task.
+It reads no secrets and touches nothing but that one task. Log: `C:\SpawnPoller\watchdog.log`.
+
+Install once on each poller PC, in an **Administrator** PowerShell:
+
+1. Copy `watchdog.ps1` into `C:\SpawnPoller\`.
+2. Find the poller task's name:
+   ```powershell
+   Get-ScheduledTask | Where-Object TaskName -like '*oller*' | Select-Object TaskName, State
+   ```
+3. Create the watchdog task, putting that name in place of `POLLER TASK NAME`:
+   ```powershell
+   schtasks /Create /TN "SpawnPollerWatchdog" /SC MINUTE /MO 5 /RU SYSTEM /RL HIGHEST /F /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\SpawnPoller\watchdog.ps1 -TaskName \"POLLER TASK NAME\""
+   ```
+4. Five minutes later, read `C:\SpawnPoller\watchdog.log`. An empty log means the poller was healthy.
+
+Tests for the decision rule (touch no task): `powershell -File watchdog.tests.ps1`.
+
+### Keep the PC awake
+
+The watchdog cannot help a PC that is asleep or off. On each poller PC:
+
+```powershell
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /hibernate off
+```
+
+Also set the BIOS to **power on after a power loss** ("Restore on AC power loss: On"), and give the poller task an
+**At startup** trigger, so a brownout does not leave the poller dark until someone visits.
+
 ## Rolling back
 
 Revert the commit and let the next run pick it up. For an emergency rollback
