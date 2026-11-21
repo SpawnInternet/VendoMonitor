@@ -33,7 +33,9 @@
     poller_dapitan:  { label: '🖥 Open System',             panel: 'status' },
     audit_harvest:   { label: '🧺 Open Harvest',            panel: 'harvest' },
     overdue:         { label: '🧺 Open Harvest',            panel: 'harvest' },
-    pullout:         { label: '🔗 Open Vendos',             panel: 'vendos' }
+    pullout:         { label: '🔗 Open Vendos',             panel: 'vendos' },
+    income_checker:  { label: '🧺 Open Harvest',            panel: 'harvest' },
+    newly_installed: { label: '🔗 Open Vendos',             panel: 'vendos' }
   };
 
   const clean = s => String(s == null ? '' : s).replace(/[^a-z0-9_-]/gi, '');
