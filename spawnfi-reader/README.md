@@ -8,7 +8,9 @@ Railway variables (set in Railway, never in this public repo):
 
 | Variable | What |
 |---|---|
-| `ROUTERS` | JSON list: `[{"name":"Spawnfi-Sindangan","url":"http://10.99.0.x","user":"spawnjobs-ro","pass":"…"}]` |
+| `ROUTERS` | JSON list: `[{"name":"Spawnfi-Sindangan","url":"http://10.99.0.x"}]` (no passwords here) |
+| `ROUTER_PASS` | Password of the read-only `spawnjobs-ro` user (same on every router). Typed into Railway by the owner only. |
+| `ROUTER_USER` | Optional, default `spawnjobs-ro` |
 | `READER_TOKEN` | must match the `spawnfi_reader_token` secret in Supabase Vault |
 | `SUPABASE_KEY` | the project's publishable key |
 | `WG_PRIVATE_KEY`, `WG_ADDRESS` | this reader's WireGuard key and its 10.99.x.x/32 address |

@@ -25,7 +25,7 @@ function rest(r, path, proplist){
     catch (e) { return reject(new Error('bad router url')); }
     const lib = u.protocol === 'https:' ? https : http;
     const req = lib.request(u, { method:'GET', agent:agentFor(u), timeout:20000, rejectUnauthorized:false,
-      headers:{ Authorization:'Basic ' + Buffer.from(`${r.user}:${r.pass}`).toString('base64'), Accept:'application/json' } }, res => {
+      headers:{ Authorization:'Basic ' + Buffer.from(`${r.user || process.env.ROUTER_USER || "spawnjobs-ro"}:${r.pass || process.env.ROUTER_PASS || ""}`).toString('base64'), Accept:'application/json' } }, res => {
       let body = ''; res.setEncoding('utf8'); res.on('data', c => body += c);
       res.on('end', () => {
         if (res.statusCode === 401) return reject(new Error('router refused the login (401)'));
