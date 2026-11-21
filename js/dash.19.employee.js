@@ -77,7 +77,7 @@
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗' };
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗', audit_harvest: '🔎', overdue: '🗓', pullout: '📍' };
   let chatEmp = null, chatBusy = false, chatTimer = null, replyTo = null;   // replyTo = { id, text } while replying to a bubble
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
@@ -155,7 +155,14 @@
     box.innerHTML = (rest.map(bubble).join('') + (openQ.length ? `<div style="font-size:11px;color:#92400e;font-weight:700;margin-top:6px">❓ Waiting for your answer · ${openQ.length}</div>` + openQ.map(bubble).join('') : ''))
                  || '<div style="color:var(--mu,#6b7280);font-size:12px">No messages yet.</div>';
     box.scrollTop = box.scrollHeight;
-    box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || ''));
+    box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => {
+      const m = rows.find(r => Number(r.id) === Number(b.dataset.id));
+      // 2026-11-21: Audit harvest money questions go through hq_audit_decide (admin gateway only), never the chat reply
+      // 2026-11-21: Pull-out questions go through hq_pullout_decide the same way
+      return m && m.topic === 'audit_money' ? chatDecide(m, b.dataset.ans, b.textContent)
+        : m && m.topic === 'pullout' ? chatPullout(m, b.dataset.ans)
+        : chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || '');
+    });
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
     box.querySelectorAll('[data-fix]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fix]; if (F && window.spawnOpenPanel) spawnOpenPanel(F.panel, F.sub); });
     box.querySelectorAll('[data-fixwin]').forEach(a => a.onclick = e => { e.preventDefault(); const F = (window.SPAWN_FIX || {})[a.dataset.fixwin]; if (F && window.spawnOpenNewWindow) spawnOpenNewWindow(F.panel, F.sub); });
@@ -210,6 +217,48 @@
     if (!rt) { bar.style.display = 'none'; inp.placeholder = 'Write to this employee… (saved with the thread)'; return; }
     bar.querySelector('[data-rt]').textContent = rt.text;
     bar.style.display = 'flex'; inp.placeholder = 'Your reply…'; inp.focus();
+  }
+  /* 🔎 Audit harvest: Charge / It's OK / Later on a money question. hq_audit_decide is granted to the service role only, so it
+     works only through the admin gateway this dashboard is logged in to; it writes the same fields as the Recon tab's buttons. */
+  async function chatDecide(m, choice, label){
+    if (chatBusy) return;
+    // the button label is "Charge <collector> ₱<amount>"; that amount is what the owner confirms, and decide refuses if the
+    // shortfall moved since (late sales rows) — the button is then refreshed with the new amount
+    const amt = String(label || '').replace(/^\s*Charge\s*/i, '') || 'this shortfall';
+    const num = (String(label || '').match(/₱\s*([\d,]+(?:\.\d+)?)/) || [])[1];
+    const expect = choice === 'charge' && num ? Number(num.replace(/,/g, '')) : null;
+    if (choice === 'charge') {
+      const go = typeof window.askConfirm === 'function'
+        ? await window.askConfirm({ title: '💳 Charge as utang', body: 'Charge ' + esc(amt) + ' as utang? You can undo it in the Recon tab.', ok: 'Charge ' + esc(amt), danger: true })
+        : confirm('Charge ' + amt + ' as utang? You can undo it in the Recon tab.');
+      if (!go) return;
+    }
+    chatBusy = true;
+    try {
+      const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null, p_expect: expect });
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (e) { chatNotice('Not saved: ' + e.message); }
+    finally { chatBusy = false; }
+    chatOpen(chatEmp);
+  }
+  /* 📍 Pull-out: Flag for pull-out / It's still there / Later. hq_pullout_decide is service-role only (admin gateway); it sets
+     only the vendo card's pull-out flag, never its status. */
+  async function chatPullout(m, choice){
+    if (chatBusy) return;
+    if (choice === 'flag') {
+      const body = 'Flag this vendo for pull-out on its card? Its status is not changed; pulling it out stays an office job. You can clear the flag on the vendo card.';
+      const go = typeof window.askConfirm === 'function'
+        ? await window.askConfirm({ title: '📍 Flag for pull-out', body, ok: 'Flag for pull-out', danger: true })
+        : confirm(body);
+      if (!go) return;
+    }
+    chatBusy = true;
+    try {
+      const { r, j } = await callReply('hq_pullout_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (e) { chatNotice('Not saved: ' + e.message); }
+    finally { chatBusy = false; }
+    chatOpen(chatEmp);
   }
   async function chatAnswer(id, answer, note){
     const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
@@ -395,7 +444,7 @@ async function companionsCard(justIssued){
 /* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
 (function(){
   let i = 0, items = [], timer = null;
-  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', name_matcher: '🔗 Name matcher', poller_dapitan: '📡 Dapitan poller' };
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', name_matcher: '🔗 Name matcher', audit_harvest: '🔎 Audit harvest', poller_dapitan: '📡 Dapitan poller', overdue: '🗓 Overdue', pullout: '📍 Pull-out' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   function build(){
     const S = window.__empChatSummary || [];
