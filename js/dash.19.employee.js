@@ -77,7 +77,7 @@
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗', audit_harvest: '🔎' };
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗', audit_harvest: '🔎', overdue: '🗓', pullout: '📍' };
   let chatEmp = null, chatBusy = false, chatTimer = null, replyTo = null;   // replyTo = { id, text } while replying to a bubble
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
@@ -158,7 +158,9 @@
     box.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => {
       const m = rows.find(r => Number(r.id) === Number(b.dataset.id));
       // 2026-11-21: Audit harvest money questions go through hq_audit_decide (admin gateway only), never the chat reply
+      // 2026-11-21: Pull-out questions go through hq_pullout_decide the same way
       return m && m.topic === 'audit_money' ? chatDecide(m, b.dataset.ans, b.textContent)
+        : m && m.topic === 'pullout' ? chatPullout(m, b.dataset.ans)
         : chatAnswer(Number(b.dataset.id), b.dataset.ans, (box.querySelector(`[data-free="${b.dataset.id}"]`) || {}).value || '');
     });
     box.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => { if (e.key === 'Enter' && i.value.trim()) chatAnswer(Number(i.dataset.free), '', i.value.trim()); });
@@ -234,6 +236,25 @@
     chatBusy = true;
     try {
       const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null, p_expect: expect });
+      if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    } catch (e) { chatNotice('Not saved: ' + e.message); }
+    finally { chatBusy = false; }
+    chatOpen(chatEmp);
+  }
+  /* 📍 Pull-out: Flag for pull-out / It's still there / Later. hq_pullout_decide is service-role only (admin gateway); it sets
+     only the vendo card's pull-out flag, never its status. */
+  async function chatPullout(m, choice){
+    if (chatBusy) return;
+    if (choice === 'flag') {
+      const body = 'Flag this vendo for pull-out on its card? Its status is not changed; pulling it out stays an office job. You can clear the flag on the vendo card.';
+      const go = typeof window.askConfirm === 'function'
+        ? await window.askConfirm({ title: '📍 Flag for pull-out', body, ok: 'Flag for pull-out', danger: true })
+        : confirm(body);
+      if (!go) return;
+    }
+    chatBusy = true;
+    try {
+      const { r, j } = await callReply('hq_pullout_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
     } catch (e) { chatNotice('Not saved: ' + e.message); }
     finally { chatBusy = false; }
@@ -423,7 +444,7 @@ async function companionsCard(justIssued){
 /* ── Nav ticker (2026-11-19): rotates the employees' latest lines in the empty nav space ── */
 (function(){
   let i = 0, items = [], timer = null;
-  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', name_matcher: '🔗 Name matcher', audit_harvest: '🔎 Audit harvest', poller_dapitan: '📡 Dapitan poller' };
+  const ICON2 = { eod_harvest: '🧺 Harvest agent', supervisor: '🧑‍💼 Supervisor', job_dispatcher: '📋 Orders', gcash_autopay: '📷 GCash reader', spawn_remind: '📱 Texter', poller_dicayas: '📡 Dicayas poller', name_matcher: '🔗 Name matcher', audit_harvest: '🔎 Audit harvest', poller_dapitan: '📡 Dapitan poller', overdue: '🗓 Overdue', pullout: '📍 Pull-out' };
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   function build(){
     const S = window.__empChatSummary || [];
