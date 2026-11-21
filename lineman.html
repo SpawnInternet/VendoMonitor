@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Spawn Jobs · Lineman Tracker · v1.4.1 · keys · petty cash · cache-bust 2026-11-21b -->
+<!-- Spawn Jobs · Lineman app · v2.0 · login · jobs · petty cash · keys · tracking · 2026-11-21 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -41,6 +41,25 @@
   .queue.has{color:var(--gold);font-weight:700}
   .hide{display:none}
   .coords{font-size:12px;color:var(--muted);text-align:center;margin-top:10px;font-family:monospace}
+  #tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:#141a23;border-top:1px solid #2a3340;padding-bottom:env(safe-area-inset-bottom,0)}
+  #tabs.hide{display:none}
+  #tabs button{flex:1;border:0;background:none;color:var(--muted);padding:9px 0 10px;font-size:20px;display:flex;flex-direction:column;align-items:center;gap:2px}
+  #tabs button span{font-size:11px;font-weight:700}
+  #tabs button.on{color:var(--gold)}
+  .jb{background:#0f141b;border:1px solid #2a3340;border-radius:12px;padding:12px;margin-bottom:10px}
+  .jb.urgent{border-color:#7a2a2a}
+  .jb .t{display:flex;gap:8px;align-items:baseline}
+  .jb .t b{font-size:16px}
+  .jb .t .st{margin-left:auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:#24324a;color:#9fc0ff;white-space:nowrap}
+  .jb .t .st.dispatched,.jb .t .st.in_progress{background:#3d2c08;color:#ffcf6e}.jb .t .st.resolved{background:#0f3a33;color:#7ee0c8}
+  .jb .m{font-size:13px;color:#cfd6e0;margin:4px 0}
+  .jb .m a{color:#9fc0ff;text-decoration:none;font-weight:700}
+  .jb .i{font-size:14px;margin:6px 0;color:#fff}
+  .jb .n{font-size:12px;color:var(--muted);white-space:pre-line}
+  .jb .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .jb .acts button{flex:1;min-width:120px;border:0;border-radius:11px;padding:12px;font-weight:800;font-size:14px;cursor:pointer}
+  .jb .a1{background:var(--blue);color:#fff}.jb .a2{background:var(--teal);color:#fff}.jb .a3{background:#2a3340;color:#cfd6e0}
+  .jb textarea{width:100%;min-height:60px;border-radius:10px;border:1.5px solid #2a3340;background:#0f141b;color:#fff;font-size:15px;padding:10px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -57,21 +76,27 @@
     <div class="logo-sub">by Spawn Internet</div>
   </div>
 
-  <!-- SETUP -->
+  <!-- LOGIN (one login for jobs, petty cash, keys, tracking) -->
   <div id="setup" class="card">
-    <label>Your Name</label>
-    <select id="tech-select"><option value="">Loading…</option></select>
-    <div id="new-name-wrap" class="hide">
-      <label>New lineman name</label>
-      <input id="new-name" placeholder="Full name" autocomplete="off">
-      <select id="new-area">
-        <option value="">Select area</option>
-        <option>DIPOLOG</option><option>DAPITAN</option><option>SINDANGAN</option>
-        <option>POLANCO</option><option>ROXAS</option><option>SINAMAN</option>
-        <option>MINAOG</option><option>MIX AREAS</option>
-      </select>
-    </div>
-    <button class="btn btn-start" id="begin-btn">Continue</button>
+    <label>Your name</label>
+    <select id="lg-name"><option value="">Loading…</option></select>
+    <label>PIN</label>
+    <input id="lg-pin" type="password" inputmode="numeric" maxlength="6" placeholder="Your PIN" autocomplete="off">
+    <button class="btn btn-start" id="begin-btn">Log in</button>
+    <div id="lg-msg" style="text-align:center;font-size:13px;margin-top:10px;color:#ff8a8a;font-weight:700"></div>
+    <div style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px">No PIN yet? Ask Sir Wendell.</div>
+  </div>
+
+  <div id="who" class="hide"><div style="display:flex;align-items:center;gap:10px;margin:-8px 0 14px">
+    <span style="font-weight:800">👷 <span id="who-name"></span></span>
+    <button id="lg-out" style="margin-left:auto;border:1px solid #2a3340;background:#1a212c;color:#cfd6e0;border-radius:10px;padding:7px 12px;font-weight:700">Log out</button>
+  </div></div>
+
+  <!-- MY JOBS -->
+  <div id="jobs-card" class="card hide">
+    <div style="display:flex;align-items:center;margin-bottom:12px"><label style="margin:0">🛠 My jobs</label>
+      <button id="jb-ref" style="margin-left:auto;border:1px solid #2a3340;background:#0f141b;color:#cfd6e0;border-radius:10px;padding:7px 10px;font-weight:700">↻</button></div>
+    <div id="jb-body"><div style="color:var(--muted);text-align:center">Loading…</div></div>
   </div>
 
   <!-- TRACKING -->
@@ -112,7 +137,12 @@
     <div class="pc-h"><label>💰 Petty cash</label><div class="r" id="pc-hr"></div></div>
     <div id="pc-body"><div class="pc-none">Loading…</div></div>
   </div>
+  <div style="height:70px"></div>
 </div>
+<nav id="tabs" class="hide">
+  <button data-tab="jobs-card">🛠<span>Jobs</span></button><button data-tab="pc-card">💰<span>Petty cash</span></button>
+  <button data-tab="keys-card">🔑<span>Keys</span></button><button data-tab="tracking">📍<span>Tracking</span></button>
+</nav>
 
 <script>
 // ============================================================
@@ -165,39 +195,50 @@ let watchId = null, timer = null, lastFix = null, sentCount = 0;
 
 const $ = id => document.getElementById(id);
 
-// ---------- setup ----------
+// ---------- one login: name + PIN (same PIN as petty cash) ----------
+const PCK = 'spawn_pc_login';
+const PSB2 = 'https://cviraqfhphhsonjmrtvu.supabase.co', PKEY2 = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';
+async function prpc(fn, args){
+  let r; try { r = await window.fetch(`${PSB2}/rest/v1/rpc/${fn}`, { method:'POST', headers:{ apikey:PKEY2, 'Content-Type':'application/json' }, body:JSON.stringify(args || {}) }); }
+  catch (e) { throw new Error('No signal. Try again.'); }
+  let j = null; try { j = await r.json(); } catch (e) {}
+  const m = String(j && (j.message || j.error) || '');
+  if (!r.ok || (j && j.ok === false)) throw new Error(/bad_pin/.test(m) ? 'Wrong name or PIN.' : /too_many/.test(m) ? 'Too many wrong PINs. Wait 10 minutes.' : (m || 'Error ' + r.status));
+  return j;
+}
 async function loadTechs(){
   try{
-    const r = await fetch(`${SB}/rest/v1/technicians?select=name,area&active=eq.true&order=name.asc`,{headers:HDR});
-    const rows = await r.json();
-    const sel = $('tech-select');
-    sel.innerHTML = '<option value="">— Select your name —</option>' +
-      rows.map(t=>`<option ${t.name===tech?'selected':''}>${t.name}</option>`).join('') +
-      '<option value="__new__">➕ Add new lineman…</option>';
-  }catch(e){
-    $('tech-select').innerHTML = '<option value="">⚠ offline — type name below</option><option value="__new__">➕ Add new lineman…</option>';
-  }
+    const names = await prpc('pc_roster', {});
+    $('lg-name').innerHTML = '<option value="">— Select your name —</option>' + names.map(n => `<option ${n.toLowerCase() === (tech || '').toLowerCase() ? 'selected' : ''}>${n}</option>`).join('');
+  }catch(e){ $('lg-name').innerHTML = '<option value="">⚠ No signal — try again</option>'; }
 }
-$('tech-select').addEventListener('change',e=>{
-  $('new-name-wrap').classList.toggle('hide', e.target.value!=='__new__');
+function showTab(id){
+  ['jobs-card','pc-card','keys-card','tracking'].forEach(x => $(x).classList.toggle('hide', x !== id));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === id));
+  try { localStorage.setItem('spawn_tab', id); } catch (e) {}
+  if (id === 'jobs-card' && window.jbLoad) window.jbLoad();
+  if (id === 'pc-card' && window.pcStart) window.pcStart(JSON.parse(localStorage.getItem(PCK) || 'null'));
+}
+function enterApp(login){
+  tech = login.name; localStorage.setItem('spawn_lineman', tech); localStorage.setItem(PCK, JSON.stringify(login));
+  $('setup').classList.add('hide'); $('who').classList.remove('hide'); $('who-name').textContent = tech; $('tabs').classList.remove('hide');
+  let t = 'jobs-card'; try { t = localStorage.getItem('spawn_tab') || t; } catch (e) {}
+  showTab(['jobs-card','pc-card','keys-card','tracking'].includes(t) ? t : 'jobs-card');
+}
+document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('begin-btn').addEventListener('click', async () => {
+  const name = $('lg-name').value, pin = $('lg-pin').value.trim(); $('lg-msg').textContent = '';
+  if (!name || !pin) { $('lg-msg').textContent = 'Pick your name and type your PIN.'; return; }
+  $('begin-btn').disabled = true;
+  try { const me = await prpc('pc_me', { p_name:name, p_pin:pin }); enterApp({ name:me.name, pin }); }
+  catch (e) { $('lg-msg').textContent = e.message; }
+  $('begin-btn').disabled = false;
 });
-$('begin-btn').addEventListener('click', async ()=>{
-  const sel = $('tech-select').value;
-  if(sel==='__new__'){
-    const nm = $('new-name').value.trim(), ar = $('new-area').value;
-    if(!nm){ alert('Enter a name'); return; }
-    try{
-      await fetch(`${SB}/rest/v1/technicians`,{method:'POST',headers:{...HDR,Prefer:'return=minimal'},
-        body:JSON.stringify({name:nm,area:ar||null,active:true})});
-    }catch(e){/* offline: still let them track, will register later */}
-    tech = nm;
-  } else if(sel){
-    tech = sel;
-  } else { alert('Pick or add your name'); return; }
-  localStorage.setItem('spawn_lineman', tech);
-  $('setup').classList.add('hide');
-  $('tracking').classList.remove('hide');
-  $('keys-card').classList.remove('hide');
+$('lg-pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('begin-btn').click(); });
+$('lg-out').addEventListener('click', () => {
+  if (watchId) stop(); localStorage.removeItem(PCK); if (window.pcStop) window.pcStop();
+  $('who').classList.add('hide'); $('tabs').classList.add('hide'); ['jobs-card','pc-card','keys-card','tracking'].forEach(x => $(x).classList.add('hide'));
+  $('setup').classList.remove('hide'); $('lg-pin').value = ''; loadTechs();
 });
 
 // ---------- offline queue ----------
@@ -310,7 +351,7 @@ async function vkPick(id, name, area){
 
 $('vk-log-btn').addEventListener('click', async ()=>{
   if(!vkVendo){ alert('Search and pick a vendo first'); return; }
-  if(!tech){ alert('Set your name first (Continue button above)'); return; }
+  if(!tech){ alert('Log in first'); return; }
   const body = {
     vendo_id:vkVendo.id, vendo_name:vkVendo.name, area:vkVendo.area,
     key_type:$('vk-type').value, changed_by:tech,
@@ -330,7 +371,7 @@ $('vk-log-btn').addEventListener('click', async ()=>{
 // init
 renderQ();
 loadTechs();
-if(tech){ /* prefill but still require Continue */ }
+(function(){ let L = null; try { L = JSON.parse(localStorage.getItem(PCK) || 'null'); } catch (e) {} if (L && L.name && L.pin) enterApp(L); })();
 </script>
 <!-- ==================== PETTY CASH (personnel) · SPAWN Finance ==================== -->
 <style>
@@ -455,8 +496,8 @@ function relHtml(r){
 }
 function render(){
   const m = st.me; if (!m) return;
-  el('pc-hr').innerHTML = `<button class="pc-sm" id="pc-ref">↻</button><button class="pc-sm" id="pc-out">Log out</button>`;
-  el('pc-ref').onclick = refresh; el('pc-out').onclick = () => { localStorage.removeItem(LS); st.login = null; st.me = null; showLogin(); };
+  el('pc-hr').innerHTML = `<button class="pc-sm" id="pc-ref">↻</button>`;
+  el('pc-ref').onclick = refresh;
   const rel = m.releases || [], live = rel.filter(r => r.status !== 'closed' && r.status !== 'void'), done = rel.filter(r => r.status === 'closed');
   const owe = live.reduce((s, r) => s + Number(r.amount) - Number(r.spent), 0);
   el('pc-body').innerHTML = `<div class="pc-qr"><div class="q" id="pc-qrimg"></div><div><b>${esc(m.code)}</b><small>${esc(m.name)} · show this at the office when you bring the receipts and change.</small>
@@ -488,14 +529,113 @@ async function addExp(id, btn){
   st.busy = false;
 }
 
-// petty cash has its own name + PIN login, so show it right away (no need to pick a tracker name first)
-function reveal(){ el('pc-card').classList.remove('hide'); refresh(); }
-reveal();
-document.addEventListener('visibilitychange', () => { if (!document.hidden && st.me) refresh(); });
-window.pcReveal = reveal;
+// started by the app's one login (tab "Petty cash")
+window.pcStart = login => { if (login) st.login = login; refresh(); };
+window.pcStop = () => { st.login = null; st.me = null; st.form = {}; };
+if (!el('pc-card').classList.contains('hide')) refresh();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && st.me && !el('pc-card').classList.contains('hide')) refresh(); });
 })();
 </script>
 <!-- ==================== /PETTY CASH ==================== -->
 
+
+<script>
+(function(){
+'use strict';
+// ---------- MY JOBS: job orders assigned to me (office assigns in the Command Center) ----------
+const JSB = 'https://cviraqfhphhsonjmrtvu.supabase.co', JKEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';
+const g = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)));
+const TYPES = { vendo_repair:'🔧 Vendo repair', subscriber_repair:'🏠 Subscriber repair', vendo_installation:'🆕 Vendo installation', subscriber_installation:'🆕 New subscriber' };
+const ST = { open:'Assigned', pending_review:'Assigned', approved:'Assigned', dispatched:'On the way', in_progress:'Working', resolved:'Done ✓' };
+const ERR = { job_not_yours:'This job is not assigned to you anymore.', job_closed:'This job is already closed.', note_required:"Type why you can't fix it.",
+  still_offline:'MikroTik still shows it OFFLINE. Reconnect the machine, wait about 30 seconds, then press Done again.' };
+const J = { data:null, open:null, busy:false, photo:{} };
+const login = () => { try { return JSON.parse(localStorage.getItem('spawn_pc_login') || 'null'); } catch (e) { return null; } };
+async function rpc(fn, args){
+  let r; try { r = await fetch(`${JSB}/rest/v1/rpc/${fn}`, { method:'POST', headers:{ apikey:JKEY, 'Content-Type':'application/json' }, body:JSON.stringify(args) }); }
+  catch (e) { throw new Error('No signal. Try again.'); }
+  let j = null; try { j = await r.json(); } catch (e) {}
+  const m = String(j && (j.message || j.error) || '');
+  if (!r.ok || (j && j.ok === false)) { const k = Object.keys(ERR).find(x => m.includes(x)); throw new Error(k ? ERR[k] : /bad_pin/.test(m) ? 'Wrong PIN. Log out and log in again.' : (m || 'Error ' + r.status)); }
+  return j;
+}
+async function shrink(file){
+  const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Could not read that photo.')); i.src = URL.createObjectURL(file); });
+  const sc = Math.min(1, 1280 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(im.naturalWidth * sc); c.height = Math.round(im.naturalHeight * sc); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.72));
+}
+async function upload(file){
+  const blob = await shrink(file), d = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Manila'}).slice(0, 7), path = `${d}/${uid()}.jpg`;
+  let r; try { r = await fetch(`${JSB}/storage/v1/object/job-photos/${path}`, { method:'POST', headers:{ apikey:JKEY, 'Content-Type':'image/jpeg' }, body:blob }); }
+  catch (e) { throw new Error('No signal. The photo was not sent; try again.'); }
+  if (!r.ok) throw new Error('Photo upload failed (' + r.status + ').');
+  return path;
+}
+async function load(){
+  const L = login(); if (!L) return;
+  try { J.data = await rpc('lm_jobs', { p_name:L.name, p_pin:L.pin }); render(); }
+  catch (e) { g('jb-body').innerHTML = `<div style="color:#ff8a8a;text-align:center;font-weight:700">${esc(e.message)}</div>`; }
+}
+function card(j){
+  const live = j.status !== 'resolved' && j.status !== 'cancelled', where = [j.address, j.area].filter(Boolean).join(', ');
+  const tel = (j.contact || '').replace(/[^\d+]/g, '');
+  let h = `<div class="jb ${j.priority === 'urgent' || j.priority === 'high' ? 'urgent' : ''}"><div class="t"><b>${esc(j.customer || 'No name')}</b><span class="st ${j.status}">${ST[j.status] || esc(j.status)}</span></div>
+    <div class="m">${TYPES[j.type] || esc(j.type || 'Job')}${j.area ? ' · ' + esc(j.area) : ''}${j.priority && j.priority !== 'normal' ? ' · <b style="color:#ff8a8a">' + esc(j.priority) + '</b>' : ''}${j.online === true ? ' · 🟢 online' : j.online === false ? ' · 🔴 offline' : ''}</div>
+    ${j.issue ? `<div class="i">${esc(j.issue)}</div>` : ''}
+    <div class="m">${where ? `📍 <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(where)}" target="_blank" rel="noopener">${esc(where)}</a>` : ''}${tel ? ` &nbsp; 📞 <a href="tel:${esc(tel)}">${esc(j.contact)}</a>` : ''}</div>
+    ${j.notes ? `<div class="n">Office: ${esc(j.notes)}</div>` : ''}${j.lineman_note ? `<div class="n">${esc(j.lineman_note)}</div>` : ''}`;
+  if (live) {
+    if (J.open && J.open.id === j.id) {
+      const done = J.open.act === 'done';
+      h += `<textarea id="jb-note" placeholder="${done ? 'What did you do? (optional)' : "Why can't you fix it? (needed)"}"></textarea>
+        <label class="pc-ph ${J.photo[j.id] ? 'ok' : ''}" style="margin-top:8px">📷 ${J.photo[j.id] ? 'Photo ready ✓' : 'Add a photo (optional)'}<input id="jb-photo" type="file" accept="image/*" capture="environment" style="display:none"></label>
+        <div class="acts"><button class="${done ? 'a2' : 'a3'}" id="jb-ok">${done ? '✅ Confirm done' : "Send back to office"}</button><button class="a3" id="jb-cancel">Cancel</button></div><div class="pc-msg" id="jb-msg"></div>`;
+    } else {
+      const a = [];
+      if (['open','pending_review','approved'].includes(j.status)) a.push(['onway','a1','🚗 On the way']);
+      if (j.status !== 'in_progress') a.push(['working','a3','🔧 Working']);
+      if (j.status !== 'open' && j.status !== 'pending_review' && j.status !== 'approved') a.push(['done','a2','✅ Done']);
+      a.push(['cantfix','a3',"Can't fix"]);
+      h += `<div class="acts">${a.map(([k, c, l]) => `<button class="${c}" data-ja="${k}" data-id="${j.id}">${l}</button>`).join('')}</div>`;
+    }
+  }
+  return h + '</div>';
+}
+function render(){
+  const jobs = (J.data && J.data.jobs) || [], live = jobs.filter(j => j.status !== 'resolved' && j.status !== 'cancelled'), done = jobs.filter(j => j.status === 'resolved');
+  g('jb-body').innerHTML = (live.length ? live.map(card).join('') : '<div style="color:var(--muted);text-align:center;padding:10px 0">No jobs assigned to you right now.<br><span style="font-size:12px">The office assigns jobs in the Command Center.</span></div>')
+    + (done.length ? `<details><summary style="color:var(--muted);font-size:13px;cursor:pointer;margin-top:6px">Done in the last 2 days (${done.length})</summary>${done.map(card).join('')}</details>` : '');
+  const B = g('jb-body');
+  B.querySelectorAll('[data-ja]').forEach(b => b.onclick = () => act(b.dataset.id, b.dataset.ja, b));
+  const ph = g('jb-photo'); if (ph) ph.onchange = () => { J.photo[J.open.id] = ph.files[0] || null; const note = g('jb-note').value; render(); g('jb-note').value = note; };
+  const ok = g('jb-ok'); if (ok) ok.onclick = () => finish(ok);
+  const cc = g('jb-cancel'); if (cc) cc.onclick = () => { J.open = null; render(); };
+}
+async function act(id, a, btn){
+  if (a === 'done' || a === 'cantfix') { J.open = { id, act:a }; render(); const n = g('jb-note'); if (n) n.focus(); return; }
+  const L = login(); btn.disabled = true;
+  try { await rpc('lm_job_update', { p_name:L.name, p_pin:L.pin, p_id:id, p_action:a }); await load(); }
+  catch (e) { alert(e.message); btn.disabled = false; }
+}
+async function finish(btn){
+  const L = login(), o = J.open, note = g('jb-note').value.trim(), msg = g('jb-msg');
+  if (o.act === 'cantfix' && !note) { msg.textContent = ERR.note_required; return; }
+  if (J.busy) return; J.busy = true; btn.disabled = true;
+  try {
+    let path = null; if (J.photo[o.id]) { btn.textContent = 'Sending photo…'; path = await upload(J.photo[o.id]); }
+    await rpc('lm_job_update', { p_name:L.name, p_pin:L.pin, p_id:o.id, p_action:o.act, p_note:note || null, p_photo:path });
+    delete J.photo[o.id]; J.open = null; await load();
+  } catch (e) { msg.textContent = e.message; btn.disabled = false; btn.textContent = 'Try again'; }
+  J.busy = false;
+}
+g('jb-ref').onclick = load;
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !g('jobs-card').classList.contains('hide')) load(); });
+window.jbLoad = load;
+if (!g('jobs-card').classList.contains('hide')) load();
+})();
+</script>
 </body>
 </html>

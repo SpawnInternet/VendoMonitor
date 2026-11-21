@@ -1,0 +1,8 @@
+-- Spawn Jobs v2 (applied 2026-11-21 in Supabase cviraqfhphhsonjmrtvu)
+-- job_orders.lineman_photo, bucket job-photos (public read, anon insert)
+-- lm_names()                               -> active staff linemen (for the Command Center "Assign lineman" list)
+-- lm_jobs(p_name, p_pin)                   -> job orders assigned to that person (assigned_to/technician), open + done in last 2 days
+-- lm_job_update(p_name, p_pin, p_id, p_action onway|working|done|cantfix, p_note, p_photo)
+--   done is blocked while mikrotik_status shows the vendo/subscriber offline (same gate as the office "Mark done")
+--   cantfix needs a note; sends the job back to 'approved'
+-- Login uses pc_person_auth (name + existing staff/collector/office PIN), shared with petty cash.

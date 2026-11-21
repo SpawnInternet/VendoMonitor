@@ -993,7 +993,7 @@ async function openDetail(id){
     <div class="irow"><span class="il">Approved</span><span class="iv">${stageFmt(j.approved_at,1)}</span></div>
     <div class="irow"><span class="il">Dispatched</span><span class="iv">${stageFmt(j.dispatched_at,2)}</span></div>
     <div class="irow"><span class="il">Completed</span><span class="iv">${fmt(j.completed_at)}</span></div>
-    <div class="m-section"><h4>Assign lineman</h4><input class="field" id="dAssign" value="${esc(j.assigned_to||j.technician||'')}" placeholder="Lineman name (e.g. Jericho)"></div>
+    <div class="m-section"><h4>Assign lineman</h4><input class="field" id="dAssign" list="lmNames" autocomplete="off" value="${esc(j.assigned_to||j.technician||'')}" placeholder="Lineman name (e.g. Jericho)"><div style="font-size:11px;color:#8a93a3;margin-top:4px">Pick from the list so it shows in the lineman's Spawn Jobs app.</div></div>
     <div class="m-section"><h4>Internal note</h4><textarea class="field" id="dNote" placeholder="Notes for the team...">${esc(j.notes||'')}</textarea></div>`;
   document.getElementById('detail').classList.add('show');
 }
@@ -1953,6 +1953,14 @@ switchView('dash');
 if(!supaKey)showConfig();else loadJobs();
 checkHeartbeat();
 setInterval(checkHeartbeat,60000); // re-check every minute
+</script>
+<script>
+// linemen names for "Assign lineman" (the same names they log in with in Spawn Jobs)
+(async function(){ try {
+  const r = await fetch(`${supaUrl}/rest/v1/rpc/lm_names`, { method:'POST', headers:{ apikey:supaKey, Authorization:`Bearer ${supaKey}`, 'Content-Type':'application/json' }, body:'{}' });
+  const names = await r.json(); if (!Array.isArray(names)) return;
+  const dl = document.createElement('datalist'); dl.id = 'lmNames'; dl.innerHTML = names.map(n => `<option value="${String(n).replace(/"/g,'&quot;')}">`).join(''); document.body.appendChild(dl);
+} catch (e) {} })();
 </script>
 </body>
 </html>
