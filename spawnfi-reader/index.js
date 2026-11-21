@@ -78,6 +78,14 @@ async function cycle(){
     }
   }
 }
+// Log this reader's WireGuard PUBLIC key (safe to show) so it can be checked against the hub's peer entry.
+try {
+  if (process.env.WG_PRIVATE_KEY) {
+    const der = Buffer.concat([Buffer.from('302e020100300506032b656e04220420', 'hex'), Buffer.from(process.env.WG_PRIVATE_KEY.trim(), 'base64')]);
+    const pub = require('crypto').createPublicKey({ key: der, format: 'der', type: 'pkcs8' }).export({ format: 'jwk' }).x;
+    log('WireGuard public key of this reader:', Buffer.from(pub, 'base64url').toString('base64'));
+  }
+} catch (e) { log('Could not derive WireGuard public key:', e.message); }
 log(`SpawnFi reader starting: ${ROUTERS.map(r => r.name).join(', ')} every ${INTERVAL / 1000}s${SOCKS ? ' via WireGuard' : ' direct'}`);
 (async function loop(){ await cycle(); setTimeout(loop, INTERVAL); })();
 process.on('SIGTERM', () => process.exit(0));
