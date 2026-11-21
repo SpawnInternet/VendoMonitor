@@ -86,6 +86,15 @@ try {
     log('WireGuard public key of this reader:', Buffer.from(pub, 'base64url').toString('base64'));
   }
 } catch (e) { log('Could not derive WireGuard public key:', e.message); }
+// One-time UDP self-test at start: ask a public time server (NTP, UDP 123). Shows whether Railway can send AND receive UDP.
+try {
+  const sock = require('dgram').createSocket('udp4');
+  const pkt = Buffer.alloc(48); pkt[0] = 0x1b;
+  const t = setTimeout(() => { log('UDP self-test: NO reply from time.google.com (UDP blocked?)'); sock.close(); }, 5000);
+  sock.on('message', () => { clearTimeout(t); log('UDP self-test: reply OK from time.google.com'); sock.close(); });
+  sock.on('error', e => { clearTimeout(t); log('UDP self-test error:', e.message); });
+  sock.send(pkt, 123, 'time.google.com');
+} catch (e) { log('UDP self-test error:', e.message); }
 log(`SpawnFi reader starting: ${ROUTERS.map(r => r.name).join(', ')} every ${INTERVAL / 1000}s${SOCKS ? ' via WireGuard' : ' direct'}`);
 (async function loop(){ await cycle(); setTimeout(loop, INTERVAL); })();
 process.on('SIGTERM', () => process.exit(0));
