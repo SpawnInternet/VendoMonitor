@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Spawn Jobs · Lineman Tracker · v1.3 · keys · cache-bust 2026-07-15b -->
+<!-- Spawn Jobs · Lineman Tracker · v1.4 · keys · petty cash · cache-bust 2026-11-21 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -106,6 +106,11 @@
       <button class="btn btn-start" id="vk-log-btn" style="font-size:15px;padding:13px">✓ Log Key Change</button>
       <div id="vk-msg" style="text-align:center;font-size:13px;margin-top:10px;color:var(--green);font-weight:700"></div>
     </div>
+  </div>
+
+<div id="pc-card" class="card hide">
+    <div class="pc-h"><label>💰 Petty cash</label><div class="r" id="pc-hr"></div></div>
+    <div id="pc-body"><div class="pc-none">Loading…</div></div>
   </div>
 </div>
 
@@ -327,5 +332,170 @@ renderQ();
 loadTechs();
 if(tech){ /* prefill but still require Continue */ }
 </script>
+<!-- ==================== PETTY CASH (personnel) · SPAWN Finance ==================== -->
+<style>
+  .pc-h{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+  .pc-h label{margin:0}
+  .pc-h .r{margin-left:auto;display:flex;gap:6px}
+  .pc-sm{border:1px solid #2a3340;background:#0f141b;color:#cfd6e0;border-radius:10px;padding:7px 10px;font-size:13px;font-weight:700;cursor:pointer}
+  .pc-qr{display:flex;gap:14px;align-items:center;background:#0f141b;border-radius:12px;padding:12px;margin-bottom:12px}
+  .pc-qr .q{background:#fff;border-radius:10px;padding:6px;line-height:0;flex:none}
+  .pc-qr .q img{width:112px;height:112px;image-rendering:pixelated}
+  .pc-qr b{font:800 24px ui-monospace,Menlo,monospace;letter-spacing:3px;color:var(--gold)}
+  .pc-qr small{display:block;color:var(--muted);font-size:12px;margin-top:4px;line-height:1.4}
+  .pc-rel{background:#0f141b;border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid #2a3340}
+  .pc-rel.flag{border-color:#8a5a00}
+  .pc-rel .t{display:flex;gap:8px;align-items:baseline}
+  .pc-rel .t b{font-size:18px}
+  .pc-rel .t span{color:var(--muted);font-size:12px}
+  .pc-rel .t .st{margin-left:auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:#24324a;color:#9fc0ff}
+  .pc-rel .t .st.flagged{background:#3d2c08;color:#ffcf6e}.pc-rel .t .st.uploaded{background:#0f3a33;color:#7ee0c8}.pc-rel .t .st.closed{background:#2a3340;color:#aab3c0}
+  .pc-rel .p{font-size:13px;color:#cfd6e0;margin:4px 0 6px}
+  .pc-rel .f{font-size:13px;color:#ffcf6e;font-weight:700;margin-bottom:6px}
+  .pc-rel .s{display:flex;gap:12px;font-size:13px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+  .pc-rel .s b{color:#fff}
+  .pc-e{display:grid;grid-template-columns:44px 1fr auto auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #1e2733;font-size:14px}
+  .pc-e img,.pc-e .n{width:44px;height:44px;border-radius:8px;object-fit:cover;background:#1e2733;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--muted);text-align:center}
+  .pc-e small{display:block;color:var(--muted);font-size:11.5px}
+  .pc-e button{border:0;background:none;color:var(--muted);font-size:16px;cursor:pointer}
+  .pc-add{margin-top:8px;border-top:1px dashed #2a3340;padding-top:10px}
+  .pc-add input{margin-bottom:8px;padding:12px}
+  .pc-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+  .pc-chips button{border:1px solid #2a3340;background:#1a212c;color:#cfd6e0;border-radius:999px;padding:6px 11px;font-size:13px;font-weight:700;cursor:pointer}
+  .pc-ph{display:block;border:1.5px dashed #3b4656;border-radius:12px;padding:12px;text-align:center;color:#cfd6e0;font-weight:700;margin-bottom:8px;cursor:pointer}
+  .pc-ph.ok{border-color:var(--teal);color:#7ee0c8}
+  .pc-msg{font-size:13px;font-weight:700;color:#ff8a8a;min-height:16px;margin-top:6px;text-align:center}
+  .pc-none{color:var(--muted);font-size:14px;text-align:center;padding:10px 0}
+</style>
+<script>
+(function(){
+'use strict';
+// Petty cash talks straight to SPAWN Finance's PIN-checked functions (pc_*), not through the field gateway.
+const PSB = 'https://cviraqfhphhsonjmrtvu.supabase.co';
+const PKEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';
+const LS = 'spawn_pc_login';
+const el = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const peso = n => (Number(n) < 0 ? '−' : '') + '₱' + Math.abs(Number(n || 0)).toLocaleString('en-PH', {maximumFractionDigits:2});
+const num = v => { const n = parseFloat(String(v ?? '').replace(/[,₱\s]/g, '')); return isFinite(n) ? n : 0; };
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16)));
+const today = () => new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Manila'});
+const dl = d => new Date(d + 'T12:00:00Z').toLocaleDateString('en-PH', {month:'short', day:'numeric', timeZone:'UTC'});
+const img = p => `${PSB}/storage/v1/object/public/pc-receipts/${p}`;
+const ERR = { bad_pin:'Wrong name or PIN.', too_many_attempts:'Too many wrong PINs. Wait 10 minutes.', receipt_or_reason_required:'Take a photo of the receipt, or type why there is none.',
+  release_closed:'The office already confirmed this one.', amount_must_be_positive:'Enter the amount.', what_required:'Type what you bought.', release_not_found:'This cash is not on your account.' };
+const st = { login:null, me:null, form:{}, busy:false };
+try { st.login = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) {}
+
+async function rpc(fn, args){
+  let r; try { r = await fetch(`${PSB}/rest/v1/rpc/${fn}`, { method:'POST', headers:{ apikey:PKEY, 'Content-Type':'application/json' }, body:JSON.stringify(args || {}) }); }
+  catch (e) { throw new Error('No signal. Nothing was lost; try again.'); }
+  let j = null; try { j = await r.json(); } catch (e) {}
+  const m = j && (j.message || j.error || '');
+  if (!r.ok || (j && j.ok === false)) { const k = Object.keys(ERR).find(x => String(m).includes(x)); throw new Error(k ? ERR[k] : (m || 'Error ' + r.status)); }
+  return j;
+}
+async function shrink(file){
+  const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('Could not read that photo.')); i.src = URL.createObjectURL(file); });
+  const s = Math.min(1, 1280 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas');
+  c.width = Math.round(im.naturalWidth * s); c.height = Math.round(im.naturalHeight * s); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.72));
+}
+async function upload(file){
+  const blob = await shrink(file), path = `${today().slice(0, 7)}/${uid()}.jpg`;
+  let r; try { r = await fetch(`${PSB}/storage/v1/object/pc-receipts/${path}`, { method:'POST', headers:{ apikey:PKEY, 'Content-Type':'image/jpeg' }, body:blob }); }
+  catch (e) { throw new Error('No signal. The photo was not sent; try again.'); }
+  if (!r.ok) throw new Error('Photo upload failed (' + r.status + '). Try again.');
+  return path;
+}
+let qrLib = null;
+function loadQR(){ return qrLib || (qrLib = new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; s.onload = () => ok(window.qrcode); s.onerror = () => no(); document.head.appendChild(s); })); }
+async function drawQR(code){
+  try { const q = (await loadQR())(0, 'M'); q.addData('SPAWNPC:' + code); q.make(); const box = el('pc-qrimg'); if (box) box.innerHTML = q.createImgTag(4, 0); }
+  catch (e) { const box = el('pc-qrimg'); if (box) box.textContent = ''; }
+}
+
+async function loadRoster(){ try { return await rpc('pc_roster', {}); } catch (e) { return []; } }
+async function showLogin(msg){
+  el('pc-hr').innerHTML = '';
+  const names = await loadRoster(), pre = (st.login && st.login.name) || (typeof tech === 'string' ? tech : '') || '';
+  el('pc-body').innerHTML = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">Cash from the office for gas, materials, errands. Upload each receipt here.</div>
+    <select id="pc-name"><option value="">— Your name —</option>${names.map(n => `<option ${n.toLowerCase() === pre.toLowerCase() ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+    <input id="pc-pin" type="password" inputmode="numeric" maxlength="6" placeholder="Your PIN" autocomplete="off">
+    <button class="btn btn-start" id="pc-go" style="font-size:15px;padding:13px">Open my petty cash</button><div class="pc-msg" id="pc-lmsg">${esc(msg || '')}</div>`;
+  el('pc-go').onclick = async () => {
+    const name = el('pc-name').value, pin = el('pc-pin').value.trim();
+    if (!name || !pin) { el('pc-lmsg').textContent = 'Pick your name and type your PIN.'; return; }
+    el('pc-go').disabled = true;
+    try { st.me = await rpc('pc_me', { p_name:name, p_pin:pin }); st.login = { name:st.me.name, pin }; localStorage.setItem(LS, JSON.stringify(st.login)); render(); }
+    catch (e) { el('pc-lmsg').textContent = e.message; el('pc-go').disabled = false; }
+  };
+  el('pc-pin').onkeydown = e => { if (e.key === 'Enter') el('pc-go').click(); };
+}
+async function refresh(){
+  if (!st.login) return showLogin();
+  try { st.me = await rpc('pc_me', { p_name:st.login.name, p_pin:st.login.pin }); render(); }
+  catch (e) { if (/PIN/.test(e.message)) { localStorage.removeItem(LS); st.login = null; return showLogin(e.message); } el('pc-body').innerHTML = `<div class="pc-msg">${esc(e.message)}</div>`; }
+}
+function relHtml(r){
+  const live = r.status !== 'closed' && r.status !== 'void', due = Number(r.amount) - Number(r.spent), F = st.form[r.id] || {};
+  const label = ({open:'Not liquidated', uploaded:'Receipts uploaded', flagged:'Needs attention', closed:'Confirmed'})[r.status] || r.status;
+  let h = `<div class="pc-rel ${r.status === 'flagged' ? 'flag' : ''}"><div class="t"><b>${peso(r.amount)}</b><span>${esc(r.pcv_no)} · ${esc(dl(r.release_date))}</span><span class="st ${r.status}">${label}</span></div>
+    ${r.purpose ? `<div class="p">${esc(r.purpose)}</div>` : ''}${live && r.flag_reason ? `<div class="f">⚠ ${esc(r.flag_reason)}</div>` : ''}
+    <div class="s"><span>Spent <b>${peso(r.spent)}</b></span><span>${due >= 0 ? 'Change to return' : 'Office owes you'} <b>${peso(Math.abs(due))}</b></span></div>`;
+  h += (r.expenses || []).map(e => `<div class="pc-e">${e.receipt_path ? `<a href="${img(e.receipt_path)}" target="_blank" rel="noopener"><img src="${img(e.receipt_path)}" alt="Receipt"></a>` : '<span class="n">no receipt</span>'}
+    <span>${esc(e.what)}<small>${esc(dl(e.date))}${e.no_receipt_reason ? ' · ' + esc(e.no_receipt_reason) : ''}</small></span><b>${peso(e.amount)}</b>${live && e.by_self ? `<button data-pcx="${e.id}" aria-label="Remove">✕</button>` : '<span></span>'}</div>`).join('');
+  if (live) h += `<div class="pc-add"><div class="pc-chips">${['Gas','Snack','Fiber','Connector','Fare','Materials'].map(c => `<button data-pcc="${r.id}" data-v="${c}">${c}</button>`).join('')}</div>
+    <input data-pcw="${r.id}" placeholder="What did you buy?" value="${esc(F.what || '')}" autocomplete="off">
+    <input data-pca="${r.id}" inputmode="decimal" placeholder="Amount ₱" value="${esc(F.amt || '')}">
+    <label class="pc-ph ${F.file ? 'ok' : ''}">📷 ${F.file ? 'Receipt photo ready ✓' : 'Take photo of receipt'}<input data-pcf="${r.id}" type="file" accept="image/*" capture="environment" style="display:none"></label>
+    <input data-pcn="${r.id}" placeholder="No receipt? Type why" value="${esc(F.nor || '')}" autocomplete="off">
+    <button class="btn btn-start" data-pcs="${r.id}" style="font-size:15px;padding:13px">＋ Add expense</button><div class="pc-msg" id="pcm-${r.id}"></div></div>`;
+  return h + '</div>';
+}
+function render(){
+  const m = st.me; if (!m) return;
+  el('pc-hr').innerHTML = `<button class="pc-sm" id="pc-ref">↻</button><button class="pc-sm" id="pc-out">Log out</button>`;
+  el('pc-ref').onclick = refresh; el('pc-out').onclick = () => { localStorage.removeItem(LS); st.login = null; st.me = null; showLogin(); };
+  const rel = m.releases || [], live = rel.filter(r => r.status !== 'closed' && r.status !== 'void'), done = rel.filter(r => r.status === 'closed');
+  const owe = live.reduce((s, r) => s + Number(r.amount) - Number(r.spent), 0);
+  el('pc-body').innerHTML = `<div class="pc-qr"><div class="q" id="pc-qrimg"></div><div><b>${esc(m.code)}</b><small>${esc(m.name)} · show this at the office when you bring the receipts and change.</small>
+      ${live.length ? `<small style="color:#ffcf6e;font-weight:700">To liquidate: ${live.length} · ${owe >= 0 ? 'change' : 'office owes you'} ${peso(Math.abs(owe))}</small>` : ''}</div></div>
+    ${live.length ? live.map(relHtml).join('') : '<div class="pc-none">No petty cash with you right now.</div>'}
+    ${done.length ? `<details><summary style="color:var(--muted);font-size:13px;cursor:pointer;margin-top:6px">Confirmed by the office (${done.length})</summary>${done.map(relHtml).join('')}</details>` : ''}`;
+  drawQR(m.code);
+  const B = el('pc-body');
+  B.querySelectorAll('[data-pcc]').forEach(b => b.onclick = () => { const w = B.querySelector(`[data-pcw="${b.dataset.pcc}"]`); w.value = b.dataset.v + (w.value && !w.value.startsWith(b.dataset.v) ? ' ' + w.value : ''); keep(b.dataset.pcc); B.querySelector(`[data-pca="${b.dataset.pcc}"]`).focus(); });
+  B.querySelectorAll('[data-pcw],[data-pca],[data-pcn]').forEach(i => i.oninput = () => keep(i.dataset.pcw || i.dataset.pca || i.dataset.pcn));
+  B.querySelectorAll('[data-pcf]').forEach(i => i.onchange = () => { const id = i.dataset.pcf; keep(id); st.form[id].file = i.files[0] || null; st.form[id].path = null; render(); });
+  B.querySelectorAll('[data-pcs]').forEach(b => b.onclick = () => addExp(+b.dataset.pcs, b));
+  B.querySelectorAll('[data-pcx]').forEach(b => b.onclick = async () => { if (!confirm('Remove this expense?')) return; try { await rpc('pc_my_exp_void', { p_name:st.login.name, p_pin:st.login.pin, p_id:+b.dataset.pcx }); refresh(); } catch (e) { alert(e.message); } });
+}
+function keep(id){ const B = el('pc-body'), F = st.form[id] = st.form[id] || {}, q = s => B.querySelector(s);
+  if (q(`[data-pcw="${id}"]`)) F.what = q(`[data-pcw="${id}"]`).value; if (q(`[data-pca="${id}"]`)) F.amt = q(`[data-pca="${id}"]`).value; if (q(`[data-pcn="${id}"]`)) F.nor = q(`[data-pcn="${id}"]`).value; }
+async function addExp(id, btn){
+  keep(id); const F = st.form[id], msg = el('pcm-' + id);
+  const amt = num(F.amt), what = (F.what || '').trim(), nor = (F.nor || '').trim();
+  if (!what) { msg.textContent = ERR.what_required; return; } if (!(amt > 0)) { msg.textContent = ERR.amount_must_be_positive; return; }
+  if (!F.file && !nor) { msg.textContent = ERR.receipt_or_reason_required; return; }
+  if (st.busy) return; st.busy = true; btn.disabled = true; btn.textContent = F.file ? 'Sending photo…' : 'Saving…';
+  try {
+    if (F.file && !F.path) F.path = await upload(F.file);
+    F.cid = F.cid || uid();
+    await rpc('pc_my_exp_add', { p_name:st.login.name, p_pin:st.login.pin, p_client_id:F.cid, p_release_id:id, p_amount:amt, p_what:what, p_receipt_path:F.path || null, p_no_receipt:nor || null });
+    delete st.form[id]; await refresh();
+  } catch (e) { msg.textContent = e.message; btn.disabled = false; btn.textContent = '＋ Try again'; }
+  st.busy = false;
+}
+
+// show the card once the lineman has picked his name (and right away if he already did before)
+function reveal(){ el('pc-card').classList.remove('hide'); refresh(); }
+const begin = el('begin-btn'); if (begin) begin.addEventListener('click', () => setTimeout(() => { if (el('setup').classList.contains('hide')) reveal(); }, 0));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && st.me) refresh(); });
+window.pcReveal = reveal;
+})();
+</script>
+<!-- ==================== /PETTY CASH ==================== -->
+
 </body>
 </html>
