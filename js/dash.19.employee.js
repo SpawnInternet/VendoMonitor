@@ -350,7 +350,7 @@
     reports:   { hub: 'reports',   tabs: [['reports', '📄 Reports'], ['analytics', '📊 Analytics']] },
     vendos:    { hub: 'vendos',    tabs: [['vendos', '📟 Telegram vendos'], ['vmap-top', '📍 Map'], ['spawncloud', '☁ Cloud'], ['suspicious', '⚠️ Suspicious'], ['notsus', '✅ Not Sus'], ['skipped', '⏭ Skipped']] },
     system:    { hub: 'system',    tabs: [['health', '🩺 Health'], ['status', '🖥 System']] },
-    employees: { hub: 'employees', tabs: [['employees', '💬 Chat'], ['agents', '🤖 Agents']] }
+    employees: { hub: 'employees', tabs: [['needsyou', '🧾 Needs you'], ['employees', '💬 Chat'], ['agents', '🤖 Agents']] }   // needsyou: shown only when spawn_settings.hq_needs_you = on (dash.23)
   };
   const groupOf = id => Object.keys(GROUPS).find(g => GROUPS[g].tabs.some(t => t[0] === id));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -361,23 +361,26 @@
     document.querySelectorAll('.nav-bar button[data-hub]').forEach(b => b.classList.toggle('active', !!g && b.dataset.hub === g));
     if (!g) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
     bar.style.display = 'flex';
-    bar.innerHTML = GROUPS[g].tabs.map(([pid, label]) => {
+    // 2026-11-24: the Needs you tab exists only while spawn_settings.hq_needs_you = on (dash.23 reads the switch and re-renders)
+    const tabs = GROUPS[g].tabs.filter(([pid]) => pid !== 'needsyou' || (window.__hqSwitches && String(window.__hqSwitches.hq_needs_you || '').trim().toLowerCase() === 'on'));
+    bar.innerHTML = tabs.map(([pid, label]) => {
       const ob = origBtn(pid); const hidden = ob && ob.offsetParent === null && getComputedStyle(ob).display === 'none' && !ob.classList.contains('sub');
       const badge = ob && ob.querySelector('.nbadge') && ob.querySelector('.nbadge').textContent.trim();
       return `<button data-sub="${esc(pid)}" ${hidden ? 'style="display:none"' : ''} class="subnav-btn${pid === id ? ' on' : ''}" style="padding:5px 12px;border:1px solid ${pid === id ? '#025AC6' : '#dbe3f4'};border-radius:999px;background:${pid === id ? '#025AC6' : '#fff'};color:${pid === id ? '#fff' : '#334155'};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">${label}${badge ? ` <span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 6px;font-size:10px">${esc(badge)}</span>` : ''}</button>`;
     }).join('');
     bar.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
       const pid = b.dataset.sub;
-      if (pid === 'agents') { window.showP('agents', null); return; }
+      if (pid === 'agents' || pid === 'needsyou') { window.showP(pid, null); return; }
       const ob = origBtn(pid); if (ob) ob.click(); else window.showP(pid, null);
     });
   }
+  window.subnavRender = render;
   function hookShowP(){
     if (typeof window.showP !== 'function' || window.showP.__hub) return false;
     const orig = window.showP;
     const wrapped = function(id, btn){
       const r = orig.apply(this, arguments);
-      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); } catch (_) {}
+      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); if (id === 'needsyou' && typeof window.needsYouTabShown === 'function') window.needsYouTabShown(); } catch (_) {}
       return r;
     };
     wrapped.__hub = true; window.showP = wrapped; return true;
