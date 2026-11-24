@@ -77,7 +77,12 @@
   const seen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || '{}'); } catch (_) { return {}; } };
   const seenId = id => Number(seen()[id] || 0);
   const markSeen = (id, msgId) => { const s = seen(); if (Number(msgId) > Number(s[id] || 0)) { s[id] = Number(msgId); try { localStorage.setItem(SEEN_KEY, JSON.stringify(s)); } catch (_) {} } };
-  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗', audit_harvest: '🔎', overdue: '🗓', pullout: '📍', income_checker: '📈', newly_installed: '🆕' };
+  const ICON = { eod_harvest: '🧺', supervisor: '🧑‍💼', job_dispatcher: '📋', gcash_autopay: '📷', spawn_remind: '📱', poller_dicayas: '📡', poller_dapitan: '📡', name_matcher: '🔗', audit_harvest: '🔎', overdue: '🗓', pullout: '📍', income_checker: '📈', newly_installed: '🆕', network_watch: '📡', sms_gateway: '📱', system_doctor: '🩺' };
+  /* 2026-11-24 (Needs you queue): the decision handlers below take an optional last argument ctx = { after(ok), notice(msg) }.
+     With ctx, after(ok) replaces the chat re-render and notice() replaces the chat-pane notice; without it (the chat itself)
+     nothing changes. Exposed as window.employeesChatActions so the queue presses the very same buttons. */
+  const ctxAfter = (ctx, ok) => { if (ctx && typeof ctx.after === 'function') ctx.after(!!ok); else chatOpen(chatEmp); };
+  const ctxNotice = ctx => (ctx && typeof ctx.notice === 'function') ? ctx.notice : chatNotice;
   let chatEmp = null, chatBusy = false, chatTimer = null, replyTo = null;   // replyTo = { id, text } while replying to a bubble
   const tmFull = iso => new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' });
 
@@ -123,7 +128,9 @@
         const free = m.free_text ? `<input data-free="${m.id}" placeholder="or type the vendo…" style="padding:4px 8px;border:1px solid var(--bd,#e5e7eb);border-radius:7px;font-size:12px;min-width:160px">` : '';
         foot = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">${btns}${free}</div>`;
       } else {
-        foot = `<div style="margin-top:4px;font-size:11px;color:var(--mu,#6b7280)">${m.status === 'answered' ? '✓ answered' : 'skipped'}${m.answered_at ? ' · ' + tmFull(m.answered_at) : ''}</div>`;
+        const autoDays = (window.__hqSwitches && window.__hqSwitches.hq_needs_you_expire_days) || 7;
+        const word = m.status === 'answered' ? '✓ answered' : (m.status === 'closed' && m.answer === 'later_auto') ? '⏱ closed after ' + autoDays + ' days (no answer)' : 'skipped';
+        foot = `<div style="margin-top:4px;font-size:11px;color:var(--mu,#6b7280)">${word}${m.answered_at ? ' · ' + tmFull(m.answered_at) : ''}</div>`;
       }
     }
     // an owner reply quotes the line it answers
@@ -193,15 +200,16 @@
     const j = await r.json().catch(() => ({}));
     return { r, j };
   }
-  async function chatReply(body){
-    if (chatBusy) return null; chatBusy = true;
+  async function chatReply(body, ctx){
+    if (chatBusy) return undefined;                 // undefined = did not run (busy); null = ran and failed
+    chatBusy = true;
     try {
       let { r, j } = await callReply('spawn_hq_chat_reply_v2', body);
       // gateway still on v86 (no v2 name): answers and new messages still work through v1; replies need v2
       if (!r.ok && /rpc not allowed/.test(String(j.error || '')) && !body.p_reply_to) ({ r, j } = await callReply('spawn_hq_chat_reply', body));
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
       return j;
-    } catch (e) { chatNotice('Could not send: ' + e.message); return null; }
+    } catch (e) { ctxNotice(ctx)('Could not send: ' + e.message); return null; }
     finally { chatBusy = false; }
   }
   /* inline notice above the reply box (no pop-up) */
@@ -215,13 +223,13 @@
     replyTo = rt;
     const bar = document.getElementById('emp-chat-replying'), inp = document.getElementById('emp-chat-input');
     if (!bar || !inp) return;
-    if (!rt) { bar.style.display = 'none'; inp.placeholder = 'Write to this employee… (saved with the thread)'; return; }
+    if (!rt) { bar.style.display = 'none'; inp.placeholder = 'Write a note… (saved to the thread; nobody acts on it)'; return; }
     bar.querySelector('[data-rt]').textContent = rt.text;
-    bar.style.display = 'flex'; inp.placeholder = 'Your reply…'; inp.focus();
+    bar.style.display = 'flex'; inp.placeholder = 'Your note…'; inp.focus();
   }
   /* 🔎 Audit harvest: Charge / It's OK / Later on a money question. hq_audit_decide is granted to the service role only, so it
      works only through the admin gateway this dashboard is logged in to; it writes the same fields as the Recon tab's buttons. */
-  async function chatDecide(m, choice, label){
+  async function chatDecide(m, choice, label, ctx){
     if (chatBusy) return;
     // the button label is "Charge <collector> ₱<amount>"; that amount is what the owner confirms, and decide refuses if the
     // shortfall moved since (late sales rows) — the button is then refreshed with the new amount
@@ -234,17 +242,18 @@
         : confirm('Charge ' + amt + ' as utang? You can undo it in the Recon tab.');
       if (!go) return;
     }
-    chatBusy = true;
+    chatBusy = true; let ok = false;
     try {
       const { r, j } = await callReply('hq_audit_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null, p_expect: expect });
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    } catch (e) { chatNotice('Not saved: ' + e.message); }
+      ok = true;
+    } catch (e) { ctxNotice(ctx)('Not saved: ' + e.message); }
     finally { chatBusy = false; }
-    chatOpen(chatEmp);
+    ctxAfter(ctx, ok);
   }
   /* 📍 Pull-out: Flag for pull-out / It's still there / Later. hq_pullout_decide is service-role only (admin gateway); it sets
      only the vendo card's pull-out flag, never its status. */
-  async function chatPullout(m, choice){
+  async function chatPullout(m, choice, ctx){
     if (chatBusy) return;
     if (choice === 'flag') {
       const body = 'Flag this vendo for pull-out on its card? Its status is not changed; pulling it out stays an office job. You can clear the flag on the vendo card.';
@@ -253,17 +262,18 @@
         : confirm(body);
       if (!go) return;
     }
-    chatBusy = true;
+    chatBusy = true; let ok = false;
     try {
       const { r, j } = await callReply('hq_pullout_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    } catch (e) { chatNotice('Not saved: ' + e.message); }
+      ok = true;
+    } catch (e) { ctxNotice(ctx)('Not saved: ' + e.message); }
     finally { chatBusy = false; }
-    chatOpen(chatEmp);
+    ctxAfter(ctx, ok);
   }
   /* 🆕 Newly installed: Same as … / New vendo / Ignore on a group-chat post. hq_newvendo_decide is service-role only (admin
      gateway); "Same as" fills blanks on that vendo only, "New vendo" creates one. */
-  async function chatNewVendo(m, choice){
+  async function chatNewVendo(m, choice, ctx){
     if (chatBusy) return;
     if (choice === 'create') {
       const body = 'Create a new vendo from this post? It is added as active and joins the first harvest group of its area; you can move or retire it on the vendo card.';
@@ -272,18 +282,22 @@
         : confirm(body);
       if (!go) return;
     }
-    chatBusy = true;
+    chatBusy = true; let ok = false;
     try {
       const { r, j } = await callReply('hq_newvendo_decide', { p_msg: Number(m.id), p_choice: choice, p_note: null });
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
-    } catch (e) { chatNotice('Not saved: ' + e.message); }
+      ok = true;
+    } catch (e) { ctxNotice(ctx)('Not saved: ' + e.message); }
     finally { chatBusy = false; }
-    chatOpen(chatEmp);
+    ctxAfter(ctx, ok);
   }
-  async function chatAnswer(id, answer, note){
-    const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null });
-    if (j) chatOpen(chatEmp);
+  async function chatAnswer(id, answer, note, ctx){
+    const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null }, ctx);
+    if (j === undefined) return;                    // blocked by chatBusy (double-click): nothing ran, nothing to report
+    if (ctx) { if (typeof ctx.after === 'function') ctx.after(!!j); }
+    else if (j) chatOpen(chatEmp);
   }
+  window.employeesChatActions = { decide: chatDecide, pullout: chatPullout, newvendo: chatNewVendo, answer: chatAnswer, ICON };
   async function chatSend(){
     const inp = document.getElementById('emp-chat-input'); const t = (inp.value || '').trim(); if (!t || !chatEmp) return;
     const j = replyTo ? await chatReply({ p_reply_to: replyTo.id, p_note: t })
@@ -307,7 +321,7 @@
         f.insertAdjacentHTML('beforebegin',
           `<div id="emp-chat-notice" style="display:none;margin:0 12px;padding:5px 10px;border-radius:7px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700"></div>
            <div id="emp-chat-replying" style="display:none;align-items:center;gap:8px;margin:0 12px;padding:5px 10px;border-left:3px solid #7c3aed;background:#f5f3ff;border-radius:6px;font-size:12px">
-             <span style="font-weight:800;color:#6d28d9">↩ Replying to</span>
+             <span style="font-weight:800;color:#6d28d9">↩ Note on</span>
              <span data-rt style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#4b5563"></span>
              <button type="button" data-rt-x title="Cancel the reply (Esc)" style="border:0;background:none;color:#6b7280;font-size:14px;cursor:pointer;padding:0 4px">✕</button>
            </div>`);
@@ -338,7 +352,7 @@
     reports:   { hub: 'reports',   tabs: [['reports', '📄 Reports'], ['analytics', '📊 Analytics']] },
     vendos:    { hub: 'vendos',    tabs: [['vendos', '📟 Telegram vendos'], ['vmap-top', '📍 Map'], ['spawncloud', '☁ Cloud'], ['suspicious', '⚠️ Suspicious'], ['notsus', '✅ Not Sus'], ['skipped', '⏭ Skipped']] },
     system:    { hub: 'system',    tabs: [['health', '🩺 Health'], ['status', '🖥 System']] },
-    employees: { hub: 'employees', tabs: [['employees', '💬 Chat'], ['agents', '🤖 Agents']] }
+    employees: { hub: 'employees', tabs: [['needsyou', '🧾 Needs you'], ['employees', '💬 Chat'], ['agents', '🤖 Agents']] }   // needsyou: shown only when spawn_settings.hq_needs_you = on (dash.23)
   };
   const groupOf = id => Object.keys(GROUPS).find(g => GROUPS[g].tabs.some(t => t[0] === id));
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -349,23 +363,26 @@
     document.querySelectorAll('.nav-bar button[data-hub]').forEach(b => b.classList.toggle('active', !!g && b.dataset.hub === g));
     if (!g) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
     bar.style.display = 'flex';
-    bar.innerHTML = GROUPS[g].tabs.map(([pid, label]) => {
+    // 2026-11-24: the Needs you tab exists only while spawn_settings.hq_needs_you = on (dash.23 reads the switch and re-renders)
+    const tabs = GROUPS[g].tabs.filter(([pid]) => pid !== 'needsyou' || (window.__hqSwitches && String(window.__hqSwitches.hq_needs_you || '').trim().toLowerCase() === 'on'));
+    bar.innerHTML = tabs.map(([pid, label]) => {
       const ob = origBtn(pid); const hidden = ob && ob.offsetParent === null && getComputedStyle(ob).display === 'none' && !ob.classList.contains('sub');
       const badge = ob && ob.querySelector('.nbadge') && ob.querySelector('.nbadge').textContent.trim();
       return `<button data-sub="${esc(pid)}" ${hidden ? 'style="display:none"' : ''} class="subnav-btn${pid === id ? ' on' : ''}" style="padding:5px 12px;border:1px solid ${pid === id ? '#025AC6' : '#dbe3f4'};border-radius:999px;background:${pid === id ? '#025AC6' : '#fff'};color:${pid === id ? '#fff' : '#334155'};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">${label}${badge ? ` <span style="background:#dc2626;color:#fff;border-radius:999px;padding:0 6px;font-size:10px">${esc(badge)}</span>` : ''}</button>`;
     }).join('');
     bar.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
       const pid = b.dataset.sub;
-      if (pid === 'agents') { window.showP('agents', null); return; }
+      if (pid === 'agents' || pid === 'needsyou') { window.showP(pid, null); return; }
       const ob = origBtn(pid); if (ob) ob.click(); else window.showP(pid, null);
     });
   }
+  window.subnavRender = render;
   function hookShowP(){
     if (typeof window.showP !== 'function' || window.showP.__hub) return false;
     const orig = window.showP;
     const wrapped = function(id, btn){
       const r = orig.apply(this, arguments);
-      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); } catch (_) {}
+      try { render(id); if (id === 'agents' && typeof window.agentsTabShown === 'function') window.agentsTabShown(); if (id === 'needsyou' && typeof window.needsYouTabShown === 'function') window.needsYouTabShown(); } catch (_) {}
       return r;
     };
     wrapped.__hub = true; window.showP = wrapped; return true;

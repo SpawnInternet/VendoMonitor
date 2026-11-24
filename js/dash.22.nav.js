@@ -35,7 +35,11 @@
     overdue:         { label: '🧺 Open Harvest',            panel: 'harvest' },
     pullout:         { label: '🔗 Open Vendos',             panel: 'vendos' },
     income_checker:  { label: '🧺 Open Harvest',            panel: 'harvest' },
-    newly_installed: { label: '🔗 Open Vendos',             panel: 'vendos' }
+    newly_installed: { label: '🔗 Open Vendos',             panel: 'vendos' },
+    // 2026-11-24 (Needs you): the three employees that go red without a Fix-it link
+    network_watch:   { label: '🖥 Open System',             panel: 'status' },
+    sms_gateway:     { label: '🖥 Open System',             panel: 'status' },
+    system_doctor:   { label: '🤖 Open Agents',             panel: 'agents' }
   };
 
   const clean = s => String(s == null ? '' : s).replace(/[^a-z0-9_-]/gi, '');
