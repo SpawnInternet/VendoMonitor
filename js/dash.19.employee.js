@@ -201,7 +201,8 @@
     return { r, j };
   }
   async function chatReply(body, ctx){
-    if (chatBusy) return null; chatBusy = true;
+    if (chatBusy) return undefined;                 // undefined = did not run (busy); null = ran and failed
+    chatBusy = true;
     try {
       let { r, j } = await callReply('spawn_hq_chat_reply_v2', body);
       // gateway still on v86 (no v2 name): answers and new messages still work through v1; replies need v2
@@ -292,6 +293,7 @@
   }
   async function chatAnswer(id, answer, note, ctx){
     const j = await chatReply({ p_id: id, p_answer: answer || null, p_note: note || null }, ctx);
+    if (j === undefined) return;                    // blocked by chatBusy (double-click): nothing ran, nothing to report
     if (ctx) { if (typeof ctx.after === 'function') ctx.after(!!j); }
     else if (j) chatOpen(chatEmp);
   }

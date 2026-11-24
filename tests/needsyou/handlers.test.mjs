@@ -33,3 +33,12 @@ fetchResult = { ok: true, json: async () => ({ ok: true }) };
 afterCalls = 0; afterArgs = []; notices = [];
 await A.newvendo({ id: 4 }, 'ignore', ctx);
 assert(afterCalls === 1 && afterArgs[0] === true && notices.length === 0, 'newvendo with ctx: after(true) on success, no notice');
+
+// F2 (final review): a click blocked by chatBusy must not call after() at all
+let release; fetchResult = new Promise(res => { release = () => res({ ok: true, json: async () => ({ ok: true }) }); });
+afterCalls = 0; afterArgs = []; notices = [];
+const p1 = A.answer(10, 'yes', '', ctx);
+await A.answer(11, 'yes', '', ctx);            // second click while the first is in flight
+assert(afterCalls === 0 && notices.length === 0, 'blocked second answer calls neither after() nor notice()');
+release(); await p1;
+assert(afterCalls === 1 && afterArgs[0] === true, 'first answer still completes with after(true)');

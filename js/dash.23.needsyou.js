@@ -77,28 +77,49 @@
     let s = nb.querySelector('.nbadge'); if (!s) { s = document.createElement('span'); s.className = 'nbadge'; nb.appendChild(s); }
     s.textContent = n ? String(n) : ''; s.style.display = n ? 'block' : 'none';   // the sub-bar copies .nbadge on render
   }
+  /* the notice lives in module state (msg + expiry) so a re-render cannot wipe it (final review, item 1) */
+  let lastNotice = { msg: '', until: 0 };
+  const liveNotice = () => (lastNotice.msg && Date.now() < lastNotice.until) ? lastNotice.msg : '';
   function notice(msg){
+    lastNotice = { msg: msg || '', until: msg ? Date.now() + 8000 : 0 };
     const n = document.getElementById('needsyou-notice'); if (!n) return;
-    n.textContent = msg || ''; n.style.display = msg ? 'block' : 'none';
-    clearTimeout(notice.t); if (msg) notice.t = setTimeout(() => { n.style.display = 'none'; }, 6000);
+    n.textContent = lastNotice.msg; n.style.display = lastNotice.msg ? 'block' : 'none';
+    clearTimeout(notice.t); if (msg) notice.t = setTimeout(() => { if (!liveNotice()) n.style.display = 'none'; }, 8000);
   }
-  function ctxFor(rowEl){
-    return { after: ok => { if (ok && rowEl) rowEl.remove(); refresh(); }, notice };
+  const decided = new Set();                          // msg_ids decided here, filtered out until the queue confirms (item 2)
+  function ctxFor(rowEl, msgId){
+    return { after: ok => { if (ok) { if (msgId != null) decided.add(Number(msgId)); if (rowEl) rowEl.remove(); } refresh(); }, notice };
+  }
+  function filterDecided(rowsIn, decidedSet){
+    return (rowsIn || []).filter(r => !(r.item === 'q' && decidedSet.has(Number(r.msg_id))));
+  }
+  /* only HTTP 200 is truth (item 3): a failed read keeps what we had and says so instead of "Nothing needs you" */
+  function queueState(prev, q){
+    if (q.status === 200) return { rows: q.rows, error: '' };
+    return { rows: (prev && prev.rows) || [], error: 'Could not read the queue (HTTP ' + q.status + '), retrying' };
+  }
+  function switchState(prev, sw){
+    if (sw.status === 200) return { on: tabVisible(sw.rows), known: true, rows: sw.rows };
+    if (sw.status === 403) return { on: false, known: true, rows: [] };      // gateway < v91: hide, silently
+    return { on: !!(prev && prev.on), known: !!(prev && prev.known), rows: (prev && prev.rows) || [] };
+  }
+  function panelHtml(groups, summary, noticeMsg){
+    const total = groups.reduce((a, g) => a + g.rows.length, 0);
+    const sl = summaryLine(summary);
+    return `<div style="padding:8px 12px;border-bottom:1px solid var(--line,#e5e7eb);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
+        <span style="font-weight:800;font-size:14px">🧾 Needs you · ${total} item${total === 1 ? '' : 's'}</span>
+        <span style="color:var(--mu,#6b7280)">${sl}</span></div>
+      <div id="needsyou-notice" style="display:${noticeMsg ? 'block' : 'none'};margin:8px 12px;padding:5px 10px;border-radius:7px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700">${esc(noticeMsg || '')}</div>` +
+      (total ? groups.map(g => `<div style="padding:8px 12px 2px;font-size:11px;font-weight:800;color:var(--mu,#6b7280);letter-spacing:.04em">${g.title} (${g.rows.length})</div>${g.rows.map(rowHtml).join('')}`).join('')
+             : '<div style="padding:24px 12px;color:var(--mu,#6b7280);font-size:13px">Nothing needs you 🎉</div>');
   }
   function render(groups, summary){
     const h = host(); if (!h) return;
-    const total = groups.reduce((a, g) => a + g.rows.length, 0);
-    const sl = summaryLine(summary);
-    h.innerHTML = `<div style="padding:8px 12px;border-bottom:1px solid var(--line,#e5e7eb);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px">
-        <span style="font-weight:800;font-size:14px">🧾 Needs you · ${total} item${total === 1 ? '' : 's'}</span>
-        <span style="color:var(--mu,#6b7280)">${sl}</span></div>
-      <div id="needsyou-notice" style="display:none;margin:8px 12px;padding:5px 10px;border-radius:7px;background:#fef2f2;color:#b91c1c;font-size:12px;font-weight:700"></div>` +
-      (total ? groups.map(g => `<div style="padding:8px 12px 2px;font-size:11px;font-weight:800;color:var(--mu,#6b7280);letter-spacing:.04em">${g.title} (${g.rows.length})</div>${g.rows.map(rowHtml).join('')}`).join('')
-             : '<div style="padding:24px 12px;color:var(--mu,#6b7280);font-size:13px">Nothing needs you 🎉</div>');
+    h.innerHTML = panelHtml(groups, summary, liveNotice());
     const A = window.employeesChatActions || {};
     h.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => {
       const m = rows.find(r => r.item === 'q' && Number(r.msg_id) === Number(b.dataset.id)); if (!m) return;
-      const rowEl = b.closest('[data-row]'); const ctx = ctxFor(rowEl); const mm = { id: m.msg_id, topic: m.topic, text: m.text };
+      const rowEl = b.closest('[data-row]'); const ctx = ctxFor(rowEl, m.msg_id); const mm = { id: m.msg_id, topic: m.topic, text: m.text };
       const freeVal = (h.querySelector(`[data-free="${m.msg_id}"]`) || {}).value || '';
       return m.topic === 'audit_money' ? A.decide(mm, b.dataset.ans, b.textContent, ctx)
         : m.topic === 'pullout' ? A.pullout(mm, b.dataset.ans, ctx)
@@ -107,7 +128,7 @@
     });
     h.querySelectorAll('[data-free]').forEach(i => i.onkeydown = e => {
       if (e.key !== 'Enter' || !i.value.trim()) return;
-      const rowEl = i.closest('[data-row]'); A.answer(Number(i.dataset.free), '', i.value.trim(), ctxFor(rowEl));
+      const rowEl = i.closest('[data-row]'); A.answer(Number(i.dataset.free), '', i.value.trim(), ctxFor(rowEl, i.dataset.free));
     });
     h.querySelectorAll('[data-thread]').forEach(a => a.onclick = e => { e.preventDefault(); window.showP('employees', null); setTimeout(() => { if (window.employeesOpenThread) window.employeesOpenThread(a.dataset.thread); }, 300); });
     h.querySelectorAll('[data-fix]').forEach(a => a.onclick = e => { e.preventDefault(); if (window.spawnOpenPanel) spawnOpenPanel(a.dataset.fix, a.dataset.fixsub || undefined); else window.showP(a.dataset.fix, null); });
@@ -122,26 +143,34 @@
       return { rows: Array.isArray(rows) ? rows : [], status: r.status };
     } catch (_) { return { rows: [], status: 0 }; }
   }
+  let swState = { on: false, known: false, rows: [] }, pendingRefresh = false, lastSummary = [];
   async function refresh(){
-    if (busyRefresh) return; busyRefresh = true;
+    if (busyRefresh) { pendingRefresh = true; return; }   // a refresh asked for mid-flight runs once more afterwards (item 2)
+    busyRefresh = true;
     try {
-      const sw = await read('v_hq_switches_v1', 'select=key,value', 50);
-      window.__hqSwitches = {}; sw.rows.forEach(s => { window.__hqSwitches[s.key] = s.value; });
-      const on = tabVisible(sw.rows);
-      showTab(on);                                   // switches view not allowed (gateway < v91) → [] → tab hidden, silently
-      if (!on) { rows = []; badge(0); return; }
+      swState = switchState(swState, await read('v_hq_switches_v1', 'select=key,value', 50));
+      window.__hqSwitches = {}; swState.rows.forEach(s => { window.__hqSwitches[s.key] = s.value; });
+      showTab(swState.on);
+      if (!swState.on) { rows = []; badge(0); return; }
       const [q, s] = await Promise.all([
         read('v_hq_needs_you_v1', 'select=*&order=rank,at', 1000),
         read('v_hq_needs_you_summary_v1', 'select=*', 100),
       ]);
-      rows = q.rows;
-      badge(rows.length);
       const h = host();
-      if (q.status === 403 && h) { h.innerHTML = '<div style="padding:24px 12px;color:var(--mu,#6b7280);font-size:13px">Needs the gateway update (v91).</div>'; return; }
-      render(buildGroups(rows), s.rows);
-    } finally { busyRefresh = false; }
+      if (q.status === 403) { rows = []; badge(0); if (h) h.innerHTML = '<div style="padding:24px 12px;color:var(--mu,#6b7280);font-size:13px">Needs the gateway update (v91).</div>'; return; }
+      const st = queueState({ rows }, q);
+      if (st.error) notice(st.error);
+      if (q.status === 200) q.rows.forEach(r => { if (r.item === 'q') decided.delete(Number(r.msg_id)); });   // the server confirmed what is still open
+      rows = filterDecided(st.rows, decided);
+      if (s.status === 200) lastSummary = s.rows;
+      badge(rows.length);
+      render(buildGroups(rows), lastSummary);
+    } finally {
+      busyRefresh = false;
+      if (pendingRefresh) { pendingRefresh = false; refresh(); }
+    }
   }
-  window.needsYou = { tabVisible, buildGroups, rowHtml, summaryLine, refresh };
+  window.needsYou = { tabVisible, buildGroups, rowHtml, summaryLine, panelHtml, filterDecided, queueState, switchState, refresh };
   window.needsYouTabShown = function(){
     refresh();
     clearInterval(timer);

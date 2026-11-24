@@ -38,3 +38,17 @@ assert((moneyHtml.match(/data-ans="/g) || []).length === 3 && /It&#39;s OK/.test
 // summaryLine
 assert(/Name matcher: 5 shown, 73 waiting/.test(N.summaryLine([{ employee: 'Name matcher', in_queue: 5, hidden_by_cap: 73 }])), 'summary line text');
 assert(N.summaryLine([{ employee: 'X', in_queue: 2, hidden_by_cap: 0 }]) === '', 'summary line is empty when nothing is hidden');
+
+// ── final-review fixes ──
+// F1: the notice must survive a re-render (panelHtml carries it)
+const ph = N.panelHtml(groups, [], 'Not saved: shortfall moved');
+assert(/Not saved: shortfall moved/.test(ph) && /id="needsyou-notice"[^>]*display:block/.test(ph), 'panelHtml shows a live notice');
+assert(/id="needsyou-notice"[^>]*display:none/.test(N.panelHtml(groups, [], '')), 'panelHtml hides an empty notice');
+// F2: rows just decided are filtered out of the next render
+assert(N.filterDecided(rows, new Set([2, 3])).map(r => r.msg_id ?? r.employee_id).join(',') === '1,supervisor', 'filterDecided drops decided msg_ids, keeps lights');
+// F3: only HTTP 200 is truth
+assert(JSON.stringify(N.queueState({ rows: [{ a: 1 }] }, { status: 200, rows: [] })) === JSON.stringify({ rows: [], error: '' }), 'queueState: 200 replaces rows');
+assert(JSON.stringify(N.queueState({ rows: [{ a: 1 }] }, { status: 500, rows: [] })) === JSON.stringify({ rows: [{ a: 1 }], error: 'Could not read the queue (HTTP 500), retrying' }), 'queueState: non-200 keeps last rows and reports');
+assert(N.switchState({ on: true, known: true }, { status: 500, rows: [] }).on === true, 'switchState: failed read keeps last known state');
+assert(N.switchState({ on: true, known: true }, { status: 403, rows: [] }).on === false, 'switchState: 403 hides the tab');
+assert(N.switchState({ on: false, known: false }, { status: 200, rows: [{ key: 'hq_needs_you', value: 'on' }] }).on === true, 'switchState: 200 on');
