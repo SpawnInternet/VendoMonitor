@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- v14.1 (2026-11-24): double-save warning — red banner on an already-harvested card, submit checks server + offline queue, second harvest is held for the owner. -->
 <!-- v14.0 · v13.9 + the Harvest v4 features (2026-11-18). Every new behaviour is behind a spawn_settings
      switch read through spawn_harvest_flags(): harvest_login_v2, harvest_card_colors, harvest_search,
      harvest_save_v2, harvest_v4_guard (off | shadow | on). All off = v13.9 behaviour. -->
@@ -816,6 +817,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <div id="v4-identity-box" class="v4-idbox" style="display:none"></div>
+  <div id="dup-warn-box" style="display:none;background:#fee2e2;border:2px solid #dc2626;color:#7f1d1d;border-radius:10px;padding:10px 14px;margin:0 0 12px;font-size:13px;font-weight:700;line-height:1.45"></div>
   <!-- V4: GPS lives outside the Edit panel so it is always reachable -->
   <div class="card v4-gpscard">
     <button class="btn" id="v4-get-gps-btn" onclick="v4GetGps()" style="margin-bottom:8px;background:linear-gradient(90deg,#0E47C4,#7A2A9E);color:#fff">📍 Get GPS</button>
@@ -1266,7 +1268,7 @@ const HDR = {'apikey':'gw','Authorization':'Bearer gw','Content-Type':'applicati
      harvest_save_v2      on  → save through spawn-ops submit-harvest-v2 (v1 fallback)
      harvest_v4_guard     shadow → log what the GPS/identity guard would block, block nothing
                           on  → enforce (fill-in sheet; no owner details, no harvest)       */
-const APP_BUILD = 'v14.0';
+const APP_BUILD = 'v14.1';
 const HV_PUBLISHABLE_KEY = 'sb_publishable_6J1xIrlkpHf6jir4DtUh4g_xX7Fm9ln';   // public key, same one hq/index.html ships
 const HV_FLAGS_URL = SB + '/rest/v1/rpc/spawn_harvest_flags';
 let _hvFlags = null;
@@ -2080,7 +2082,7 @@ if('serviceWorker' in navigator){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
-const APP_VERSION = 'v14.0';   // flag loader: 404 = all off (2026-11-18 review)
+const APP_VERSION = 'v14.1';   // flag loader: 404 = all off (2026-11-18 review)
 /* v13.9: Spawn share = net × 75% rounded UP to the next peso (the office notebook rule; e.g. ₱1,874.25 → ₱1,875).
    The database applies the same rule on save (trg_harvest_share_round_up), this keeps the screen in step with it. */
 function spawnShareOf(net){ const n = Number(net) || 0; return Math.ceil(Math.round(n * 75) / 100); }
@@ -3886,6 +3888,9 @@ function openItem(idx){
   currentItem=currentItems[idx]; currentItemIdx=idx; capturedGPS=null; _v4SheetEntered=null;
   v4RenderIdentityBox();
   _dupConfirmed=false;   // a fresh card must ask again before double-harvesting
+  _dupBanner(null);      // v14.1: clear the previous card's double-save banner
+  { const _it=currentItem; _it._dupPrior=null;
+    _dupFindToday(_it).then(p=>{ _it._dupPrior=p||null; if(p && currentItem===_it) _dupBanner(p); }).catch(()=>{}); }
   const name=currentItem.sheet_name||currentItem.tg_name||'Vendo';
   document.getElementById('form-vname').textContent=name;
   const _vcodeEl=document.getElementById('form-vcode');
@@ -4013,7 +4018,10 @@ function openItem(idx){
     if(currentItem.coins_old) { const _e=document.getElementById('coin-old'); if(_e) _e.value=currentItem.coins_old; }
     if(currentItem.coins_saloy) { const _e=document.getElementById('coin-saloy'); if(_e) _e.value=currentItem.coins_saloy; }
     if(currentItem.collector_note) { const _e=document.getElementById('note-inp'); if(_e) _e.value=currentItem.collector_note; }
-    calcNet(); toast('Already harvested — re-submit to update');
+    calcNet();
+    // v14.1: the old toast said "re-submit to update" — re-submitting never updated anything, it saved a SECOND harvest.
+    if(currentItem.harvested_at && String(currentItem.harvested_at).split('T')[0]!==new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}))
+      toast('Harvested before on '+String(currentItem.harvested_at).split('T')[0]+' — this would be a new harvest');
   }
   showScreen('screen-form');
 }
@@ -4684,18 +4692,71 @@ document.addEventListener('click',function(e){
   }
 });
 
+// ── v14.1 double-save helpers ────────────────────────────────────────────
+function _dupToday(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}); }
+function _dupWhen(p){
+  let t = '';
+  if(p && p.at){ try{ t = ' at '+new Date(p.at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'}); }catch(_){} }
+  const amt = (p && p.share!=null && !isNaN(p.share)) ? ' (₱'+Math.round(p.share)+(p.by?' by '+p.by:'')+')' : (p && p.by ? ' (by '+p.by+')' : '');
+  const src = p && p.src==='queue' ? ' — still waiting to sync on this phone' : '';
+  return t+amt+src;
+}
+function _dupIsToday(p){ try{ return !!(p && p.at && new Date(p.at).toLocaleDateString('en-CA',{timeZone:'Asia/Manila'})===_dupToday()); }catch(_){ return false; } }
+function _dupBanner(p){
+  const el = document.getElementById('dup-warn-box'); if(!el) return;
+  if(!p){ el.style.display='none'; el.textContent=''; return; }
+  el.innerHTML = '⚠️ Already harvested today'+_dupWhen(p).replace(/</g,'&lt;')
+    +'<br><span style="font-weight:600">Wrong number? Do NOT submit again — that saves a SECOND harvest. Tell the office to fix it.</span>';
+  el.style.display='';
+}
+// Returns {vendoKey, at, share, by, src} for an earlier harvest today on this vendo, or null.
+async function _dupFindToday(item, localOnly){
+  if(!item) return null;
+  const today = _dupToday();
+  const key = item.vendo_id || item.id;
+  // 1) this card
+  if(item.status==='harvested' && item.harvested_at && String(item.harvested_at).split('T')[0]===today){
+    return {vendoKey:key, at:item.harvested_at, share:item.spawn_share, by:null, src:'card'};
+  }
+  // 2) offline queue on this phone (not yet synced)
+  try{
+    const q = (typeof offlineQueue!=='undefined' && Array.isArray(offlineQueue)) ? offlineQueue : [];
+    const hit = q.find(e => e && e.type==='harvest' && e.harvestRecord && e.harvestRecord.harvest_date===today &&
+      ((item.vendo_id && e.vendoId===item.vendo_id) || e.itemId===item.id));
+    if(hit) return {vendoKey:key, at:hit.harvestRecord.harvested_at, share:hit.harvestRecord.spawn_share, by:hit.harvestRecord.collector, src:'queue'};
+  }catch(_){}
+  // 3) server (any collector, any phone) — short timeout; offline or slow = skip
+  if(localOnly || !item.vendo_id || !navigator.onLine) return null;
+  try{
+    const ctl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+    const tm = ctl ? setTimeout(()=>ctl.abort(), 3500) : null;
+    const r = await fetch(`${SB}/rest/v1/harvests?vendo_id=eq.${item.vendo_id}&harvest_date=eq.${today}&status=in.(harvested,needs_check)&select=id,spawn_share,harvested_at,collector,is_test&order=harvested_at.asc&limit=5`,
+      {headers:HDR, signal: ctl ? ctl.signal : undefined});
+    if(tm) clearTimeout(tm);
+    if(!r.ok) return null;
+    const rows = (await r.json().catch(()=>[])).filter(x => x && x.is_test!==true);
+    if(rows.length) return {vendoKey:key, at:rows[0].harvested_at, share:rows[0].spawn_share, by:rows[0].collector, src:'server'};
+  }catch(_){}
+  return null;
+}
+
 async function submitHarvest(){
-  // A vendo already harvested today is almost always a double-tap or a collector
-  // reopening the wrong card. It has happened twice in ~600 real harvests, so it is
-  // possible — but it must be deliberate, not accidental. Each duplicate invents a
-  // full spawn share out of nothing.
-  if(currentItem && currentItem.status==='harvested' && currentItem.harvested_at){
-    const _d = String(currentItem.harvested_at).split('T')[0];
-    const _today = new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'});
-    if(_d === _today && !_dupConfirmed){
+  // v14.1 (2026-11-24): a vendo already harvested today is almost always a double save —
+  // a collector re-entering a corrected number, or re-saving after an offline save looked lost.
+  // Check the card, the offline queue AND the server (the card can be reloaded before an
+  // offline save syncs). The database also holds any second same-day harvest as needs_check.
+  if(currentItem && !_dupConfirmed){
+    // No network wait here: a slow check before the buttons disable would let a double tap through.
+    // The server answer was fetched when the card opened (currentItem._dupPrior).
+    let _prior = null;
+    try { _prior = await _dupFindToday(currentItem, true); } catch(_){ _prior = null; }
+    if(!_prior && _dupIsToday(currentItem._dupPrior)) _prior = currentItem._dupPrior;
+    if(_prior){
+      _dupBanner(_prior);
       const nm = currentItem.sheet_name || currentItem.tg_name || 'This vendo';
-      const t = new Date(currentItem.harvested_at).toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
-      if(!confirm(nm+' was already harvested today at '+t+'.\n\nHarvesting again creates a SECOND record and a second spawn share.\n\nAre you sure this machine was emptied twice?')){
+      if(!confirm(nm+' was already harvested today'+_dupWhen(_prior)+'.\n\n'
+        +'To FIX a wrong number: press Cancel and tell the office. Submitting again does NOT change the first harvest — it saves a SECOND one.\n\n'
+        +'Press OK only if this machine was emptied a second time today. The second harvest will be HELD until the owner checks it.')){
         return;
       }
       _dupConfirmed = true;
