@@ -124,7 +124,7 @@ function vpTgSelect(tgName) {
   if (inp) inp.value = tgName;
   if (el) el.style.display = 'none';
 }
-async function htShowVendoProfile(name, area) {
+async function htShowVendoProfile(name, area, startTab) {
   let modal = document.getElementById('vp-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -163,6 +163,7 @@ async function htShowVendoProfile(name, area) {
     ]);
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
     vpRenderInfo();
+    if(startTab){ const btns=document.querySelectorAll('.vp-tab'); const idx={info:0,ledger:1,recon:2,names:3}[startTab]; if(btns[idx]) vpTab(startTab, btns[idx]); }
   } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
 }
 function vpCancelPullout(){const ov=document.getElementById('vp-po-ov');if(ov)ov.remove();}
@@ -860,8 +861,11 @@ async function htShowCollectorPopup(collectorName){
     const total = Number(h.coins_total||0);
     const spawn = Number(h.spawn_share||0);
     const photoHtml = h.photo_url ? `<img src="${h.photo_url}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:52px;height:52px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🏪</div>`;
+    const nm = h.sheet_name||h.vendo_name||h.tg_name||'';
     return `
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:8px;">
+    <div onclick='htShowVendoProfile(${klArg(nm, h.area||"", "ledger")})' title="Open ledger"
+         style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;"
+         onmouseover="this.style.borderColor='#1565c0';this.style.boxShadow='0 2px 10px rgba(21,101,192,.15)'" onmouseout="this.style.borderColor='#e5e7eb';this.style.boxShadow='none'">
       <div style="display:flex;gap:10px;align-items:flex-start;">
         ${photoHtml}
         <div style="flex:1;min-width:0;">
