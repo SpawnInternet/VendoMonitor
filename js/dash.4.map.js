@@ -1105,55 +1105,63 @@ function showSearchDrop() {
 }
 function hideSearchDrop() { document.getElementById("search-drop").style.display = "none"; }
 
+/* ── Global search (2026-11-25): vendos + subscribers straight from the DB.
+   Click a vendo → its profile window on the Ledger tab; click a subscriber → the subscriber page. ── */
+let _gsT = null, _gsSeq = 0;
 function globalSearch(q) {
   const drop = document.getElementById("search-drop");
-  if (!q || q.length < 2) { drop.style.display = "none"; return; }
-  const ql = q.toLowerCase();
-
-  // Primary: match TG name from allVendos (transaction-based)
-  let results = allVendos.filter(v => v.vendo.toLowerCase().includes(ql)).slice(0, 10);
-
-  // Secondary: if fewer than 5 results, also search sheet_name in allVendos registry
-  // and cross-reference to allVendos by tg_name
-  if (results.length < 5 && allVendos && allVendos.length) {
-    const sheetMatches = allVendos.filter(v =>
-      v.sheet_name && v.sheet_name.toLowerCase().includes(ql) && v.tg_name
-    );
-    for (const sm of sheetMatches) {
-      const already = results.find(r => r.vendo === sm.tg_name);
-      if (!already) {
-        const fromAll = allVendos.find(r => r.vendo === sm.tg_name);
-        if (fromAll) results.push(fromAll);
-        else results.push({ vendo: sm.tg_name, area: sm.area || '—', sales: 0, txn_count: 0, _sheetLabel: sm.sheet_name });
-      }
-      if (results.length >= 10) break;
-    }
-  }
-
-  if (!results.length) { drop.style.display = "none"; return; }
+  clearTimeout(_gsT);
+  q = String(q||'').trim();
+  if (q.length < 2) { drop.style.display = "none"; return; }
   drop.style.display = "block";
-  drop.innerHTML =
-    `<div style="padding:8px 14px;background:#f0f4ff;border-bottom:1px solid var(--bd);font-size:11px;color:#1565c0;font-weight:600;">
-      ${results.length} vendos found — click to view transactions
-    </div>` +
-    results.map(v => {
-      // Find sheet_name label if available
-      const reg = allVendos ? allVendos.find(x => x.tg_name === v.vendo) : null;
-      const sheetLabel = reg && reg.sheet_name ? `<span style="color:#7c3aed;font-size:10px;margin-left:6px;">📋 ${reg.sheet_name}</span>` : '';
-      return `
-    <div onclick="openVendoFromSearch('${esc(v.vendo)}','${v.area}')"
-      style="padding:11px 14px;border-bottom:1px solid var(--bd);cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .12s;"
-      onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
-      <div>
-        <div style="font-weight:600;font-size:13px;color:#1a1d2e">${v.vendo}${sheetLabel}</div>
-        <div style="font-size:11px;color:var(--mu);margin-top:2px">📍 ${v.area} · ${parseInt(v.txn_count||v.txns||0).toLocaleString()} txns</div>
-      </div>
-      <div style="text-align:right;flex-shrink:0;margin-left:8px;">
-        <div style="font-weight:700;color:#1565c0;font-size:13px">${fmt(v.sales)}</div>
-        <div style="font-size:10px;color:#9FE1CB;font-weight:600;">→ View txns</div>
-      </div>
-    </div>`;
-    }).join("");
+  drop.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:#6b7280;">Searching…</div>';
+  const seq = ++_gsSeq;
+  _gsT = setTimeout(async () => {
+    const enc = encodeURIComponent('*' + q + '*');
+    const H = (typeof _HDR !== 'undefined') ? _HDR : {apikey:'gw', Authorization:'Bearer gw', 'Content-Type':'application/json'};
+    const get = (path) => fetch((window.__SPAWN_SB||_SB) + '/rest/v1/' + path, {headers:H}).then(r => r.ok ? r.json() : []).catch(() => []);
+    const isNum = /^\d+$/.test(q);
+    const [vend, subs] = await Promise.all([
+      get('vendos?select=id,sheet_name,tg_name,owner_name,area,vlan,vendo_code,status,last_harvest_date&status=neq.merged&or=(sheet_name.ilike.'+enc+',tg_name.ilike.'+enc+',owner_name.ilike.'+enc+',vendo_code.ilike.'+enc+(isNum?',vlan.eq.'+q:'')+')&order=sheet_name.asc&limit=10'),
+      get('subscribers?select=id,name,acct_no,area,address,phone,status,plan_mbps,monthly_amount&or=(name.ilike.'+enc+',acct_no.ilike.'+enc+',address.ilike.'+enc+')&order=name.asc&limit=10')
+    ]);
+    if (seq !== _gsSeq) return;
+    const V = Array.isArray(vend) ? vend : [], S = Array.isArray(subs) ? subs : [];
+    if (!V.length && !S.length) { drop.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:#6b7280;">Nothing matched "'+esc(q)+'"</div>'; return; }
+    const hdr = (t, n, c) => `<div style="padding:7px 14px;background:${c}10;border-bottom:1px solid var(--bd);border-top:1px solid var(--bd);font-size:10px;color:${c};font-weight:800;text-transform:uppercase;letter-spacing:.05em;">${t} · ${n}</div>`;
+    const row = (onclick, title, sub, right) => `
+      <div onclick="${onclick}" style="padding:9px 14px;border-bottom:1px solid var(--bd);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;"
+           onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">
+        <div style="min-width:0;"><div style="font-weight:700;font-size:13px;color:#1a1d2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${title}</div>
+        <div style="font-size:10px;color:#6b7280;margin-top:1px;">${sub}</div></div>
+        <div style="font-size:10px;color:#9ca3af;white-space:nowrap;">${right}</div></div>`;
+    let html = '';
+    if (V.length) html += hdr('🏪 Vendos', V.length, '#1565c0') + V.map(v => {
+      const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
+      const bits = [v.area||'—', v.vlan ? 'VLAN '+v.vlan : null, v.vendo_code||null, (v.tg_name && v.tg_name!==nm) ? '📶 '+v.tg_name : null, (v.owner_name && v.owner_name!==nm) ? '👤 '+v.owner_name : null].filter(Boolean).join(' · ');
+      const right = v.status && v.status!=='active' ? '<span style="color:#dc2626;font-weight:700;">'+esc(v.status)+'</span>' : (v.last_harvest_date ? 'last '+v.last_harvest_date : '');
+      return row("gsOpenVendo("+JSON.stringify(nm).replace(/"/g,'&quot;')+","+JSON.stringify(v.area||'').replace(/"/g,'&quot;')+")", esc(nm), esc(bits), right + ' <span style="color:#1565c0;font-weight:700;">ledger ›</span>');
+    }).join('');
+    if (S.length) html += hdr('👤 Subscribers', S.length, '#0f766e') + S.map(s => {
+      const bits = [s.area||'—', s.acct_no ? '#'+s.acct_no : null, s.plan_mbps ? s.plan_mbps+' Mbps' : null, s.monthly_amount ? '₱'+Number(s.monthly_amount).toLocaleString()+'/mo' : null].filter(Boolean).join(' · ');
+      const right = s.status && !/active/i.test(s.status) ? '<span style="color:#dc2626;font-weight:700;">'+esc(s.status)+'</span>' : '';
+      return row("gsOpenSub("+s.id+")", esc(s.name||('#'+s.id)), esc(bits), right + ' <span style="color:#0f766e;font-weight:700;">details ›</span>');
+    }).join('');
+    drop.innerHTML = html;
+  }, 280);
+}
+async function gsOpenVendo(name, area) {
+  document.getElementById("search-drop").style.display = "none";
+  document.getElementById("global-search").value = "";
+  if (typeof window.ensureHarvest === 'function') { try { await window.ensureHarvest(); } catch(e){} }
+  if (typeof htShowVendoProfile === 'function') htShowVendoProfile(name, area, 'ledger');
+  else openVendoFromSearch(name, area);
+}
+function gsOpenSub(id) {
+  document.getElementById("search-drop").style.display = "none";
+  document.getElementById("global-search").value = "";
+  if (typeof window.subDetail === 'function') window.subDetail(id);
+  else if (typeof showP === 'function') { showP('subscribers'); setTimeout(() => window.subDetail && window.subDetail(id), 1200); }
 }
 
 async function openVendoFromSearch(vendo, area) {
