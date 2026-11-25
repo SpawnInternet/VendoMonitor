@@ -6028,7 +6028,7 @@ async function viAdd(){
     // without one: the original function, unchanged
     const sfi = _viSfi;
     const autoFobs = viFobsOn();
-    const scanned = viFobCodes();
+    const scanned = viFobScanned();
     for(const t in scanned){ if(_viFobBad[t]){ viModal({ok:false, title:'Fob problem', lead:_viFobBad[t]}); return; } }
     const colors = viKcColors();
     const useV5 = autoFobs || Object.keys(scanned).length || Object.keys(colors).length;
@@ -6157,11 +6157,11 @@ function viResetForm(){
   viSetNoTg(false);
   ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr','vi-sfiq','vi-phone'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   const as=document.getElementById('vi-addr-state'); if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
-  const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
+  viRtEnable(true);
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const sfs=document.getElementById('vi-sfi-srv'); if(sfs) sfs.value='';
   _viNextFobs = null; _viFobBad = {};
-  ['vi-f-co','vi-f-cd','vi-f-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; e.style.borderColor='#e5e7eb'; } });
+  ['vi-f-co','vi-f-cd','vi-f-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; e._auto=null; e._userTyped=false; e.style.borderColor='#e5e7eb'; e.style.color='#111'; } });
   ['vi-c-co','vi-c-cd','vi-c-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; viKcPick(e); } });
   viFobBoxes(); viFobPreview(true);
   viSfiState();
@@ -6561,7 +6561,8 @@ function viPickSfi(router, vlan){
   const q = document.getElementById('vi-sfiq');
   if(q) q.value = 'VLAN '+r.vlan+' — '+String(r.site_name||'').slice(0,40);
   const sel = document.getElementById('vi-sfi-srv'); if(sel) sel.value = r.router_name;
-  // the SpawnFi server IS the vendo's server
+  // the SpawnFi server IS the vendo's server; the JuanFi/MikroTik router search is not for this vendo
+  viRtClear(); viRtEnable(false);
   _viSrv = r.router_name;
   const sq = document.getElementById('vi-srvq'); if(sq) sq.value = r.router_name;
   const ss = document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#028867'; ss.innerHTML='✅ Server = SpawnFi router <b>'+klEsc(r.router_name)+'</b>'; }
@@ -6589,6 +6590,7 @@ function viSfiState(){
 }
 
 function viSfiClear(){
+  viRtEnable(true);
   if(_viSfi && _viSrv === _viSfi.router_name){ _viSrv = null; const sq=document.getElementById('vi-srvq'); if(sq) sq.value=''; viSrvState(); }
   _viSfi = null;
   if(_viSfiAutoNoTg){ _viSfiAutoNoTg = false; viSetNoTg(false); }
@@ -6624,15 +6626,21 @@ function viFobPreview(reload){
       return;
     }
     if(!_viNextFobs){ el.innerHTML='🏷️ Fob codes: loading next free fobs…'; return; }
+    // put the pool code straight into the empty scan boxes — scanning a different fob just overwrites it
+    for(const id of ticked){
+      const [t] = VI_FOB_TYPE[id]; const b = document.getElementById(VI_FOB_BOX[t][1]); const n = _viNextFobs[t];
+      if(b && !b.value && n && n.qr && !b._userTyped){ b.value = n.qr; b._auto = n.qr; b.style.borderColor='#025AC6'; b.style.color='#025AC6'; }
+    }
     const codes = viFobCodes();
     const lines = ticked.map(id=>{
       const [t,label] = VI_FOB_TYPE[id]; const n = _viNextFobs[t];
-      if(codes[t]) return label+' → <span style="font-family:monospace;font-size:13px;background:#028867;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(codes[t])+'</span> <span style="color:#028867;font-weight:600;">scanned</span>';
+      const b = document.getElementById(VI_FOB_BOX[t][1]);
+      if(codes[t] && !(b && b._auto === codes[t])) return label+' → <span style="font-family:monospace;font-size:13px;background:#028867;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(codes[t])+'</span> <span style="color:#028867;font-weight:600;">scanned</span>';
       return label+' → '+(n && n.qr ? '<span style="font-family:monospace;font-size:13px;background:#311A8E;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(n.qr)+'</span> <span style="color:#6b7280;font-weight:600;">('+n.left+' left)</span>'
                                        : '<span style="color:#DF1A35;">none left in pool — print more tags</span>');
     });
-    el.innerHTML = '🏷️ Fobs to bind on save — scanned ones first, the rest from the printed pool:<br>'+lines.join('<br>')
-      + '<div style="margin-top:5px;color:#6b7280;font-weight:600;">Another install saving at the same time may take a code first; the result window shows the final ones. '
+    el.innerHTML = '🏷️ Fobs on save — take these from the printed pool, or scan the one you used:<br>'+lines.join('<br>')
+      + '<div style="margin-top:5px;color:#6b7280;font-weight:600;">'
       + '<button type="button" onclick="viFobToggle()" style="padding:2px 8px;background:#fff;color:#6b7280;border:1px solid #cbd5e1;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">don\'t bind fobs</button></div>';
   };
   draw();
@@ -6651,7 +6659,7 @@ function viFobBoxes(){
     if(!c||!b) continue;
     b.style.display = c.checked ? 'block' : 'none';
     const cs = document.getElementById(VI_KC_BOX[t]); if(cs){ cs.style.display = c.checked ? 'block' : 'none'; if(!c.checked){ cs.value=''; viKcPick(cs); } }
-    if(!c.checked){ b.value=''; b.style.borderColor='#e5e7eb'; delete _viFobBad[t]; }
+    if(!c.checked){ b.value=''; b._auto=null; b._userTyped=false; b.style.borderColor='#e5e7eb'; b.style.color='#111'; delete _viFobBad[t]; }
   }
   viFobState();
 }
@@ -6660,9 +6668,16 @@ function viFobCodes(){
   for(const t in VI_FOB_BOX){ const b=document.getElementById(VI_FOB_BOX[t][1]); const v=b && b.style.display!=='none' ? String(b.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'') : ''; if(v.length>=4) out[t]=v; }
   return out;
 }
+function viFobScanned(){   // only codes the office typed/scanned — auto-filled pool codes are left to the DB to take
+  const out = viFobCodes();
+  for(const t in out){ const b=document.getElementById(VI_FOB_BOX[t][1]); if(b && b._auto === out[t]) delete out[t]; }
+  return out;
+}
 function viFobScan(el, t){
   el.value = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el._userTyped = !!el.value; el._auto = null; el.style.color='#111';
   el.style.borderColor='#e5e7eb'; delete _viFobBad[t];
+  if(!el.value){ el._userTyped = false; viFobPreview(); viFobState(); return; }
   clearTimeout(_viFobVT[t]);
   const code = el.value;
   viFobPreview(); viFobState();
@@ -6692,7 +6707,7 @@ function viFobState(){
   if(!any){ el.style.display='none'; return; }
   el.style.display='block';
   if(bad.length){ el.style.color='#DF1A35'; el.textContent='❌ '+bad.join(' '); }
-  else { el.style.color='#9ca3af'; el.textContent='Scan or type the fob on each key (saves at 4–5 letters). Leave blank to take the next printed fob from the pool.'; }
+  else { el.style.color='#9ca3af'; el.textContent='Blue code = next fob from the printed pool. Scan the fob you used to replace it.'; }
 }
 
 /* holder colour per key, per vendo (2026-11-25) — the 9 colours the office uses */
@@ -7415,8 +7430,7 @@ async function viPhotoPick(input){
     } else {
       st.style.color='#6b7280';
       st.innerHTML = '✅ '+klEsc(f.name)+' · '+size
-        + '<br><span style="color:#9ca3af;">Could not read coordinates from the picture'+(o&&o.error?' ('+klEsc(o.error)+')':'')+'. Type or paste them above.</span>'
-        + (o && o.text ? '<div style="margin-top:3px;font-family:monospace;font-size:10px;color:#9ca3af;white-space:pre-wrap;">read: '+klEsc(o.text.slice(0,160))+'</div>' : '');
+        + '<br><span style="color:#9ca3af;">📍 No readable GPS stamp'+(o&&o.error?' ('+klEsc(o.error)+')':'')+' — type or paste the coordinates above.</span>';
     }
   }
   viCompile();
@@ -7434,20 +7448,24 @@ async function viOcrWorker(){
     await new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; sc.onload=ok; sc.onerror=()=>bad(new Error('OCR library did not load — check internet')); document.head.appendChild(sc); });
   }
   const w = await Tesseract.createWorker('eng', 1, Object.assign({ logger: ()=>{} }, window._viOcrOpts||{}));   // _viOcrOpts: test hook only
-  await w.setParameters({ tessedit_char_whitelist: '0123456789.,:-°\'"NSEWLatLongitude ', preserve_interword_spaces: '1' });
+  await w.setParameters({ tessedit_char_whitelist: '0123456789.,:-°\'"NSEWLatLongitude ', preserve_interword_spaces: '1', tessedit_pageseg_mode: '6' });
   _viOcrWorker = w;
   return w;
 }
-function viOcrStrip(img, fromTop){
-  // crop a strip (35% of height) and blow it up so the small stamp text is readable
+function viOcrStrip(img, fromTop, frac){
+  // crop a strip and blow it up so the small stamp text is readable
   const W = img.naturalWidth, H = img.naturalHeight;
-  const h = Math.round(H*0.35), y = fromTop ? 0 : H - h;
+  const h = Math.round(H*(frac||0.35)), y = fromTop ? 0 : H - h;
   const scale = Math.min(3, Math.max(1, 2200 / W));
   const c = document.createElement('canvas'); c.width = Math.round(W*scale); c.height = Math.round(h*scale);
   const ctx = c.getContext('2d');
   ctx.drawImage(img, 0, y, W, h, 0, 0, c.width, c.height);
   const d = ctx.getImageData(0,0,c.width,c.height), px = d.data;
-  for(let i=0;i<px.length;i+=4){ const g = (px[i]*0.3+px[i+1]*0.59+px[i+2]*0.11); px[i]=px[i+1]=px[i+2]=g; }
+  // grey, then stretch contrast so white stamp text on a dark band (or black on light) becomes crisp
+  let lo=255, hi=0; const g = new Float32Array(px.length/4);
+  for(let i=0,j=0;i<px.length;i+=4,j++){ const v = px[i]*0.3+px[i+1]*0.59+px[i+2]*0.11; g[j]=v; if(v<lo) lo=v; if(v>hi) hi=v; }
+  const span = Math.max(1, hi-lo);
+  for(let i=0,j=0;i<px.length;i+=4,j++){ const v = Math.round((g[j]-lo)*255/span); px[i]=px[i+1]=px[i+2]=v; }
   ctx.putImageData(d,0,0);
   return c;
 }
@@ -7471,8 +7489,8 @@ async function viOcrGps(file){
   const img = await new Promise((ok,bad)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>bad(new Error('image did not decode')); i.src=URL.createObjectURL(file); });
   const w = await viOcrWorker();
   let allText = '';
-  for(const fromTop of [false, true]){
-    const c = viOcrStrip(img, fromTop);
+  for(const [fromTop, frac] of [[false,0.22],[false,0.4],[true,0.22],[true,0.4]]){
+    const c = viOcrStrip(img, fromTop, frac);
     const r = await w.recognize(c);
     const text = (r && r.data && r.data.text) || '';
     allText += text + ' ';
@@ -7702,6 +7720,12 @@ function viUseAddr(a){
   viCompile();
 }
 
+function viRtEnable(on){
+  const q = document.getElementById('vi-rtq'), st = document.getElementById('vi-rt-state');
+  if(q){ q.disabled = !on; q.style.background = on ? '#fff' : '#f3f4f6'; q.placeholder = on ? '🔍 e.g. Gina Velasco, gulayon, 209...' : 'SpawnFi vendo — not on a JuanFi router'; }
+  if(st && !on){ st.style.color='#9ca3af'; st.textContent='⚡ Off — this vendo is on SpawnFi, the MikroTik router link does not apply.'; }
+  if(st && on && !_viRt){ st.style.color='#9ca3af'; st.textContent='Linking a router auto-fills VLAN + server.'; }
+}
 function viRtClear(){
   _viRt = null;
   const q=document.getElementById('vi-rtq'); if(q) q.value='';
