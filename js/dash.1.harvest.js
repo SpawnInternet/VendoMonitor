@@ -6466,7 +6466,6 @@ async function viSfiInput(){
   if(!list.length){ box.style.display='none'; return; }
   const srv = (document.getElementById('vi-sfi-srv')||{}).value || '';
   const q = ((document.getElementById('vi-sfiq')||{}).value||'').trim().toLowerCase();
-  const formVlan = parseInt(((document.getElementById('vi-vlan')||{}).value||'').trim(), 10) || null;
   const qNum = /^\d+$/.test(q) ? parseInt(q,10) : null;
   const words = q.split(/\s+/).filter(Boolean);
 
@@ -6477,20 +6476,18 @@ async function viSfiInput(){
       const hay = ((r.site_name||'')+' '+r.router_name+' vlan '+r.vlan+' '+(r.vendo_name||'')).toLowerCase();
       return words.every(w=>hay.indexOf(w)>=0);
     }
-    // nothing typed: show lines with the form's VLAN, else the server's unlinked lines
-    if(formVlan) return r.vlan === formVlan;
+    // nothing typed: show the server's lines that are not linked yet
     return !!srv && r.link_status !== 'linked';
   });
   const pickedId = _viPicked && _viPicked.id;
   const free = r => r.link_status !== 'linked' || !r.vendo_id || r.vendo_id === pickedId;
   rows.sort((a,b)=> (free(b)-free(a))
-                 || ((b.vlan===formVlan)-(a.vlan===formVlan))
                  || (new Date(b.last_sale||0) - new Date(a.last_sale||0)));
   rows = rows.slice(0, 30);
 
   if(!rows.length){
     box.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#6b7280;">'
-      + (q || formVlan || srv ? 'No SpawnFi line matched. Try the owner name, the VLAN, or another server.'
+      + (q || srv ? 'No SpawnFi line matched. Try the owner name, the VLAN, or another server.'
                               : 'Pick a SpawnFi server or type the SpawnFi vendo name / VLAN.')
       + '</div>';
     box.style.display='block'; return;
@@ -6502,12 +6499,11 @@ async function viSfiInput(){
       ? '<span style="font-size:9px;background:#DF1A35;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">LINKED</span>'
       : (same ? '<span style="font-size:9px;background:#025AC6;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">THIS VENDO</span>'
               : '<span style="font-size:9px;background:#028867;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">FREE</span>');
-    const vMatch = formVlan && r.vlan === formVlan ? ' <span style="color:#028867;">= form VLAN</span>' : '';
     return '<div onclick=\'viPickSfi('+klArg(r.router_name, r.vlan)+')\' '
       + 'style="padding:8px 12px;border-bottom:1px solid #f1f5f9;cursor:'+(ok?'pointer':'not-allowed')+';font-size:12px;'+(ok?'':'background:#fafafa;opacity:.7;')+'" '
       + 'onmouseover="this.style.background=\''+(ok?'#f5f3ff':'#fafafa')+'\'" onmouseout="this.style.background=\''+(ok?'#fff':'#fafafa')+'\'">'
       + '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">'
-      +   '<b style="color:#311A8E;">⚡ VLAN '+r.vlan+vMatch+'</b>'+badge
+      +   '<b style="color:#311A8E;">⚡ VLAN '+r.vlan+'</b>'+badge
       + '</div>'
       + '<div style="font-size:11px;color:#374151;margin-top:2px;">'+klEsc(r.site_name||'(no name on panel)')+'</div>'
       + '<div style="font-size:10px;color:#6b7280;margin-top:2px;">🖥️ '+klEsc(r.router_name)+' · '+viSfiAgo(r.last_sale)
@@ -6535,9 +6531,7 @@ function viPickSfi(router, vlan){
   const q = document.getElementById('vi-sfiq');
   if(q) q.value = 'VLAN '+r.vlan+' — '+String(r.site_name||'').slice(0,40);
   const sel = document.getElementById('vi-sfi-srv'); if(sel) sel.value = r.router_name;
-  // fill VLAN if blank; never overwrite a typed one silently
-  const vl = document.getElementById('vi-vlan');
-  if(vl && !vl.value.trim()){ vl.value = r.vlan; vl.style.borderColor='#028867'; setTimeout(()=>{vl.style.borderColor='#e5e7eb';},1500); }
+  // SpawnFi VLAN is its own system: it is NOT copied into the VLAN box above (that one is the JuanFi / MikroTik VLAN)
   viSfiState();
 }
 
@@ -6546,16 +6540,13 @@ function viSfiState(){
   if(!st) return;
   if(!_viSfi){
     st.style.color = '#9ca3af';
-    st.textContent = 'Leave empty if this vendo is JuanFi / Telegram only.';
+    st.textContent = 'Leave empty if this vendo is JuanFi / Telegram only. SpawnFi VLANs are separate from the VLAN box above.';
   } else {
     const r = _viSfi;
-    const fv = parseInt(((document.getElementById('vi-vlan')||{}).value||'').trim(), 10) || null;
-    const clash = fv && fv !== r.vlan;
-    st.style.color = clash ? '#B45309' : '#028867';
+    st.style.color = '#028867';
     st.innerHTML = '✅ SpawnFi: <b>'+klEsc(r.router_name)+'</b> · VLAN <b>'+r.vlan+'</b> · '+viSfiAgo(r.last_sale)
       + (r.all_n ? ' · '+Number(r.all_n).toLocaleString()+' sales so far will be linked' : '')
-      + (clash ? '<br>⚠️ Form VLAN is '+fv+' but this SpawnFi line is VLAN '+r.vlan+' · '
-          + '<button type="button" onclick="viUseVlan('+r.vlan+');viSfiState();" style="padding:2px 8px;background:#B45309;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use '+r.vlan+'</button>' : '');
+      + '<br><span style="color:#6b7280;font-weight:600;">SpawnFi VLAN is separate — it can share a number with a JuanFi vendo.</span>';
   }
   viCompile();
 }
