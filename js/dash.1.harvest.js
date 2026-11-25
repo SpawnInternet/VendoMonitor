@@ -5887,7 +5887,8 @@ function viLoad(){
   const dEl = document.getElementById('vi-date');
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
   kcEnsureNames();
-  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', viCompile); e._wired=true; } });
+  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', ()=>{ viFobPreview(); viCompile(); }); e._wired=true; } });
+  viFobPreview(true);
   if(!_viGroups.length){
     fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label,group_id,collector,team,barangays,total_vendos,status&status=eq.active&order=area.asc,group_id.asc', {headers:_HDR})
       .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); })
@@ -6023,8 +6024,11 @@ async function viAdd(){
     // with a SpawnFi line: v2 links it in the SAME transaction (all or nothing);
     // without one: the original function, unchanged
     const sfi = _viSfi;
-    const rpcName = sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo';
-    const sfiArgs = sfi ? { p_spawnfi_router: sfi.router_name, p_spawnfi_vlan: sfi.vlan } : {};
+    const autoFobs = viFobsOn();
+    const rpcName = autoFobs ? 'spawn_log_install_v3' : (sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo');
+    const sfiArgs = Object.assign(
+      sfi ? { p_spawnfi_router: sfi.router_name, p_spawnfi_vlan: sfi.vlan } : {},
+      autoFobs ? { p_auto_fobs: true } : {});
     const res = await fetch(_SB+'/rest/v1/rpc/'+rpcName, {
       method:'POST', headers:_HDR,
       body: JSON.stringify(Object.assign({
@@ -6092,6 +6096,7 @@ async function viAdd(){
           ['TG name', (_wasNoTg && res.spawnfi_router) ? '<span style="color:#311A8E;">⚡ none — SpawnFi vendo</span>' : (_wasNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—'))],
           ['Server',  res.server_name ? klEsc(res.server_name) : '<span style="color:#9ca3af;">—</span>'],
           ['SpawnFi', viSfiResult(res)],
+          ['Fobs',    viFobResult(res)],
           ['Address',  res.address ? klEsc(res.address) : '<span style="color:#9ca3af;">—</span>'],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
           ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
@@ -6117,7 +6122,7 @@ async function viAdd(){
     } else {
       viModal({ ok:true, title:'Install logged', btn:'Done',
         lead:'Logged against the existing vendo — no new vendo was created.',
-        rows:[['Vendo', klEsc(res.sheet_name||'')], ['SpawnFi', viSfiResult(res)], ['Keys', keys.join('<br>')]] });
+        rows:[['Vendo', klEsc(res.sheet_name||'')], ['SpawnFi', viSfiResult(res)], ['Fobs', viFobResult(res)], ['Keys', keys.join('<br>')]] });
     }
     viLoad();
   }catch(e){
@@ -6139,6 +6144,7 @@ function viResetForm(){
   const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const sfs=document.getElementById('vi-sfi-srv'); if(sfs) sfs.value='';
+  _viNextFobs = null; viFobPreview(true);
   viSfiState();
   _viSfiList = null;   // reload so the line just linked shows as LINKED next time
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
@@ -6565,6 +6571,56 @@ function viSfiClear(){
   const box = document.getElementById('vi-sfires'); if(box){ box.style.display='none'; box.innerHTML=''; }
   viSfiLoad(true).then(viSfiAreaDefault);
   viSfiState();
+}
+
+/* ══ INSTALL: auto fob codes (2026-11-25) ══
+   Ticking a key takes the next unused PRINTED fob of that type from the pool
+   (vendo_key_qr, lowest id first) and binds it on save, in the same transaction.
+   The office picks THAT fob from the drawer and hangs it on the key.           */
+let _viNextFobs = null, _viFobsOff = false;
+const VI_FOB_TYPE = { 'vi-k-co':['pungpung','🪙 Coin Original'], 'vi-k-cd':['duplicate','🪙 Coin Duplicate'], 'vi-k-bd':['board','🔌 Board'] };
+function viFobsOn(){ return !_viFobsOff && ['vi-k-co','vi-k-cd','vi-k-bd'].some(id=>(document.getElementById(id)||{}).checked); }
+function viFobToggle(){ _viFobsOff = !_viFobsOff; viFobPreview(); viCompile(); }
+function viFobPreview(reload){
+  let el = document.getElementById('vi-fob-prev');
+  if(!el){
+    const bd = document.getElementById('vi-k-bd'); const wrap = bd && bd.closest('div[style*="flex-direction:column"]');
+    if(!wrap) return;
+    el = document.createElement('div'); el.id='vi-fob-prev';
+    el.style.cssText='margin-top:4px;padding:8px 10px;border-radius:8px;border:1.5px dashed #025AC6;background:#f0f7ff;font-size:11px;font-weight:700;color:#1e3a8a;display:none;';
+    wrap.appendChild(el);
+  }
+  const ticked = Object.keys(VI_FOB_TYPE).filter(id=>(document.getElementById(id)||{}).checked);
+  if(!ticked.length){ el.style.display='none'; return; }
+  el.style.display='block';
+  const draw = ()=>{
+    if(_viFobsOff){
+      el.innerHTML = '🏷️ Fob codes: <span style="color:#6b7280;">off — bind fobs later in Fobs tab</span> · <button type="button" onclick="viFobToggle()" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">turn on</button>';
+      return;
+    }
+    if(!_viNextFobs){ el.innerHTML='🏷️ Fob codes: loading next free fobs…'; return; }
+    const lines = ticked.map(id=>{
+      const [t,label] = VI_FOB_TYPE[id]; const n = _viNextFobs[t];
+      return label+' → '+(n && n.qr ? '<span style="font-family:monospace;font-size:13px;background:#311A8E;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(n.qr)+'</span> <span style="color:#6b7280;font-weight:600;">('+n.left+' left)</span>'
+                                       : '<span style="color:#DF1A35;">none left in pool — print more tags</span>');
+    });
+    el.innerHTML = '🏷️ Fobs to bind on save — take these from the printed pool:<br>'+lines.join('<br>')
+      + '<div style="margin-top:5px;color:#6b7280;font-weight:600;">Another install saving at the same time may take a code first; the result window shows the final ones. '
+      + '<button type="button" onclick="viFobToggle()" style="padding:2px 8px;background:#fff;color:#6b7280;border:1px solid #cbd5e1;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">don\'t bind fobs</button></div>';
+  };
+  draw();
+  if(reload || !_viNextFobs){
+    fetch(_SB+'/rest/v1/rpc/spawn_next_fobs', {method:'POST', headers:_HDR, body:'{}'})
+      .then(r=>r.json()).then(j=>{ _viNextFobs = (j && typeof j==='object' && !Array.isArray(j)) ? j : {}; draw(); })
+      .catch(()=>{ _viNextFobs = {}; draw(); });
+  }
+}
+function viFobResult(res){
+  const f = res && res.fobs;
+  if(!f || !Object.keys(f).length) return '<span style="color:#9ca3af;">— none bound</span>';
+  const label = {pungpung:'🪙 Coin Original', duplicate:'🪙 Coin Duplicate', board:'🔌 Board'};
+  return Object.keys(f).map(t=>label[t]+' → <span style="font-family:monospace;font-size:14px;background:#311A8E;color:#fff;padding:1px 8px;border-radius:5px;letter-spacing:1px;">'+klEsc(f[t].qr)+'</span>'+(f[t].existing?' <span style="color:#6b7280;font-size:11px;">(already on this vendo)</span>':'')).join('<br>')
+    + '<div style="font-size:11px;color:#028867;margin-top:3px;">✓ bound — hang these fobs on the keys</div>';
 }
 
 function viSfiResult(res){
@@ -7228,11 +7284,97 @@ async function viPhotoPick(input){
       st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>⚠️ Photo GPS looks wrong ('+g.lat+', '+g.lng+') — ignored.';
     }
   } else {
+    // no EXIF — read the stamp printed on the picture (Conota / GPS Map Camera)
     st.style.color='#6b7280';
-    st.innerHTML = '✅ '+klEsc(f.name)+' · '+size
-      + '<br><span style="color:#9ca3af;">No GPS in this photo — a Conota stamp is printed on the image, not stored as data. Type or paste the coordinates above.</span>';
+    st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>🔎 No GPS data in the file — reading the stamp on the picture…';
+    viCompile();
+    let o = null;
+    try{ o = await viOcrGps(f); }catch(e){ o = {error:String(e&&e.message||e)}; }
+    if(_viPhotoFile !== f || !st) return;   // user picked another photo meanwhile
+    if(o && o.gps){
+      const sane = viGpsSane(o.gps);
+      const box = document.getElementById('vi-gps');
+      if(sane.ok && box && !box.value.trim()){
+        box.value = o.gps.lat+', '+o.gps.lng; viGpsParse();
+        st.style.color='#028867';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 <b>GPS read from the stamp</b> ('+o.gps.lat+', '+o.gps.lng+') — filled in above. Check it against the picture.';
+      } else if(sane.ok){
+        st.style.color='#025AC6';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 Stamp says '+o.gps.lat+', '+o.gps.lng+' · '
+          + '<button type="button" onclick="viUsePhotoGps('+o.gps.lat+','+o.gps.lng+')" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use it</button>';
+      } else {
+        st.style.color='#C01176';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>⚠️ Stamp read as '+o.gps.lat+', '+o.gps.lng+' — '+klEsc(sane.why)+'. Not filled in; type it from the picture.';
+      }
+    } else {
+      st.style.color='#6b7280';
+      st.innerHTML = '✅ '+klEsc(f.name)+' · '+size
+        + '<br><span style="color:#9ca3af;">Could not read coordinates from the picture'+(o&&o.error?' ('+klEsc(o.error)+')':'')+'. Type or paste them above.</span>'
+        + (o && o.text ? '<div style="margin-top:3px;font-family:monospace;font-size:10px;color:#9ca3af;white-space:pre-wrap;">read: '+klEsc(o.text.slice(0,160))+'</div>' : '');
+    }
   }
   viCompile();
+}
+
+/* ══ INSTALL: OCR the GPS stamp burned into the picture (2026-11-25) ══
+   Conota / GPS Map Camera print "Lat 8.594080° Long 123.350890°" (or DMS) in a
+   strip at the bottom (sometimes top). Tesseract.js is loaded on first use only
+   (~3 MB, cached by the browser). We OCR the bottom strip, then the top one,
+   upscaled and greyscaled, and only accept numbers that pass viGpsSane().        */
+let _viOcrWorker = null;
+async function viOcrWorker(){
+  if(_viOcrWorker) return _viOcrWorker;
+  if(!window.Tesseract){
+    await new Promise((ok,bad)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'; sc.onload=ok; sc.onerror=()=>bad(new Error('OCR library did not load — check internet')); document.head.appendChild(sc); });
+  }
+  const w = await Tesseract.createWorker('eng', 1, Object.assign({ logger: ()=>{} }, window._viOcrOpts||{}));   // _viOcrOpts: test hook only
+  await w.setParameters({ tessedit_char_whitelist: '0123456789.,:-°\'"NSEWLatLongitude ', preserve_interword_spaces: '1' });
+  _viOcrWorker = w;
+  return w;
+}
+function viOcrStrip(img, fromTop){
+  // crop a strip (35% of height) and blow it up so the small stamp text is readable
+  const W = img.naturalWidth, H = img.naturalHeight;
+  const h = Math.round(H*0.35), y = fromTop ? 0 : H - h;
+  const scale = Math.min(3, Math.max(1, 2200 / W));
+  const c = document.createElement('canvas'); c.width = Math.round(W*scale); c.height = Math.round(h*scale);
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, y, W, h, 0, 0, c.width, c.height);
+  const d = ctx.getImageData(0,0,c.width,c.height), px = d.data;
+  for(let i=0;i<px.length;i+=4){ const g = (px[i]*0.3+px[i+1]*0.59+px[i+2]*0.11); px[i]=px[i+1]=px[i+2]=g; }
+  ctx.putImageData(d,0,0);
+  return c;
+}
+function viOcrParseGps(text){
+  if(!text) return null;
+  let t = String(text).replace(/[|]/g,'1').replace(/[Oo](?=\d)/g,'0').replace(/\s+/g,' ');
+  // labelled: Lat 8.594080 ... Long 123.350890 (any order)
+  const la = t.match(/Lat[a-z]*\s*[:\-]?\s*(-?\d{1,2}[.,]\d{3,})/i);
+  const lo = t.match(/Lon[a-z]*\s*[:\-]?\s*(-?\d{2,3}[.,]\d{3,})/i);
+  if(la && lo) return {lat:+parseFloat(la[1].replace(',','.')).toFixed(6), lng:+parseFloat(lo[1].replace(',','.')).toFixed(6)};
+  // DMS or plain decimal pair — reuse the paste parser after dropping the Lat/Long labels and a trailing date/time
+  const dms = viGpsParseStr(t.replace(/\b(Lat|Lon)[a-z]*\.?\s*[:\-]?/gi,' ').replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b.*$/,'').replace(/\b\d{1,2}:\d{2}\b.*$/,''));
+  if(dms && viGpsSane(dms).ok) return dms;
+  // scan every decimal number for one that looks like a ZN latitude and one like a longitude
+  const nums = (t.match(/-?\d{1,3}[.,]\d{3,}/g)||[]).map(x=>parseFloat(x.replace(',','.')));
+  const lat = nums.find(n=>n>7.5&&n<9.5), lng = nums.find(n=>n>122.5&&n<124);
+  if(lat!==undefined && lng!==undefined) return {lat:+lat.toFixed(6), lng:+lng.toFixed(6)};
+  return null;
+}
+async function viOcrGps(file){
+  const img = await new Promise((ok,bad)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>bad(new Error('image did not decode')); i.src=URL.createObjectURL(file); });
+  const w = await viOcrWorker();
+  let allText = '';
+  for(const fromTop of [false, true]){
+    const c = viOcrStrip(img, fromTop);
+    const r = await w.recognize(c);
+    const text = (r && r.data && r.data.text) || '';
+    allText += text + ' ';
+    const gps = viOcrParseGps(text);
+    if(gps) return {gps, text};
+  }
+  URL.revokeObjectURL(img.src);
+  return {gps:null, text:allText.trim()};
 }
 
 function viUsePhotoGps(lat, lng){
