@@ -4511,7 +4511,7 @@ function klLoad(){
 
 let _klItems = [];
 const KI_VAR = { original:'Original', duplicate:'Duplicate', pungpung:'Pungpung' };
-const KI_LBL = it => it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
+const KI_LBL = it => it.key_kind==='board' ? '🔌 BOARD KEY' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
 
 /* per-key checkbox: mark a single key_items row returned (password 101510) */
 function kiToggle(itemId, makeReturned){
@@ -5572,7 +5572,7 @@ function kvoItemLbl(logId){
   const its = _kvoItems.filter(x=>x.key_log_id===logId);
   if(!its.length) return '';
   return its.map(it=>{
-    const k = it.key_kind==='board' ? '🔌 Board' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
+    const k = it.key_kind==='board' ? '🔌 BOARD KEY' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
     return it.vendo_name+' — '+k+' '+(it.returned?'✅':'🔴');
   }).join(' · ');
 }
@@ -5958,9 +5958,9 @@ function viCompile(){
   if(!pv) return;
   if(!_viPicked){ pv.style.display='none'; return; }
   const parts = [];
-  if((document.getElementById('vi-k-co')||{}).checked) parts.push('Coins (Not Duplicate)');
-  if((document.getElementById('vi-k-cd')||{}).checked) parts.push('Coins (Duplicate)');
-  if((document.getElementById('vi-k-bd')||{}).checked) parts.push('Board');
+  if((document.getElementById('vi-k-co')||{}).checked) parts.push('PUNGPUNG KEY');
+  if((document.getElementById('vi-k-cd')||{}).checked) parts.push('COINS DUPLICATE KEY');
+  if((document.getElementById('vi-k-bd')||{}).checked) parts.push('BOARD KEY');
   const area = (document.getElementById('vi-area')||{}).value || '';
   const vlan = (document.getElementById('vi-vlan')||{}).value || '';
   const gsel = document.getElementById('vi-group');
@@ -5974,7 +5974,7 @@ function viCompile(){
   if(_viSrv) bits.push('🖥️ '+_viSrv);
   if(_viSfi) bits.push('⚡ SpawnFi '+_viSfi.router_name+' VLAN '+_viSfi.vlan);
   const _kc = (typeof viKcColors==='function') ? viKcColors() : {};
-  Object.keys(_kc).forEach(t=>bits.push({pungpung:'🪙O',duplicate:'🪙D',board:'🔌'}[t]+' '+_kc[t]));
+  Object.keys(_kc).forEach(t=>bits.push({pungpung:'🪙PP',duplicate:'🪙DUP',board:'🔌BD'}[t]+' '+_kc[t]));
   const _ad = (((document.getElementById('vi-addr')||{}).value)||'').trim();
   if(_ad) bits.push('🏠 '+_ad);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
@@ -6051,9 +6051,9 @@ async function viAdd(){
     }).then(async r=>{ const t = await r.text(); if(!r.ok) throw new Error(t); return JSON.parse(t); });
 
     const keys = [];
-    if(co) keys.push('🪙 Coins (Not Duplicate)');
-    if(cd) keys.push('🪙 Coins (Duplicate)');
-    if(bd) keys.push('🔌 Board');
+    if(co) keys.push('🪙 PUNGPUNG KEY');
+    if(cd) keys.push('🪙 COINS DUPLICATE KEY');
+    if(bd) keys.push('🔌 BOARD KEY');
     const gLbl = gsel && gsel.value ? gsel.options[gsel.selectedIndex].text : null;
 
     // GPS + photo are best-effort: the vendo already exists, so never fail the whole save
@@ -6179,9 +6179,9 @@ function viResetForm(){
 function viKeysLbl(r){
   const p = [], kc = r.key_colors || {}, fb = r.fob_codes || {};
   const tag = t => (kc[t] ? ' '+viKcDot(kc[t]) : '') + (fb[t] && fb[t].qr ? ' <span style="font-family:monospace;font-size:10px;background:#311A8E;color:#fff;padding:0 5px;border-radius:4px;">'+klEsc(fb[t].qr)+'</span>' : '');
-  if(r.key_coin_original)  p.push('🪙 Coins (Not Duplicate)'+tag('pungpung'));
-  if(r.key_coin_duplicate) p.push('🪙 Coins (Duplicate)'+tag('duplicate'));
-  if(r.key_board)          p.push('🔌 Board'+tag('board'));
+  if(r.key_coin_original)  p.push('🪙 Pungpung'+tag('pungpung'));
+  if(r.key_coin_duplicate) p.push('🪙 Coins Dup'+tag('duplicate'));
+  if(r.key_board)          p.push('🔌 BOARD KEY'+tag('board'));
   return p.length ? p.join(', ') : '—';
 }
 
@@ -6605,7 +6605,7 @@ function viSfiClear(){
    (vendo_key_qr, lowest id first) and binds it on save, in the same transaction.
    The office picks THAT fob from the drawer and hangs it on the key.           */
 let _viNextFobs = null, _viFobsOff = false;
-const VI_FOB_TYPE = { 'vi-k-co':['pungpung','🪙 Coin Original'], 'vi-k-cd':['duplicate','🪙 Coin Duplicate'], 'vi-k-bd':['board','🔌 Board'] };
+const VI_FOB_TYPE = { 'vi-k-co':['pungpung','🪙 PUNGPUNG KEY'], 'vi-k-cd':['duplicate','🪙 COINS DUPLICATE KEY'], 'vi-k-bd':['board','🔌 BOARD KEY'] };
 function viFobsOn(){ return !_viFobsOff && ['vi-k-co','vi-k-cd','vi-k-bd'].some(id=>(document.getElementById(id)||{}).checked); }
 function viFobToggle(){ _viFobsOff = !_viFobsOff; viFobPreview(); viCompile(); }
 function viFobPreview(reload){
@@ -6687,8 +6687,10 @@ function viFobScan(el, t){
       const rows = await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code,key_type,vendo_id&qr_code=eq.'+encodeURIComponent(code), {headers:_HDR}).then(r=>r.json());
       if(el.value !== code) return;
       const f = Array.isArray(rows) && rows[0];
-      const label = {pungpung:'Coin Original', duplicate:'Coin Duplicate', board:'Board'};
-      if(!f){ _viFobBad[t] = code+' is not a Spawn fob code.'; }
+      const label = {pungpung:'PUNGPUNG', duplicate:'COINS DUPLICATE', board:'BOARD'};
+      const dup = Object.keys(VI_FOB_BOX).find(o=>o!==t && (document.getElementById(VI_FOB_BOX[o][1])||{}).value===code);
+      if(dup){ _viFobBad[t] = code+' is already in the '+label[dup]+' box — one fob cannot be on two keys.'; }
+      else if(!f){ _viFobBad[t] = code+' is not a Spawn fob code.'; }
       else if(f.key_type !== t){ _viFobBad[t] = code+' is a '+label[f.key_type]+' tag — it cannot go on the '+label[t]+' key.'; }
       else if(f.vendo_id && !(_viPicked && _viPicked.id === f.vendo_id)){
         let nm = '#'+f.vendo_id;
@@ -6711,31 +6713,59 @@ function viFobState(){
 }
 
 /* holder colour per key, per vendo (2026-11-25) — the 9 colours the office uses */
-const VI_KC = [['black','#111827'],['red','#dc2626'],['yellow','#eab308'],['white','#f9fafb'],['violet','#7c3aed'],['blue','#2563eb'],['orange','#f97316'],['skyblue','#38bdf8'],['green','#16a34a']];
+let VI_KC = [['black','#111827'],['red','#dc2626'],['yellow','#eab308'],['white','#f9fafb'],['violet','#7c3aed'],['blue','#2563eb'],['orange','#f97316'],['skyblue','#38bdf8'],['green','#16a34a'],['pink','#ec4899']];
 const VI_KC_BOX = { pungpung:'vi-c-co', duplicate:'vi-c-cd', board:'vi-c-bd' };
-function viKcLoad(){
+function viKcLight(hex){ const h=(hex||'').replace('#',''); if(h.length<6) return false; const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16); return (r*299+g*587+b*114)/1000 > 150; }
+function viKcFill(){
   for(const t in VI_KC_BOX){
-    const sel = document.getElementById(VI_KC_BOX[t]); if(!sel || sel.options.length>1) continue;
-    sel.innerHTML = '<option value="">colour…</option>' + VI_KC.map(([n,h])=>'<option value="'+n+'" style="background:'+h+';color:'+(n==='white'||n==='yellow'||n==='skyblue'?'#111':'#fff')+'">● '+n+'</option>').join('');
+    const sel = document.getElementById(VI_KC_BOX[t]); if(!sel) continue;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">colour…</option>' + VI_KC.map(([n,h])=>'<option value="'+klEsc(n)+'" style="background:'+h+';color:'+(viKcLight(h)?'#111':'#fff')+'">● '+klEsc(n)+'</option>').join('')
+      + '<option value="__add">＋ add a colour…</option>';
+    if(prev && VI_KC.some(x=>x[0]===prev)) sel.value = prev;
+    viKcPick(sel, true);
   }
 }
-function viKcPick(sel){
+function viKcLoad(){
+  viKcFill();   // defaults first, so the form works even if the palette fetch is slow
+  fetch(_SB+'/rest/v1/install_color_palette?select=name,hex&order=sort.asc,name.asc', {headers:_HDR}).then(r=>r.json())
+    .then(rows=>{ if(Array.isArray(rows) && rows.length){ VI_KC = rows.map(r=>[r.name, r.hex]); viKcFill(); } }).catch(()=>{});
+}
+async function viKcAdd(sel){
+  const name = prompt('New holder colour name (e.g. maroon, gold):'); if(!name){ sel.value=''; viKcPick(sel); return; }
+  const nm = name.trim().toLowerCase(); if(!nm){ sel.value=''; viKcPick(sel); return; }
+  if(VI_KC.some(x=>x[0]===nm)){ sel.value = nm; viKcPick(sel); return; }
+  let hex = prompt('Its colour code (hex, e.g. #800000). Leave blank and I will pick a close one:', '') || '';
+  hex = hex.trim();
+  if(!/^#?[0-9a-fA-F]{6}$/.test(hex)){
+    const guess = {maroon:'#7f1d1d',gold:'#d4af37',gray:'#9ca3af',grey:'#9ca3af',brown:'#92400e',silver:'#c0c0c0',teal:'#0d9488',navy:'#1e3a8a',lime:'#84cc16',cyan:'#06b6d4',magenta:'#d946ef',beige:'#e7d8b1',peach:'#fdba74',cream:'#fef3c7',purple:'#7c3aed',indigo:'#4f46e5'};
+    hex = guess[nm] || '#6b7280';
+  }
+  if(hex[0] !== '#') hex = '#'+hex;
+  try{
+    const r = await fetch(_SB+'/rest/v1/install_color_palette', {method:'POST', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({name:nm, hex:hex, sort:50+VI_KC.length})});
+    if(!r.ok) throw new Error(await r.text());
+    VI_KC.push([nm, hex]); viKcFill(); sel.value = nm; viKcPick(sel);
+  }catch(e){ sel.value=''; viKcPick(sel); viModal({ok:false, title:'Colour not added', lead:String(e.message||e)}); }
+}
+function viKcPick(sel, silent){
+  if(sel.value === '__add'){ viKcAdd(sel); return; }
   const c = VI_KC.find(x=>x[0]===sel.value);
   sel.style.background = c ? c[1] : '#fff';
-  sel.style.color = c ? ((c[0]==='white'||c[0]==='yellow'||c[0]==='skyblue')?'#111':'#fff') : '#374151';
-  viCompile();
+  sel.style.color = c ? (viKcLight(c[1])?'#111':'#fff') : '#374151';
+  if(!silent) viCompile();
 }
 function viKcColors(){
   const out = {};
   for(const t in VI_KC_BOX){ const sel=document.getElementById(VI_KC_BOX[t]); if(sel && sel.style.display!=='none' && sel.value) out[t]=sel.value; }
   return out;
 }
-function viKcDot(name){ const c = VI_KC.find(x=>x[0]===name); return c ? '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+c[1]+';border:1px solid rgba(0,0,0,.25);vertical-align:-1px;margin-right:3px;"></span>'+klEsc(name) : klEsc(name||''); }
+function viKcDot(name){ const c = VI_KC.find(x=>x[0]===name); return '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+(c?c[1]:'#e5e7eb')+';border:1px solid rgba(0,0,0,.25);vertical-align:-1px;margin-right:3px;"></span>'+klEsc(name||''); }
 
 function viFobResult(res){
   const f = res && res.fobs;
   const kc = (res && res.key_colors) || {};
-  const label = {pungpung:'🪙 Coin Original', duplicate:'🪙 Coin Duplicate', board:'🔌 Board'};
+  const label = {pungpung:'🪙 PUNGPUNG KEY', duplicate:'🪙 COINS DUPLICATE KEY', board:'🔌 BOARD KEY'};
   if(!f || !Object.keys(f).length){
     const ks = Object.keys(kc);
     return ks.length ? ks.map(t=>label[t]+' holder: '+viKcDot(kc[t])).join('<br>')+'<div style="font-size:11px;color:#9ca3af;">no fob bound</div>' : '<span style="color:#9ca3af;">— none bound</span>';
@@ -7370,6 +7400,15 @@ function viGpsClear(){
   viGpsParse();
 }
 
+function viPhotoView(){
+  const pv = document.getElementById('vi-photo-prev'); if(!pv || !pv.src) return;
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  ov.innerHTML='<img src="'+pv.src+'" style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:6px;">'
+    +'<div style="position:absolute;top:12px;right:16px;color:#fff;font-size:28px;font-weight:800;">✕</div>';
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+}
 async function viPhotoPick(input){
   const f = input.files && input.files[0];
   const st = document.getElementById('vi-photo-state');
