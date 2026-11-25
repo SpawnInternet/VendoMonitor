@@ -5887,8 +5887,8 @@ function viLoad(){
   const dEl = document.getElementById('vi-date');
   if(dEl && !dEl.value){ const n=new Date(); dEl.value = n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
   kcEnsureNames();
-  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', ()=>{ viFobPreview(); viCompile(); }); e._wired=true; } });
-  viFobPreview(true);
+  ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e && !e._wired){ e.addEventListener('change', ()=>{ viFobBoxes(); viFobPreview(); viCompile(); }); e._wired=true; } });
+  viFobBoxes(); viFobPreview(true); viKcLoad();
   if(!_viGroups.length){
     fetch(_SB+'/rest/v1/harvest_groups?select=id,area,group_label,group_id,collector,team,barangays,total_vendos,status&status=eq.active&order=area.asc,group_id.asc', {headers:_HDR})
       .then(r=>r.json()).then(gs=>{ _viGroups = Array.isArray(gs)?gs:[]; viAreaChanged(); })
@@ -6025,10 +6025,13 @@ async function viAdd(){
     // without one: the original function, unchanged
     const sfi = _viSfi;
     const autoFobs = viFobsOn();
-    const rpcName = autoFobs ? 'spawn_log_install_v3' : (sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo');
+    const scanned = viFobCodes();
+    for(const t in scanned){ if(_viFobBad[t]){ viModal({ok:false, title:'Fob problem', lead:_viFobBad[t]}); return; } }
+    const useV4 = autoFobs || Object.keys(scanned).length;
+    const rpcName = useV4 ? 'spawn_log_install_v4' : (sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo');
     const sfiArgs = Object.assign(
       sfi ? { p_spawnfi_router: sfi.router_name, p_spawnfi_vlan: sfi.vlan } : {},
-      autoFobs ? { p_auto_fobs: true } : {});
+      useV4 ? { p_auto_fobs: !!autoFobs, p_fob_codes: scanned } : {});
     const res = await fetch(_SB+'/rest/v1/rpc/'+rpcName, {
       method:'POST', headers:_HDR,
       body: JSON.stringify(Object.assign({
@@ -6144,7 +6147,9 @@ function viResetForm(){
   const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
   const sfs=document.getElementById('vi-sfi-srv'); if(sfs) sfs.value='';
-  _viNextFobs = null; viFobPreview(true);
+  _viNextFobs = null; _viFobBad = {};
+  ['vi-f-co','vi-f-cd','vi-f-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; e.style.borderColor='#e5e7eb'; } });
+  viFobBoxes(); viFobPreview(true);
   viSfiState();
   _viSfiList = null;   // reload so the line just linked shows as LINKED next time
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
@@ -6599,12 +6604,14 @@ function viFobPreview(reload){
       return;
     }
     if(!_viNextFobs){ el.innerHTML='🏷️ Fob codes: loading next free fobs…'; return; }
+    const codes = viFobCodes();
     const lines = ticked.map(id=>{
       const [t,label] = VI_FOB_TYPE[id]; const n = _viNextFobs[t];
+      if(codes[t]) return label+' → <span style="font-family:monospace;font-size:13px;background:#028867;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(codes[t])+'</span> <span style="color:#028867;font-weight:600;">scanned</span>';
       return label+' → '+(n && n.qr ? '<span style="font-family:monospace;font-size:13px;background:#311A8E;color:#fff;padding:1px 7px;border-radius:5px;letter-spacing:1px;">'+klEsc(n.qr)+'</span> <span style="color:#6b7280;font-weight:600;">('+n.left+' left)</span>'
                                        : '<span style="color:#DF1A35;">none left in pool — print more tags</span>');
     });
-    el.innerHTML = '🏷️ Fobs to bind on save — take these from the printed pool:<br>'+lines.join('<br>')
+    el.innerHTML = '🏷️ Fobs to bind on save — scanned ones first, the rest from the printed pool:<br>'+lines.join('<br>')
       + '<div style="margin-top:5px;color:#6b7280;font-weight:600;">Another install saving at the same time may take a code first; the result window shows the final ones. '
       + '<button type="button" onclick="viFobToggle()" style="padding:2px 8px;background:#fff;color:#6b7280;border:1px solid #cbd5e1;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">don\'t bind fobs</button></div>';
   };
@@ -6615,11 +6622,94 @@ function viFobPreview(reload){
       .catch(()=>{ _viNextFobs = {}; draw(); });
   }
 }
+/* scan box per ticked key — the fob the office actually hung on it (2026-11-25) */
+const VI_FOB_BOX = { pungpung:['vi-k-co','vi-f-co'], duplicate:['vi-k-cd','vi-f-cd'], board:['vi-k-bd','vi-f-bd'] };
+let _viFobBad = {}, _viFobVT = {};
+function viFobBoxes(){
+  for(const t in VI_FOB_BOX){
+    const [cb,bx] = VI_FOB_BOX[t]; const c=document.getElementById(cb), b=document.getElementById(bx);
+    if(!c||!b) continue;
+    b.style.display = c.checked ? 'block' : 'none';
+    if(!c.checked){ b.value=''; b.style.borderColor='#e5e7eb'; delete _viFobBad[t]; }
+  }
+  viFobState();
+}
+function viFobCodes(){
+  const out = {};
+  for(const t in VI_FOB_BOX){ const b=document.getElementById(VI_FOB_BOX[t][1]); const v=b && b.style.display!=='none' ? String(b.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'') : ''; if(v.length>=4) out[t]=v; }
+  return out;
+}
+function viFobScan(el, t){
+  el.value = String(el.value||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,5);
+  el.style.borderColor='#e5e7eb'; delete _viFobBad[t];
+  clearTimeout(_viFobVT[t]);
+  const code = el.value;
+  viFobPreview(); viFobState();
+  if(code.length < 4) return;
+  _viFobVT[t] = setTimeout(async ()=>{
+    try{
+      const rows = await fetch(_SB+'/rest/v1/vendo_key_qr?select=qr_code,key_type,vendo_id&qr_code=eq.'+encodeURIComponent(code), {headers:_HDR}).then(r=>r.json());
+      if(el.value !== code) return;
+      const f = Array.isArray(rows) && rows[0];
+      const label = {pungpung:'Coin Original', duplicate:'Coin Duplicate', board:'Board'};
+      if(!f){ _viFobBad[t] = code+' is not a Spawn fob code.'; }
+      else if(f.key_type !== t){ _viFobBad[t] = code+' is a '+label[f.key_type]+' tag — it cannot go on the '+label[t]+' key.'; }
+      else if(f.vendo_id && !(_viPicked && _viPicked.id === f.vendo_id)){
+        let nm = '#'+f.vendo_id;
+        try{ const v = await fetch(_SB+'/rest/v1/vendos?select=sheet_name,tg_name&id=eq.'+f.vendo_id, {headers:_HDR}).then(r=>r.json()); if(v&&v[0]) nm = v[0].sheet_name||v[0].tg_name||nm; }catch(_){}
+        _viFobBad[t] = code+' is already bound to '+nm+'. Unbind it in the Fobs tab first.';
+      }
+      el.style.borderColor = _viFobBad[t] ? '#DF1A35' : '#028867';
+    }catch(e){ _viFobBad[t] = 'Could not check '+code+' ('+(e&&e.message||'error')+').'; el.style.borderColor='#DF1A35'; }
+    viFobPreview(); viFobState();
+  }, 300);
+}
+function viFobState(){
+  const el = document.getElementById('vi-fob-state'); if(!el) return;
+  const bad = Object.values(_viFobBad).filter(Boolean);
+  const any = Object.values(VI_FOB_BOX).some(([cb])=>(document.getElementById(cb)||{}).checked);
+  if(!any){ el.style.display='none'; return; }
+  el.style.display='block';
+  if(bad.length){ el.style.color='#DF1A35'; el.textContent='❌ '+bad.join(' '); }
+  else { el.style.color='#9ca3af'; el.textContent='Scan or type the fob on each key (saves at 4–5 letters). Leave blank to take the next printed fob from the pool.'; }
+}
+
+/* holder colours per key type — typed once, remembered (install_key_colors) */
+const VI_KC_HEX = {red:'#dc2626',blue:'#2563eb',green:'#16a34a',yellow:'#eab308',orange:'#f97316',pink:'#ec4899',purple:'#7c3aed',violet:'#7c3aed',black:'#111827',white:'#f9fafb',gray:'#9ca3af',grey:'#9ca3af',brown:'#92400e',pula:'#dc2626',asul:'#2563eb',berde:'#16a34a',dalag:'#eab308',itom:'#111827',puti:'#f9fafb',lunhaw:'#16a34a',kahel:'#f97316'};
+let _viKc = {};
+function viKcHex(name){ const k=String(name||'').toLowerCase().trim(); for(const w in VI_KC_HEX){ if(k.indexOf(w)>=0) return VI_KC_HEX[w]; } return '#d1d5db'; }
+function viKcDraw(){
+  for(const t of ['pungpung','duplicate','board']){
+    const el = document.getElementById('vi-kc-'+t); if(!el) continue;
+    const c = _viKc[t];
+    el.innerHTML = c ? '<i style="background:'+(c.color_hex||viKcHex(c.color_name))+'"></i>'+klEsc(c.color_name) : '<i style="background:#fff"></i>colour?';
+    el.style.opacity = c ? '1' : '.6';
+  }
+}
+function viKcLoad(){
+  fetch(_SB+'/rest/v1/install_key_colors?select=key_type,color_name,color_hex', {headers:_HDR}).then(r=>r.json())
+    .then(rows=>{ _viKc = {}; (Array.isArray(rows)?rows:[]).forEach(r=>{ _viKc[r.key_type]=r; }); viKcDraw(); }).catch(()=>{});
+}
+async function viKcEdit(t){
+  const label = {pungpung:'Coin Original (pungpung)', duplicate:'Coin Duplicate', board:'Board'}[t];
+  const cur = _viKc[t] ? _viKc[t].color_name : '';
+  const name = prompt('Holder colour of the '+label+' key (e.g. red, blue, yellow):', cur);
+  if(name === null) return;
+  const nm = name.trim(); if(!nm) return;
+  const body = { key_type:t, color_name:nm, color_hex:viKcHex(nm), updated_at:new Date().toISOString(), updated_by:'dashboard' };
+  try{
+    const r = await fetch(_SB+'/rest/v1/install_key_colors?on_conflict=key_type', {method:'POST',
+      headers:Object.assign({'Prefer':'resolution=merge-duplicates,return=minimal'},_HDR), body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(await r.text());
+    _viKc[t] = body; viKcDraw();
+  }catch(e){ viModal({ok:false, title:'Colour not saved', lead:String(e.message||e)}); }
+}
+
 function viFobResult(res){
   const f = res && res.fobs;
   if(!f || !Object.keys(f).length) return '<span style="color:#9ca3af;">— none bound</span>';
   const label = {pungpung:'🪙 Coin Original', duplicate:'🪙 Coin Duplicate', board:'🔌 Board'};
-  return Object.keys(f).map(t=>label[t]+' → <span style="font-family:monospace;font-size:14px;background:#311A8E;color:#fff;padding:1px 8px;border-radius:5px;letter-spacing:1px;">'+klEsc(f[t].qr)+'</span>'+(f[t].existing?' <span style="color:#6b7280;font-size:11px;">(already on this vendo)</span>':'')).join('<br>')
+  return Object.keys(f).map(t=>label[t]+' → <span style="font-family:monospace;font-size:14px;background:#311A8E;color:#fff;padding:1px 8px;border-radius:5px;letter-spacing:1px;">'+klEsc(f[t].qr)+'</span>'+(f[t].existing?' <span style="color:#6b7280;font-size:11px;">(already on this vendo)</span>':(f[t].src==='pool'?' <span style="color:#6b7280;font-size:11px;">(from pool — take this one)</span>':' <span style="color:#028867;font-size:11px;">(scanned)</span>'))).join('<br>')
     + '<div style="font-size:11px;color:#028867;margin-top:3px;">✓ bound — hang these fobs on the keys</div>';
 }
 
