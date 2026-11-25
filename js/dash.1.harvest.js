@@ -5895,6 +5895,7 @@ function viLoad(){
                   klWarn('Group list did not load ('+e.message+'). Do not save an install until it does — the group would be blank.', 'vi-list'); });
   }
   viSrvLoadList();
+  viSfiLoad().then(viSfiAreaDefault);
   fetch(_SB+'/rest/v1/vendo_installs?select=*&order=created_at.desc&limit=500', {headers:_HDR})
     .then(r=>r.json())
     .then(rows=>{ _viRows = Array.isArray(rows)?rows:[]; viRender(); })
@@ -5970,6 +5971,7 @@ function viCompile(){
   if(_viNoTg) bits.push('🚫 no TG (sheet name)');
   else if(_viTg) bits.push('📶 '+_viTg);
   if(_viSrv) bits.push('🖥️ '+_viSrv);
+  if(_viSfi) bits.push('⚡ SpawnFi '+_viSfi.router_name+' VLAN '+_viSfi.vlan);
   const _ad = (((document.getElementById('vi-addr')||{}).value)||'').trim();
   if(_ad) bits.push('🏠 '+_ad);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
@@ -6018,9 +6020,14 @@ async function viAdd(){
     }
 
     // 2) install + vendo in ONE transaction — both or neither
-    const res = await fetch(_SB+'/rest/v1/rpc/spawn_log_install_and_create_vendo', {
+    // with a SpawnFi line: v2 links it in the SAME transaction (all or nothing);
+    // without one: the original function, unchanged
+    const sfi = _viSfi;
+    const rpcName = sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo';
+    const sfiArgs = sfi ? { p_spawnfi_router: sfi.router_name, p_spawnfi_vlan: sfi.vlan } : {};
+    const res = await fetch(_SB+'/rest/v1/rpc/'+rpcName, {
       method:'POST', headers:_HDR,
-      body: JSON.stringify({
+      body: JSON.stringify(Object.assign({
         p_sheet_name:_viPicked.name, p_area: area || _viPicked.area || '',
         p_tg_name: _viNoTg ? null : _viTg, p_no_tg: !!_viNoTg,
         p_vlan: vlan, p_group_id: gid,
@@ -6029,7 +6036,7 @@ async function viAdd(){
         p_notes: notes, p_existing_vendo_id: _viPicked.id,
         p_server_name: _viSrv || null,
         p_address: (((document.getElementById('vi-addr')||{}).value)||'').trim() || null
-      })
+      }, sfiArgs))
     }).then(async r=>{ const t = await r.text(); if(!r.ok) throw new Error(t); return JSON.parse(t); });
 
     const keys = [];
@@ -6083,6 +6090,7 @@ async function viAdd(){
           ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
           ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
           ['Server',  res.server_name ? klEsc(res.server_name) : '<span style="color:#9ca3af;">—</span>'],
+          ['SpawnFi', viSfiResult(res)],
           ['Address',  res.address ? klEsc(res.address) : '<span style="color:#9ca3af;">—</span>'],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
           ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
@@ -6108,7 +6116,7 @@ async function viAdd(){
     } else {
       viModal({ ok:true, title:'Install logged', btn:'Done',
         lead:'Logged against the existing vendo — no new vendo was created.',
-        rows:[['Vendo', klEsc(res.sheet_name||'')], ['Keys', keys.join('<br>')]] });
+        rows:[['Vendo', klEsc(res.sheet_name||'')], ['SpawnFi', viSfiResult(res)], ['Keys', keys.join('<br>')]] });
     }
     viLoad();
   }catch(e){
@@ -6123,12 +6131,15 @@ async function viAdd(){
 }
 
 function viResetForm(){
-  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null;
+  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null; _viSfi = null;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr','vi-sfiq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   const as=document.getElementById('vi-addr-state'); if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
   const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
+  const sfs=document.getElementById('vi-sfi-srv'); if(sfs) sfs.value='';
+  viSfiState();
+  _viSfiList = null;   // reload so the line just linked shows as LINKED next time
   const pp=document.getElementById('vi-photo-prev'); if(pp){ pp.style.display='none'; pp.src=''; }
   const ps=document.getElementById('vi-photo-state'); if(ps){ ps.style.color='#9ca3af'; ps.textContent='Optional — uploaded after the vendo is created.'; }
   const gs=document.getElementById('vi-gps-state'); if(gs){ gs.style.color='#9ca3af'; gs.textContent='Paste coordinates — only real camera/Maps values, never estimated.'; }
@@ -6261,6 +6272,7 @@ const VI_AREA_GROUPS = { 'SINAMAN':'DIPOLOG', 'MINAOG':'DIPOLOG', 'MIX AREAS':'D
 
 function viAreaChanged(){
   const area = ((document.getElementById('vi-area')||{}).value || '').toUpperCase();
+  viSfiAreaDefault();
   const sel  = document.getElementById('vi-group');
   if(!sel) return;
   const prev = sel.value;
@@ -6391,6 +6403,185 @@ function viTgState(){
   }
   viCompile();
 }
+
+/* ══ INSTALL: SpawnFi line (2026-11-25) ══
+   SpawnFi server = panel router_name, SpawnFi vendo = its VLAN line (site_name).
+   Picking one links spawnfi_links(router, vlan) -> this vendo inside the same
+   save (spawn_log_install_v2), so the box-to-collector audit counts its sales.
+   A line already linked to a different vendo cannot be picked.                */
+let _viSfi = null, _viSfiList = null, _viSfiLoading = null;
+const VI_SFI_AREA = { DAPITAN:'dapitan', SINDANGAN:'sindangan', SINAMAN:'sinaman', DIPOLOG:'dicayas' };
+
+function viSfiLoad(force){
+  if(_viSfiList && !force) return Promise.resolve(_viSfiList);
+  if(_viSfiLoading) return _viSfiLoading;
+  _viSfiLoading = fetch(_SB+'/rest/v1/v_spawnfi_sales_v1?select=router_name,vlan,site_name,link_status,vendo_id,vendo_name,vendo_code,last_sale,d7_pesos,all_n&order=router_name.asc,vlan.asc', {headers:_HDR})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(rows=>{
+      _viSfiList = Array.isArray(rows) ? rows : [];
+      const sel = document.getElementById('vi-sfi-srv');
+      if(sel){
+        const prev = sel.value;
+        const srvs = [...new Set(_viSfiList.map(r=>r.router_name))].sort();
+        sel.innerHTML = '<option value="">🖥️ All SpawnFi servers</option>'
+          + srvs.map(s=>{
+              const n = _viSfiList.filter(r=>r.router_name===s && r.link_status!=='linked').length;
+              return '<option value="'+klEsc(s)+'">🖥️ '+klEsc(s)+' · '+n+' not yet linked</option>';
+            }).join('');
+        if(prev && srvs.includes(prev)) sel.value = prev;
+      }
+      return _viSfiList;
+    })
+    .catch(e=>{
+      const st = document.getElementById('vi-sfi-state');
+      if(st){ st.style.color='#DF1A35'; st.textContent='SpawnFi list did not load ('+e.message+'). Tap ✕ then search again.'; }
+      _viSfiList = null; return [];
+    })
+    .finally(()=>{ _viSfiLoading = null; });
+  return _viSfiLoading;
+}
+
+function viSfiAreaDefault(){
+  // when the area is picked and no server is chosen yet, pre-pick that area's SpawnFi server
+  const sel = document.getElementById('vi-sfi-srv');
+  if(!sel || sel.value || !_viSfiList) return;
+  const key = VI_SFI_AREA[((document.getElementById('vi-area')||{}).value||'').toUpperCase()];
+  if(!key) return;
+  const hit = [...sel.options].find(o=>o.value && o.value.toLowerCase().indexOf(key)>=0);
+  if(hit) sel.value = hit.value;
+}
+
+function viSfiAgo(ts){
+  if(!ts) return 'no sales yet';
+  const d = (Date.now() - new Date(ts).getTime())/86400000;
+  if(d < 1) return 'sold today';
+  if(d < 2) return 'sold yesterday';
+  return 'last sale '+Math.floor(d)+'d ago';
+}
+
+async function viSfiInput(){
+  const box = document.getElementById('vi-sfires');
+  if(!box) return;
+  const list = await viSfiLoad();
+  if(!list.length){ box.style.display='none'; return; }
+  const srv = (document.getElementById('vi-sfi-srv')||{}).value || '';
+  const q = ((document.getElementById('vi-sfiq')||{}).value||'').trim().toLowerCase();
+  const formVlan = parseInt(((document.getElementById('vi-vlan')||{}).value||'').trim(), 10) || null;
+  const qNum = /^\d+$/.test(q) ? parseInt(q,10) : null;
+  const words = q.split(/\s+/).filter(Boolean);
+
+  let rows = list.filter(r=>{
+    if(srv && r.router_name !== srv) return false;
+    if(qNum !== null) return r.vlan === qNum;
+    if(words.length){
+      const hay = ((r.site_name||'')+' '+r.router_name+' vlan '+r.vlan+' '+(r.vendo_name||'')).toLowerCase();
+      return words.every(w=>hay.indexOf(w)>=0);
+    }
+    // nothing typed: show lines with the form's VLAN, else the server's unlinked lines
+    if(formVlan) return r.vlan === formVlan;
+    return !!srv && r.link_status !== 'linked';
+  });
+  const pickedId = _viPicked && _viPicked.id;
+  const free = r => r.link_status !== 'linked' || !r.vendo_id || r.vendo_id === pickedId;
+  rows.sort((a,b)=> (free(b)-free(a))
+                 || ((b.vlan===formVlan)-(a.vlan===formVlan))
+                 || (new Date(b.last_sale||0) - new Date(a.last_sale||0)));
+  rows = rows.slice(0, 30);
+
+  if(!rows.length){
+    box.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#6b7280;">'
+      + (q || formVlan || srv ? 'No SpawnFi line matched. Try the owner name, the VLAN, or another server.'
+                              : 'Pick a SpawnFi server or type the SpawnFi vendo name / VLAN.')
+      + '</div>';
+    box.style.display='block'; return;
+  }
+  box.innerHTML = rows.map(r=>{
+    const ok = free(r);
+    const same = r.vendo_id && r.vendo_id === pickedId;
+    const badge = !ok
+      ? '<span style="font-size:9px;background:#DF1A35;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">LINKED</span>'
+      : (same ? '<span style="font-size:9px;background:#025AC6;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">THIS VENDO</span>'
+              : '<span style="font-size:9px;background:#028867;color:#fff;padding:1px 6px;border-radius:5px;font-weight:800;">FREE</span>');
+    const vMatch = formVlan && r.vlan === formVlan ? ' <span style="color:#028867;">= form VLAN</span>' : '';
+    return '<div onclick=\'viPickSfi('+klArg(r.router_name, r.vlan)+')\' '
+      + 'style="padding:8px 12px;border-bottom:1px solid #f1f5f9;cursor:'+(ok?'pointer':'not-allowed')+';font-size:12px;'+(ok?'':'background:#fafafa;opacity:.7;')+'" '
+      + 'onmouseover="this.style.background=\''+(ok?'#f5f3ff':'#fafafa')+'\'" onmouseout="this.style.background=\''+(ok?'#fff':'#fafafa')+'\'">'
+      + '<div style="display:flex;justify-content:space-between;gap:6px;align-items:center;">'
+      +   '<b style="color:#311A8E;">⚡ VLAN '+r.vlan+vMatch+'</b>'+badge
+      + '</div>'
+      + '<div style="font-size:11px;color:#374151;margin-top:2px;">'+klEsc(r.site_name||'(no name on panel)')+'</div>'
+      + '<div style="font-size:10px;color:#6b7280;margin-top:2px;">🖥️ '+klEsc(r.router_name)+' · '+viSfiAgo(r.last_sale)
+      +   (r.d7_pesos ? ' · ₱'+Math.round(r.d7_pesos).toLocaleString()+' this week' : '')+'</div>'
+      + (!ok ? '<div style="font-size:10px;color:#DF1A35;margin-top:2px;font-weight:700;">Already linked to: '+klEsc(r.vendo_name||('#'+r.vendo_id))+(r.vendo_code?' ('+klEsc(r.vendo_code)+')':'')+'</div>' : '')
+      + '</div>';
+  }).join('');
+  box.style.display='block';
+}
+
+function viPickSfi(router, vlan){
+  const r = (_viSfiList||[]).find(x=>x.router_name===router && x.vlan===vlan);
+  if(!r) return;
+  const pickedId = _viPicked && _viPicked.id;
+  if(r.link_status === 'linked' && r.vendo_id && r.vendo_id !== pickedId){
+    viModal({ok:false, title:'SpawnFi line already linked',
+      lead:'VLAN '+r.vlan+' on '+r.router_name+' already feeds another vendo’s sales audit.',
+      rows:[['Linked to', klEsc(r.vendo_name||('#'+r.vendo_id))+(r.vendo_code?' ('+klEsc(r.vendo_code)+')':'')],
+            ['SpawnFi name', klEsc(r.site_name||'—')]],
+      note:'Pick a FREE line. If the old link is wrong, unlink it first.'});
+    return;
+  }
+  _viSfi = r;
+  const box = document.getElementById('vi-sfires'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  const q = document.getElementById('vi-sfiq');
+  if(q) q.value = 'VLAN '+r.vlan+' — '+String(r.site_name||'').slice(0,40);
+  const sel = document.getElementById('vi-sfi-srv'); if(sel) sel.value = r.router_name;
+  // fill VLAN if blank; never overwrite a typed one silently
+  const vl = document.getElementById('vi-vlan');
+  if(vl && !vl.value.trim()){ vl.value = r.vlan; vl.style.borderColor='#028867'; setTimeout(()=>{vl.style.borderColor='#e5e7eb';},1500); }
+  viSfiState();
+}
+
+function viSfiState(){
+  const st = document.getElementById('vi-sfi-state');
+  if(!st) return;
+  if(!_viSfi){
+    st.style.color = '#9ca3af';
+    st.textContent = 'Leave empty if this vendo is JuanFi / Telegram only.';
+  } else {
+    const r = _viSfi;
+    const fv = parseInt(((document.getElementById('vi-vlan')||{}).value||'').trim(), 10) || null;
+    const clash = fv && fv !== r.vlan;
+    st.style.color = clash ? '#B45309' : '#028867';
+    st.innerHTML = '✅ SpawnFi: <b>'+klEsc(r.router_name)+'</b> · VLAN <b>'+r.vlan+'</b> · '+viSfiAgo(r.last_sale)
+      + (r.all_n ? ' · '+Number(r.all_n).toLocaleString()+' sales so far will be linked' : '')
+      + (clash ? '<br>⚠️ Form VLAN is '+fv+' but this SpawnFi line is VLAN '+r.vlan+' · '
+          + '<button type="button" onclick="viUseVlan('+r.vlan+');viSfiState();" style="padding:2px 8px;background:#B45309;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use '+r.vlan+'</button>' : '');
+  }
+  viCompile();
+}
+
+function viSfiClear(){
+  _viSfi = null;
+  const q = document.getElementById('vi-sfiq'); if(q) q.value='';
+  const box = document.getElementById('vi-sfires'); if(box){ box.style.display='none'; box.innerHTML=''; }
+  viSfiLoad(true).then(viSfiAreaDefault);
+  viSfiState();
+}
+
+function viSfiResult(res){
+  if(!res || !res.spawnfi_router) return '<span style="color:#9ca3af;">— (JuanFi / Telegram only)</span>';
+  return '⚡ '+klEsc(res.spawnfi_router)+' · VLAN '+res.spawnfi_vlan
+    + (res.spawnfi_site ? '<div style="font-size:11px;color:#6b7280;">'+klEsc(res.spawnfi_site)+'</div>' : '')
+    + '<div style="font-size:11px;color:#028867;">✓ linked to the sales audit'
+    + (res.spawnfi_sales_linked ? ' · '+Number(res.spawnfi_sales_linked).toLocaleString()+' past sales attached' : '')+'</div>';
+}
+
+document.addEventListener('click', function(e){
+  const box = document.getElementById('vi-sfires');
+  if(!box || box.style.display==='none') return;
+  if(e.target.closest && (e.target.closest('#vi-sfires') || e.target.closest('#vi-sfiq') || e.target.closest('#vi-sfi-srv'))) return;
+  box.style.display = 'none';
+});
 
 /* ══ PUNGPUNG TRANSFER — keys to move into a collector's bunch ══ */
 let _ktRows = [], _ktVendos = [], _ktVT = null, _ktSeq = 0, _ktCustodians = [], _ktPending = [], _ktBusy = false, _ktDetails = {}
