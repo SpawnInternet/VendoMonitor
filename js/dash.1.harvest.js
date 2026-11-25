@@ -6077,6 +6077,7 @@ async function viAdd(){
       }catch(err){ photoUrl = null; extraNote += '<br><br>⚠️ Photo not saved: '+klEsc(String(err.message||err)); }
     }
     const savedGps = _viGps;
+    const _wasNoTg = _viNoTg;   // viResetForm clears it; the result window still needs it
 
     viResetForm();
     if(res.vendo_created){
@@ -6088,7 +6089,7 @@ async function viAdd(){
           ['Vendo',   klEsc(res.sheet_name||'')+' <span style="color:#6b7280;font-weight:600;">#'+res.vendo_id+'</span>'],
           ['Area',    klEsc(res.area||'—')],
           ['VLAN',    vlan ? String(vlan) : '<span style="color:#9ca3af;">—</span>'],
-          ['TG name', _viNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—')],
+          ['TG name', (_wasNoTg && res.spawnfi_router) ? '<span style="color:#311A8E;">⚡ none — SpawnFi vendo</span>' : (_wasNoTg ? '<span style="color:#C01176;">🚫 none — using sheet name</span>' : klEsc(res.tg_name||'—'))],
           ['Server',  res.server_name ? klEsc(res.server_name) : '<span style="color:#9ca3af;">—</span>'],
           ['SpawnFi', viSfiResult(res)],
           ['Address',  res.address ? klEsc(res.address) : '<span style="color:#9ca3af;">—</span>'],
@@ -6099,7 +6100,7 @@ async function viAdd(){
         ],
         note: '✅ Live now in <b>Vendos</b>, <b>Spawn Harvest</b> (collector route), <b>Vendo Map</b>'
               + (savedGps ? ' with its GPS pin' : '') + ' and <b>Recon</b>. Caches rebuilt.'
-              + (_viNoTg ? '<br><br>⚠️ No TG name yet — link it in <b>dicayas.html</b> when ready.' : '')
+              + ((_wasNoTg && !res.spawnfi_router) ? '<br><br>⚠️ No TG name yet — link it in <b>dicayas.html</b> when ready.' : '')
               + extraNote
       });
       // rebuild BOTH caches so the new vendo shows up everywhere immediately:
@@ -6131,7 +6132,7 @@ async function viAdd(){
 }
 
 function viResetForm(){
-  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null; _viSfi = null;
+  _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null; _viSfi = null; _viSfiAutoNoTg = false;
   viSetNoTg(false);
   ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr','vi-sfiq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   const as=document.getElementById('vi-addr-state'); if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
@@ -6369,7 +6370,7 @@ function viPickTg(name){
   viTgState();
 }
 
-function viToggleNoTg(){ viSetNoTg(!_viNoTg); }
+function viToggleNoTg(){ if(typeof _viSfiAutoNoTg!=='undefined') _viSfiAutoNoTg = false; viSetNoTg(!_viNoTg); }
 
 function viSetNoTg(on){
   _viNoTg = !!on;
@@ -6391,7 +6392,10 @@ function viTgState(){
   const el = document.getElementById('vi-tg-state');
   if(!el) return;
   const nm = ((document.getElementById('vi-vq')||{}).value||'').trim();
-  if(_viNoTg){
+  if(_viNoTg && typeof _viSfi !== 'undefined' && _viSfi){
+    el.style.color = '#311A8E';
+    el.textContent = '⚡ SpawnFi vendo — no Telegram needed. Sales come from '+_viSfi.router_name+' VLAN '+_viSfi.vlan+'.';
+  } else if(_viNoTg){
     el.style.color = '#C01176';
     el.textContent = '🚫 no_tg = true · tg_name = "'+(nm||'(sheet name)')+'" · link it in dicayas.html later';
   } else if(_viTg){
@@ -6409,7 +6413,7 @@ function viTgState(){
    Picking one links spawnfi_links(router, vlan) -> this vendo inside the same
    save (spawn_log_install_v2), so the box-to-collector audit counts its sales.
    A line already linked to a different vendo cannot be picked.                */
-let _viSfi = null, _viSfiList = null, _viSfiLoading = null;
+let _viSfi = null, _viSfiList = null, _viSfiLoading = null, _viSfiAutoNoTg = false;
 const VI_SFI_AREA = { DAPITAN:'dapitan', SINDANGAN:'sindangan', SINAMAN:'sinaman', DIPOLOG:'dicayas' };
 
 function viSfiLoad(force){
@@ -6532,6 +6536,9 @@ function viPickSfi(router, vlan){
   if(q) q.value = 'VLAN '+r.vlan+' — '+String(r.site_name||'').slice(0,40);
   const sel = document.getElementById('vi-sfi-srv'); if(sel) sel.value = r.router_name;
   // SpawnFi VLAN is its own system: it is NOT copied into the VLAN box above (that one is the JuanFi / MikroTik VLAN)
+  // A SpawnFi vendo has no Telegram: a NEW vendo goes to "No TG" automatically (sales come from SpawnFi)
+  if(!(_viPicked && _viPicked.id) && !_viNoTg){ _viSfiAutoNoTg = true; viSetNoTg(true); }
+  else viTgState();
   viSfiState();
 }
 
@@ -6553,6 +6560,7 @@ function viSfiState(){
 
 function viSfiClear(){
   _viSfi = null;
+  if(_viSfiAutoNoTg){ _viSfiAutoNoTg = false; viSetNoTg(false); }
   const q = document.getElementById('vi-sfiq'); if(q) q.value='';
   const box = document.getElementById('vi-sfires'); if(box){ box.style.display='none'; box.innerHTML=''; }
   viSfiLoad(true).then(viSfiAreaDefault);
