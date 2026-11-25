@@ -5973,6 +5973,8 @@ function viCompile(){
   else if(_viTg) bits.push('📶 '+_viTg);
   if(_viSrv) bits.push('🖥️ '+_viSrv);
   if(_viSfi) bits.push('⚡ SpawnFi '+_viSfi.router_name+' VLAN '+_viSfi.vlan);
+  const _kc = (typeof viKcColors==='function') ? viKcColors() : {};
+  Object.keys(_kc).forEach(t=>bits.push({pungpung:'🪙O',duplicate:'🪙D',board:'🔌'}[t]+' '+_kc[t]));
   const _ad = (((document.getElementById('vi-addr')||{}).value)||'').trim();
   if(_ad) bits.push('🏠 '+_ad);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
@@ -6027,11 +6029,12 @@ async function viAdd(){
     const autoFobs = viFobsOn();
     const scanned = viFobCodes();
     for(const t in scanned){ if(_viFobBad[t]){ viModal({ok:false, title:'Fob problem', lead:_viFobBad[t]}); return; } }
-    const useV4 = autoFobs || Object.keys(scanned).length;
-    const rpcName = useV4 ? 'spawn_log_install_v4' : (sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo');
+    const colors = viKcColors();
+    const useV5 = autoFobs || Object.keys(scanned).length || Object.keys(colors).length;
+    const rpcName = useV5 ? 'spawn_log_install_v5' : (sfi ? 'spawn_log_install_v2' : 'spawn_log_install_and_create_vendo');
     const sfiArgs = Object.assign(
       sfi ? { p_spawnfi_router: sfi.router_name, p_spawnfi_vlan: sfi.vlan } : {},
-      useV4 ? { p_auto_fobs: !!autoFobs, p_fob_codes: scanned } : {});
+      useV5 ? { p_auto_fobs: !!autoFobs, p_fob_codes: scanned, p_key_colors: colors } : {});
     const res = await fetch(_SB+'/rest/v1/rpc/'+rpcName, {
       method:'POST', headers:_HDR,
       body: JSON.stringify(Object.assign({
@@ -6149,6 +6152,7 @@ function viResetForm(){
   const sfs=document.getElementById('vi-sfi-srv'); if(sfs) sfs.value='';
   _viNextFobs = null; _viFobBad = {};
   ['vi-f-co','vi-f-cd','vi-f-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; e.style.borderColor='#e5e7eb'; } });
+  ['vi-c-co','vi-c-cd','vi-c-bd'].forEach(id=>{ const e=document.getElementById(id); if(e){ e.value=''; viKcPick(e); } });
   viFobBoxes(); viFobPreview(true);
   viSfiState();
   _viSfiList = null;   // reload so the line just linked shows as LINKED next time
@@ -6163,10 +6167,11 @@ function viResetForm(){
 }
 
 function viKeysLbl(r){
-  const p = [];
-  if(r.key_coin_original)  p.push('🪙 Coins (Not Duplicate)');
-  if(r.key_coin_duplicate) p.push('🪙 Coins (Duplicate)');
-  if(r.key_board)          p.push('🔌 Board');
+  const p = [], kc = r.key_colors || {}, fb = r.fob_codes || {};
+  const tag = t => (kc[t] ? ' '+viKcDot(kc[t]) : '') + (fb[t] && fb[t].qr ? ' <span style="font-family:monospace;font-size:10px;background:#311A8E;color:#fff;padding:0 5px;border-radius:4px;">'+klEsc(fb[t].qr)+'</span>' : '');
+  if(r.key_coin_original)  p.push('🪙 Coins (Not Duplicate)'+tag('pungpung'));
+  if(r.key_coin_duplicate) p.push('🪙 Coins (Duplicate)'+tag('duplicate'));
+  if(r.key_board)          p.push('🔌 Board'+tag('board'));
   return p.length ? p.join(', ') : '—';
 }
 
@@ -6630,6 +6635,7 @@ function viFobBoxes(){
     const [cb,bx] = VI_FOB_BOX[t]; const c=document.getElementById(cb), b=document.getElementById(bx);
     if(!c||!b) continue;
     b.style.display = c.checked ? 'block' : 'none';
+    const cs = document.getElementById(VI_KC_BOX[t]); if(cs){ cs.style.display = c.checked ? 'block' : 'none'; if(!c.checked){ cs.value=''; viKcPick(cs); } }
     if(!c.checked){ b.value=''; b.style.borderColor='#e5e7eb'; delete _viFobBad[t]; }
   }
   viFobState();
@@ -6674,42 +6680,37 @@ function viFobState(){
   else { el.style.color='#9ca3af'; el.textContent='Scan or type the fob on each key (saves at 4–5 letters). Leave blank to take the next printed fob from the pool.'; }
 }
 
-/* holder colours per key type — typed once, remembered (install_key_colors) */
-const VI_KC_HEX = {red:'#dc2626',blue:'#2563eb',green:'#16a34a',yellow:'#eab308',orange:'#f97316',pink:'#ec4899',purple:'#7c3aed',violet:'#7c3aed',black:'#111827',white:'#f9fafb',gray:'#9ca3af',grey:'#9ca3af',brown:'#92400e',pula:'#dc2626',asul:'#2563eb',berde:'#16a34a',dalag:'#eab308',itom:'#111827',puti:'#f9fafb',lunhaw:'#16a34a',kahel:'#f97316'};
-let _viKc = {};
-function viKcHex(name){ const k=String(name||'').toLowerCase().trim(); for(const w in VI_KC_HEX){ if(k.indexOf(w)>=0) return VI_KC_HEX[w]; } return '#d1d5db'; }
-function viKcDraw(){
-  for(const t of ['pungpung','duplicate','board']){
-    const el = document.getElementById('vi-kc-'+t); if(!el) continue;
-    const c = _viKc[t];
-    el.innerHTML = c ? '<i style="background:'+(c.color_hex||viKcHex(c.color_name))+'"></i>'+klEsc(c.color_name) : '<i style="background:#fff"></i>colour?';
-    el.style.opacity = c ? '1' : '.6';
+/* holder colour per key, per vendo (2026-11-25) — the 9 colours the office uses */
+const VI_KC = [['black','#111827'],['red','#dc2626'],['yellow','#eab308'],['white','#f9fafb'],['violet','#7c3aed'],['blue','#2563eb'],['orange','#f97316'],['skyblue','#38bdf8'],['green','#16a34a']];
+const VI_KC_BOX = { pungpung:'vi-c-co', duplicate:'vi-c-cd', board:'vi-c-bd' };
+function viKcLoad(){
+  for(const t in VI_KC_BOX){
+    const sel = document.getElementById(VI_KC_BOX[t]); if(!sel || sel.options.length>1) continue;
+    sel.innerHTML = '<option value="">colour…</option>' + VI_KC.map(([n,h])=>'<option value="'+n+'" style="background:'+h+';color:'+(n==='white'||n==='yellow'||n==='skyblue'?'#111':'#fff')+'">● '+n+'</option>').join('');
   }
 }
-function viKcLoad(){
-  fetch(_SB+'/rest/v1/install_key_colors?select=key_type,color_name,color_hex', {headers:_HDR}).then(r=>r.json())
-    .then(rows=>{ _viKc = {}; (Array.isArray(rows)?rows:[]).forEach(r=>{ _viKc[r.key_type]=r; }); viKcDraw(); }).catch(()=>{});
+function viKcPick(sel){
+  const c = VI_KC.find(x=>x[0]===sel.value);
+  sel.style.background = c ? c[1] : '#fff';
+  sel.style.color = c ? ((c[0]==='white'||c[0]==='yellow'||c[0]==='skyblue')?'#111':'#fff') : '#374151';
+  viCompile();
 }
-async function viKcEdit(t){
-  const label = {pungpung:'Coin Original (pungpung)', duplicate:'Coin Duplicate', board:'Board'}[t];
-  const cur = _viKc[t] ? _viKc[t].color_name : '';
-  const name = prompt('Holder colour of the '+label+' key (e.g. red, blue, yellow):', cur);
-  if(name === null) return;
-  const nm = name.trim(); if(!nm) return;
-  const body = { key_type:t, color_name:nm, color_hex:viKcHex(nm), updated_at:new Date().toISOString(), updated_by:'dashboard' };
-  try{
-    const r = await fetch(_SB+'/rest/v1/install_key_colors?on_conflict=key_type', {method:'POST',
-      headers:Object.assign({'Prefer':'resolution=merge-duplicates,return=minimal'},_HDR), body:JSON.stringify(body)});
-    if(!r.ok) throw new Error(await r.text());
-    _viKc[t] = body; viKcDraw();
-  }catch(e){ viModal({ok:false, title:'Colour not saved', lead:String(e.message||e)}); }
+function viKcColors(){
+  const out = {};
+  for(const t in VI_KC_BOX){ const sel=document.getElementById(VI_KC_BOX[t]); if(sel && sel.style.display!=='none' && sel.value) out[t]=sel.value; }
+  return out;
 }
+function viKcDot(name){ const c = VI_KC.find(x=>x[0]===name); return c ? '<span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:'+c[1]+';border:1px solid rgba(0,0,0,.25);vertical-align:-1px;margin-right:3px;"></span>'+klEsc(name) : klEsc(name||''); }
 
 function viFobResult(res){
   const f = res && res.fobs;
-  if(!f || !Object.keys(f).length) return '<span style="color:#9ca3af;">— none bound</span>';
+  const kc = (res && res.key_colors) || {};
   const label = {pungpung:'🪙 Coin Original', duplicate:'🪙 Coin Duplicate', board:'🔌 Board'};
-  return Object.keys(f).map(t=>label[t]+' → <span style="font-family:monospace;font-size:14px;background:#311A8E;color:#fff;padding:1px 8px;border-radius:5px;letter-spacing:1px;">'+klEsc(f[t].qr)+'</span>'+(f[t].existing?' <span style="color:#6b7280;font-size:11px;">(already on this vendo)</span>':(f[t].src==='pool'?' <span style="color:#6b7280;font-size:11px;">(from pool — take this one)</span>':' <span style="color:#028867;font-size:11px;">(scanned)</span>'))).join('<br>')
+  if(!f || !Object.keys(f).length){
+    const ks = Object.keys(kc);
+    return ks.length ? ks.map(t=>label[t]+' holder: '+viKcDot(kc[t])).join('<br>')+'<div style="font-size:11px;color:#9ca3af;">no fob bound</div>' : '<span style="color:#9ca3af;">— none bound</span>';
+  }
+  return Object.keys(f).map(t=>label[t]+(kc[t]?' '+viKcDot(kc[t]):'')+' → <span style="font-family:monospace;font-size:14px;background:#311A8E;color:#fff;padding:1px 8px;border-radius:5px;letter-spacing:1px;">'+klEsc(f[t].qr)+'</span>'+(f[t].existing?' <span style="color:#6b7280;font-size:11px;">(already on this vendo)</span>':(f[t].src==='pool'?' <span style="color:#6b7280;font-size:11px;">(from pool — take this one)</span>':' <span style="color:#028867;font-size:11px;">(scanned)</span>'))).join('<br>')
     + '<div style="font-size:11px;color:#028867;margin-top:3px;">✓ bound — hang these fobs on the keys</div>';
 }
 

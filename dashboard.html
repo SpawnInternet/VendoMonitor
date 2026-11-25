@@ -197,7 +197,7 @@ tr:hover td{background:#f8f9ff;cursor:pointer}
 .rc-chip{padding:4px 12px;border-radius:20px;background:#eef2ff;color:#1e3cb8;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;}
 </style>
 <link rel="stylesheet" href="css/polish.css?v=pl1031c">
-<style>.vi-kc{display:inline-flex;align-items:center;gap:4px;margin-left:4px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;}.vi-kc i{display:inline-block;width:10px;height:10px;border-radius:50%;border:1px solid rgba(0,0,0,.2);}</style>
+<style>.vi-kc-sel{padding:6px 6px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:12px;font-weight:800;font-family:inherit;width:104px;background:#fff;}</style>
 </head>
 <body>
 
@@ -1705,18 +1705,21 @@ try { if (localStorage.getItem('sl_login_v') !== '2') { localStorage.removeItem(
               <img id="vi-photo-prev" style="display:none;margin-top:8px;width:100%;max-height:150px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;">
             </div>
 
-            <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">Keys received (check all that were received) — scan the fob you hung on each key</label>
+            <label style="font-size:11px;font-weight:700;color:#6b7280;display:block;margin-bottom:4px;">Keys received (check all that were received) — scan the fob + pick the holder colour</label>
             <div style="border:1.5px solid #e5e7eb;border-radius:8px;padding:10px;background:#fafafa;margin-bottom:10px;display:flex;flex-direction:column;gap:7px;">
               <div style="display:flex;align-items:center;gap:7px;">
-                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-co" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key — Original<span id="vi-kc-pungpung" class="vi-kc" onclick="event.preventDefault();viKcEdit('pungpung')" title="holder colour — click to change"></span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-co" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key — Original</label>
+                <select id="vi-c-co" class="vi-kc-sel" onchange="viKcPick(this)" style="display:none;"><option value="">colour…</option></select>
                 <input id="vi-f-co" placeholder="scan fob" maxlength="5" autocomplete="off" oninput="viFobScan(this,'pungpung')" style="width:92px;padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-family:monospace;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;display:none;">
               </div>
               <div style="display:flex;align-items:center;gap:7px;">
-                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-cd" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key — Duplicate<span id="vi-kc-duplicate" class="vi-kc" onclick="event.preventDefault();viKcEdit('duplicate')" title="holder colour — click to change"></span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-cd" style="width:15px;height:15px;cursor:pointer;">🪙 Coin Key — Duplicate</label>
+                <select id="vi-c-cd" class="vi-kc-sel" onchange="viKcPick(this)" style="display:none;"><option value="">colour…</option></select>
                 <input id="vi-f-cd" placeholder="scan fob" maxlength="5" autocomplete="off" oninput="viFobScan(this,'duplicate')" style="width:92px;padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-family:monospace;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;display:none;">
               </div>
               <div style="display:flex;align-items:center;gap:7px;">
-                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-bd" style="width:15px;height:15px;cursor:pointer;">🔌 Board Key<span id="vi-kc-board" class="vi-kc" onclick="event.preventDefault();viKcEdit('board')" title="holder colour — click to change"></span></label>
+                <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#374151;cursor:pointer;flex:1;min-width:0;"><input type="checkbox" id="vi-k-bd" style="width:15px;height:15px;cursor:pointer;">🔌 Board Key</label>
+                <select id="vi-c-bd" class="vi-kc-sel" onchange="viKcPick(this)" style="display:none;"><option value="">colour…</option></select>
                 <input id="vi-f-bd" placeholder="scan fob" maxlength="5" autocomplete="off" oninput="viFobScan(this,'board')" style="width:92px;padding:6px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-family:monospace;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;display:none;">
               </div>
               <div id="vi-fob-state" style="font-size:11px;font-weight:700;color:#9ca3af;display:none;"></div>
@@ -4046,7 +4049,7 @@ try { if (localStorage.getItem('sl_login_v') !== '2') { localStorage.removeItem(
     if (typeof window.ensureHarvest === 'function') return window.ensureHarvest();
     if (window.__hvLoaded) return; window.__hvLoaded = 1;   // fallback: core failed to load
     var s = document.createElement("script");
-    s.src = "js/dash.1.harvest.js?v=fob1125b"; s.async = false;
+    s.src = "js/dash.1.harvest.js?v=fob1125c"; s.async = false;
     document.head.appendChild(s);
   };
   if(document.readyState==="loading"){document.addEventListener("DOMContentLoaded",window.ensureHarvestJs);}else{window.ensureHarvestJs();}
