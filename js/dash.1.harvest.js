@@ -5978,6 +5978,7 @@ function viCompile(){
   const _ad = (((document.getElementById('vi-addr')||{}).value)||'').trim();
   if(_ad) bits.push('🏠 '+_ad);
   if(_viGps) bits.push('📍 '+_viGps.lat+', '+_viGps.lng);
+  const _ph = viPhoneNorm(((document.getElementById('vi-phone')||{}).value)||''); if(_ph) bits.push('📱 '+_ph);
   if(_viPhotoFile) bits.push('📷 photo');
   pv.style.display='block';
   pv.textContent = '📝 Compiled: '+_viPicked.name+' — '+(parts.length?parts.join(', '):'⚠️ no key checked')
@@ -6074,6 +6075,14 @@ async function viAdd(){
         .catch(err2=>{ extraNote += '<br><br>⚠️ GPS saved on the vendo but NOT synced to the collector app ('+klEsc(String(err2.message||err2))+'). The pin will look right here and wrong on the route.'; });
       }catch(err){ extraNote += '<br><br>⚠️ GPS not saved: '+klEsc(String(err.message||err)); }
     }
+    const ownerPhone = viPhoneNorm(((document.getElementById('vi-phone')||{}).value)||'');
+    if(ownerPhone && vid){
+      try{
+        const pr = await fetch(_SB+'/rest/v1/vendos?id=eq.'+vid+(isNew?'':'&contact_number=is.null'), {method:'PATCH',
+          headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify({contact_number: ownerPhone})});
+        if(!pr.ok) throw new Error(await pr.text());
+      }catch(err){ extraNote += '<br><br>⚠️ Owner number not saved: '+klEsc(String(err.message||err)); }
+    }
     let photoUrl = null;
     if(_viPhotoFile && vid){
       try{
@@ -6104,6 +6113,7 @@ async function viAdd(){
           ['SpawnFi', viSfiResult(res)],
           ['Fobs',    viFobResult(res)],
           ['Address',  res.address ? klEsc(res.address) : '<span style="color:#9ca3af;">—</span>'],
+          ['Owner #',  ownerPhone ? '📱 '+klEsc(ownerPhone) : '<span style="color:#9ca3af;">—</span>'],
           ['Group',   gLbl ? klEsc(gLbl) : '<span style="color:#9ca3af;">—</span>'],
           ['GPS',     savedGps ? ('📍 '+savedGps.lat+', '+savedGps.lng) : '<span style="color:#9ca3af;">—</span>'],
           ['Photo',   photoUrl ? '<img src="'+photoUrl+'" style="width:100%;max-height:110px;object-fit:cover;border-radius:6px;">' : '<span style="color:#9ca3af;">—</span>'],
@@ -6145,7 +6155,7 @@ async function viAdd(){
 function viResetForm(){
   _viPicked = null; _viTg = null; _viGps = null; _viPhotoFile = null; _viSrv = null; _viRt = null; _viSfi = null; _viSfiAutoNoTg = false;
   viSetNoTg(false);
-  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr','vi-sfiq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
+  ['vi-vq','vi-by','vi-notes','vi-vlan','vi-tgq','vi-gps','vi-photo','vi-srvq','vi-rtq','vi-addr','vi-sfiq','vi-phone'].forEach(id=>{ const e=document.getElementById(id); if(e) e.value=''; });
   const as=document.getElementById('vi-addr-state'); if(as){ as.style.color='#9ca3af'; as.textContent='Optional — shown to collectors on the route.'; }
   const rs=document.getElementById('vi-rt-state'); if(rs){ rs.style.color='#9ca3af'; rs.textContent='Linking a router auto-fills VLAN + server.'; }
   const ss=document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#9ca3af'; ss.textContent='Optional — which MikroTik server this vendo sits on.'; }
@@ -6551,6 +6561,10 @@ function viPickSfi(router, vlan){
   const q = document.getElementById('vi-sfiq');
   if(q) q.value = 'VLAN '+r.vlan+' — '+String(r.site_name||'').slice(0,40);
   const sel = document.getElementById('vi-sfi-srv'); if(sel) sel.value = r.router_name;
+  // the SpawnFi server IS the vendo's server
+  _viSrv = r.router_name;
+  const sq = document.getElementById('vi-srvq'); if(sq) sq.value = r.router_name;
+  const ss = document.getElementById('vi-srv-state'); if(ss){ ss.style.color='#028867'; ss.innerHTML='✅ Server = SpawnFi router <b>'+klEsc(r.router_name)+'</b>'; }
   // SpawnFi VLAN is its own system: it is NOT copied into the VLAN box above (that one is the JuanFi / MikroTik VLAN)
   // A SpawnFi vendo has no Telegram: a NEW vendo goes to "No TG" automatically (sales come from SpawnFi)
   if(!(_viPicked && _viPicked.id) && !_viNoTg){ _viSfiAutoNoTg = true; viSetNoTg(true); }
@@ -6575,6 +6589,7 @@ function viSfiState(){
 }
 
 function viSfiClear(){
+  if(_viSfi && _viSrv === _viSfi.router_name){ _viSrv = null; const sq=document.getElementById('vi-srvq'); if(sq) sq.value=''; viSrvState(); }
   _viSfi = null;
   if(_viSfiAutoNoTg){ _viSfiAutoNoTg = false; viSetNoTg(false); }
   const q = document.getElementById('vi-sfiq'); if(q) q.value='';
@@ -7661,6 +7676,22 @@ function viAddrFromComment(cmt){
   }
   s = s.replace(/(^[\s,]+)|([\s,]+$)/g, '');
   return s.length > 3 ? s : null;
+}
+
+/* owner cellphone (2026-11-25) — stored in vendos.contact_number as 09XXXXXXXXX */
+function viPhoneNorm(v){
+  let d = String(v||'').replace(/\D/g,'');
+  if(d.startsWith('63') && d.length===12) d = '0'+d.slice(2);
+  if(d.length===10 && d.startsWith('9')) d = '0'+d;
+  return d;
+}
+function viPhoneInput(){
+  const el = document.getElementById('vi-phone'), st = document.getElementById('vi-phone-state'); if(!el||!st) return;
+  const raw = el.value.trim(), d = viPhoneNorm(raw);
+  if(!raw){ st.style.color='#9ca3af'; st.textContent='Optional — the vendo owner\u2019s number (09XX XXX XXXX).'; }
+  else if(/^09\d{9}$/.test(d)){ st.style.color='#028867'; st.textContent='✅ '+d.replace(/(\d{4})(\d{3})(\d{4})/,'$1 $2 $3'); }
+  else { st.style.color='#B45309'; st.textContent='⚠️ Not a PH mobile number yet ('+d.length+' digits) — will be saved as typed.'; }
+  viCompile();
 }
 
 function viUseAddr(a){
