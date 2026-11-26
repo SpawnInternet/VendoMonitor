@@ -690,6 +690,47 @@
     const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
     // 2026-11-26: add / fix a subscriber's GPS from the office — shared reader (js/gps-reader.js)
     const gpsBtn = ` <button type="button" class="sd-gps-btn" style="margin-left:6px;height:24px;padding:0 10px;background:#eef2ff;color:#311A8E;border:1px solid #c7d2fe;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit">📍 ${hasGps ? 'Check / fix GPS' : 'Add GPS'}</button>`;
+    // 2026-11-26: subscriber photo, like the vendo card — upload / change / remove / zoom; a new photo goes
+    // straight into the GPS reader (its stamp or camera GPS can become the subscriber's pin)
+    const photoBlock = () => `<div class="sd-card" style="display:flex;align-items:center;gap:14px">
+        ${sub.photo_url ? `<img src="${esc(sub.photo_url)}" class="sd-ph-zoom" style="width:76px;height:76px;border-radius:12px;object-fit:cover;flex-shrink:0;border:1px solid #e5e7eb;cursor:zoom-in" alt="Subscriber photo">`
+                        : `<div style="width:76px;height:76px;border-radius:12px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;border:1px solid #e5e7eb">🏠</div>`}
+        <div style="flex:1;min-width:0"><div style="font-size:12px;color:#6b7280;font-weight:700;margin-bottom:6px">📷 Subscriber photo <span style="font-weight:500">· house / modem / stamp photo</span></div>
+          <input type="file" accept="image/*" class="sd-ph-file" style="display:none">
+          <button type="button" class="sd-ph-up" style="height:32px;padding:0 14px;background:#025ac6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${sub.photo_url ? 'Change photo' : 'Upload photo'}</button>
+          ${sub.photo_url ? `<button type="button" class="sd-ph-rm" style="height:32px;padding:0 12px;margin-left:6px;background:#fff;color:#d91934;border:1px solid #fca5a5;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>` : ''}
+          <span class="sd-ph-msg" style="margin-left:8px;font-size:12px;color:#6b7280"></span></div></div>`;
+    const photoWire = () => {
+      const up = pg.querySelector('.sd-ph-up'), fi = pg.querySelector('.sd-ph-file'), rm = pg.querySelector('.sd-ph-rm'), zm = pg.querySelector('.sd-ph-zoom'), m = pg.querySelector('.sd-ph-msg');
+      if (zm) zm.onclick = () => { const ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:100005;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+        ov.innerHTML = `<img src="${esc(sub.photo_url)}" style="max-width:96vw;max-height:96vh;object-fit:contain;border-radius:6px">`; ov.onclick = () => ov.remove(); document.body.appendChild(ov); };
+      if (up && fi) { up.onclick = () => fi.click(); fi.onchange = async () => {
+        const f = fi.files && fi.files[0]; if (!f) return;
+        if (!/^image\//.test(f.type)) { m.style.color = '#d91934'; m.textContent = 'Not an image'; return; }
+        m.style.color = '#6b7280'; m.textContent = 'Uploading…';
+        try {
+          const path = 'subscriber-photos/sub_' + sub.id + '_' + Date.now() + '.jpg';
+          const r = await fetch(`${_SB}/storage/v1/object/harvest-photos/${path}`, { method:'POST', headers:{ apikey:_KEY, Authorization:'Bearer ' + _KEY, 'Content-Type': f.type || 'image/jpeg', 'x-upsert':'true' }, body:f });
+          const t = await r.text(); if (!r.ok) throw new Error('upload failed');
+          let url = `${_SB}/storage/v1/object/public/harvest-photos/${path}`; try { const j = JSON.parse(t); if (j && j.public_url) url = j.public_url; } catch (_) {}
+          const p2 = await fetch(`${_SB}/rest/v1/subscribers?id=eq.${sub.id}`, { method:'PATCH', headers:Object.assign({}, _HDR, { 'Content-Type':'application/json', Prefer:'return=minimal' }), body:JSON.stringify({ photo_url:url }) });
+          if (!p2.ok) throw new Error('save failed');
+          sub.photo_url = url; window._sdGpsFile = f;          // read its GPS right away
+          if (typeof toast === 'function') toast('✅ Photo saved — reading its GPS…');
+          draw('info');
+        } catch (e) { m.style.color = '#d91934'; m.textContent = 'Error: ' + e.message; }
+      }; }
+      if (rm) rm.onclick = async () => {
+        const ok = typeof window.askConfirm === 'function' ? await window.askConfirm({ title:'Remove photo?', body:'The subscriber photo is removed from this page. GPS is not changed.', ok:'Remove', danger:true }) : confirm('Remove this photo?');
+        if (!ok) return;
+        const r = await fetch(`${_SB}/rest/v1/subscribers?id=eq.${sub.id}`, { method:'PATCH', headers:Object.assign({}, _HDR, { 'Content-Type':'application/json', Prefer:'return=minimal' }), body:JSON.stringify({ photo_url:null }) });
+        if (r.ok) { sub.photo_url = null; draw('info'); } else if (typeof toast === 'function') toast('Remove failed');
+      };
+      // a just-uploaded photo opens the GPS reader on that file
+      if (window._sdGpsFile) { const f = window._sdGpsFile; window._sdGpsFile = null;
+        const b = pg.querySelector('.sd-gps-btn'); const host = b && b.closest('.sd-row') && b.closest('.sd-row').nextElementSibling;
+        if (host && host.classList.contains('sd-gps-tool') && window.SpawnGps) window.SpawnGps.panel(host, {kind:'subscriber', id:sub.id, name:sub.name, area:sub.area, lat:sub.lat, lng:sub.lng, photoUrl:sub.photo_url, file:f, onSaved: () => { close(); subDetail(sub.id); }}); }
+    };
     const gpsWire = () => pg.querySelectorAll('.sd-gps-btn').forEach(b => b.onclick = ev => {
       ev.stopPropagation();
       const host = b.closest('.sd-row') && b.closest('.sd-row').nextElementSibling;
@@ -814,7 +855,7 @@
           : '<div style="color:#9ca3af;font-size:13px;padding:6px 0">No GCash ref texted to Spawn Text yet.</div>'}</div>
         ${sysPays.length ? `<div class="sd-card"><div class="sd-h green">🤖 Payments the system recorded from GCash</div>${sysPays.map(x => row(short(String(x.payment_date).slice(0,10)), peso(x.amount) + (x.coverage_from ? ' · for ' + mon(x.coverage_from) + (x.coverage_months > 1 ? ' + ' + (x.coverage_months - 1) + ' more' : '') : '') + (x.gcash_ref ? ' · ref …' + esc(String(x.gcash_ref).slice(-4)) : ''))).join('')}</div>` : ''}`;
     };
-    const info = () => `<div class="sd-card"><div class="sd-grid">
+    const info = () => photoBlock() + `<div class="sd-card"><div class="sd-grid">
         <div><div class="sd-h">Identity</div>
           ${row('Subscriber', esc(sub.name))}${row('Account no.', esc(sub.acct_no))}${row('Area', esc(sub.area))}${row('Plan', [sub.plan_type, sub.plan_mbps ? sub.plan_mbps + ' Mbps' : ''].filter(Boolean).map(esc).join(' · '))}
           ${row('Status', esc([sub.status, sub.billing_status].filter(Boolean).join(' · ')) + (sub.billing_note ? ' <span style="color:#6b7280;font-weight:500">' + esc(sub.billing_note) + '</span>' : ''))}
@@ -857,7 +898,7 @@
       </div>`; };
     const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k));
       if (k === 'gcash' && !gcLoaded) { pg.querySelector('.sd-body').innerHTML = '<div class="sd-card" style="color:#6b7280">Checking their GCash refs against the statements…</div>'; gcLoad().then(() => { if (document.getElementById('sd-page') === pg && pg.querySelector('.sd-tabs button.on') && pg.querySelector('.sd-tabs button.on').dataset.t === 'gcash') pg.querySelector('.sd-body').innerHTML = gcashT(); }); return; }
-      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); gpsWire(); };
+      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); gpsWire(); photoWire(); };
     pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         <a class="sd-btn" href="#" id="sd-chat">💬 Open chat</a>${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
       <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;

@@ -223,7 +223,7 @@ function loadImg(blob){
 function band(img, top, bottom, mode){
   const W = img.naturalWidth, H = img.naturalHeight;
   const sy = Math.floor(H*top), sh = Math.max(1, Math.floor(H*(bottom-top)));
-  const scale = Math.max(0.6, Math.min(3, 2000 / W));
+  const scale = Math.max(0.5, Math.min(2.5, 1600 / W));   // 1600 px wide is enough for stamp text and ~35% faster than 2000
   const c = document.createElement('canvas'); c.width = Math.round(W*scale); c.height = Math.round(sh*scale);
   const ctx = c.getContext('2d', {willReadFrequently:true});
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -250,29 +250,44 @@ function band(img, top, bottom, mode){
 }
 const AGREE_KM = 0.015;   // two reads within 15 m = the same reading
 
-async function ocr(blob, onStatus){
+/* 2026-11-26 (faster): at most 5 passes and a 12 s budget. Order: bottom strip; if it gives a
+   reading, ONE confirmation pass on the same strip with the other treatment (usually done in 2 passes).
+   Otherwise top strip, then the other treatment on both, then a taller bottom strip. No whole-photo pass
+   (slowest, rarely helps). opts.cancel() → stop between passes. */
+const OCR_BUDGET_MS = 12000;
+async function ocr(blob, onStatus, opts){
+  opts = opts || {};
+  const t0 = Date.now();
   const img = await loadImg(blob);
   const w = await worker();
-  // stamps sit at the bottom (most apps) or the top; last try is the whole picture
-  const bands = [[0.72,1],[0.55,1],[0,0.28],[0,0.45],[0,1]];
-  const reads = []; let allText = '';
-  let pass = 0;
-  for(const [a,b] of bands){
-    for(const mode of [0,1]){
-      pass++;
-      onStatus && onStatus('Reading the stamp… pass '+pass);
-      let text = '';
-      try{ const r = await w.recognize(band(img, a, b, mode)); text = (r && r.data && r.data.text) || ''; }catch(_){}
-      allText += text + '\n';
-      const good = candidates(text).filter(c => inBox(c.lat,c.lng) && c.decimals >= 4).sort((x,y)=>y.score-x.score);
-      if(good.length){ reads.push(Object.assign({band:a+'-'+b, mode}, good[0])); }
-      // stop as soon as two reads agree
-      const best = cluster(reads);
-      if(best && best.count >= 2) return finish(best, reads, allText);
+  const plan = [[0.70,1,0],[0,0.30,0],[0.70,1,1],[0,0.30,1],[0.50,1,0]];
+  const reads = []; let allText = ''; let pass = 0;
+  const run = async (a,b,mode) => {
+    pass++;
+    onStatus && onStatus('Reading the stamp… pass '+pass+' · '+Math.round((Date.now()-t0)/1000)+' s');
+    let text = '';
+    try{ const r = await w.recognize(band(img, a, b, mode)); text = (r && r.data && r.data.text) || ''; }catch(_){}
+    allText += text + '\n';
+    const good = candidates(text).filter(c => inBox(c.lat,c.lng) && c.decimals >= 4).sort((x,y)=>y.score-x.score);
+    if(good.length) reads.push(Object.assign({band:a+'-'+b, mode}, good[0]));
+    return good.length > 0;
+  };
+  for(let i=0; i<plan.length; i++){
+    if(opts.cancel && opts.cancel()) return {gps:null, text:allText.trim(), error:'stopped'};
+    if(Date.now()-t0 > OCR_BUDGET_MS) break;
+    const [a,b,mode] = plan[i];
+    const found = await run(a,b,mode);
+    if(found){
+      let best = cluster(reads);
+      if(best.count >= 2) return finish(best, reads, allText);
+      // confirm on the same strip with the other treatment
+      if(!(opts.cancel && opts.cancel()) && Date.now()-t0 <= OCR_BUDGET_MS) await run(a,b,mode?0:1);
+      best = cluster(reads);
+      if(best.count >= 2) return finish(best, reads, allText);
     }
   }
   const best = cluster(reads);
-  return best ? finish(best, reads, allText) : {gps:null, text:allText.trim(), reads:[]};
+  return best ? finish(best, reads, allText) : {gps:null, text:allText.trim(), reads:[], error: Date.now()-t0 > OCR_BUDGET_MS ? 'no readable stamp within 12 s' : 'no readable stamp'};
 }
 /* the reading most reads agree with (ties → better label) */
 function cluster(reads){
@@ -300,7 +315,7 @@ async function read(blob, opts){
   const e = await exif(blob);
   if(e && sane(e).ok) return {gps:e, how:'exif', agree:99, decimals:6, place:null, text:''};
   say('No GPS data in the file — reading the stamp on the picture…');
-  try{ return await ocr(blob, say); }
+  try{ return await ocr(blob, say, opts); }
   catch(err){ return {gps:null, error:String(err && err.message || err), text:''}; }
 }
 async function readUrl(url, opts){
@@ -469,6 +484,7 @@ function panel(host, o){
     <div id="${uid}-res"></div>
   </div>`;
   const $ = s => host.querySelector('#'+uid+'-'+s);
+  worker().catch(()=>{});   // start loading the OCR engine now, so the first photo does not wait for the download
   const msg = (t, c) => { const m = $('msg'); if(m){ m.style.color = c||'#6b7280'; m.innerHTML = t; } };
 
   async function show(res){
@@ -538,12 +554,18 @@ function panel(host, o){
   }
 
   async function run(getRes, blob){
-    if(st.busy) return; st.busy = true;
+    if(st.busy) return; st.busy = true; st.stop = false;
     st.blob = blob || null; $('res').innerHTML = '';
-    try{ await show(await getRes()); }
+    try{
+      const r = await getRes();
+      if(r && r.error === 'stopped'){ msg('Stopped. Type the coordinates from the stamp in the box above.', '#6b7280'); }
+      else await show(r);
+    }
     catch(e){ msg('❌ '+esc(e.message||e), '#b91c1c'); }
     finally{ st.busy = false; }
   }
+  const ropts = () => ({onStatus: t => { msg('⏳ '+esc(t)+` <button type="button" id="${uid}-stop" style="${BTN}padding:2px 9px;margin-left:6px;background:#fff;color:#b91c1c;border:1px solid #fca5a5;">Stop</button>`); const b=$('stop'); if(b) b.onclick=()=>{ st.stop=true; }; },
+                        cancel: () => st.stop});
   function check(){
     const t = $('in').value.trim();
     if(!t){ msg('Paste coordinates first.', '#b45309'); return; }
@@ -565,12 +587,12 @@ function panel(host, o){
     }catch(e){ msg('❌ '+esc(e.message||e), '#b91c1c'); }
   }
 
-  if($('cur')) $('cur').onclick = () => run(() => readUrl(o.photoUrl, {onStatus:t=>msg('⏳ '+esc(t))}), null);
+  if($('cur')) $('cur').onclick = () => run(() => readUrl(o.photoUrl, ropts()), null);
   $('pick').onclick = () => $('file').click();
-  $('file').onchange = () => { const f = $('file').files[0]; if(f) run(() => read(f, {onStatus:t=>msg('⏳ '+esc(t))}), f); };
+  $('file').onchange = () => { const f = $('file').files[0]; if(f) run(() => read(f, ropts()), f); };
   $('chk').onclick = check;
   $('in').onkeydown = e => { if(e.key === 'Enter') check(); };
-  if(o.file) run(() => read(o.file, {onStatus:t=>msg('⏳ '+esc(t))}), o.file);
+  if(o.file) run(() => read(o.file, ropts()), o.file);
   else if(o.lat != null && o.lng != null && isFinite(+o.lat)){
     // show how the pin already saved checks out
     msg('Saved pin: '+(+o.lat)+', '+(+o.lng)+' — checking…');
@@ -584,5 +606,5 @@ function panel(host, o){
   }
 }
 
-window.SpawnGps = {sane, parse, candidates, fixOcr, stampPlace, exif, read, readUrl, near, pins, forget, suspects, save, panel, km, fmtDist, family:fam, BUILD:'gps1126a'};
+window.SpawnGps = {sane, parse, candidates, fixOcr, stampPlace, exif, read, readUrl, near, pins, forget, suspects, save, panel, km, fmtDist, family:fam, BUILD:'gps1126d'};
 })();
