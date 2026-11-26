@@ -51,6 +51,23 @@
     return { useCache: false, ageMin, notice: 'Live numbers — cache is ' + ageMin + ' min old' };
   }
 
+  /* everything one Recon row needs, in the row's own field names — the one helper the Recon tab's three verdict sites call
+     (cache row, saved harvests row, live build). useSavedGap (default true): a row with no income at all keeps the recon_gap an
+     earlier run saved, as the cache / saved paths always did; the live path passes false (phase 2 never shows saved figures).
+     Switch off ⇒ exactly the old inline maths (tests/spawnfi/recon.test.mjs proves it against rows from the live cache file). */
+  function figures(row, useSavedGap){
+    row = row || {};
+    const coins = Number(row.coins_total || 0);
+    const inc = incomeOf(row);
+    let gap = inc.total != null ? inc.total - coins
+            : (useSavedGap !== false && row.recon_gap != null) ? Number(row.recon_gap) : null;
+    const paused = Array.isArray(row.book_inside) && row.book_inside.length > 0 && gap != null;
+    const flag = paused ? 'paused' : gap == null ? 'nodata' : Math.abs(gap) <= 20 ? 'ok' : gap > 20 ? 'alert' : 'warn';
+    const gap_pct = (coins > 0 && gap != null) ? Math.abs(gap) / coins * 100 : null;
+    return { tg_income: inc.tg, cloud_income: inc.cloud, spawnfi_income: inc.spawnfi, total_income: inc.total,
+             gap, gap_pct, flag, spawnfi_overlap_days: spawnfiOn() ? Number(row.spawnfi_overlap_days || 0) : 0, sources: inc.sources };
+  }
+
   function chip(source, pesos){
     const c = COLOR[source] || '#6b7280';
     return `<span style="display:inline-block;white-space:nowrap;color:${c};font-weight:700">${esc(LABEL[source] || source)} ${php(pesos)}</span>`;
@@ -65,5 +82,5 @@
       : `<div style="font-size:11px;line-height:1.35">${chips}</div>`;
   }
 
-  window.spawnIncome = { incomeOf, verdict, cell, cacheDecision, chip, COLOR, LABEL, spawnfiOn };
+  window.spawnIncome = { incomeOf, verdict, figures, cell, cacheDecision, chip, COLOR, LABEL, spawnfiOn };
 })();
