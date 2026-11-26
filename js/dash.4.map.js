@@ -1134,9 +1134,30 @@ function changeYear(y) {
 // ══════════════════════════════════════════════════════════
 // GLOBAL SEARCH
 // ══════════════════════════════════════════════════════════
-function showSearchDrop() {
-  if (allVendos.length) document.getElementById("search-drop").style.display = "block";
+/* 2026-11-26: place the results under the search box and inside the screen. It used to hang from the box's
+   right edge at 320 px wide, so in a narrow window (box at the left edge) half of it was off-screen. */
+function placeSearchDrop() {
+  const inp = document.getElementById("global-search"), dd = document.getElementById("search-drop");
+  if (!inp || !dd) return;
+  const r = inp.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(380, vw - 16);
+  let left = r.right - w;                 // line up with the box's right edge (wide screens)
+  if (left < 8) left = r.left;            // not enough room on the left: line up with its left edge
+  left = Math.max(8, Math.min(left, vw - w - 8));
+  dd.style.position = "fixed";
+  dd.style.left = left + "px";
+  dd.style.right = "auto";
+  dd.style.top = (r.bottom + 4) + "px";
+  dd.style.width = w + "px";
+  dd.style.maxHeight = Math.max(160, Math.min(420, vh - r.bottom - 16)) + "px";
+  dd.style.zIndex = "1000";
 }
+function showSearchDrop() {
+  const dd = document.getElementById("search-drop"); if (!dd) return;
+  if (allVendos.length || dd.innerHTML.trim()) { placeSearchDrop(); dd.style.display = "block"; }
+}
+window.addEventListener("resize", () => { const dd = document.getElementById("search-drop"); if (dd && dd.style.display === "block") placeSearchDrop(); });
+window.addEventListener("scroll", () => { const dd = document.getElementById("search-drop"); if (dd && dd.style.display === "block") placeSearchDrop(); }, true);
 function hideSearchDrop() { document.getElementById("search-drop").style.display = "none"; }
 
 /* ── Global search (2026-11-25): vendos + subscribers straight from the DB.
@@ -1147,7 +1168,7 @@ function globalSearch(q) {
   clearTimeout(_gsT);
   q = String(q||'').trim();
   if (q.length < 2) { drop.style.display = "none"; return; }
-  drop.style.display = "block";
+  placeSearchDrop(); drop.style.display = "block";
   drop.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:#6b7280;">Searching…</div>';
   const seq = ++_gsSeq;
   _gsT = setTimeout(async () => {
@@ -1174,7 +1195,7 @@ function globalSearch(q) {
       const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
       const bits = [v.area||'—', v.vlan ? 'VLAN '+v.vlan : null, v.vendo_code||null, (v.tg_name && v.tg_name!==nm) ? '📶 '+v.tg_name : null, (v.owner_name && v.owner_name!==nm) ? '👤 '+v.owner_name : null].filter(Boolean).join(' · ');
       const right = v.status && v.status!=='active' ? '<span style="color:#dc2626;font-weight:700;">'+esc(v.status)+'</span>' : (v.last_harvest_date ? 'last '+v.last_harvest_date : '');
-      return row("gsOpenVendo("+JSON.stringify(nm).replace(/"/g,'&quot;')+","+JSON.stringify(v.area||'').replace(/"/g,'&quot;')+")", esc(nm), esc(bits), right + ' <span style="color:#1565c0;font-weight:700;">ledger ›</span>');
+      return row("gsOpenVendo("+JSON.stringify(nm).replace(/"/g,'&quot;')+","+JSON.stringify(v.area||'').replace(/"/g,'&quot;')+","+(Number(v.id)||0)+")", esc(nm), esc(bits), right + ' <span style="color:#1565c0;font-weight:700;">open ›</span>');
     }).join('');
     if (S.length) html += hdr('👤 Subscribers', S.length, '#0f766e') + S.map(s => {
       const bits = [s.area||'—', s.acct_no ? '#'+s.acct_no : null, s.plan_mbps ? s.plan_mbps+' Mbps' : null, s.monthly_amount ? '₱'+Number(s.monthly_amount).toLocaleString()+'/mo' : null].filter(Boolean).join(' · ');
@@ -1184,11 +1205,11 @@ function globalSearch(q) {
     drop.innerHTML = html;
   }, 280);
 }
-async function gsOpenVendo(name, area) {
+async function gsOpenVendo(name, area, id) {
   document.getElementById("search-drop").style.display = "none";
   document.getElementById("global-search").value = "";
   if (typeof window.ensureHarvest === 'function') { try { await window.ensureHarvest(); } catch(e){} }
-  if (typeof htShowVendoProfile === 'function') htShowVendoProfile(name, area, 'ledger');
+  if (typeof htShowVendoProfile === 'function') htShowVendoProfile(name, area, 'info', id || null);
   else openVendoFromSearch(name, area);
 }
 function gsOpenSub(id) {
@@ -1227,33 +1248,11 @@ function htShowVendoFromRow(tr) {
   htShowVendoById(id, name, area);
 }
 
+/* 2026-11-26: one card loader for every page. This copy used to open on Names, look harvests up by name and
+   keep the previous vendo's ledger / keys / SpawnFi on screen; it now hands over to the full loader (Info first, by id). */
 async function htShowVendoById(id, name, area) {
-  let modal = document.getElementById('vp-modal');
-  if (!modal) {
-    // Create modal if not exists (same as htShowVendoProfile)
-    htShowVendoProfile(name, area);
-    return;
-  }
-  modal.style.display='flex';
-  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null;
-  document.getElementById('vp-title').textContent=name||'—';
-  document.getElementById('vp-sub').textContent=area||'';
-  document.getElementById('vp-edit-btn').textContent='Edit';
-  document.getElementById('vp-body').innerHTML='<div style="padding:30px;text-align:center;color:#6b7280;font-size:13px;">Loading...</div>';
-  // Activate Names tab by default
-  document.querySelectorAll('.vp-tab').forEach(t=>{t.style.borderBottomColor='transparent';t.style.color='#6b7280';t.style.fontWeight='';});
-  const namesBtn = document.getElementById('vp-tab-names');
-  if(namesBtn){namesBtn.style.borderBottomColor='#1565c0';namesBtn.style.color='#1565c0';namesBtn.style.fontWeight='600';}
-  try {
-    // Look up by id (most reliable)
-    const [vr, hr] = await Promise.all([
-      id ? sb('vendos','id=eq.'+id+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1)
-         : sb('vendos','sheet_name=eq.'+encodeURIComponent(name)+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
-      sb('harvests','sheet_name=eq.'+encodeURIComponent(name)+'&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
-    ]);
-    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
-    vpRenderNames();
-  } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
+  if (typeof htShowVendoProfile !== 'function' && typeof window.ensureHarvest === 'function') { try { await window.ensureHarvest(); } catch(_){} }
+  if (typeof htShowVendoProfile === 'function') return htShowVendoProfile(name, area, 'info', id || null);
 }
 
 
