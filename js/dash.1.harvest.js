@@ -272,7 +272,7 @@ async function vpGet(q){
 async function vpPw(what){
   const pw=await askAdminPw('Enter admin password to '+what+'.');
   if(pw===null) return null;
-  if(pw!=='101510'){ if(typeof markAdminPwWrong==='function') markAdminPwWrong(); toast('Wrong password'); return null; }
+  if(!window.spawnAdminPwOk(pw)){ if(typeof markAdminPwWrong==='function') markAdminPwWrong(); toast('Wrong password'); return null; }
   return pw;
 }
 async function vpLoadExtras(){
@@ -654,6 +654,9 @@ async function vpRenderNames(){
       </div>
     </div>
 
+    <!-- ⚡ SpawnFi line (filled by dash.24 when hq_link_widget is on) -->
+    <div id="vp-sfline"></div>
+
     <!-- Edit section -->
     <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:10px;padding:14px;margin-bottom:12px;">
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:10px;">Edit Names</div>
@@ -709,11 +712,15 @@ async function vpRenderNames(){
 
   html += '</div>';
   body.innerHTML = html;
+  if(window.spawnLink && v) window.spawnLink.mountCard(v.id, document.getElementById('vp-sfline'));
 }
 
+// The ONE admin-password check (the inline sites in this file call it too, 2026-11-26) — also used by the dash.24 link widget.
+// Known debt (decisions-log): this literal sits in a public repo; move the check behind the gateway, then rotate.
+window.spawnAdminPwOk = function(pw){ return pw === '101510'; };
 async function vpQuickLink(tgName){
   const v=window._vpVendo; if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={tg_name:tgName, tg_match_confirmed:true};
   try{
     const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
@@ -761,7 +768,7 @@ function vpTgPick(i){
 
 async function vpSaveNames(){
   const v=window._vpVendo; if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('vn-sheet')||{}).value||'';
   const tg=(document.getElementById('vn-tg')||{}).value||'';
   const u={sheet_name:sheet||null, tg_name:tg||null};
@@ -803,7 +810,7 @@ async function vpSaveHarvestWindow(){
   const ws=(document.getElementById('vn-window-start')||{}).value||'';
   const hd=(document.getElementById('vn-harvest-date')||{}).value||'';
   if(!ws&&!hd){toast('Enter at least one date to update');return;}
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd){ u.harvest_date=hd; }
@@ -917,7 +924,7 @@ async function vpRemovePhoto(){
 
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
@@ -951,7 +958,7 @@ async function vpExecutePullout(){
   const v=window._vpVendo;
   const pw=(document.getElementById('vp-po-pw')||{}).value||'';
   const reason=(document.getElementById('vp-po-reason')||{}).value||'';
-  if(pw!=='101510'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
+  if(!window.spawnAdminPwOk(pw)){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
   try{
     const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
     if(r.ok){vpCancelPullout();window._vpVendo.status='pulled_out';toast('Vendo pulled out');vpRenderInfo();}
@@ -1778,6 +1785,35 @@ function rcCustomRange(){
   rcRun();
 }
 
+// ── ⚡ SpawnFi everywhere (2026-11-27; switch hq_recon_spawnfi; spec docs/superpowers/specs/2026-11-26-spawnfi-everywhere-design.md) ──
+const _RC_BIG_URL  = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
+const _RC_ROWS_URL = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_rows.json';
+// Income by source + verdict for one Recon row — window.spawnIncome.figures (js/dash.25.income.js). The fallback below is
+// today's TG + Cloud maths, only for the case where dash.25 did not load.
+function _rcFigures(row, useSavedGap){
+  if(window.spawnIncome) return window.spawnIncome.figures(row, useSavedGap);
+  const tgInc = row.tg_income_live!=null ? Number(row.tg_income_live) : (row.tg_income!=null && row.tg_name) ? Number(row.tg_income) : null;
+  const cloudInc = row.cloud_income_live!=null ? Number(row.cloud_income_live) : null;
+  const totalInc = (tgInc!=null||cloudInc!=null) ? Number(tgInc||0)+Number(cloudInc||0) : null;
+  const coins = Number(row.coins_total||0);
+  const gap = totalInc!=null ? totalInc-coins : (useSavedGap!==false && row.recon_gap!=null ? Number(row.recon_gap) : null);
+  const paused = Array.isArray(row.book_inside) && row.book_inside.length>0 && gap!=null;
+  const flag = paused ? 'paused' : gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+  return {tg_income:tgInc, cloud_income:cloudInc, spawnfi_income:null, total_income:totalInc, gap, gap_pct:(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null, flag, spawnfi_overlap_days:0, sources:[]};
+}
+// Background: the big snapshot (packs / recons / history / suspicious_tx) for Statement + History, when the table itself came
+// from the small rows file. The table's rows are kept — the two files are written by the same run.
+async function _rcLoadBigSnap(){
+  try{
+    const rc = await fetch(_RC_BIG_URL + '?t=' + Math.floor(Date.now()/120000));
+    if(!rc.ok) return;
+    const d = await rc.json();
+    window._rcSnap = Object.assign({}, d, {rows:(window._rcSnap&&window._rcSnap.rows)||d.rows});
+    if(Array.isArray(d.suspicious_tx)) window._rcSuspiciousTx = d.suspicious_tx;
+    if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
+  }catch(e){}
+}
+
 async function rcRun(){
   console.log('[rcRun] called');
   try {
@@ -1791,13 +1827,38 @@ async function rcRun(){
   const el = document.getElementById('rc-content');
   document.getElementById('rc-count').textContent='';
   rcAllRows=[];
-  // Try bucket cache first
-  const _RC_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/recon_cache.json';
+  window._rcLiveNotice='';
+  // Try bucket cache first.
+  // ⚡ With hq_recon_spawnfi on: the small rows file (recon_rows.json, write-recon-cache v24) first. Fresh (≤ hq_recon_cache_max_age_min,
+  // default 15 min) → the table comes from it and the big file loads in the background for Statement / History. Stale → live read,
+  // with a notice in the count line. Missing (v24 not deployed yet) → the big file as before. Switch off → exactly today's path.
+  const _RC_BUCKET = _RC_BIG_URL;
+  const _SI = window.spawnIncome, _sfOn = !!(_SI && _SI.spawnfiOn());
+  let _rcNotice = '', _dSmall = null, _dBig = null, _use = null;
   if (!rcBypassCache) try {
-    const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
-    if (rc.ok) {
-      const d = await rc.json();
-      window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
+    const maxAge = Number((window.__hqSwitches||{}).hq_recon_cache_max_age_min) || 15;
+    if (_sfOn) try {
+      const rs = await fetch(_RC_ROWS_URL + '?t=' + Math.floor(Date.now()/120000));
+      if (rs.ok) { const ds = await rs.json(); if (Array.isArray(ds.rows)) _dSmall = ds; }
+    } catch(e) {}
+    if (_sfOn && _dSmall && _SI.cacheDecision(_dSmall.generated_at, null, maxAge).useCache) _use = 'small';
+    else {
+      // small file missing or stale → the big file (writer rolled back, or its second upload failed); live only if that is stale too.
+      // Switch off: the big file as always, whatever its age (today's path).
+      const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
+      if (rc.ok) _dBig = await rc.json();
+      if (_sfOn) { const pk = _SI.pickCache(_dSmall ? _dSmall.generated_at : null, _dBig ? _dBig.generated_at : null, null, maxAge); _use = pk.use; _rcNotice = pk.notice; }
+      else _use = _dBig ? 'big' : 'live';
+    }
+    if (_use !== 'live') {
+      const _small = _use === 'small';
+      const d = _small ? _dSmall : _dBig;
+      if (_small) {
+        window._rcSnap = Object.assign({}, window._rcSnap||{}, {rows:d.rows, ghosts:d.ghosts, feed:d.feed, aliases:d.aliases, generated_at:d.generated_at, from:d.from, to:d.to});
+        setTimeout(_rcLoadBigSnap, 0);
+      } else {
+        window._rcSnap = d;   // packs / recons / history ride along for Statement + History (v19)
+      }
       if(Array.isArray(d.aliases)) _rcSetAliases(d.aliases);
       if(d.feed && d.feed.names) window._rcFeed = d.feed;
       if(d.packs && typeof rcStUseSnapshot==='function') rcStUseSnapshot(d);
@@ -1809,22 +1870,13 @@ async function rcRun(){
         // windows and tg_name fills are already in the file. One fetch = the
         // same rows the live path would have built with 4+ requests.
         const mapCached = row=>{
-          // same orphan guard as _rcFromSaved: no TG name → no saved income
-          const tgInc = row.tg_income_live!=null ? Number(row.tg_income_live)
-                      : (row.tg_income!=null && row.tg_name) ? Number(row.tg_income) : null;
-          const cloudInc = row.cloud_income_live!=null ? Number(row.cloud_income_live) : null;
-          const totalInc = (tgInc!=null||cloudInc!=null) ? Number(tgInc||0)+Number(cloudInc||0) : null;
-          const coins = Number(row.coins_total||0);
-          const gap = totalInc!=null ? totalInc-coins : (row.recon_gap!=null?Number(row.recon_gap):null);
-          const gap_pct = (coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-          // Rule 1/2: a BASHANG harvest inside this window that is not in the app
-          // means the window really ended earlier → TG check paused, not a verdict.
-          const paused = Array.isArray(row.book_inside) && row.book_inside.length>0 && gap!=null;
-          const flag = paused ? 'paused' : gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+          // Income by source (TG / Cloud / SpawnFi when the switch is on) + verdict: _rcFigures → dash.25. Same orphan guard
+          // (no TG name → no saved income), same saved-gap fallback, same Rule 1/2 pause (BASHANG harvest inside the window).
+          const F = _rcFigures(row, true);
           return {...row,
             _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
             collector:row.collector||'Unknown',
-            tg_income:tgInc, cloud_income:cloudInc, total_income:totalInc, gap, gap_pct, flag,
+            ...F,
             window_estimated:false,
             route_code:row.route_code||'ADMIN',
             is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
@@ -1844,7 +1896,7 @@ async function rcRun(){
           const stale = age >= 8;
           ageEl.innerHTML = rcAllRows.length + ' harvests · '
             + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';" title="One-fetch snapshot, rebuilt every 5 minutes with live TG + Cloud income">'
-            + (stale ? '⚠ snapshot ' : '⚡ snapshot ') + age + 'min ago</span>';
+            + (stale ? '⚠ snapshot ' : '⚡ snapshot ') + age + 'min ago' + (_small ? ' · rows file' : '') + '</span>';
         }
         // The snapshot rebuilds every 5 min, so a background live read is only
         // needed when it is unexpectedly old or empty for this range.
@@ -1853,6 +1905,7 @@ async function rcRun(){
       }
     }
   } catch(e) {}
+  window._rcLiveNotice=_rcNotice;
   el.innerHTML='<div style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading harvests…</div>';
   let harvestRows=[], offset=0;
   while(true){
@@ -1881,15 +1934,12 @@ async function rcRun(){
   const _rcFromSaved = row=>{
     // ORPHAN GUARD: a saved tg_income with no TG name behind it is leftover
     // garbage from an old run (the ₱454k "Valles" case) — never display it.
-    const tgInc=(row.tg_income!=null && row.tg_name)?Number(row.tg_income):null;
-    const coins=Number(row.coins_total||0);
-    const gap=tgInc!=null?tgInc-coins:(row.recon_gap!=null?Number(row.recon_gap):null);
-    const gap_pct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-    const flag = gap==null ? 'nodata' : Math.abs(gap)<=20 ? 'ok' : gap>20 ? 'alert' : 'warn';
+    // (harvests rows carry no live Cloud / SpawnFi figure, so this is TG only — _rcFigures keeps the orphan guard and saved gap)
+    const F=_rcFigures(row, true);
     return {...row,
       _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
       collector:row.actual_collector||row.collector||'Unknown',
-      tg_income:tgInc, gap, gap_pct, flag, cloud_income:null, total_income:tgInc,
+      ...F,
       window_estimated:false,
       route_code:row.route_code||'ADMIN',
       is_admin:!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL'
@@ -1918,6 +1968,7 @@ async function rcRun(){
   const rpcById={};      // harvest_id -> {tg_income, audited, submitted_at, window_start}
   const rpcTgByName={};  // fallback: tg_name -> tg_income
   const cloudById={};
+  const spawnfiById={};  // harvest_id -> {income, overlap} — ⚡ SpawnFi sales inside the window (switch hq_recon_spawnfi)
   const vendoTgMap={}, sheetTgMap={};
   const officeByVendo={}; // vendo_id -> [{record_date, amount}] — BASHANG office book
 
@@ -1954,6 +2005,17 @@ async function rcRun(){
       if(Array.isArray(cj)) cj.forEach(o=>{ if(o && o.harvest_id!=null) cloudById[o.harvest_id]=Number(o.cloud_income||0); });
     }catch(e){ console.warn('[rcRun] cloud income RPC failed',e); }
   })());
+  // ⚡ SpawnFi income per harvest window, one call per loaded month (spawn_spawnfi_recon_income, gateway v92). Only when the
+  // switch is on; a 4xx (gateway not yet v92) is caught and simply leaves the SpawnFi column empty.
+  if(window.spawnIncome && window.spawnIncome.spawnfiOn()) rpcMonths.forEach(m=>jobs.push((async()=>{
+    try{
+      const sr=await fetch(`${_SB}/rest/v1/rpc/spawn_spawnfi_recon_income`,{method:'POST', headers:{..._HDR}, body:JSON.stringify({p_month:m})});
+      let sj=await sr.json();
+      if(Array.isArray(sj) && sj.length===1 && Array.isArray(sj[0])) sj = sj[0];
+      else if(sj && !Array.isArray(sj) && Array.isArray(sj.spawn_spawnfi_recon_income)) sj = sj.spawn_spawnfi_recon_income;
+      if(Array.isArray(sj)) sj.forEach(o=>{ if(o && o.harvest_id!=null) spawnfiById[o.harvest_id]={income:Number(o.spawnfi_income||0), overlap:Number(o.overlap_days||0)}; });
+    }catch(e){ console.warn('[rcRun] SpawnFi income RPC failed',m,e); }
+  })()));
   for(let i=0;i<noTgIds.length;i+=200){
     const ids=noTgIds.slice(i,i+200);
     jobs.push((async()=>{
@@ -2020,21 +2082,15 @@ async function rcRun(){
       // saved fallback only when a TG name actually stands behind the value
       tgInc=Number(row.tg_income);
     }
-    const coins=Number(row.coins_total||0);
     const cloudInc=cloudById[row.id]!==undefined?Number(cloudById[row.id]):null;
-    // Total expected income = Telegram feed + Spawn Cloud coin drops (cloud-linked vendos).
-    // Without the cloud term a migrated vendo shows a false surplus.
-    const totalInc=(tgInc!=null||cloudInc!=null)?Number(tgInc||0)+Number(cloudInc||0):null;
-    // coins_total already includes saloy — compare directly with total income
-    const gap=totalInc!=null?totalInc-coins:null; // gap = income - coins. positive=short, negative=surplus
-    const gapPct=(coins>0&&gap!=null)?Math.abs(gap)/coins*100:null;
-    // OK only within ±20 pesos. Beyond that: flag by direction.
-    //   gap >  20  => TG more than coins   => SHORT (coins may be missing) => 'alert'
-    //   gap < -20  => coins more than TG    => SURPLUS (extra coins)         => 'warn'
-    const flag = gap==null ? 'nodata'
-               : Math.abs(gap)<=20 ? 'ok'
-               : gap>20 ? 'alert'
-               : 'warn';
+    const sf=spawnfiById[row.id];
+    // Total expected income = Telegram feed + Spawn Cloud coin drops (+ ⚡ SpawnFi sales when hq_recon_spawnfi is on).
+    // Without the cloud / SpawnFi term a migrated vendo shows a false surplus. coins_total already includes saloy.
+    // gap = income − coins: > 20 → coins SHORT → 'alert'; < −20 → extra coins → 'warn'; within ±20 → 'ok'.
+    // The live path never falls back to the gap saved on the row (phase 1 already showed that) — useSavedGap=false.
+    const F=_rcFigures({...row, tg_name:tg, tg_income_live:tgInc, cloud_income_live:cloudInc,
+                        spawnfi_income_live:sf?sf.income:undefined, spawnfi_overlap_days:sf?sf.overlap:0}, false);
+    const gap=F.gap, gapPct=F.gap_pct, flag=F.flag;
     const rc=row.route_code||'ADMIN';
     const isAdmin=!row.route_code||row.route_code.toUpperCase()==='ADMIN'||row.route_code.toUpperCase()==='MANUAL';
     // Nearest BASHANG office record for this vendo within ±3 days of the
@@ -2055,7 +2111,9 @@ async function rcRun(){
       bashang_amount, bashang_date,
       _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
       collector:row.actual_collector||row.collector||'Unknown',
-      tg_name:tg,tg_income:tgInc,cloud_income:cloudInc,total_income:totalInc,gap,gap_pct:gapPct,flag,
+      tg_name:tg, ...F, spawnfi_income_live:sf?sf.income:null, spawnfi_overlap_days:sf?sf.overlap:0,
+      // what may be written back to harvests (TG + Cloud only — stored figures never include SpawnFi, spec §3)
+      _w: window.spawnIncome ? window.spawnIncome.storedFigures({...row, tg_name:tg, tg_income_live:tgInc, cloud_income_live:cloudInc}) : {tg_income:F.tg_income, gap:F.gap, flag:F.flag},
       rpc_audited:rpcAudited,
       rpc_window_start:rpcWinStart,
       rpc_submitted_at:rpcSubmit,
@@ -2067,13 +2125,16 @@ async function rcRun(){
   // Phase 2 done — swap the live figures in and clear the "updating" badge.
   rcFilter();
   const cnt2=document.getElementById('rc-count');
-  if(cnt2) cnt2.textContent=rcAllRows.length+' harvests · live just now';
+  if(cnt2) cnt2.innerHTML=_rcEsc(rcAllRows.length+' harvests · live just now')
+    + (window._rcLiveNotice ? ' · <span style="color:#b45309;" title="The 5-minute snapshot is older than hq_recon_cache_max_age_min allows, so this read came straight from the database">' + _rcEsc(window._rcLiveNotice) + '</span>' : '');
   // Write back ONLY rows whose figures changed. The old code PATCHed every
   // matched row on every live read — hundreds of writes per Refresh click,
   // which is what made Refresh slow and the DB busy.
   const _num=v=>v==null?null:Math.round(Number(v)*100)/100;
+  // Stored figures are TG + Cloud only (r._w); the SpawnFi-inclusive verdict stays on screen and in the cache file.
+  const _wf=r=>r._w||r;
   const toSave = rcAllRows.filter(r=>r.tg_income!=null && (
-    _num(r.tg_income)!==_num(r._saved_tg) || _num(r.gap)!==_num(r._saved_gap) || (r.flag||null)!==(r._saved_flag||null)));
+    _num(r.tg_income)!==_num(r._saved_tg) || _num(_wf(r).gap)!==_num(r._saved_gap) || (_wf(r).flag||null)!==(r._saved_flag||null)));
   if(toSave.length){
     (async()=>{
       for(let i=0;i<toSave.length;i+=50){
@@ -2083,7 +2144,7 @@ async function rcRun(){
             fetch(`${_SB}/rest/v1/harvests?id=eq.${r.id}`,{
               method:'PATCH',
               headers:{..._HDR,'Prefer':'return=minimal'},
-              body:JSON.stringify({tg_income:r.tg_income,recon_gap:r.gap,recon_flag:r.flag,recon_at:new Date().toISOString()})
+              body:JSON.stringify({tg_income:r.tg_income,recon_gap:_wf(r).gap,recon_flag:_wf(r).flag,recon_at:new Date().toISOString()})
             })
           ));
         }catch(e){}
@@ -2389,7 +2450,7 @@ function rcnTgPick(i){
 }
 
 async function rcnSaveNames(vendoName){
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('rcn-sheet')?.value||'').trim();
   const tg=(document.getElementById('rcn-tg')?.value||'').trim();
   const msg=document.getElementById('rcn-msg');
@@ -2471,7 +2532,7 @@ async function rcnSaveHarvestWindow(){
   const ws=(document.getElementById('rcn-window-start')?.value||'').trim();
   const hd=(document.getElementById('rcn-harvest-date')?.value||'').trim();
   if(!ws&&!hd){ if(msg){msg.textContent='Enter at least one date';msg.style.color='#dc2626';} return; }
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd) u.harvest_date=hd;
@@ -2516,7 +2577,7 @@ async function rcnSaveHarvestWindow(){
 }
 
 async function rcnQuickLink(vendoName, tgName){
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   try{
     // Same duplicate-name hazard as rcnUnlink — do not blind-pick with limit=1.
     const r=await fetch(`${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
@@ -2659,7 +2720,7 @@ async function rcnUnlink(vendoName, opts){
       ok: markNoTg?'Mark NO TG':'Unlink', danger:true });
     if(!_go) return;
     const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
-    if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+    if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
 
     const vendoPatch = markNoTg
       ? {tg_name:null, tg_match_confirmed:false, no_tg:true}
@@ -2876,7 +2937,7 @@ function _rcSurplus(r){ return r.gap==null ? null : -Number(r.gap); }
 function _rcFeedLast(name){ const f=window._rcFeed; return (f && f.names && name) ? (f.names[name]||null) : null; }
 function _rcFeedSilent(r){
   if(!r.tg_name || !window._rcFeed) return false;
-  if(Number(r.tg_income)>0 || Number(r.cloud_income)>0) return false;
+  if(Number(r.tg_income)>0 || Number(r.cloud_income)>0 || Number(r.spawnfi_income)>0) return false;
   const last=_rcFeedLast(r.tg_name);
   const ws=String(r.rpc_window_start||r.harvest_window_start||r.window_start||'').slice(0,10);
   if(!last) return true;                 // not seen in the last 120 days at all
@@ -2885,7 +2946,7 @@ function _rcFeedSilent(r){
 // Rule 7: short this round AND short the round before, both with a clean window.
 function _rcIsRepeatShort(r){ return r.flag==='alert' && !!(r.prev_harvest && r.prev_harvest.short) && !_rcFeedSilent(r) && !_rcIsSharedFeed(r); }
 function _rcIsPaused(r){ return r.flag==='paused'; }
-function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && Number(r.coins_total||0)>0; }
+function _rcIsZeroTg(r){ return !!r.tg_name && r.tg_income===0 && !(Number(r.cloud_income)>0) && !(Number(r.spawnfi_income)>0) && Number(r.coins_total||0)>0; }
 // One coin vendo cannot take >₱2,000/day. A value like that means a bad
 // transaction in the feed (a parsed "total" message) or a wrong link.
 // One TG name feeding MORE THAN ONE machine: every machine on that name
@@ -2925,7 +2986,7 @@ function _rcDays(r){
   return d>0?d:1;
 }
 function _rcStats(rows){
-  const s={count:rows.length, coins:0, tg:0, cloud:0, gap:0, exactN:0, surplusN:0, deficitN:0,
+  const s={count:rows.length, coins:0, tg:0, cloud:0, spawnfi:0, gap:0, exactN:0, surplusN:0, deficitN:0,
            surplusAmt:0, deficitAmt:0, unmatchedN:0, unmatchedCoins:0, zeroN:0, confirmed:0, autoN:0, accountN:0, accountAmt:0, pausedN:0, repeatN:0, repeatAmt:0};
   rows.forEach(r=>{
     // 'auto' counts as confirmed work done — but stays its own kind, and is
@@ -2942,6 +3003,7 @@ function _rcStats(rows){
     s.coins+=Number(r.coins_total||0);
     s.tg+=Number(r.tg_income||0);
     s.cloud+=Number(r.cloud_income||0);
+    s.spawnfi+=Number(r.spawnfi_income||0);
     s.gap+=Number(r.gap);
     const v=-Number(r.gap);
     if(Math.abs(v)<=20) s.exactN++;
@@ -2963,6 +3025,9 @@ const _RC_FILTERS = [
   ['repeat',  '🔁 Repeat short', r=>_rcIsRepeatShort(r)],
   ['paused',  '📱 Not in app',  r=>_rcIsPaused(r)],
   ['surplus', '🟡 Surplus',    r=>r.flag==='warn'],
+  // ⚡ SpawnFi everywhere — the 4th item hides the chip while hq_recon_spawnfi is off
+  ['spawnfi', '⚡ SpawnFi',     r=>Number(r.spawnfi_income_live)>0,  ()=>!(window.spawnIncome&&window.spawnIncome.spawnfiOn())],
+  ['overlap', '⚠ Overlap',     r=>Number(r.spawnfi_overlap_days)>0, ()=>!(window.spawnIncome&&window.spawnIncome.spawnfiOn())],
   ['exact',   '✅ Exact',      r=>r.flag==='ok'],
   ['zero',    '⚠ TG ₱0',      r=>_rcIsZeroTg(r)],
   ['longwin', '⏳ Long window', r=>_rcLongWindowShort(r)],
@@ -3135,6 +3200,7 @@ function _rcSumHtml(rows){
   const word = Math.abs(net)<=20 ? '' : net>0 ? ' surplus' : ' short';
   return `<span>Coins: <b>${_php(s.coins)}</b></span><span>TG: <b>${_php(s.tg)}</b></span>`
     + (s.cloud?`<span style="color:#028867;">Cloud: <b>${_php(s.cloud)}</b></span>`:'')
+    + (s.spawnfi?`<span style="color:#311A8E;">⚡ SpawnFi: <b>${_php(s.spawnfi)}</b></span>`:'')
     + `<span>Net: ${_rcSigned(net)}<span style="color:#8a93a9;">${word}</span></span>`
     + (s.unmatchedN?`<span style="color:#4338ca;" title="Coins from harvests with no TG match — not counted above">+${_php(s.unmatchedCoins)} no TG</span>`:'');
 }
@@ -3163,6 +3229,22 @@ function _rcBookCell(h){
   return `<b style="color:#b45309;font-variant-numeric:tabular-nums;" title="BASHANG office record differs from this harvest's spawn share">${_php(amt)}</b>
     <div style="font-size:8.5px;color:#b45309;font-weight:800;">Δ ${d>0?'+':'−'}${_php(Math.abs(d))} vs share ${_php(share)}</div>${dateNote}`;
 }
+let _rcShowSpawnfi=false;   // set per render: hq_recon_spawnfi on AND at least one row has a SpawnFi figure
+// ⚡ notes under the flag (only with hq_recon_spawnfi on): "overlap Nd" — Telegram and SpawnFi both reported sales on the same
+// days (the SpawnFi line's switch date is missing or wrong, so the days count twice); "no source linked" — coins in the box but
+// the vendo has no TG name, Cloud device or SpawnFi line (income_sources from the v24 cache file; live rows show nothing here).
+function _rcSpawnfiNotes(h){
+  if(!(window.spawnIncome && window.spawnIncome.spawnfiOn())) return '';
+  let s='';
+  const ov=Number(h.spawnfi_overlap_days||0);
+  if(ov>0) s+=`<div style="font-size:9px;color:#b45309;font-weight:800;margin-top:3px;" title="Telegram and SpawnFi both reported sales on ${ov} day(s) of this window — set the switch date on the SpawnFi line so those days are not counted twice">⚠ overlap ${ov}d</div>`;
+  if(Array.isArray(h.income_sources) && !h.income_sources.length && Number(h.coins_total||0)>0){
+    const btn=(window.spawnLink && typeof window.spawnLink.open==='function' && h.vendo_id!=null)
+      ? ` <a href="#" style="color:#311A8E;font-weight:800;" onclick="window.spawnLink.open({vendo_id:${Number(h.vendo_id)},from:'recon'});return false;">Link SpawnFi ›</a>` : '';
+    s+=`<div style="font-size:9px;color:#6b7280;font-weight:700;margin-top:3px;" title="This vendo has coins but no Telegram name, Cloud device or SpawnFi line linked — nothing to compare the coins against">no source linked${btn}</div>`;
+  }
+  return s;
+}
 function _rcRowHtml(h, showCloud, flat){
   const fcls = h.flag==='alert'?'f-alert':h.flag==='warn'?'f-warn':h.flag==='nodata'?'f-nodata':h.flag==='paused'?'f-paused':'';
   const done = h.reconcile_status==='ok' || h.reconcile_status==='auto' || h.reconcile_status==='account';
@@ -3187,7 +3269,7 @@ function _rcRowHtml(h, showCloud, flat){
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
     <td class="rca-vcell">
       <div style="display:flex;align-items:center;gap:5px;min-width:0;"><span class="rca-ell" style="font-weight:800;color:#1a2250;" title="${_rcEsc(h.sheet_name||'')}">${name}</span>${noTg}
-        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button></div>
+        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button>${(h.vendo_id!=null&&window.spawnfiPage&&window.spawnfiPage.showOpenButtons())?`<button class="rca-iconbtn" onclick="openVendoById(${Number(h.vendo_id)})" title="Open the vendo page (TG / Cloud / SpawnFi)">📄</button>`:''}</div>
       ${tgLine}
     </td>
     <td style="color:#44506b;">${_rcEsc(h.area||'—')}</td>
@@ -3198,10 +3280,11 @@ function _rcRowHtml(h, showCloud, flat){
     <td class="r" style="color:#44506b;">${_rcFeedSilent(h)
       ? `<span class="rca-pill" style="background:#fdf2f8;color:#9d174d;font-size:9px;" title="This bot name last reported ${_rcEsc(_rcFeedLast(h.tg_name)||'never (120d)')} — nothing inside this harvest's window. The Telegram feed is down for it; not a money finding.">📡 silent${_rcFeedLast(h.tg_name)?' since '+_rcEsc(String(_rcFeedLast(h.tg_name)).slice(5)):''}</span>`
       : h.tg_income!=null?_php(h.tg_income):'<span style="color:#9ca3af;font-style:italic;">no match</span>'}</td>
-    ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>
-    <td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
+    ${showCloud?`<td class="r" style="color:#028867;">${h.cloud_income!=null?_php(h.cloud_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
+    ${_rcShowSpawnfi?`<td class="r" style="color:#311A8E;">${h.spawnfi_income!=null?_php(h.spawnfi_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
+    ${(showCloud||_rcShowSpawnfi)?`<td class="r" style="font-weight:700;color:#1a2250;">${h.total_income!=null?_php(h.total_income):'<span style="color:#d7dcea;">—</span>'}</td>`:''}
     <td class="r" style="white-space:nowrap;">${_rcSigned(sv)}${perDay}</td>
-    <td class="c">${_rcFlagPill(h.flag,h)}${zero}</td>
+    <td class="c">${_rcFlagPill(h.flag,h)}${zero}${_rcSpawnfiNotes(h)}</td>
     <td class="rca-ccell">
       ${h.reconcile_status==='ok'
         ? `<span class="rca-pill" style="background:#d9f7e4;color:#0f8c43;" title="${h.recon_by?'Confirmed by '+_rcEsc(h.recon_by):''}${h.recon_marked_at?' · '+_rcEsc(String(h.recon_marked_at).slice(0,16).replace('T',' ')):''}">☑ Confirmed${h.recon_by?` <span style="opacity:.75;font-weight:600;">· ${_rcEsc(h.recon_by)}</span>`:''}</span><button class="rca-undo" onclick="rcClearConfirm(${h.id},this)" title="Undo confirm">✕ undo</button>`
@@ -3220,7 +3303,7 @@ function _rcTable(rows, showCloud, flat){
   return `<div style="overflow-x:auto;"><table class="rca"><thead><tr>
     <th>Vendo</th><th>Area</th><th>Harvested</th><th>Window</th>
     <th class="r">Coins</th><th class="r" title="BASHANG office book — records the SPAWN SHARE. Compared against this harvest's spawn share, not gross coins.">📒 Bashang</th><th class="r">TG Income</th>
-    ${showCloud?'<th class="r" style="color:#028867;">☁ Cloud</th><th class="r">Total Income</th>':''}
+    ${showCloud?'<th class="r" style="color:#028867;">☁ Cloud</th>':''}${_rcShowSpawnfi?'<th class="r" style="color:#311A8E;" title="SpawnFi sales inside this harvest window (switch hq_recon_spawnfi)">⚡ SpawnFi</th>':''}${(showCloud||_rcShowSpawnfi)?'<th class="r">Total Income</th>':''}
     <th class="r" title="Coins minus income. + = extra coins (surplus), − = coins short">Coins − Income</th>
     <th class="c">Flag</th><th>Confirm / Note</th>
   </tr></thead><tbody>${rows.map(h=>_rcRowHtml(h,showCloud,flat)).join('')}</tbody></table></div>`;
@@ -3247,6 +3330,7 @@ function _rcRenderHead(d, collector){
       <div class="rca-glass"><div class="l">Coins</div><div class="v">${_php(s.coins)}</div></div>
       <div class="rca-glass"><div class="l">TG Income</div><div class="v">${_php(s.tg)}</div></div>
       ${s.cloud?`<div class="rca-glass"><div class="l">☁ Cloud</div><div class="v">${_php(s.cloud)}</div></div>`:''}
+      ${s.spawnfi?`<div class="rca-glass"><div class="l">⚡ SpawnFi</div><div class="v">${_php(s.spawnfi)}</div></div>`:''}
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','exact')" title="Show exact rows"><div class="l">✅ Exact</div><div class="v">${s.exactN}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','surplus')" title="Show surplus rows"><div class="l">🟡 Surplus</div><div class="v">${s.surplusN}${s.surplusN?` · ${_php(s.surplusAmt)}`:''}</div></div>
       <div class="rca-glass rca-stat" onclick="rcSetView('filter','deficit')" title="Show deficit rows"><div class="l">🔴 Deficit</div><div class="v">${s.deficitN}${s.deficitN?` · ${_php(s.deficitAmt)}`:''}</div></div>
@@ -3262,7 +3346,7 @@ function _rcRenderChips(d){
   const box=document.getElementById('rca-chips'); if(!box) return;
   const q=(_rcView.q||'').trim().toLowerCase();
   const base=d.rows.filter(r=>_rcSearchHit(r,q));
-  box.innerHTML=_RC_FILTERS.map(([k,label,fn])=>{
+  box.innerHTML=_RC_FILTERS.filter(f=>!(f[3]&&f[3]())).map(([k,label,fn])=>{
     const n=base.filter(fn).length;
     const on=_rcView.filter===k;
     return `<button class="rca-chip${on?' on':''}" ${(!n&&!on&&k!=='all')?'disabled':''} onclick="rcSetView('filter','${k}')">${label}<b>${n}</b></button>`;
@@ -3277,6 +3361,7 @@ function _rcRenderBody(d){
 function _rcRenderBodyInner(d,body){
   const rows=_rcVisibleRows(d.rows);
   const showCloud=d.rows.some(r=>r.cloud_income!=null);
+  _rcShowSpawnfi=!!(window.spawnIncome && window.spawnIncome.spawnfiOn()) && d.rows.some(r=>r.spawnfi_income_live!=null);
   if(!rows.length){
     body.innerHTML=`<div class="rca-empty">🎉 Nothing here for this filter.${_rcView.filter!=='all'||_rcView.q?` <a href="#" onclick="rcSetView('reset');return false;">Show all</a>`:''}</div>`;
     return;
@@ -4845,7 +4930,7 @@ let _klItems = [];
 const KI_VAR = { original:'Original', duplicate:'Duplicate', pungpung:'Pungpung' };
 const KI_LBL = it => it.key_kind==='board' ? '🔌 BOARD KEY' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
 
-/* per-key checkbox: mark a single key_items row returned (password 101510) */
+/* per-key checkbox: mark a single key_items row returned (admin password) */
 function kiToggle(itemId, makeReturned){
   const it = _klItems.find(x=>x.id===itemId); if(!it) return;
   const verb = makeReturned ? 'RETURNED' : 'NOT returned';
@@ -5391,7 +5476,7 @@ function klDetail(id){
 
 function klCloseDetail(){ const ov=document.getElementById('kl-detail-modal'); if(ov) ov.remove(); }
 
-// ── Edit a key-custody record (password 101510 required to save) ──
+// ── Edit a key-custody record (admin password required to save) ──
 function klEdit(id){
   const r = _klRows.find(x=>x.id===id); if(!r) return;
   klCloseDetail();
@@ -5446,10 +5531,10 @@ async function klSaveEdit(id){
     lineman_reason: (gv('kl-e-reason').trim())||null,
     notes:          (gv('kl-e-notes').trim())||null
   };
-  // password gate (101510) using the shared pretty popup
+  // password gate (admin password) using the shared pretty popup
   const pw = await askAdminPw('Enter admin password to save these changes.');
   if(pw===null) return;
-  if(pw!=='101510'){ markAdminPwWrong(); return; }
+  if(!window.spawnAdminPwOk(pw)){ markAdminPwWrong(); return; }
   const pwModal = document.getElementById('spawn-pw-modal'); if(pwModal) pwModal.remove();
   try{
     const r = await fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)});

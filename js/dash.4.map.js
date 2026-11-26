@@ -2247,6 +2247,9 @@ async function openVendoDetail(vendo, area) {
   const susList = document.getElementById("sus-list"); if (susList) susList.innerHTML = '';
   const harvestBox = document.getElementById('vt-harvest-content'); if (harvestBox) harvestBox.innerHTML = '';
   if (vendoChart) { vendoChart.destroy(); vendoChart = null; }
+  // ⚡ SpawnFi tab (dash.26) belongs to the previous vendo until openVendoById says otherwise — hide and empty it
+  const sfBtn = document.getElementById('vt-spawnfi-btn'); if (sfBtn) sfBtn.style.display = 'none';
+  const sfBox = document.getElementById('vt-spawnfi-content'); if (sfBox) sfBox.innerHTML = '';
   showBread(`Vendos → ${vendo}`, closeVendo);
 
   // No default date filter — load ALL transactions
@@ -2255,6 +2258,15 @@ async function openVendoDetail(vendo, area) {
 
   await Promise.all([loadVendoTxns(), loadVendoMonthly(vendo), loadVendoSuspicious(vendo)]);
 }
+
+// For openers outside this file (dash.26 SpawnFi-only vendo page): drop the open vendo's state so a late Telegram
+// response, the Harvest tab (currentVendo) or the Monthly chart cannot show one vendo's figures under another's name.
+window.vtResetForExternal = function(){
+  vtReq++;
+  if (vtAbort) { try { vtAbort.abort(); } catch(e){} }
+  vtAbort = null; currentVendo = ''; vtxnAll = []; vtFull = false; vtShown = 100;
+  if (vendoChart) { vendoChart.destroy(); vendoChart = null; }
+};
 
 async function loadVendoHarvestRecords() {
   const vendo = currentVendo;

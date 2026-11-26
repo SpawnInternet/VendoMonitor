@@ -537,7 +537,7 @@ window.spawnfiTabShown = async function(){
     <div style="display:flex;gap:6px;padding:8px 12px;flex-wrap:wrap">
       ${[['all', 'All'], ['linked', 'Linked to a vendo'], ['unlinked', 'Not linked yet'], ['today', 'Sold today']].map(([k, l]) => `<button data-sfif="${k}" style="padding:4px 10px;border:1px solid ${filter === k ? '#1B6BE0' : '#dbe3f4'};border-radius:999px;background:${filter === k ? '#1B6BE0' : '#fff'};color:${filter === k ? '#fff' : '#334155'};font-size:12px;font-weight:700;cursor:pointer">${l}</button>`).join('')}
       <span style="flex:1"></span>
-      <span style="font-size:11px;color:var(--mu,#6b7280)">Link / unlink in Employees → 🧺 Harvest agent. Rows are our own copy — the panel cannot delete them.</span>
+      <span style="font-size:11px;color:var(--mu,#6b7280)">${(window.spawnLink && window.spawnLink.enabled()) ? 'Link › / Change › on a row opens the link widget (admin password).' : 'Link / unlink in Employees → 🧺 Harvest agent.'} Rows are our own copy — the panel cannot delete them.</span>
     </div>`;
   const vis = rows.filter(r => filter === 'all' || (filter === 'linked' && r.link_status === 'linked') || (filter === 'unlinked' && r.link_status !== 'linked') || (filter === 'today' && Number(r.today_pesos) > 0));
   const tbl = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -545,7 +545,7 @@ window.spawnfiTabShown = async function(){
     <tbody>${vis.map(r => `<tr style="border-top:1px solid var(--line,#eef2f7)">
       <td style="padding:6px 12px;font-weight:700">${esc(r.vlan)}</td>
       <td title="${esc(r.site_name)}" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.site_name)}</td>
-      <td>${r.link_status === 'linked' ? `<span style="color:#0E8A5F;font-weight:700">✓</span> #${esc(r.vendo_id)} ${esc(r.vendo_name || '')}${r.tg_name ? ` <span style="color:var(--mu,#6b7280)">· TG ${esc(r.tg_name)}</span>` : ''}` : `<span style="color:#F5A623;font-weight:700">unlinked</span>${r.suggested_vendo_id ? ` <span style="color:var(--mu,#6b7280)">(agent suggests #${esc(r.suggested_vendo_id)})</span>` : ''}`}</td>
+      <td>${r.link_status === 'linked' ? `<span style="color:#0E8A5F;font-weight:700">✓</span> ${(window.spawnfiPage && window.spawnfiPage.showOpenButtons()) ? `<a href="#" onclick="window.openVendoById(${Number(r.vendo_id)});return false;" style="color:inherit;text-decoration:none;font-weight:700" title="Open this vendo's page">#${esc(r.vendo_id)} ${esc(r.vendo_name || '')}</a>` : `#${esc(r.vendo_id)} ${esc(r.vendo_name || '')}`}${r.tg_name ? ` <span style="color:var(--mu,#6b7280)">· TG ${esc(r.tg_name)}</span>` : ''}` : `<span style="color:#F5A623;font-weight:700">unlinked</span>${r.suggested_vendo_id ? ` <span style="color:var(--mu,#6b7280)">(agent suggests #${esc(r.suggested_vendo_id)})</span>` : ''}`}${window.spawnLink ? ' ' + window.spawnLink.button(r.link_status === 'linked' ? 'Change ›' : 'Link ›', { router: r.router_name, vlan: r.vlan, site_name: r.site_name, from: 'spawnfi' }) : ''}</td>
       <td style="text-align:right;font-weight:${Number(r.today_pesos) > 0 ? 700 : 400}">${peso(r.today_pesos)}</td>
       <td style="text-align:right">${peso(r.d7_pesos)}</td>
       <td style="text-align:right">${peso(r.d30_pesos)}</td>
