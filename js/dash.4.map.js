@@ -1195,7 +1195,7 @@ function globalSearch(q) {
       const nm = v.sheet_name || v.tg_name || v.owner_name || ('#'+v.id);
       const bits = [v.area||'—', v.vlan ? 'VLAN '+v.vlan : null, v.vendo_code||null, (v.tg_name && v.tg_name!==nm) ? '📶 '+v.tg_name : null, (v.owner_name && v.owner_name!==nm) ? '👤 '+v.owner_name : null].filter(Boolean).join(' · ');
       const right = v.status && v.status!=='active' ? '<span style="color:#dc2626;font-weight:700;">'+esc(v.status)+'</span>' : (v.last_harvest_date ? 'last '+v.last_harvest_date : '');
-      return row("gsOpenVendo("+JSON.stringify(nm).replace(/"/g,'&quot;')+","+JSON.stringify(v.area||'').replace(/"/g,'&quot;')+")", esc(nm), esc(bits), right + ' <span style="color:#1565c0;font-weight:700;">ledger ›</span>');
+      return row("gsOpenVendo("+JSON.stringify(nm).replace(/"/g,'&quot;')+","+JSON.stringify(v.area||'').replace(/"/g,'&quot;')+","+(Number(v.id)||0)+")", esc(nm), esc(bits), right + ' <span style="color:#1565c0;font-weight:700;">open ›</span>');
     }).join('');
     if (S.length) html += hdr('👤 Subscribers', S.length, '#0f766e') + S.map(s => {
       const bits = [s.area||'—', s.acct_no ? '#'+s.acct_no : null, s.plan_mbps ? s.plan_mbps+' Mbps' : null, s.monthly_amount ? '₱'+Number(s.monthly_amount).toLocaleString()+'/mo' : null].filter(Boolean).join(' · ');
@@ -1205,11 +1205,11 @@ function globalSearch(q) {
     drop.innerHTML = html;
   }, 280);
 }
-async function gsOpenVendo(name, area) {
+async function gsOpenVendo(name, area, id) {
   document.getElementById("search-drop").style.display = "none";
   document.getElementById("global-search").value = "";
   if (typeof window.ensureHarvest === 'function') { try { await window.ensureHarvest(); } catch(e){} }
-  if (typeof htShowVendoProfile === 'function') htShowVendoProfile(name, area, 'ledger');
+  if (typeof htShowVendoProfile === 'function') htShowVendoProfile(name, area, 'info', id || null);
   else openVendoFromSearch(name, area);
 }
 function gsOpenSub(id) {
@@ -1248,33 +1248,11 @@ function htShowVendoFromRow(tr) {
   htShowVendoById(id, name, area);
 }
 
+/* 2026-11-26: one card loader for every page. This copy used to open on Names, look harvests up by name and
+   keep the previous vendo's ledger / keys / SpawnFi on screen; it now hands over to the full loader (Info first, by id). */
 async function htShowVendoById(id, name, area) {
-  let modal = document.getElementById('vp-modal');
-  if (!modal) {
-    // Create modal if not exists (same as htShowVendoProfile)
-    htShowVendoProfile(name, area);
-    return;
-  }
-  modal.style.display='flex';
-  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null;
-  document.getElementById('vp-title').textContent=name||'—';
-  document.getElementById('vp-sub').textContent=area||'';
-  document.getElementById('vp-edit-btn').textContent='Edit';
-  document.getElementById('vp-body').innerHTML='<div style="padding:30px;text-align:center;color:#6b7280;font-size:13px;">Loading...</div>';
-  // Activate Names tab by default
-  document.querySelectorAll('.vp-tab').forEach(t=>{t.style.borderBottomColor='transparent';t.style.color='#6b7280';t.style.fontWeight='';});
-  const namesBtn = document.getElementById('vp-tab-names');
-  if(namesBtn){namesBtn.style.borderBottomColor='#1565c0';namesBtn.style.color='#1565c0';namesBtn.style.fontWeight='600';}
-  try {
-    // Look up by id (most reliable)
-    const [vr, hr] = await Promise.all([
-      id ? sb('vendos','id=eq.'+id+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1)
-         : sb('vendos','sheet_name=eq.'+encodeURIComponent(name)+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days',1),
-      sb('harvests','sheet_name=eq.'+encodeURIComponent(name)+'&select=harvest_date,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
-    ]);
-    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
-    vpRenderNames();
-  } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
+  if (typeof htShowVendoProfile !== 'function' && typeof window.ensureHarvest === 'function') { try { await window.ensureHarvest(); } catch(_){} }
+  if (typeof htShowVendoProfile === 'function') return htShowVendoProfile(name, area, 'info', id || null);
 }
 
 

@@ -124,7 +124,9 @@ function vpTgSelect(tgName) {
   if (inp) inp.value = tgName;
   if (el) el.style.display = 'none';
 }
-async function htShowVendoProfile(name, area, startTab) {
+/* 2026-11-26: always opens on Info (startTab is ignored on purpose — the owner wants Info first), loads the vendo
+   by id when one is given, and the harvests by vendo id, so two vendos with the same name never mix. */
+async function htShowVendoProfile(name, area, startTab, vendoId) {
   let modal = document.getElementById('vp-modal');
   if (!modal) {
     modal = document.createElement('div');
@@ -150,21 +152,26 @@ async function htShowVendoProfile(name, area, startTab) {
   }
   modal.style.display='flex';
   window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null; window._vpGpsOpen=false; window._vpGpsFile=null; window._vpTabNow='info';
+  window._vpBook=null; window._vpX=null; window._vpEditing=null;   // never show the previous vendo's ledger / links
+  const _myOpen = window._vpOpenSeq = (window._vpOpenSeq||0)+1;
   document.getElementById('vp-title').textContent=name||'—';
   document.getElementById('vp-sub').textContent=area||'';
   document.getElementById('vp-edit-btn').textContent='Edit';
   document.getElementById('vp-body').innerHTML='<div style="padding:30px;text-align:center;color:#6b7280;font-size:13px;">Loading...</div>';
   document.querySelectorAll('.vp-tab').forEach((t,i)=>{t.style.borderBottomColor=i===0?'#1565c0':'transparent';t.style.color=i===0?'#1565c0':'#6b7280';t.style.fontWeight=i===0?'600':'';});
   try {
-    const enc=encodeURIComponent(name);
-    const [vr,hr]=await Promise.all([
-      sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
-      sb('harvests','sheet_name=eq.'+enc+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
-    ]);
+    const VSEL='id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url,no_tg,server_name';
+    const vr = vendoId ? await sb('vendos','id=eq.'+vendoId+'&select='+VSEL,1)
+                       : await sb('vendos','sheet_name=eq.'+encodeURIComponent(name)+'&select='+VSEL,1);
+    const v0 = Array.isArray(vr) ? vr[0] : null;
+    const hr = v0 && v0.id ? await sb('harvests','vendo_id=eq.'+v0.id+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
+                           : await sb('harvests','sheet_name=eq.'+encodeURIComponent(name)+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500);
+    if (_myOpen !== window._vpOpenSeq) return;   // another card was opened meanwhile
+    if (v0) { document.getElementById('vp-title').textContent=v0.sheet_name||v0.tg_name||name||'—'; document.getElementById('vp-sub').textContent=v0.area||area||''; window._vpName=v0.sheet_name||name; }
     window._vpVendo=vr[0]||null; window._vpHarvests=hr||[]; window._vpBook=null; window._vpX=null; window._vpEditing=null;
     vpLoadBook(); vpLoadExtras();
     vpRenderInfo();
-    if(startTab){ const btns=document.querySelectorAll('.vp-tab'); const idx={info:0,ledger:1,recon:2,names:3}[startTab]; if(btns[idx]) vpTab(startTab, btns[idx]); }
+    // always Info first (owner's choice, 2026-11-26)
   } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
 }
 function vpCancelPullout(){const ov=document.getElementById('vp-po-ov');if(ov)ov.remove();}
@@ -183,7 +190,8 @@ function vpRenderInfo(){
   const v=window._vpVendo,h=window._vpHarvests||[],edit=window._vpEditMode;
   const days=v&&v.last_harvest_date?Math.floor((Date.now()-new Date(v.last_harvest_date))/86400000):null;
   const dc=days===null?'#6b7280':days>46?'#dc2626':days>30?'#d97706':'#15803d';
-  const tgB=v&&v.tg_name?'<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">matched</span>':'<span style="background:#fef9c3;color:#b45309;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">unmatched</span>';
+  const noTg = !!(v && v.no_tg);
+  const tgB=noTg?'<span style="background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">⚡ SpawnFi — no Telegram</span>':v&&v.tg_name?'<span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">matched</span>':'<span style="background:#fef9c3;color:#b45309;padding:1px 6px;border-radius:4px;font-size:10px;margin-left:6px;">unmatched</span>';
   const gpsL=v&&v.lat&&v.lng?'&nbsp;<a href="https://www.google.com/maps?q='+v.lat+','+v.lng+'" target="_blank" style="color:#1565c0;font-size:11px;">Maps &#x2197;</a>':'';
   // Profile photo block
   const photoUrl = v&&v.photo_url ? v.photo_url : '';
@@ -209,7 +217,7 @@ function vpRenderInfo(){
       +'<div id="vp-tg-results" style="display:none;position:absolute;top:34px;left:0;right:0;background:#fff;border:1px solid #1565c0;border-radius:6px;max-height:180px;overflow-y:auto;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.1);"></div>'
       +'</div></div>';
   } else {
-    h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.tg_name||'&#8212;')+tgB+'</div></div>';
+    h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(noTg?'&#8212;':(v&&v.tg_name||'&#8212;'))+tgB+'</div></div>';
   }
   h1+=_vf('Area',v&&v.area,null,false)+_vf('VLAN',v&&v.vlan,null,false)+_vf('Status',v&&v.status,null,false);
   h1+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed;">&#128205; Location &amp; Contact</div>';
@@ -328,8 +336,9 @@ function vpLinksRender(){
   h+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#311A8E;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#eef2ff;border-radius:6px;border-left:3px solid #311A8E;">🔗 Links, keys &amp; group</div>';
 
   // ── Telegram ──
-  h+=row('📶','Telegram', v.tg_name?klEsc(v.tg_name)+' <span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;">linked</span>':'<span style="color:#b45309;">not linked</span>',
-    btn(v.tg_name?'Change':'Link','vpEdit(\'tg\')')+(v.tg_name?btn('Unlink','vpTgUnlink()','red'):''),
+  const noTgV = !!v.no_tg;
+  h+=row('📶','Telegram', noTgV?'<span style="color:#5b21b6;">none — ⚡ SpawnFi vendo, sales come from its SpawnFi line</span>':v.tg_name?klEsc(v.tg_name)+' <span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;">linked</span>':'<span style="color:#b45309;">not linked</span>',
+    btn(noTgV||!v.tg_name?'Link':'Change','vpEdit(\'tg\')')+(!noTgV&&v.tg_name?btn('Unlink','vpTgUnlink()','red'):''),
     E==='tg'?'<input id="vp-tg-q" placeholder="🔍 Type part of the Telegram name…" oninput="vpTgFind(this.value)" style="'+inp+'width:100%;"><div id="vp-tg-res" style="margin-top:6px;max-height:200px;overflow:auto;font-size:12px;color:#6b7280;">Type at least 2 letters.</div>':'');
 
   // ── SpawnFi ──
@@ -1182,7 +1191,7 @@ async function htShowCollectorPopup(collectorName){
     const photoHtml = h.photo_url ? `<img src="${h.photo_url}" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;">` : `<div style="width:52px;height:52px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🏪</div>`;
     const nm = h.sheet_name||h.vendo_name||h.tg_name||'';
     return `
-    <div onclick='htShowVendoProfile(${klArg(nm, h.area||"", "ledger")})' title="Open ledger"
+    <div onclick='htShowVendoProfile(${klArg(nm, h.area||"", "info")})' title="Open vendo"
          style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;"
          onmouseover="this.style.borderColor='#1565c0';this.style.boxShadow='0 2px 10px rgba(21,101,192,.15)'" onmouseout="this.style.borderColor='#e5e7eb';this.style.boxShadow='none'">
       <div style="display:flex;gap:10px;align-items:flex-start;">
