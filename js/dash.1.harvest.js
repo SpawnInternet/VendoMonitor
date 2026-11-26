@@ -161,8 +161,8 @@ async function htShowVendoProfile(name, area, startTab) {
       sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
       sb('harvests','sheet_name=eq.'+enc+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
-    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[]; window._vpBook=null;
-    vpLoadBook();
+    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[]; window._vpBook=null; window._vpX=null; window._vpEditing=null;
+    vpLoadBook(); vpLoadExtras();
     vpRenderInfo();
     if(startTab){ const btns=document.querySelectorAll('.vp-tab'); const idx={info:0,ledger:1,recon:2,names:3}[startTab]; if(btns[idx]) vpTab(startTab, btns[idx]); }
   } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
@@ -224,9 +224,11 @@ function vpRenderInfo(){
   const L=vpLedgerRows();
   if(L.rows.length){const tn=L.net,ts=L.spawn;h1+='<div style="margin-top:12px;background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;">Lifetime ('+L.rows.length+' harvests'+(L.book?' · '+L.book+' from BASHANG only':'')+(L.loading?' · loading BASHANG…':'')+')</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:17px;font-weight:700;color:#1565c0;">'+_php(tn)+'</div><div style="font-size:10px;color:#6b7280;">Total net'+(L.book?' (app harvests)':'')+'</div></div><div><div style="font-size:17px;font-weight:700;color:#15803d;">'+_php(ts)+'</div><div style="font-size:10px;color:#6b7280;">Spawn 75%'+(L.book?' (app + BASHANG)':'')+'</div></div></div></div>';}
   h1+='</div></div>';
+  if(!edit) h1+='<div id="vp-links"></div>';
   if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
   else if(v&&v.status!=='pulled_out'){h1+='<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button onclick="vpToggleEdit()" style="height:28px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Edit info</button></div>';}
   document.getElementById('vp-body').innerHTML=h1;
+  if(!edit) vpLinksRender();
   if(window._vpGpsOpen && !edit) vpGpsTool(window._vpGpsFile||null, true);
 }
 /* 2026-11-26: shared GPS reader (js/gps-reader.js) on the vendo card — reads the saved photo or a new one
@@ -240,6 +242,234 @@ function vpGpsTool(file, keepOpen){
   SpawnGps.panel(host,{kind:'vendo', id:v.id, name:v.sheet_name, area:v.area, lat:v.lat, lng:v.lng, photoUrl:v.photo_url, file:file||null,
     onSaved:(g,out)=>{ v.lat=g.lat; v.lng=g.lng; if(out&&out.photoUrl) v.photo_url=out.photoUrl; window._vpGpsOpen=false; vpRenderInfo(); }});
 }
+/* ══ VENDO CARD: links, keys, area & group, same-name check (2026-11-26) ══
+   Telegram link/unlink (spawn_link_apply / unlink_tg), SpawnFi line (spawn_card_spawnfi_set), address,
+   area + harvest group (spawn_card_area_group_set), keys with holder colour + code (spawn_card_key_set,
+   next code from the printed pool when none is typed), and a warning when another vendo has the same name
+   (spawn_card_same_name → Different vendo / Merge request via spawn_card_name_decide).
+   Every write asks for the admin password; the database checks it again. Inline — no pop-ups. */
+const VP_KEYS=[['pungpung','🪙 Pungpung','coin key, collector copy'],['duplicate','🪙 Coins duplicate',''],['board','🔌 Board key','']];
+const VP_AREAS=['DIPOLOG','DAPITAN','SINDANGAN','POLANCO','ROXAS','SINAMAN','MINAOG','MIX AREAS'];
+async function vpRpc(fn, body){
+  const r=await fetch(_SB+'/rest/v1/rpc/'+fn,{method:'POST',headers:_HDR,body:JSON.stringify(body||{})});
+  let j=null; try{ j=await r.json(); }catch(_){}
+  if(!r.ok) throw new Error((j&&(j.message||j.error))||('HTTP '+r.status));
+  if(j&&j.ok===false) throw new Error(j.error||'refused');
+  return j;
+}
+async function vpGet(q){
+  const r=await fetch(_SB+'/rest/v1/'+q,{headers:_HDR}); const j=await r.json();
+  if(!r.ok||!Array.isArray(j)) throw new Error((j&&j.message)||('HTTP '+r.status)); return j;
+}
+async function vpPw(what){
+  const pw=await askAdminPw('Enter admin password to '+what+'.');
+  if(pw===null) return null;
+  if(pw!=='101510'){ if(typeof markAdminPwWrong==='function') markAdminPwWrong(); toast('Wrong password'); return null; }
+  return pw;
+}
+async function vpLoadExtras(){
+  const v=window._vpVendo; if(!v||!v.id) return;
+  const id=v.id, X={loading:true};
+  window._vpX=X;
+  const safe=p=>p.catch(e=>({__err:String(e.message||e)}));
+  const [same, keys, sfi, item, groups, palette, pool]=await Promise.all([
+    safe(vpRpc('spawn_card_same_name',{p_vendo_id:id})),
+    safe(vpGet('vendo_key_qr?vendo_id=eq.'+id+'&select=qr_code,key_type,holder_color,loan_status,borrowed_by,bound_at&order=bound_at.desc')),
+    safe(vpGet('v_spawnfi_sales_v1?vendo_id=eq.'+id+'&link_status=eq.linked&select=router_name,vlan,site_name,d7_pesos,d30_pesos,last_sale')),
+    safe(vpGet('harvest_group_items?vendo_id=eq.'+id+'&select=group_run_id&limit=5')),
+    safe(vpGet('harvest_groups?select=id,group_id,group_label,area,collector,total_vendos&order=area.asc,group_id.asc')),
+    safe(vpGet('install_color_palette?select=name,hex&order=sort.asc')),
+    safe(vpRpc('spawn_next_fobs',{}))
+  ]);
+  if(!window._vpVendo||window._vpVendo.id!==id) return;   // another card opened meanwhile
+  Object.assign(X,{loading:false, same:Array.isArray(same)?same:[], sameErr:same&&same.__err, keys:Array.isArray(keys)?keys:[],
+    sfi:Array.isArray(sfi)?sfi:[], groupIds:Array.isArray(item)?item.map(x=>x.group_run_id):[], groups:Array.isArray(groups)?groups:[],
+    palette:Array.isArray(palette)?palette:[], pool:(pool&&!pool.__err)?pool:{}});
+  if((window._vpTabNow||'info')==='info' && !window._vpEditMode) vpLinksRender();
+}
+function vpColorDot(name, X){
+  if(!name) return '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px dashed #cbd5e1;vertical-align:-2px;" title="no colour set"></span>';
+  const p=(X&&X.palette||[]).find(c=>c.name===name); const hex=p?p.hex:name;
+  return '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:'+klEsc(hex)+';border:1px solid #94a3b8;vertical-align:-2px;" title="'+klEsc(name)+'"></span>';
+}
+function vpLinksRender(){
+  const host=document.getElementById('vp-links'); const v=window._vpVendo, X=window._vpX;
+  if(!host||!v) return;
+  if(!X||X.loading){ host.innerHTML='<div style="margin-top:12px;font-size:12px;color:#9ca3af;">Loading links, keys and group…</div>'; return; }
+  const E=window._vpEditing||'';
+  const btn=(t,on,kind)=>'<button type="button" onclick="'+on+'" style="height:26px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;'
+    +(kind==='red'?'background:#fff;color:#b91c1c;border:1px solid #fca5a5;':kind==='solid'?'background:#311A8E;color:#fff;border:none;':'background:#eef2ff;color:#311A8E;border:1px solid #c7d2fe;')+'">'+t+'</button>';
+  const row=(icon,label,val,acts,editor)=>'<div style="border:1px solid #e5e7eb;border-radius:10px;background:#fff;padding:8px 10px;margin-bottom:6px;">'
+    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><div style="width:120px;flex-shrink:0;font-size:11px;color:#6b7280;font-weight:700;">'+icon+' '+label+'</div>'
+    +'<div style="flex:1;min-width:160px;font-size:13px;color:#1e293b;font-weight:600;">'+val+'</div><div style="display:flex;gap:5px;flex-wrap:wrap;">'+acts+'</div></div>'
+    +(editor?'<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #e5e7eb;">'+editor+'</div>':'')+'</div>';
+  const inp='height:32px;padding:0 9px;border:1.5px solid #d1d5db;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+  let h='';
+
+  // ── same-name warning ──
+  const open=(X.same||[]).filter(m=>m.decision!=='different');
+  if(open.length){
+    h+='<div style="border:1.5px solid #fbbf24;background:#fffbeb;border-radius:10px;padding:9px 11px;margin-bottom:8px;">'
+      +'<div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px;">⚠ Same name seen on '+open.length+' other vendo'+(open.length>1?'s':'')+' — the same vendo, or a different one?</div>'
+      +open.map(m=>{
+        const req=m.decision==='merge_requested';
+        const facts=[m.area, m.vlan!=null?'VLAN '+m.vlan:'', m.vendo_code, m.tg_name?'TG '+m.tg_name:'no TG', m.harvests+' harvest'+(m.harvests==1?'':'s'), m.last_harvest?'last '+m.last_harvest:'', m.has_gps?'GPS':'no GPS', m.status!=='active'?m.status:''].filter(Boolean).map(klEsc).join(' · ');
+        const ed=E==='merge:'+m.id;
+        return '<div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:7px 9px;margin-top:5px;">'
+          +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><div style="flex:1;min-width:180px;"><b style="font-size:13px;color:#1e293b;cursor:pointer;text-decoration:underline;" onclick="htShowVendoProfile('+JSON.stringify(m.sheet_name||'').replace(/"/g,'&quot;')+','+JSON.stringify(m.area||'').replace(/"/g,'&quot;')+')">'+klEsc(m.sheet_name||m.owner_name||('#'+m.id))+'</b> <span style="font-size:10px;color:#9ca3af;">#'+m.id+' · match '+Math.round(m.score*100)+'%</span>'
+          +'<div style="font-size:11px;color:#6b7280;margin-top:1px;">'+facts+'</div></div>'
+          +(req?'<span style="font-size:11px;font-weight:800;color:#7c3aed;">🔀 Merge requested</span>':btn('Different vendo','vpNameDecide('+m.id+',\'different\')')+btn('🔀 Merge…','vpEdit(\'merge:'+m.id+'\')','solid'))+'</div>'
+          +(ed?'<div style="margin-top:7px;font-size:12px;color:#374151;">Which record stays? The other one is merged into it (harvests, keys, links, GPS) — done carefully with a backup, not instantly.<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">'
+              +btn('Keep this one ('+klEsc(v.sheet_name||'#'+v.id)+')','vpNameDecide('+m.id+',\'merge_requested\','+v.id+')','solid')+btn('Keep the other ('+klEsc(m.sheet_name||'#'+m.id)+')','vpNameDecide('+m.id+',\'merge_requested\','+m.id+')')+btn('Cancel','vpEdit(\'\')')+'</div></div>':'')
+          +'</div>';
+      }).join('')+'</div>';
+  }
+
+  h+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#311A8E;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#eef2ff;border-radius:6px;border-left:3px solid #311A8E;">🔗 Links, keys &amp; group</div>';
+
+  // ── Telegram ──
+  h+=row('📶','Telegram', v.tg_name?klEsc(v.tg_name)+' <span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:10px;">linked</span>':'<span style="color:#b45309;">not linked</span>',
+    btn(v.tg_name?'Change':'Link','vpEdit(\'tg\')')+(v.tg_name?btn('Unlink','vpTgUnlink()','red'):''),
+    E==='tg'?'<input id="vp-tg-q" placeholder="🔍 Type part of the Telegram name…" oninput="vpTgFind(this.value)" style="'+inp+'width:100%;"><div id="vp-tg-res" style="margin-top:6px;max-height:200px;overflow:auto;font-size:12px;color:#6b7280;">Type at least 2 letters.</div>':'');
+
+  // ── SpawnFi ──
+  const sfiVal=(X.sfi||[]).length?(X.sfi.map(l=>'⚡ '+klEsc(l.router_name)+' · VLAN '+klEsc(l.vlan)+' <span style="font-weight:500;color:#6b7280;font-size:11px;">'+klEsc((l.site_name||'').slice(0,60))+' · 7 d '+_php(l.d7_pesos)+'</span>').join('<br>')):'<span style="color:#9ca3af;font-weight:500;">no SpawnFi line</span>';
+  h+=row('⚡','SpawnFi', sfiVal, btn((X.sfi||[]).length?'Change':'Link a line','vpEdit(\'sfi\')')+((X.sfi||[]).length?btn('Unlink','vpSfiSet(null,null)','red'):''),
+    E==='sfi'?'<input id="vp-sfi-q" placeholder="🔍 VLAN, router or panel site name…" oninput="vpSfiFind(this.value)" style="'+inp+'width:100%;"><div id="vp-sfi-res" style="margin-top:6px;max-height:220px;overflow:auto;font-size:12px;color:#6b7280;">Loading lines…</div>':'');
+
+  // ── Address ──
+  h+=row('📍','Address', v.address?klEsc(v.address):'<span style="color:#9ca3af;font-weight:500;">no address</span>', btn('Edit','vpEdit(\'addr\')'),
+    E==='addr'?'<div style="display:flex;gap:6px;"><input id="vp-addr-in" value="'+klEsc(v.address||'')+'" placeholder="Purok, barangay, town" style="'+inp+'flex:1;">'+btn('💾 Save','vpAddrSave()','solid')+btn('Cancel','vpEdit(\'\')')+'</div>':'');
+
+  // ── Area & harvest group ──
+  const gs=(X.groups||[]).filter(g=>(X.groupIds||[]).includes(g.id));
+  const gTxt=gs.length?gs.map(g=>klEsc((g.group_id?g.group_id+' · ':'')+(g.group_label||''))+(g.collector?' <span style="font-weight:500;color:#6b7280;font-size:11px;">'+klEsc(g.collector)+'</span>':'')).join(', '):'<span style="color:#b45309;">not in any harvest group</span>';
+  let agEd='';
+  if(E==='ag'){
+    const fam={'SINAMAN':'DIPOLOG','MINAOG':'DIPOLOG','MIX AREAS':'DIPOLOG'}, cur=String(v.area||'').toUpperCase(), ha=fam[cur]||cur;
+    const byA={}; (X.groups||[]).forEach(g=>{ (byA[String(g.area||'—').toUpperCase()]=byA[String(g.area||'—').toUpperCase()]||[]).push(g); });
+    const order=Object.keys(byA).sort((a,b)=>a===ha?-1:b===ha?1:a.localeCompare(b));
+    agEd='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><select id="vp-ag-area" style="'+inp+'">'+VP_AREAS.map(a=>'<option'+(a===cur?' selected':'')+'>'+a+'</option>').join('')+'</select>'
+      +'<select id="vp-ag-grp" style="'+inp+'flex:1;min-width:220px;"><option value="">— keep the current group —</option>'+order.map(a=>'<optgroup label="'+klEsc(a)+(a===ha?' ★':'')+'">'+byA[a].map(g=>'<option value="'+g.id+'"'+((X.groupIds||[]).includes(g.id)?' selected':'')+'>'+klEsc((g.group_id?g.group_id+' · ':'')+(g.group_label||'')+(g.collector?' · '+g.collector:'')+' ('+(g.total_vendos||0)+')')+'</option>').join('')+'</optgroup>').join('')+'</select>'
+      +btn('💾 Save','vpAgSave()','solid')+btn('Cancel','vpEdit(\'\')')+'</div><div style="font-size:11px;color:#9ca3af;margin-top:4px;">Changing the area is refused if this VLAN is already used by another vendo in that area.</div>';
+  }
+  h+=row('🧺','Area · group', klEsc(v.area||'—')+' · '+gTxt, btn('Change','vpEdit(\'ag\')'), agEd);
+
+  // ── Keys ──
+  const kv=VP_KEYS.map(([t,l])=>{
+    const k=(X.keys||[]).find(x=>x.key_type===t);
+    const st=k&&k.loan_status==='out'?' <span style="color:#b45309;font-size:10px;">out with '+klEsc(k.borrowed_by||'?')+'</span>':'';
+    return '<div style="display:flex;align-items:center;gap:6px;margin:2px 0;"><span style="width:140px;font-size:12px;">'+l+'</span>'
+      +(k?vpColorDot(k.holder_color,X)+' <span style="font-family:ui-monospace,monospace;font-size:12px;background:#311A8E;color:#fff;padding:1px 6px;border-radius:4px;">'+klEsc(k.qr_code)+'</span>'+(k.holder_color?' <span style="font-size:11px;color:#6b7280;font-weight:500;">'+klEsc(k.holder_color)+'</span>':'')+st
+         :'<span style="color:#9ca3af;font-size:12px;font-weight:500;">none</span>')
+      +'<span style="flex:1"></span>'+btn(k?'Edit':'➕ Create','vpEdit(\'key:'+t+'\')')+'</div>';
+  }).join('');
+  let kEd='';
+  if(E.indexOf('key:')===0){
+    const t=E.slice(4), lab=(VP_KEYS.find(x=>x[0]===t)||[])[1]||t, k=(X.keys||[]).find(x=>x.key_type===t), next=X.pool&&X.pool[t];
+    kEd='<div style="font-size:12px;font-weight:800;color:#311A8E;margin-bottom:5px;">'+lab+(k?' — '+klEsc(k.qr_code):' — new')+'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"><input id="vp-key-code" placeholder="'+(k?'keep '+klEsc(k.qr_code)+' (or type a new fob code)':(next?'empty = next printed code '+klEsc(next.qr)+' ('+next.left+' left)':'type the fob code'))+'" style="'+inp+'width:250px;font-family:ui-monospace,monospace;text-transform:uppercase;">'
+      +'<select id="vp-key-color" style="'+inp+'"><option value="">holder colour…</option>'+(X.palette||[]).map(c=>'<option value="'+klEsc(c.name)+'"'+(k&&k.holder_color===c.name?' selected':'')+'>'+klEsc(c.name)+'</option>').join('')+'</select>'
+      +btn('💾 Save','vpKeySave(\''+t+'\')','solid')+btn('Cancel','vpEdit(\'\')')+'</div>';
+  }
+  h+=row('🔑','Keys', kv, '', kEd);
+  host.innerHTML=h;
+  if(E==='tg'){ const q=document.getElementById('vp-tg-q'); if(q) q.focus(); }
+  if(E==='sfi'){ vpSfiFind(''); const q=document.getElementById('vp-sfi-q'); if(q) q.focus(); }
+}
+function vpEdit(what){ window._vpEditing = (window._vpEditing===what ? '' : what); vpLinksRender(); }
+async function vpAfterSave(msg, patch){
+  if(patch) Object.assign(window._vpVendo, patch);
+  window._vpEditing=''; toast(msg);
+  await vpLoadExtras(); vpRenderInfo();
+}
+/* Telegram */
+let _vpTgT=null;
+function vpTgFind(q){
+  clearTimeout(_vpTgT); const box=document.getElementById('vp-tg-res'); if(!box) return;
+  q=(q||'').trim(); if(q.length<2){ box.textContent='Type at least 2 letters.'; return; }
+  _vpTgT=setTimeout(async()=>{
+    try{
+      const rows=await vpGet('summary_by_vendo?vendo=ilike.*'+encodeURIComponent(q.replace(/[*,()]/g,' '))+'*&select=vendo,area,sheet_name,last_date,sales&order=last_date.desc.nullslast&limit=25');
+      const vs=await vpGet('vendos?tg_name=in.('+rows.map(r=>'"'+String(r.vendo).replace(/"/g,'')+'"').join(',')+')&select=id,tg_name,sheet_name').catch(()=>[]);
+      const own={}; vs.forEach(x=>own[x.tg_name]=x);
+      box.innerHTML=rows.length?rows.map(r=>{ const o=own[r.vendo], mine=o&&o.id===window._vpVendo.id;
+        return '<div style="display:flex;gap:8px;align-items:center;padding:5px 2px;border-bottom:1px solid #f1f5f9;"><div style="flex:1;"><b style="color:#1e293b;">'+klEsc(r.vendo)+'</b> <span style="color:#9ca3af;">'+klEsc(r.area||'')+' · last sale '+klEsc(r.last_date||'—')+'</span>'
+          +(o&&!mine?'<div style="color:#b91c1c;font-size:11px;">already linked to '+klEsc(o.sheet_name||'#'+o.id)+'</div>':'')+(mine?'<div style="color:#15803d;font-size:11px;">this vendo</div>':'')+'</div>'
+          +(o?'':'<button type="button" onclick="vpTgLink('+JSON.stringify(r.vendo).replace(/"/g,'&quot;')+')" style="height:26px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;background:#311A8E;color:#fff;border:none;font-family:inherit;">Link</button>')+'</div>'; }).join('')
+        :'No Telegram name matches.';
+    }catch(e){ box.textContent='Search failed: '+e.message; }
+  },300);
+}
+async function vpTgLink(tg){
+  const v=window._vpVendo; const pw=await vpPw('link "'+tg+'" to this vendo'); if(!pw) return;
+  try{ await vpRpc('spawn_link_apply',{p_vendo_id:v.id, p_tg:tg, p_pw:pw}); await vpAfterSave('✅ Telegram linked: '+tg, {tg_name:tg}); }
+  catch(e){ toast('Not linked: '+e.message); }
+}
+async function vpTgUnlink(){
+  const v=window._vpVendo; if(!v.tg_name) return;
+  const pw=await vpPw('unlink "'+v.tg_name+'" from this vendo'); if(!pw) return;
+  try{ await vpRpc('unlink_tg',{p_vendo_id:v.id, p_pwd:pw}); await vpAfterSave('Telegram unlinked', {tg_name:null}); }
+  catch(e){ toast('Not unlinked: '+e.message); }
+}
+/* SpawnFi */
+let _vpSfiAll=null;
+async function vpSfiFind(q){
+  const box=document.getElementById('vp-sfi-res'); if(!box) return;
+  try{ if(!_vpSfiAll) _vpSfiAll=await vpGet('v_spawnfi_sales_v1?select=router_name,vlan,site_name,link_status,vendo_id,vendo_name,suggested_vendo_id,d7_pesos,last_sale&order=router_name.asc,vlan.asc'); }
+  catch(e){ box.textContent='Could not load SpawnFi lines: '+e.message; return; }
+  const me=window._vpVendo.id; q=String(q||'').trim().toLowerCase();
+  let rows=_vpSfiAll.filter(r=>!q || String(r.vlan)===q || (r.router_name+' '+r.site_name+' '+(r.vendo_name||'')).toLowerCase().includes(q));
+  rows.sort((a,b)=>(b.suggested_vendo_id===me)-(a.suggested_vendo_id===me) || (a.link_status==='linked')-(b.link_status==='linked'));
+  box.innerHTML=rows.slice(0,40).map(r=>{ const mine=r.vendo_id===me, other=r.link_status==='linked'&&!mine;
+    return '<div style="display:flex;gap:8px;align-items:center;padding:5px 2px;border-bottom:1px solid #f1f5f9;"><div style="flex:1;min-width:0;"><b style="color:#1e293b;">'+klEsc(r.router_name)+' · VLAN '+klEsc(r.vlan)+'</b>'
+      +(r.suggested_vendo_id===me&&!mine?' <span style="background:#ede9fe;color:#5b21b6;padding:0 6px;border-radius:4px;font-size:10px;font-weight:800;">suggested</span>':'')
+      +'<div style="color:#6b7280;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+klEsc(r.site_name||'')+' · 7 d '+_php(r.d7_pesos)+'</div>'
+      +(other?'<div style="color:#b91c1c;font-size:11px;">linked to '+klEsc(r.vendo_name||'#'+r.vendo_id)+'</div>':'')+(mine?'<div style="color:#15803d;font-size:11px;">this vendo</div>':'')+'</div>'
+      +(other||mine?'':'<button type="button" onclick="vpSfiSet('+JSON.stringify(r.router_name).replace(/"/g,'&quot;')+','+Number(r.vlan)+')" style="height:26px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;background:#311A8E;color:#fff;border:none;font-family:inherit;">Link</button>')+'</div>'; }).join('')
+    || 'No SpawnFi line matches.';
+}
+async function vpSfiSet(router, vlan){
+  const v=window._vpVendo; const pw=await vpPw(vlan==null?'unlink the SpawnFi line':'link '+router+' VLAN '+vlan+' to this vendo'); if(!pw) return;
+  try{ const r=await vpRpc('spawn_card_spawnfi_set',{p_vendo_id:v.id, p_router:router, p_vlan:vlan, p_pw:pw}); _vpSfiAll=null;
+       await vpAfterSave(vlan==null?'SpawnFi line unlinked':'✅ SpawnFi linked'+(r.sales_relinked!=null?' · '+r.sales_relinked+' sales now counted for this vendo':'')); }
+  catch(e){ toast('Not saved: '+e.message); }
+}
+/* Address */
+async function vpAddrSave(){
+  const v=window._vpVendo, el=document.getElementById('vp-addr-in'); if(!el) return;
+  const a=el.value.trim()||null; const pw=await vpPw('change the address'); if(!pw) return;
+  try{
+    const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{..._HDR,Prefer:'return=minimal'},body:JSON.stringify({address:a})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    await fetch(_SB+'/rest/v1/harvest_group_items?vendo_id=eq.'+v.id,{method:'PATCH',headers:{..._HDR,Prefer:'return=minimal'},body:JSON.stringify({address:a})}).catch(()=>{});
+    await vpAfterSave('✅ Address saved', {address:a});
+  }catch(e){ toast('Not saved: '+e.message); }
+}
+/* Area + group */
+async function vpAgSave(){
+  const v=window._vpVendo, area=(document.getElementById('vp-ag-area')||{}).value, g=(document.getElementById('vp-ag-grp')||{}).value;
+  const pw=await vpPw('change the area / harvest group'); if(!pw) return;
+  try{ await vpRpc('spawn_card_area_group_set',{p_vendo_id:v.id, p_area:area||null, p_group_run_id:g?Number(g):null, p_pw:pw});
+       await vpAfterSave('✅ Area / group saved', {area:area||v.area}); }
+  catch(e){ toast('Not saved: '+e.message); }
+}
+/* Keys */
+async function vpKeySave(t){
+  const v=window._vpVendo, code=((document.getElementById('vp-key-code')||{}).value||'').trim().toUpperCase(), color=(document.getElementById('vp-key-color')||{}).value||null;
+  const pw=await vpPw('save the '+t+' key'); if(!pw) return;
+  try{ const r=await vpRpc('spawn_card_key_set',{p_vendo_id:v.id, p_key_type:t, p_qr:code||null, p_color:color, p_pw:pw});
+       await vpAfterSave('✅ Key saved: '+(r.qr||'')+(r.color?' · '+r.color:'')); }
+  catch(e){ toast('Not saved: '+e.message); }
+}
+/* Same name */
+async function vpNameDecide(other, decision, keep){
+  const v=window._vpVendo; const pw=await vpPw(decision==='different'?'mark these as different vendos':'request a merge'); if(!pw) return;
+  try{ await vpRpc('spawn_card_name_decide',{p_vendo_id:v.id, p_other_id:other, p_decision:decision, p_keep:keep||null, p_note:null, p_pw:pw});
+       await vpAfterSave(decision==='different'?'Marked as a different vendo — no more warning for this pair':'🔀 Merge requested — it will be merged carefully with a backup'); }
+  catch(e){ toast('Not saved: '+e.message); }
+}
+
 /* 2026-11-26: the card's Ledger combines the app harvests and the BASHANG book (office_harvest_records)
    through spawn_vendo_harvest_history_v1 — one row per harvest: a harvest in both shows once as the
    app's record; one only in BASHANG shows as (book) with its date and Spawn 75% (the book has no coins). */
