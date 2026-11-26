@@ -3020,7 +3020,7 @@ function _rcRowHtml(h, showCloud, flat){
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
     <td class="rca-vcell">
       <div style="display:flex;align-items:center;gap:5px;min-width:0;"><span class="rca-ell" style="font-weight:800;color:#1a2250;" title="${_rcEsc(h.sheet_name||'')}">${name}</span>${noTg}
-        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button></div>
+        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button>${(h.vendo_id!=null&&window.openVendoById)?`<button class="rca-iconbtn" onclick="openVendoById(${Number(h.vendo_id)})" title="Open the vendo page (TG / Cloud / SpawnFi)">📄</button>`:''}</div>
       ${tgLine}
     </td>
     <td style="color:#44506b;">${_rcEsc(h.area||'—')}</td>
