@@ -3,8 +3,8 @@
    one block per month with Date · Spawn share · Collector · Check, newest month on the right.
    One call: spawn_vendo_book_v1 (read-only) — every vendo, every harvest since 6 months ago, the app record (harvests) paired
    with the BASHANG book (office_harvest_records): same vendo, within 3 days, closest date then amount.
-   Check words: ✓ Both · ≠ amount · App only · BASHANG only · Not harvested · Overdue. Rows in BASHANG order per area;
-   vendos not in BASHANG at the bottom of each area. Tap a name → the vendo card. */
+   Check words: ✓ Both · ≠ amount · App only · BASHANG only · Not harvested · Overdue. Rows by area, then harvest group (route order),
+   vendos with no group at the bottom of each area; a tag marks vendos not in BASHANG. Tap a name → the vendo card. */
 (function(){
   const SB = () => (typeof _SB !== 'undefined' && _SB) || window.__SPAWN_SB || 'https://cviraqfhphhsonjmrtvu.supabase.co';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -16,7 +16,7 @@
   const ymOf = d => d10(d).slice(0, 7);
   const lastDay = ym => { const [y, m] = ym.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
   const daysBetween = (a, b) => Math.round((new Date(d10(b) + 'T12:00:00') - new Date(d10(a) + 'T12:00:00')) / 86400000);
-  const S = { data:null, err:'', busy:false, nMonths:3, month:'', area:'', q:'', view:'all', at:0 };
+  const S = { data:null, err:'', busy:false, nMonths:3, month:'', area:'', grp:'', q:'', view:'all', at:0 };
   const host = () => document.getElementById('hvt-vbook');
 
   async function load(force){
@@ -37,7 +37,7 @@
   function shape(j){
     const today = d10(j.today), months = [];
     for (let d = new Date(d10(j.from) + 'T12:00:00'); ymOf(d.toISOString()) <= ymOf(today); d.setMonth(d.getMonth() + 1)) months.push(ymOf(d.toISOString()));
-    const V = j.vendos.map(a => ({ id:a[0], name:a[1] || ('#' + a[0]), area:a[2] || 'UNKNOWN', status:a[3] || '', vlan:a[4], iv:a[5], di:a[6], po:a[7], lh:a[8], tab:a[9], row:a[10], ev:{} }));
+    const V = j.vendos.map(a => ({ id:a[0], name:a[1] || ('#' + a[0]), area:a[2] || 'UNKNOWN', status:a[3] || '', vlan:a[4], iv:a[5], di:a[6], po:a[7], lh:a[8], tab:a[9], row:a[10], gid:a[11], gcode:a[12] || '', glabel:a[13] || '', gcol:a[14] || '', ev:{} }));
     const byId = {}; V.forEach(v => { byId[v.id] = v; });
     const maxBook = j.ev.reduce((m, e) => e[5] && d10(e[5]) > m ? d10(e[5]) : m, '');   // how far BASHANG is encoded
     j.ev.forEach(e => { const v = byId[e[0]]; if (!v) return;
@@ -118,11 +118,12 @@
     // tiles: the chosen month
     const M = S.month;
     const t = { harv:0, both:0, diff:0, app:0, book:0, miss:0, total:0, gap:0, pend:0 };
-    D.vendos.forEach(v => { if (S.area && v.area !== S.area) return; const f = monthFacts(v, M, today);
+    D.vendos.forEach(v => { if (S.area && v.area !== S.area) return; if (S.grp && String(v.gid || 'none') !== S.grp) return; const f = monthFacts(v, M, today);
       if (f.ev.length) { t.harv++; f.ev.forEach(x => { if (x.kind === 'app' && x.fresh) t.pend++; else t[x.kind]++; t.total += x.amt || 0; if (x.kind === 'diff') t.gap += x.app - x.book; }); }
       else if (f.empty === 'miss' || f.empty === 'late') t.miss++; });
     const pass = v => {
       if (S.area && v.area !== S.area) return false;
+      if (S.grp && String(v.gid || 'none') !== S.grp) return false;
       if (q && !(String(v.name).toLowerCase().includes(q) || String(v.vlan || '') === q || String(v.id) === q)) return false;
       if (S.view === 'all') return true;
       const f = monthFacts(v, M, today);
@@ -142,21 +143,25 @@
       return `<td>${ev.map(x => esc(mdy(x.d))).join('<br>')}</td><td class="n">${ev.map(x => num(x.amt)).join('<br>')}</td><td class="who">${ev.map(x => esc(x.who || (x.kind === 'book' ? 'BASHANG' : ''))).join('<br>')}</td><td class="c mend">${ev.map(word).join('')}</td>`;
     };
     const span = 1 + shown.length * 4;
-    let rows = '', lastArea = null, lastIn = null;
+    let rows = '', lastArea = null, lastG = null;
+    const monTot = arr => arr.reduce((s, x) => s + (x.ev[M] || []).reduce((a, e) => a + (e.amt || 0), 0), 0);
     list.forEach(v => {
       if (v.area !== lastArea) {
-        const n = list.filter(x => x.area === v.area).length;
-        const tot = list.filter(x => x.area === v.area).reduce((s, x) => s + (x.ev[M] || []).reduce((a, e) => a + (e.amt || 0), 0), 0);
+        const inA = list.filter(x => x.area === v.area), n = inA.length, tot = monTot(inA);
         rows += `<tr class="ar"><td class="nm" style="background:#2d3547">${esc(v.area)} · ${n} vendo${n === 1 ? '' : 's'}</td><td colspan="${span - 1}" style="background:#2d3547;text-align:left">${esc(monL(M))}: ${peso(tot)} spawn share</td></tr>`;
-        lastArea = v.area; lastIn = null;
+        lastArea = v.area; lastG = null;
       }
-      const inB = !!v.tab;
-      if (inB !== lastIn) { rows += `<tr class="sub"><td class="nm" style="background:#f1f5f9">${inB ? '📒 In BASHANG' + (v.tab ? ' · ' + esc(v.tab) : '') : '➕ Not in BASHANG (app / system only)'}</td><td colspan="${span - 1}"></td></tr>`; lastIn = inB; }
+      const gk = v.gid || 'none';
+      if (gk !== lastG) {   // 2026-11-26: arranged by harvest group (owner's ask), route order inside the group
+        const inG = list.filter(x => x.area === v.area && (x.gid || 'none') === gk);
+        rows += `<tr class="sub"><td class="nm" style="background:#e8eefc;color:#1e3a8a">${v.gid ? '🧺 ' + esc(v.gcode) + ' · ' + esc(v.glabel) : '❔ No harvest group yet'}</td><td colspan="${span - 1}" style="background:#e8eefc;color:#1e3a8a;text-align:left">${v.gcol ? '👤 ' + esc(v.gcol) + ' · ' : ''}${inG.length} vendo${inG.length === 1 ? '' : 's'} · ${esc(monL(M))}: ${peso(monTot(inG))}</td></tr>`;
+        lastG = gk;
+      }
       const dim = v.status === 'inactive' || v.status === 'pulled_out';
-      rows += `<tr class="${dim ? 'dim' : ''}"><td class="nm" title="${esc(v.name)}"><a data-vb="${v.id}">${esc(v.name)}</a>${v.vlan != null ? ` <span style="color:#9ca3af;font-size:11px">V${esc(v.vlan)}</span>` : ''}${v.status === 'pulled_out' ? ' <span style="color:#b91c1c;font-size:10px">pulled out</span>' : v.status === 'inactive' ? ' <span style="color:#9ca3af;font-size:10px">inactive</span>' : ''}</td>${shown.map(ym => cells(v, ym)).join('')}</tr>`;
+      rows += `<tr class="${dim ? 'dim' : ''}"><td class="nm" title="${esc(v.name)}"><a data-vb="${v.id}">${esc(v.name)}</a>${v.vlan != null ? ` <span style="color:#9ca3af;font-size:11px">V${esc(v.vlan)}</span>` : ''}${v.tab ? '' : ' <span style="background:#fff7ed;color:#9a3412;border-radius:4px;padding:0 4px;font-size:10px" title="not in the BASHANG sheet">not in BASHANG</span>'}${v.status === 'pulled_out' ? ' <span style="color:#b91c1c;font-size:10px">pulled out</span>' : v.status === 'inactive' ? ' <span style="color:#9ca3af;font-size:10px">inactive</span>' : ''}</td>${shown.map(ym => cells(v, ym)).join('')}</tr>`;
     });
     const tile = (k, l, v, col, sub) => `<div class="vb-tile${S.view === k ? ' on' : ''}" data-v="${k}" style="--c:${col}" title="Tap to show only these"><b>${v}</b><span>${l}${sub ? '<br>' + sub : ''}</span></div>`;
-    h.innerHTML = `<div class="vb-card"><div style="display:flex;align-items:center;gap:10px;padding:10px 12px 0;flex-wrap:wrap"><b style="font-size:15px;color:#0f2a5c">📗 Vendo book · ${esc(monL(M))}${S.area ? ' · ' + esc(S.area) : ''}</b>
+    h.innerHTML = `<div class="vb-card"><div style="display:flex;align-items:center;gap:10px;padding:10px 12px 0;flex-wrap:wrap"><b style="font-size:15px;color:#0f2a5c">📗 Vendo book · ${esc(monL(M))}${S.area ? ' · ' + esc(S.area) : ''}${S.grp ? ' · ' + esc((D.vendos.find(v => String(v.gid || 'none') === S.grp) || {}).glabel || 'No harvest group') : ''}</b>
           <span style="font-size:11px;color:#6b7280">app records + BASHANG book, one line per harvest · like SPAWN VENDOS (Auto)${D.maxBook ? ' · BASHANG encoded up to ' + esc(mdy(D.maxBook)) : ''}${D.unmatched ? ' · ' + D.unmatched + ' BASHANG line' + (D.unmatched === 1 ? '' : 's') + ' not tied to a vendo' : ''}</span></div>
         <div class="vb-tiles">${tile('all', 'Harvested', t.harv, '#0f2a5c', peso(t.total) + ' spawn share')}${tile('both', '✓ App = BASHANG', t.both, '#15803d', '')}${tile('diff', '≠ Amount differs', t.diff, '#b45309', t.diff ? 'app − BASHANG ' + peso(t.gap) : '')}
           ${tile('app', 'App only', t.app, '#0146a0', 'not in BASHANG' + (t.pend ? '<br>+' + t.pend + ' new, BASHANG pending' : ''))}${tile('book', 'BASHANG only', t.book, '#9a3412', 'no app record')}${tile('miss', 'Not harvested', t.miss, '#b91c1c', M === ymOf(today) ? 'overdue now' : 'in ' + esc(monL(M)))}</div></div>
@@ -164,6 +169,7 @@
           <select id="vb-mon" title="Month for the tiles and filters">${D.months.map(m => `<option value="${m}"${m === M ? ' selected' : ''}>${esc(monL(m))}</option>`).join('')}</select>
           <select id="vb-n">${[2, 3, 4, 6].map(n => `<option value="${n}"${n === S.nMonths ? ' selected' : ''}>show ${n} months</option>`).join('')}</select>
           <select id="vb-area"><option value="">All areas</option>${areas.map(a => `<option${S.area === a ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select>
+          <select id="vb-grp"><option value="">All harvest groups</option>${[...new Map(D.vendos.filter(v => !S.area || v.area === S.area).map(v => [String(v.gid || 'none'), v.gid ? v.gcode + ' · ' + v.glabel : 'No harvest group yet'])).entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k, l]) => `<option value="${esc(k)}"${S.grp === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>
           <button type="button" id="vb-prob" class="${S.view === 'problems' ? 'on' : ''}">⚠ Only problems</button>
           ${S.view !== 'all' && S.view !== 'problems' ? `<button type="button" id="vb-off" class="on">${esc((WORD[S.view] || ['filter'])[0])} ✕</button>` : ''}
           <input id="vb-q" type="search" placeholder="Search vendo, VLAN" value="${esc(S.q)}" style="flex:1;min-width:180px">
@@ -176,7 +182,8 @@
     h.querySelectorAll('.vb-tile').forEach(x => x.onclick = () => { S.view = S.view === x.dataset.v ? 'all' : x.dataset.v; draw(); });
     h.querySelector('#vb-mon').onchange = e => { S.month = e.target.value; if (!D.months.slice(-S.nMonths).includes(S.month)) S.nMonths = Math.min(6, D.months.length - D.months.indexOf(S.month)); draw(); };
     h.querySelector('#vb-n').onchange = e => { S.nMonths = Number(e.target.value); draw(); };
-    h.querySelector('#vb-area').onchange = e => { S.area = e.target.value; draw(); };
+    h.querySelector('#vb-area').onchange = e => { S.area = e.target.value; S.grp = ''; draw(); };
+    h.querySelector('#vb-grp').onchange = e => { S.grp = e.target.value; draw(); };
     h.querySelector('#vb-prob').onclick = () => { S.view = S.view === 'problems' ? 'all' : 'problems'; draw(); };
     const off = h.querySelector('#vb-off'); if (off) off.onclick = () => { S.view = 'all'; draw(); };
     h.querySelector('#vb-re').onclick = () => load(true);
