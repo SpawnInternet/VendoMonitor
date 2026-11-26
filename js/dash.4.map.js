@@ -1134,9 +1134,30 @@ function changeYear(y) {
 // ══════════════════════════════════════════════════════════
 // GLOBAL SEARCH
 // ══════════════════════════════════════════════════════════
-function showSearchDrop() {
-  if (allVendos.length) document.getElementById("search-drop").style.display = "block";
+/* 2026-11-26: place the results under the search box and inside the screen. It used to hang from the box's
+   right edge at 320 px wide, so in a narrow window (box at the left edge) half of it was off-screen. */
+function placeSearchDrop() {
+  const inp = document.getElementById("global-search"), dd = document.getElementById("search-drop");
+  if (!inp || !dd) return;
+  const r = inp.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+  const w = Math.min(380, vw - 16);
+  let left = r.right - w;                 // line up with the box's right edge (wide screens)
+  if (left < 8) left = r.left;            // not enough room on the left: line up with its left edge
+  left = Math.max(8, Math.min(left, vw - w - 8));
+  dd.style.position = "fixed";
+  dd.style.left = left + "px";
+  dd.style.right = "auto";
+  dd.style.top = (r.bottom + 4) + "px";
+  dd.style.width = w + "px";
+  dd.style.maxHeight = Math.max(160, Math.min(420, vh - r.bottom - 16)) + "px";
+  dd.style.zIndex = "1000";
 }
+function showSearchDrop() {
+  const dd = document.getElementById("search-drop"); if (!dd) return;
+  if (allVendos.length || dd.innerHTML.trim()) { placeSearchDrop(); dd.style.display = "block"; }
+}
+window.addEventListener("resize", () => { const dd = document.getElementById("search-drop"); if (dd && dd.style.display === "block") placeSearchDrop(); });
+window.addEventListener("scroll", () => { const dd = document.getElementById("search-drop"); if (dd && dd.style.display === "block") placeSearchDrop(); }, true);
 function hideSearchDrop() { document.getElementById("search-drop").style.display = "none"; }
 
 /* ── Global search (2026-11-25): vendos + subscribers straight from the DB.
@@ -1147,7 +1168,7 @@ function globalSearch(q) {
   clearTimeout(_gsT);
   q = String(q||'').trim();
   if (q.length < 2) { drop.style.display = "none"; return; }
-  drop.style.display = "block";
+  placeSearchDrop(); drop.style.display = "block";
   drop.innerHTML = '<div style="padding:12px 14px;font-size:12px;color:#6b7280;">Searching…</div>';
   const seq = ++_gsSeq;
   _gsT = setTimeout(async () => {
