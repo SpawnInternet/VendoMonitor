@@ -149,7 +149,7 @@ async function htShowVendoProfile(name, area, startTab) {
     document.body.appendChild(modal);
   }
   modal.style.display='flex';
-  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null; window._vpGpsOpen=false; window._vpGpsFile=null;
+  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null; window._vpGpsOpen=false; window._vpGpsFile=null; window._vpTabNow='info';
   document.getElementById('vp-title').textContent=name||'—';
   document.getElementById('vp-sub').textContent=area||'';
   document.getElementById('vp-edit-btn').textContent='Edit';
@@ -161,13 +161,15 @@ async function htShowVendoProfile(name, area, startTab) {
       sb('vendos','sheet_name=eq.'+enc+'&select=id,sheet_name,owner_name,tg_name,area,vlan,address,contact_number,lat,lng,last_harvest_date,date_installed,installer,status,admin_notes,harvest_interval_days,photo_url',1),
       sb('harvests','sheet_name=eq.'+enc+'&select=id,harvest_date,harvest_window_start,coins_total,coins_free,coins_saloy,coins_old,net_collectible,spawn_share,customer_share,collector,source&order=harvest_date.desc',500)
     ]);
-    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[];
+    window._vpVendo=vr[0]||null; window._vpHarvests=hr||[]; window._vpBook=null;
+    vpLoadBook();
     vpRenderInfo();
     if(startTab){ const btns=document.querySelectorAll('.vp-tab'); const idx={info:0,ledger:1,recon:2,names:3}[startTab]; if(btns[idx]) vpTab(startTab, btns[idx]); }
   } catch(e){document.getElementById('vp-body').innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;">Error: '+e.message+'</div>';}
 }
 function vpCancelPullout(){const ov=document.getElementById('vp-po-ov');if(ov)ov.remove();}
 function vpTab(tab,btn){
+  window._vpTabNow=tab;
   document.querySelectorAll('.vp-tab').forEach(t=>{t.style.borderBottomColor='transparent';t.style.color='#6b7280';t.style.fontWeight='';});
   btn.style.borderBottomColor='#1565c0';btn.style.color='#1565c0';btn.style.fontWeight='600';
   if(tab==='info')vpRenderInfo();else if(tab==='ledger')vpRenderLedger();else if(tab==='names')vpRenderNames();else vpRenderRecon();
@@ -219,7 +221,8 @@ function vpRenderInfo(){
   h1+='<div style="font-size:10px;font-weight:600;color:#15803d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #15803d;">&#127806; Harvest</div>';
   h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">Last harvest</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.last_harvest_date||'&#8212;')+(days!==null?' <span style="font-size:11px;color:'+dc+';">('+days+'d ago)</span>':'')+'</div></div>';
   h1+=_vf('Interval',v&&v.harvest_interval_days?v.harvest_interval_days+'d':null,null,false)+_vf('Installed',v&&v.date_installed,null,false)+_vf('Installer',v&&v.installer,null,false);
-  if(h.length){const tn=h.reduce((s,r)=>s+Number(r.net_collectible||0),0),ts=h.reduce((s,r)=>s+Number(r.spawn_share||0),0);h1+='<div style="margin-top:12px;background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;">Lifetime ('+h.length+' harvests)</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:17px;font-weight:700;color:#1565c0;">'+_php(tn)+'</div><div style="font-size:10px;color:#6b7280;">Total net</div></div><div><div style="font-size:17px;font-weight:700;color:#15803d;">'+_php(ts)+'</div><div style="font-size:10px;color:#6b7280;">Spawn 75%</div></div></div></div>';}
+  const L=vpLedgerRows();
+  if(L.rows.length){const tn=L.net,ts=L.spawn;h1+='<div style="margin-top:12px;background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;">Lifetime ('+L.rows.length+' harvests'+(L.book?' · '+L.book+' from BASHANG only':'')+(L.loading?' · loading BASHANG…':'')+')</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:17px;font-weight:700;color:#1565c0;">'+_php(tn)+'</div><div style="font-size:10px;color:#6b7280;">Total net'+(L.book?' (app harvests)':'')+'</div></div><div><div style="font-size:17px;font-weight:700;color:#15803d;">'+_php(ts)+'</div><div style="font-size:10px;color:#6b7280;">Spawn 75%'+(L.book?' (app + BASHANG)':'')+'</div></div></div></div>';}
   h1+='</div></div>';
   if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
   else if(v&&v.status!=='pulled_out'){h1+='<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button onclick="vpToggleEdit()" style="height:28px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Edit info</button></div>';}
@@ -237,13 +240,84 @@ function vpGpsTool(file, keepOpen){
   SpawnGps.panel(host,{kind:'vendo', id:v.id, name:v.sheet_name, area:v.area, lat:v.lat, lng:v.lng, photoUrl:v.photo_url, file:file||null,
     onSaved:(g,out)=>{ v.lat=g.lat; v.lng=g.lng; if(out&&out.photoUrl) v.photo_url=out.photoUrl; window._vpGpsOpen=false; vpRenderInfo(); }});
 }
+/* 2026-11-26: the card's Ledger combines the app harvests and the BASHANG book (office_harvest_records)
+   through spawn_vendo_harvest_history_v1 — one row per harvest: a harvest in both shows once as the
+   app's record; one only in BASHANG shows as (book) with its date and Spawn 75% (the book has no coins). */
+async function vpLoadBook(){
+  const v=window._vpVendo; if(!v||!v.id) return;
+  const vid=v.id;
+  try{
+    const r=await fetch(_SB+'/rest/v1/rpc/spawn_vendo_harvest_history_v1',{method:'POST',headers:_HDR,body:JSON.stringify({p_vendo_id:vid})});
+    const rows=await r.json();
+    if(!r.ok||!Array.isArray(rows)) throw new Error((rows&&rows.message)||('HTTP '+r.status));
+    if(!window._vpVendo||window._vpVendo.id!==vid) return;   // another card opened meanwhile
+    window._vpBook=rows;
+  }catch(e){ if(window._vpVendo&&window._vpVendo.id===vid) window._vpBook={error:String(e.message||e)}; }
+  if(!window._vpVendo||window._vpVendo.id!==vid) return;
+  const t=window._vpTabNow||'info';
+  if(t==='ledger') vpRenderLedger(); else if(t==='info' && !window._vpEditMode) vpRenderInfo();
+}
+function vpLedgerRows(){
+  const h=window._vpHarvests||[], B=window._vpBook;
+  const byId={}; h.forEach(r=>byId[r.id]=r);
+  if(!Array.isArray(B)){
+    // BASHANG not loaded (yet / failed): app rows only
+    const rows=h.map(r=>({d:r.harvest_date, app:r}));
+    return {rows, net:h.reduce((s,r)=>s+Number(r.net_collectible||0),0), spawn:h.reduce((s,r)=>s+Number(r.spawn_share||0),0), book:0, loading:B===null, error:B&&B.error};
+  }
+  const used={}, rows=[];
+  B.forEach(x=>{
+    if(x.app_id!=null){
+      const a=byId[x.app_id]; used[x.app_id]=1;
+      rows.push({d:x.d||x.app_date, app:a||{harvest_date:x.app_date, spawn_share:x.app_amount, collector:x.app_collector}, bookAmt:x.book_id!=null?Number(x.book_amount):null, gap:x.src==='both'?Number(x.amount_gap||0):0});
+    } else if(x.book_id!=null){
+      rows.push({d:x.book_date||x.d, book:{amount:Number(x.book_amount||0), collector:x.book_collector}});
+    }
+  });
+  h.forEach(r=>{ if(!used[r.id]) rows.push({d:r.harvest_date, app:r}); });   // safety: an app harvest the function did not list
+  rows.sort((a,b)=>String(b.d||'').localeCompare(String(a.d||'')));
+  let net=0, spawn=0, book=0;
+  rows.forEach(r=>{ if(r.app){ net+=Number(r.app.net_collectible||0); spawn+=Number(r.app.spawn_share||0); } else { spawn+=r.book.amount; book++; } });
+  return {rows, net, spawn, book, loading:false};
+}
 function vpRenderLedger(){
-  const h=window._vpHarvests||[];
-  if(!h.length){document.getElementById('vp-body').innerHTML='<div style="padding:30px;text-align:center;color:#6b7280;font-size:13px;">No harvest records</div>';return;}
-  const tc=h.reduce((s,r)=>s+Number(r.coins_total||0),0),tn=h.reduce((s,r)=>s+Number(r.net_collectible||0),0),ts=h.reduce((s,r)=>s+Number(r.spawn_share||0),0),to=h.reduce((s,r)=>s+Number(r.customer_share||0),0);
-  document.getElementById('vp-body').innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f8faff;"><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Date</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Total</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Free</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Saloy</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;">Old</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;color:#1565c0;font-weight:700;">Net</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;color:#15803d;">Spawn 75%</th><th style="padding:7px 10px;text-align:right;border-bottom:2px solid #e5e7eb;color:#7c3aed;">Owner 25%</th><th style="padding:7px 10px;text-align:left;border-bottom:2px solid #e5e7eb;">Collector</th></tr></thead><tbody>'
-    +h.map(r=>{const ex=r.source==='excel';return '<tr style="'+(ex?'background:#f9fafb;':'')+'">'+'<td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;'+(ex?'color:#9ca3af;font-style:italic;':'')+'">'+(r.harvest_date||'&#8212;')+(ex?' <span style="font-size:9px;color:#9ca3af">Excel</span>':'')+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;">'+_php(r.coins_total)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#6b7280;">'+_php(r.coins_free)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#6b7280;">'+_php(r.coins_saloy)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#6b7280;">'+_php(r.coins_old)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;font-weight:700;color:#1565c0;">'+_php(r.net_collectible)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#15803d;">'+_php(r.spawn_share)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;text-align:right;color:#7c3aed;">'+_php(r.customer_share)+'</td><td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">'+(r.collector||'&#8212;')+'</td></tr>';}).join('')
-    +'<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #e5e7eb;"><td style="padding:8px 10px;">TOTAL ('+h.length+')</td><td style="padding:8px 10px;text-align:right;">'+_php(tc)+'</td><td colspan="3"></td><td style="padding:8px 10px;text-align:right;color:#1565c0;">'+_php(tn)+'</td><td style="padding:8px 10px;text-align:right;color:#15803d;">'+_php(ts)+'</td><td style="padding:8px 10px;text-align:right;color:#7c3aed;">'+_php(to)+'</td><td></td></tr></tbody></table>';
+  const L=vpLedgerRows();
+  const body=document.getElementById('vp-body');
+  if(!L.rows.length){ body.innerHTML='<div style="padding:30px;text-align:center;color:#6b7280;font-size:13px;">'+(L.loading?'Loading harvests…':'No harvest records in the app or in BASHANG')+'</div>'; return; }
+  const td='padding:6px 10px;border-bottom:1px solid #f3f4f6;', dash='<span style="color:#d1d5db;">&#8212;</span>';
+  const th=(t,al,c)=>'<th style="padding:7px 10px;text-align:'+(al||'right')+';border-bottom:2px solid #e5e7eb;'+(c?'color:'+c+';':'')+'">'+t+'</th>';
+  let tc=0, to=0;
+  const trs=L.rows.map(r=>{
+    if(r.app){
+      const a=r.app, ex=a.source==='excel';
+      tc+=Number(a.coins_total||0); to+=Number(a.customer_share||0);
+      const mark = r.bookAmt!=null
+        ? (Math.abs(r.gap)>20 ? ' <span title="app − BASHANG = '+_php(r.gap)+'" style="font-size:9.5px;color:#c2410c;font-weight:800;">≠ book '+_php(r.bookAmt)+'</span>' : ' <span title="also in BASHANG" style="font-size:9.5px;color:#047857;font-weight:800;">✓ book</span>')
+        : ' <span title="not in BASHANG" style="font-size:9.5px;color:#1d4ed8;font-weight:700;">app only</span>';
+      return '<tr style="'+(ex?'background:#f9fafb;':'')+'"><td style="'+td+(ex?'color:#9ca3af;font-style:italic;':'')+'white-space:nowrap;">'+(r.d||'&#8212;')+(ex?' <span style="font-size:9px;color:#9ca3af">Excel</span>':'')+mark+'</td>'
+        +'<td style="'+td+'text-align:right;">'+(a.coins_total!=null?_php(a.coins_total):dash)+'</td>'
+        +'<td style="'+td+'text-align:right;color:#6b7280;">'+(a.coins_free!=null?_php(a.coins_free):dash)+'</td>'
+        +'<td style="'+td+'text-align:right;color:#6b7280;">'+(a.coins_saloy!=null?_php(a.coins_saloy):dash)+'</td>'
+        +'<td style="'+td+'text-align:right;color:#6b7280;">'+(a.coins_old!=null?_php(a.coins_old):dash)+'</td>'
+        +'<td style="'+td+'text-align:right;font-weight:700;color:#1565c0;">'+(a.net_collectible!=null?_php(a.net_collectible):dash)+'</td>'
+        +'<td style="'+td+'text-align:right;color:#15803d;">'+_php(a.spawn_share)+'</td>'
+        +'<td style="'+td+'text-align:right;color:#7c3aed;">'+(a.customer_share!=null?_php(a.customer_share):dash)+'</td>'
+        +'<td style="'+td+'">'+(a.collector||'&#8212;')+'</td></tr>';
+    }
+    const b=r.book;
+    return '<tr style="background:#fffbeb;"><td style="'+td+'white-space:nowrap;">'+(r.d||'&#8212;')+' <span title="only in the BASHANG book — not entered in the app" style="font-size:9.5px;color:#b45309;font-weight:800;">(book)</span></td>'
+      +'<td style="'+td+'text-align:right;">'+dash+'</td><td style="'+td+'text-align:right;">'+dash+'</td><td style="'+td+'text-align:right;">'+dash+'</td><td style="'+td+'text-align:right;">'+dash+'</td><td style="'+td+'text-align:right;">'+dash+'</td>'
+      +'<td style="'+td+'text-align:right;color:#15803d;">'+_php(b.amount)+'</td><td style="'+td+'text-align:right;">'+dash+'</td>'
+      +'<td style="'+td+'color:#6b7280;">'+(b.collector||'BASHANG')+'</td></tr>';
+  }).join('');
+  const nApp=L.rows.length-L.book;
+  const note = L.error ? '<div style="font-size:11px;color:#b91c1c;margin-bottom:8px;">⚠ Could not load the BASHANG book ('+L.error+') — showing app harvests only.</div>'
+    : L.loading ? '<div style="font-size:11px;color:#6b7280;margin-bottom:8px;">⏳ Loading the BASHANG book…</div>'
+    : '<div style="font-size:11px;color:#6b7280;margin-bottom:8px;">📱 App + 📒 BASHANG, one row per harvest · '+nApp+' from the app'+(L.book?' · <b style="color:#b45309;">'+L.book+' only in BASHANG</b> (date + Spawn 75% only — the book has no coins)':'')+'</div>';
+  body.innerHTML=note+'<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f8faff;">'
+    +th('Date','left')+th('Total')+th('Free')+th('Saloy')+th('Old')+th('Net',null,'#1565c0')+th('Spawn 75%',null,'#15803d')+th('Owner 25%',null,'#7c3aed')+th('Collector','left')+'</tr></thead><tbody>'
+    +trs
+    +'<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #e5e7eb;"><td style="padding:8px 10px;">TOTAL ('+L.rows.length+')</td><td style="padding:8px 10px;text-align:right;">'+_php(tc)+'</td><td colspan="3"></td><td style="padding:8px 10px;text-align:right;color:#1565c0;">'+_php(L.net)+'</td><td style="padding:8px 10px;text-align:right;color:#15803d;">'+_php(L.spawn)+'</td><td style="padding:8px 10px;text-align:right;color:#7c3aed;">'+_php(to)+'</td><td style="padding:8px 10px;font-size:10px;color:#6b7280;font-weight:600;">'+(L.book?'Total/Net/Owner: app only':'')+'</td></tr></tbody></table>';
 }
 async function vpRenderRecon(){
   const v=window._vpVendo,h=window._vpHarvests||[];
