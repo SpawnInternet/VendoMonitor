@@ -141,6 +141,7 @@ async function htShowVendoProfile(name, area, startTab, vendoId) {
       +'</div></div>'
       +'<div id="vp-tabs" style="display:flex;border-bottom:1px solid #e5e7eb;flex-shrink:0;background:#f8faff;">'
       +'<button class="vp-tab" onclick="vpTab(\'info\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid #1565c0;color:#1565c0;font-weight:600;">Info</button>'
+      +'<button class="vp-tab" id="vp-tab-links" onclick="vpTab(\'links\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">🔑 Links &amp; keys</button>'
       +'<button class="vp-tab" onclick="vpTab(\'ledger\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">Ledger</button>'
       +'<button class="vp-tab" onclick="vpTab(\'recon\',this)" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">Reconciliation</button>'
       +'<button class="vp-tab" onclick="vpTab(\'names\',this)" id="vp-tab-names" style="padding:8px 18px;font-size:12px;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:#6b7280;">🔗 Names</button>'
@@ -179,9 +180,15 @@ function vpTab(tab,btn){
   window._vpTabNow=tab;
   document.querySelectorAll('.vp-tab').forEach(t=>{t.style.borderBottomColor='transparent';t.style.color='#6b7280';t.style.fontWeight='';});
   btn.style.borderBottomColor='#1565c0';btn.style.color='#1565c0';btn.style.fontWeight='600';
-  if(tab==='info')vpRenderInfo();else if(tab==='ledger')vpRenderLedger();else if(tab==='names')vpRenderNames();else vpRenderRecon();
+  if(tab==='info')vpRenderInfo();else if(tab==='links')vpRenderLinksTab();else if(tab==='ledger')vpRenderLedger();else if(tab==='names')vpRenderNames();else vpRenderRecon();
 }
-function vpToggleEdit(){window._vpEditMode=!window._vpEditMode;document.getElementById('vp-edit-btn').textContent=window._vpEditMode?'Cancel':'Edit';vpRenderInfo();}
+// 2026-11-26: Links, keys & group live in their own tab (owner's ask) — Info stays short
+function vpRenderLinksTab(){ const b=document.getElementById('vp-body'); if(!b)return; b.innerHTML='<div id="vp-links"></div>'; vpLinksRender(); }
+function vpLinksBadge(){ const t=document.getElementById('vp-tab-links'); const X=window._vpX; if(!t)return;
+  const n=X&&!X.loading?(X.same||[]).filter(m=>m.decision!=='different').length:0;
+  t.innerHTML='🔑 Links &amp; keys'+(n?' <span style="background:#f59e0b;color:#fff;border-radius:999px;padding:0 6px;font-size:10px;font-weight:800;" title="same name seen on another vendo">⚠ '+n+'</span>':''); }
+function vpSelTab(tab){ document.querySelectorAll('.vp-tab').forEach(t=>{const on=(t.getAttribute('onclick')||'').indexOf("'"+tab+"'")>=0; t.style.borderBottomColor=on?'#1565c0':'transparent'; t.style.color=on?'#1565c0':'#6b7280'; t.style.fontWeight=on?'600':'';}); window._vpTabNow=tab; }
+function vpToggleEdit(){vpSelTab('info');window._vpEditMode=!window._vpEditMode;document.getElementById('vp-edit-btn').textContent=window._vpEditMode?'Cancel':'Edit';vpRenderInfo();}
 function _vf(label,value,key,edit){
   if(edit&&key)return '<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">'+label+'</div><input id="vp-f-'+key+'" value="'+(value||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>';
   return '<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">'+label+'</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(value||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
@@ -224,7 +231,7 @@ function vpRenderInfo(){
   } else {
     h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(noTg?'&#8212;':(v&&v.tg_name||'&#8212;'))+tgB+'</div></div>';
   }
-  h1+=_vf('Area',v&&v.area,null,false)+(edit?_vfe('VLAN',v&&v.vlan,'vlan','number','e.g. 161')+_vfe('Server',v&&v.server_name,'server_name','text','router / server name'):_vf('VLAN',v&&v.vlan,null,false)+_vf('Server',v&&v.server_name,null,false))+_vf('Status',v&&v.status,null,false)+(edit?'<div style="font-size:10px;color:#6b7280;margin:-4px 0 8px;">Area &amp; harvest group: change them in the card below (after Save).</div>':'');
+  h1+=_vf('Area',v&&v.area,null,false)+(edit?_vfe('VLAN',v&&v.vlan,'vlan','number','e.g. 161')+_vfe('Server',v&&v.server_name,'server_name','text','router / server name'):_vf('VLAN',v&&v.vlan,null,false)+_vf('Server',v&&v.server_name,null,false))+_vf('Status',v&&v.status,null,false)+(edit?'<div style="font-size:10px;color:#6b7280;margin:-4px 0 8px;">Area &amp; harvest group: change them in the 🔑 Links &amp; keys tab.</div>':'');
   h1+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed;">&#128205; Location &amp; Contact</div>';
   h1+=_vf('Address',v&&v.address,'address',edit)+(edit?_vfe('Contact',v&&v.contact_number,'contact_number','tel','09xx xxx xxxx'):_vf('Contact',v&&v.contact_number,null,false));
   h1+=edit?'':'<div style="margin-bottom:8px;display:flex;gap:8px;align-items:flex-start;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:2px;">GPS</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.lat!=null?v.lat+', '+v.lng:'<span style="color:#b45309;">none yet</span>')+gpsL
@@ -238,11 +245,9 @@ function vpRenderInfo(){
   const L=vpLedgerRows();
   if(L.rows.length){const tn=L.net,ts=L.spawn;h1+='<div style="margin-top:12px;background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;">Lifetime ('+L.rows.length+' harvests'+(L.book?' · '+L.book+' from BASHANG only':'')+(L.loading?' · loading BASHANG…':'')+')</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:17px;font-weight:700;color:#1565c0;">'+_php(tn)+'</div><div style="font-size:10px;color:#6b7280;">Total net'+(L.book?' (app harvests)':'')+'</div></div><div><div style="font-size:17px;font-weight:700;color:#15803d;">'+_php(ts)+'</div><div style="font-size:10px;color:#6b7280;">Spawn 75%'+(L.book?' (app + BASHANG)':'')+'</div></div></div></div>';}
   h1+='</div></div>';
-  if(!edit) h1+='<div id="vp-links"></div>';
   if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button id="vp-save-btn" onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
   else if(v&&v.status!=='pulled_out'){h1+='<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button onclick="vpToggleEdit()" style="height:28px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Edit info</button></div>';}
   document.getElementById('vp-body').innerHTML=h1;
-  if(!edit) vpLinksRender();
   if(window._vpGpsOpen && !edit) vpGpsTool(window._vpGpsFile||null, true);
 }
 /* 2026-11-26: shared GPS reader (js/gps-reader.js) on the vendo card — reads the saved photo or a new one
@@ -299,7 +304,7 @@ async function vpLoadExtras(){
   Object.assign(X,{loading:false, same:Array.isArray(same)?same:[], sameErr:same&&same.__err, keys:Array.isArray(keys)?keys:[],
     sfi:Array.isArray(sfi)?sfi:[], groupIds:Array.isArray(item)?item.map(x=>x.group_run_id):[], groups:Array.isArray(groups)?groups:[],
     palette:Array.isArray(palette)?palette:[], pool:(pool&&!pool.__err)?pool:{}});
-  if((window._vpTabNow||'info')==='info' && !window._vpEditMode) vpLinksRender();
+  vpLinksBadge(); if(window._vpTabNow==='links') vpLinksRender();
 }
 function vpColorDot(name, X){
   if(!name) return '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:1.5px dashed #cbd5e1;vertical-align:-2px;" title="no colour set"></span>';
@@ -396,7 +401,7 @@ function vpEdit(what){ window._vpEditing = (window._vpEditing===what ? '' : what
 async function vpAfterSave(msg, patch){
   if(patch) Object.assign(window._vpVendo, patch);
   window._vpEditing=''; toast(msg);
-  await vpLoadExtras(); vpRenderInfo();
+  await vpLoadExtras(); if(window._vpTabNow==='links') vpLinksRender(); else vpRenderInfo();
 }
 /* Telegram */
 let _vpTgT=null;
