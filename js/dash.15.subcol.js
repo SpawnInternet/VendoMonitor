@@ -322,7 +322,7 @@
         // harvest from the financial pack (app + BASHANG book, each once; cached, refreshed every 15 min)
         const [mp, mt, pk] = await Promise.all([
           allRows('sub_months', `paid_date=gte.${m1}&paid_date=lte.${d}&select=amount`),
-          allRows('sub_months', `paid_date=eq.${d}&select=amount,received_by,source`),
+          allRows('sub_months', `paid_date=eq.${d}&select=subscriber_id,amount,received_by,source`),
           fetch(`${_SB}/rest/v1/rpc/spawn_financial_pack`, {method:'POST', headers:Object.assign({}, _HDR, {'Content-Type':'application/json'}), body:JSON.stringify({p_from: m1.slice(0,4)+'-01-01'})}).then(r=>r.json()).catch(()=>null)]);
         const hc = pk && Array.isArray(pk.harvest_check) ? pk.harvest_check.find(h => h.ym === d.slice(0,7)) : null;
         month = { m1, subs: sumF(mp,'amount'), subsN: mp.length, subsToday: sumF(mt,'amount'), subsTodayN: mt.length, todayRows: mt,
@@ -542,7 +542,16 @@
   // 👥 Subscribers — who paid TODAY first (live), then late, partly paid, due soon…
   function paidToday(){
     const m = {}; live.forEach(p => { if (!p.subscriber_id || isVd(p)) return; const x = m[p.subscriber_id] = m[p.subscriber_id] || {amt:0, at:'', who:whoOf(p), how:methodOf(p)};
-      x.amt += Number(p.amount||0); if (String(p.created_at||'') > x.at) x.at = String(p.created_at||''); }); return m;
+      x.amt += Number(p.amount||0); if (String(p.created_at||'') > x.at) x.at = String(p.created_at||''); });
+    // 2026-11-26: also everyone recorded today in BASHANG / the payment log (sub_months) — the same rows the
+    // header above counts. Spawn Collect payments already listed above are not added twice.
+    ((month && month.todayRows) || []).forEach(r => {
+      if (!r.subscriber_id || m[r.subscriber_id] && m[r.subscriber_id].fromCollect) return;
+      const x = m[r.subscriber_id] = m[r.subscriber_id] || {amt:0, at:'', who:r.received_by || 'BASHANG', how:'', fromBook:true};
+      if (x.fromBook) x.amt += Number(r.amount||0);
+    });
+    live.forEach(p => { if (p.subscriber_id && m[p.subscriber_id]) m[p.subscriber_id].fromCollect = true; });
+    return m;
   }
   function drawBook(){
     const body = document.getElementById('st-body'); if (!body || !book) return;
