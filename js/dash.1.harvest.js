@@ -186,6 +186,11 @@ function _vf(label,value,key,edit){
   if(edit&&key)return '<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">'+label+'</div><input id="vp-f-'+key+'" value="'+(value||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>';
   return '<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">'+label+'</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(value||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
 }
+function _vfe(label,value,key,type,ph){
+  const val=(value==null?'':String(value)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  if(type==='textarea') return '<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">'+label+'</div><textarea id="vp-f-'+key+'" rows="2" placeholder="'+(ph||'')+'" style="width:100%;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;resize:vertical;">'+val+'</textarea></div>';
+  return '<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">'+label+'</div><input id="vp-f-'+key+'" type="'+(type||'text')+'" value="'+val+'" placeholder="'+(ph||'')+'"'+(type==='number'?' inputmode="numeric"':'')+' style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>';
+}
 function vpRenderInfo(){
   const v=window._vpVendo,h=window._vpHarvests||[],edit=window._vpEditMode;
   const days=v&&v.last_harvest_date?Math.floor((Date.now()-new Date(v.last_harvest_date))/86400000):null;
@@ -208,9 +213,9 @@ function vpRenderInfo(){
     + '</div></div>';
   let h1=photoBlock+'<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;background:#f8faff;border-radius:8px;padding:14px;">';
   h1+='<div><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;">Identity</div>';
-  h1+=_vf('Store / Vendo name',v&&v.sheet_name,null,false);
+  h1+=edit?_vfe('Store / Vendo name',v&&v.sheet_name,'sheet_name','text','Name shown everywhere'):_vf('Store / Vendo name',v&&v.sheet_name,null,false);
   h1+=edit?_vf('Owner name',v&&v.owner_name,'owner_name',true):'<div style="margin-bottom:6px;display:flex;gap:8px;padding:5px 8px;border-radius:5px;background:#fff;border:0.5px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:1px;font-weight:500;">Owner name</div><div style="font-size:13px;color:#1e293b;flex:1;font-weight:500;">'+(v&&v.owner_name||'<span style="color:#d1d5db;">&#8212;</span>')+'</div></div>';
-  if(edit){
+  if(edit&&!noTg){
     h1+='<div style="margin-bottom:10px;"><div style="font-size:11px;color:#374151;font-weight:500;margin-bottom:3px;">TG name</div>'
       +'<div style="position:relative;">'
       +'<input id="vp-f-tg_name" value="'+(v&&v.tg_name||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" placeholder="Search TG name..." oninput="vpTgSearch(this.value)" style="width:100%;height:32px;padding:0 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;box-sizing:border-box;">'
@@ -219,21 +224,22 @@ function vpRenderInfo(){
   } else {
     h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">TG name</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(noTg?'&#8212;':(v&&v.tg_name||'&#8212;'))+tgB+'</div></div>';
   }
-  h1+=_vf('Area',v&&v.area,null,false)+_vf('VLAN',v&&v.vlan,null,false)+_vf('Status',v&&v.status,null,false);
+  h1+=_vf('Area',v&&v.area,null,false)+(edit?_vfe('VLAN',v&&v.vlan,'vlan','number','e.g. 161')+_vfe('Server',v&&v.server_name,'server_name','text','router / server name'):_vf('VLAN',v&&v.vlan,null,false)+_vf('Server',v&&v.server_name,null,false))+_vf('Status',v&&v.status,null,false)+(edit?'<div style="font-size:10px;color:#6b7280;margin:-4px 0 8px;">Area &amp; harvest group: change them in the card below (after Save).</div>':'');
   h1+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed;">&#128205; Location &amp; Contact</div>';
-  h1+=_vf('Address',v&&v.address,'address',edit)+_vf('Contact',v&&v.contact_number,'contact_number',edit);
+  h1+=_vf('Address',v&&v.address,'address',edit)+(edit?_vfe('Contact',v&&v.contact_number,'contact_number','tel','09xx xxx xxxx'):_vf('Contact',v&&v.contact_number,null,false));
   h1+=edit?'':'<div style="margin-bottom:8px;display:flex;gap:8px;align-items:flex-start;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:2px;">GPS</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.lat!=null?v.lat+', '+v.lng:'<span style="color:#b45309;">none yet</span>')+gpsL
     +(v&&v.id?' <button type="button" onclick="vpGpsTool()" style="margin-left:6px;height:24px;padding:0 10px;background:#eef2ff;color:#311A8E;border:1px solid #c7d2fe;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">📍 '+(v.lat!=null?'Check / fix GPS':'Add GPS from photo')+'</button>':'')
     +'</div></div><div id="vp-gps-tool"></div>';
   h1+='</div><div>';
   h1+='<div style="font-size:10px;font-weight:600;color:#15803d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #15803d;">&#127806; Harvest</div>';
   h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">Last harvest</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.last_harvest_date||'&#8212;')+(days!==null?' <span style="font-size:11px;color:'+dc+';">('+days+'d ago)</span>':'')+'</div></div>';
-  h1+=_vf('Interval',v&&v.harvest_interval_days?v.harvest_interval_days+'d':null,null,false)+_vf('Installed',v&&v.date_installed,null,false)+_vf('Installer',v&&v.installer,null,false);
+  h1+=edit?_vfe('Harvest every (days)',v&&v.harvest_interval_days,'harvest_interval_days','number','e.g. 30')+_vfe('Installed',v&&v.date_installed,'date_installed','date')+_vfe('Installer',v&&v.installer,'installer','text','who installed it')+_vfe('Notes',v&&v.admin_notes,'admin_notes','textarea','anything to remember')
+      :_vf('Interval',v&&v.harvest_interval_days?v.harvest_interval_days+'d':null,null,false)+_vf('Installed',v&&v.date_installed,null,false)+_vf('Installer',v&&v.installer,null,false)+(v&&v.admin_notes?_vf('Notes',String(v.admin_notes).replace(/&/g,'&amp;').replace(/</g,'&lt;'),null,false):'');
   const L=vpLedgerRows();
   if(L.rows.length){const tn=L.net,ts=L.spawn;h1+='<div style="margin-top:12px;background:#f8faff;border-radius:8px;padding:12px;"><div style="font-size:10px;font-weight:600;color:#374151;margin-bottom:8px;">Lifetime ('+L.rows.length+' harvests'+(L.book?' · '+L.book+' from BASHANG only':'')+(L.loading?' · loading BASHANG…':'')+')</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><div style="font-size:17px;font-weight:700;color:#1565c0;">'+_php(tn)+'</div><div style="font-size:10px;color:#6b7280;">Total net'+(L.book?' (app harvests)':'')+'</div></div><div><div style="font-size:17px;font-weight:700;color:#15803d;">'+_php(ts)+'</div><div style="font-size:10px;color:#6b7280;">Spawn 75%'+(L.book?' (app + BASHANG)':'')+'</div></div></div></div>';}
   h1+='</div></div>';
   if(!edit) h1+='<div id="vp-links"></div>';
-  if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
+  if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button id="vp-save-btn" onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
   else if(v&&v.status!=='pulled_out'){h1+='<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button onclick="vpToggleEdit()" style="height:28px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Edit info</button></div>';}
   document.getElementById('vp-body').innerHTML=h1;
   if(!edit) vpLinksRender();
@@ -917,14 +923,32 @@ async function vpRemovePhoto(){
 
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
-  const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
-  if(u.tg_name)u.tg_match_confirmed=true;
+  const F=['sheet_name','owner_name','contact_number','address','date_installed','installer','vlan','server_name','harvest_interval_days','admin_notes'];
+  const patch={};
+  F.forEach(f=>{const el=document.getElementById('vp-f-'+f); if(!el)return; const nv=el.value.trim(); const ov=v[f]==null?'':String(v[f]); if(nv!==ov) patch[f]=nv;});
+  const tgEl=document.getElementById('vp-f-tg_name'); const tgNew=tgEl?tgEl.value.trim():null;
+  const tgChanged = tgEl && !v.no_tg && tgNew!==(v.tg_name||'');
+  if(!Object.keys(patch).length && !tgChanged){toast('Nothing changed');vpToggleEdit();return;}
+  if(patch.sheet_name!==undefined && !patch.sheet_name){toast('Vendo name cannot be blank');return;}
+  const pw=await askAdminPw('Enter admin password to save '+(Object.keys(patch).length+(tgChanged?1:0))+' change(s).'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const btn=document.getElementById('vp-save-btn'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
   try{
-    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
-    if(r.ok){Object.assign(window._vpVendo,u);window._vpEditMode=false;document.getElementById('vp-edit-btn').textContent='Edit';document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name;vpRenderInfo();toast('Saved!');}
-    else toast('Save failed');
-  }catch(e){toast('Error: '+e.message);}
+    if(Object.keys(patch).length){
+      const j=await vpRpc('spawn_card_details_set',{p_vendo_id:v.id,p_patch:patch,p_pw:pw});
+      if(j&&j.vendo) Object.assign(window._vpVendo,j.vendo);
+    }
+    if(tgChanged){
+      const u={tg_name:tgNew||null}; if(tgNew)u.tg_match_confirmed=true;
+      const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
+      if(!r.ok) throw new Error('TG name not saved (HTTP '+r.status+')');
+      window._vpVendo.tg_name=u.tg_name;
+    }
+    const nv=window._vpVendo;
+    window._vpEditMode=false;document.getElementById('vp-edit-btn').textContent='Edit';
+    document.getElementById('vp-title').textContent=nv.sheet_name||nv.tg_name||'—';
+    if(patch.sheet_name){window._vpName=nv.sheet_name; try{htAllRows=[];}catch(_){}}
+    vpRenderInfo(); toast('✅ Saved');
+  }catch(e){toast('Not saved: '+e.message); if(btn){btn.disabled=false;btn.textContent='Save';}}
 }
 function vpConfirmPullout(){
   const v=window._vpVendo;if(!v)return;
