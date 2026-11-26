@@ -415,6 +415,9 @@ async function vpRenderNames(){
       </div>
     </div>
 
+    <!-- ⚡ SpawnFi line (filled by dash.24 when hq_link_widget is on) -->
+    <div id="vp-sfline"></div>
+
     <!-- Edit section -->
     <div style="background:#f8faff;border:1px solid #e0e7ff;border-radius:10px;padding:14px;margin-bottom:12px;">
       <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:10px;">Edit Names</div>
@@ -470,8 +473,11 @@ async function vpRenderNames(){
 
   html += '</div>';
   body.innerHTML = html;
+  if(window.spawnLink && v) window.spawnLink.mountCard(v.id, document.getElementById('vp-sfline'));
 }
 
+// The same admin-password check the four inline sites above use, for other modules (dash.24 link widget).
+window.spawnAdminPwOk = function(pw){ return pw === '101510'; };
 async function vpQuickLink(tgName){
   const v=window._vpVendo; if(!v)return;
   const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}

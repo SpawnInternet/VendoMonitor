@@ -37,6 +37,12 @@
     }
     return out;
   }
+  /* ⚡ SpawnFi link widget (dash.24, switch hq_link_widget): the Name matcher's question names the line in its first line — offer the widget beside the buttons */
+  function linkBtn(r){
+    const L = window.spawnLink; if (!L || !L.enabled() || r.topic !== 'spawnfi_link') return '';
+    const q = L.fromQuestionText(r.text); if (!q) return '';
+    return L.button('choose another vendo ›', Object.assign(q, { from: 'needsyou' }), 'color:#311A8E;font-weight:700;text-decoration:none;font-size:12px;white-space:nowrap');
+  }
   function rowHtml(r){
     const head = `<span style="font-weight:800">${icon(r.employee_id)} ${esc(r.employee || r.employee_id)}</span>` +
                  `<span style="color:var(--mu,#6b7280);font-size:11px"> · ${r.item === 'light' ? 'since ' : ''}${esc(ago(r.at))}</span>`;
@@ -56,7 +62,7 @@
       <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">${head}
         <a href="#" data-thread="${esc(r.employee_id)}" style="margin-left:auto;font-size:11px;color:#7c3aed;text-decoration:none;font-weight:700">Open thread ›</a></div>
       <div title="${esc(r.text)}" style="font-size:13px;margin-top:2px;white-space:pre-wrap;word-break:break-word">${esc(to12(firstLines(r.text, 2)))}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">${btns}${free}</div></div>`;
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">${btns}${free}${linkBtn(r)}</div></div>`;
   }
   function summaryLine(summary){
     return (summary || []).filter(s => Number(s.hidden_by_cap) > 0)
