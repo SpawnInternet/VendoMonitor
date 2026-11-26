@@ -873,7 +873,56 @@
           ${row('Last paid', bk.last_paid ? `${short(bk.last_paid)} · ${peso(bk.last_amount)}${bk.last_for ? ' <span style="color:#6b7280;font-weight:500">for ' + mon(bk.last_for) + '</span>' : ''}${bk.last_or ? ' · OR ' + esc(bk.last_or) : ''}${bk.last_by ? ' · ' + esc(bk.last_by) : ''}` : '')}
           ${row('Installed', [sub.date_installed ? short(String(sub.date_installed).slice(0,10)) : '', sub.installer].filter(Boolean).map(esc).join(' · '))}
           <div class="sd-kpi"><div><small>Lifetime paid (${live.length} payment${live.length===1?'':'s'})</small><b style="color:#025ac6">${peso(lifetime)}</b></div><div><small>Months on record</small><b>${months.length}</b></div><div><small>Linked numbers</small><b>${nums.length}</b></div></div>
-        </div></div></div>`;
+        </div></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px"><button type="button" class="sd-edit-open" style="height:32px;padding:0 16px;background:#fff;color:#025ac6;border:1px solid #bfd4fb;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✏️ Edit info</button></div></div>`;
+    // 2026-11-26: edit the subscriber's details in place (admin password; spawn_sub_details_set checks + logs every change).
+    // Plan / monthly amount and cut-off keep their own flows, so they are not in this form.
+    let editing = false;
+    const SD_AREAS = ['DIPOLOG','DAPITAN','ROXAS','POLANCO','SINDANGAN','MINAOG','SINAMAN','UNKNOWN'];
+    const SD_PAY = [['','—'],['gcash','GCash'],['cash','Cash (collector)'],['office','Office'],['mixed','Mixed'],['unknown','Not sure']];
+    const ein = (label, key, val, type, ph) => `<label style="display:block;margin-bottom:10px"><span style="display:block;font-size:12px;color:#374151;font-weight:700;margin-bottom:3px">${label}</span>`
+      + (type === 'textarea' ? `<textarea data-k="${key}" rows="3" placeholder="${ph||''}" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${esc(val == null ? '' : val)}</textarea>`
+        : type === 'area' ? `<select data-k="${key}" style="width:100%;height:36px;padding:0 8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;background:#fff">${SD_AREAS.map(a => `<option value="${a}"${String(val||'UNKNOWN').toUpperCase()===a?' selected':''}>${a==='UNKNOWN'?'Not set':a.charAt(0)+a.slice(1).toLowerCase()}</option>`).join('')}</select>`
+        : type === 'pay' ? `<select data-k="${key}" style="width:100%;height:36px;padding:0 8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;background:#fff">${SD_PAY.map(([v,l]) => `<option value="${v}"${(val||'')===v?' selected':''}>${l}</option>`).join('')}</select>`
+        : `<input data-k="${key}" type="${type||'text'}" value="${esc(val == null ? '' : String(val))}" placeholder="${ph||''}"${type==='number'?' inputmode="numeric" min="1" max="31"':''} style="width:100%;box-sizing:border-box;height:36px;padding:0 9px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit">`)
+      + `</label>`;
+    const editForm = () => `<div class="sd-card"><div class="sd-h">✏️ Edit subscriber info</div><div class="sd-grid">
+        <div>${ein('Name', 'name', sub.name)}${ein('Area', 'area', sub.area, 'area')}${ein('Address', 'address', sub.address, 'text', 'purok, barangay, town')}
+          ${ein('Phone', 'phone', sub.phone, 'tel', '09xx xxx xxxx')}${ein('Facebook name', 'fb_name', sub.fb_name)}</div>
+        <div>${ein('Due day (of the month)', 'due_day', sub.due_day, 'number', '1 to 31')}${ein('Usually pays on day', 'pay_pref_day', sub.pay_pref_day, 'number', '1 to 31')}
+          ${ein('Pays by', 'pay_mode', sub.pay_mode, 'pay')}${ein('Usual collector', 'usual_collector', sub.usual_collector)}
+          ${ein('Installed', 'date_installed', sub.date_installed ? String(sub.date_installed).slice(0,10) : '', 'date')}${ein('Installer', 'installer', sub.installer)}</div></div>
+        ${ein('Notes', 'notes', sub.notes, 'textarea', 'anything to remember')}
+        <div style="font-size:12px;color:#6b7280;margin:-2px 0 10px">Plan / monthly amount and cut-off have their own buttons, so they are not here.</div>
+        <div style="display:flex;gap:8px;align-items:center"><button type="button" class="sd-edit-save" style="height:36px;padding:0 20px;background:#025ac6;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>
+          <button type="button" class="sd-edit-cancel" style="height:36px;padding:0 14px;background:#fff;color:#374151;border:1px solid #d1d5db;border-radius:8px;font-size:14px;cursor:pointer;font-family:inherit">Cancel</button>
+          <span class="sd-edit-msg" style="font-size:13px"></span></div></div>`;
+    const editWire = () => {
+      const op = pg.querySelector('.sd-edit-open'); if (op) op.onclick = () => { editing = true; draw('info'); };
+      const cn = pg.querySelector('.sd-edit-cancel'); if (cn) cn.onclick = () => { editing = false; draw('info'); };
+      const sv = pg.querySelector('.sd-edit-save'); if (!sv) return;
+      sv.onclick = async () => {
+        const m = pg.querySelector('.sd-edit-msg'); const say = (t, bad) => { m.style.color = bad ? '#d91934' : '#6b7280'; m.textContent = t; };
+        const patch = {};
+        pg.querySelectorAll('[data-k]').forEach(el => { const k = el.dataset.k; const nv = el.value.trim();
+          let ov = sub[k] == null ? '' : String(sub[k]); if (k === 'date_installed') ov = ov.slice(0,10); if (k === 'area' && !ov) ov = 'UNKNOWN';
+          if (nv !== ov) patch[k] = nv; });
+        if (!Object.keys(patch).length) { editing = false; draw('info'); return; }
+        if (patch.name !== undefined && !patch.name) { say('Name cannot be blank', true); return; }
+        const pw = typeof askAdminPw === 'function' ? await askAdminPw('Enter admin password to save ' + Object.keys(patch).length + ' change(s).') : prompt('Admin password');
+        if (pw === null) return;
+        if (pw !== '101510') { if (typeof markAdminPwWrong === 'function') markAdminPwWrong(); say('Wrong password', true); return; }
+        sv.disabled = true; say('Saving…');
+        try {
+          const r = await fetch(`${_SB}/rest/v1/rpc/spawn_sub_details_set`, { method:'POST', headers:Object.assign({}, _HDR, { 'Content-Type':'application/json' }), body:JSON.stringify({ p_sub_id:sub.id, p_patch:patch, p_pw:pw }) });
+          let j = null; try { j = await r.json(); } catch (_) {}
+          if (!r.ok || !j || j.ok === false) throw new Error((j && (j.error || j.message)) || ('HTTP ' + r.status));
+          if (j.sub) { Object.assign(sub, j.sub); if (bk && bk.id === sub.id) { if (j.sub.name) bk.name = j.sub.name; if (j.sub.area) bk.area = j.sub.area; } }
+          if (typeof toast === 'function') toast('✅ Saved');
+          close(); subDetail(sub.id);
+        } catch (e) { sv.disabled = false; say('Not saved: ' + e.message, true); }
+      };
+    };
     const ledger = () => `<div class="sd-card"><div class="sd-h">📅 Month ledger <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· from BASHANG, the payment sheet and Spawn Collect</span></div>
         <div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th>Paid on</th><th class="n">Amount</th><th>OR / ref</th><th>Received by</th><th>Source</th></tr></thead><tbody>${months.map(m => `<tr><td><b>${mon(m.ym)}</b></td><td>${m.paid_date ? short(m.paid_date) : '<span style="color:#d91934">unpaid</span>'}</td><td class="n">${m.amount != null ? peso(m.amount) : '—'}</td><td>${esc(m.or_no || '—')}</td><td>${esc(m.received_by || '—')}</td><td style="color:#6b7280">${esc(srcL[m.source] || m.source || '')}${m.check_flag ? ' · <span style="color:#b45309">' + esc(String(m.check_flag).replace('_',' ')) + '</span>' : ''}${Number(m.balance) > 0 ? ' · <span style="color:#d91934">balance ' + peso(m.balance) + '</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">No months on record.</td></tr>'}</tbody></table></div></div>
       <div class="sd-card"><div class="sd-h">🧾 Payments <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#6b7280">· ${live.length} · ${peso(lifetime)}${vd.length ? ' · ' + vd.length + ' voided' : ''}</span></div>
@@ -898,7 +947,8 @@
       </div>`; };
     const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k));
       if (k === 'gcash' && !gcLoaded) { pg.querySelector('.sd-body').innerHTML = '<div class="sd-card" style="color:#6b7280">Checking their GCash refs against the statements…</div>'; gcLoad().then(() => { if (document.getElementById('sd-page') === pg && pg.querySelector('.sd-tabs button.on') && pg.querySelector('.sd-tabs button.on').dataset.t === 'gcash') pg.querySelector('.sd-body').innerHTML = gcashT(); }); return; }
-      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); gpsWire(); photoWire(); };
+      if (k !== 'info') editing = false;
+      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : editing ? editForm() : info(); gpsWire(); photoWire(); editWire(); };
     pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         <a class="sd-btn" href="#" id="sd-chat">💬 Open chat</a>${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
       <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;
