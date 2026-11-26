@@ -190,8 +190,13 @@ function _gpsAgeDays(updatedAt){
   if(!updatedAt) return null;
   return Math.floor((Date.now() - new Date(updatedAt).getTime())/86400000);
 }
+/* 2026-11-26: a pin does not go bad with age — a vendo does not move. 'check' = the pin
+   looks wrong (shared with another vendo, or listed in a different area from every vendo
+   around it); age (fresh / aging / old) is only shown as information. */
+let _gpsSuspect = {};
 function _gpsStatus(v){
   if(v.lat==null||v.lng==null) return 'missing';
+  if(_gpsSuspect[v.id]) return 'check';
   const age=_gpsAgeDays(v.gps_updated_at);
   if(age==null) return 'old';
   if(age<30) return 'fresh';
@@ -199,7 +204,7 @@ function _gpsStatus(v){
   return 'old';
 }
 function _gpsColor(status){
-  return status==='fresh'?'#16a34a':status==='aging'?'#d97706':status==='missing'?'#9ca3af':'#dc2626';
+  return status==='check'?'#dc2626':status==='missing'?'#9ca3af':status==='fresh'?'#16a34a':'#475569';
 }
 
 async function gpsTraceLoad(){
@@ -207,27 +212,47 @@ async function gpsTraceLoad(){
   if(!listEl) return;
   listEl.innerHTML='<div style="text-align:center;padding:40px;color:#6b7280;font-size:13px;">⏳ Loading vendos…</div>';
   try{
-    const rows = await sbAll('vendos', 'select=id,sheet_name,tg_name,owner_name,area,address,lat,lng,gps,gps_updated_at,photo_url,status&status=eq.active&order=area.asc');
+    // read every page or fail loudly — a half-loaded list would show wrong counts
+    const q='select=id,sheet_name,tg_name,owner_name,area,address,lat,lng,gps,gps_updated_at,photo_url,status&status=eq.active&order=id.asc';
+    const rows = await _gpsFetchAll('vendos', q);
     _gpsAllVendos = Array.isArray(rows)?rows:[];
+    _gpsSuspect = (window.SpawnGps && SpawnGps.suspects) ? SpawnGps.suspects(_gpsAllVendos) : {};
 
     // Summary
     const total=_gpsAllVendos.length;
     const hasGps=_gpsAllVendos.filter(v=>v.lat!=null&&v.lng!=null).length;
     const missing=total-hasGps;
-    const old=_gpsAllVendos.filter(v=>_gpsStatus(v)==='old'&&v.lat!=null).length;
-    const fresh=_gpsAllVendos.filter(v=>_gpsStatus(v)==='fresh').length;
+    const check=Object.keys(_gpsSuspect).length;
     const pct=total>0?Math.round(hasGps/total*100):0;
-    document.getElementById('gps-summary').innerHTML=`
-      <div class="stat" style="border-bottom-color:#16a34a"><div class="sl">GPS Coverage</div><div class="sv" style="color:#16a34a">${pct}%</div></div>
-      <div class="stat"><div class="sl">Has GPS</div><div class="sv">${hasGps}</div></div>
-      <div class="stat" style="border-bottom-color:#dc2626"><div class="sl">Missing GPS</div><div class="sv" style="color:#dc2626">${missing}</div></div>
-      <div class="stat" style="border-bottom-color:#d97706"><div class="sl">Old / Recheck</div><div class="sv" style="color:#d97706">${old}</div></div>`;
+    const card=(lbl,val,col,st,tip)=>`<div class="stat" title="${tip}" onclick="gpsQuick('${st}')" style="cursor:pointer;border-bottom-color:${col}"><div class="sl">${lbl}</div><div class="sv" style="color:${col}">${val}</div></div>`;
+    document.getElementById('gps-summary').innerHTML=
+        card('GPS Coverage',pct+'%','#16a34a','','Active vendos with a pin')
+      + card('Has GPS',hasGps,'#1e293b','has','Show vendos with a pin')
+      + card('Missing GPS',missing,'#dc2626','missing','Show vendos with no pin')
+      + card('⚠ Check pin',check,'#d97706','check','Pins that look wrong: shared with another vendo, or listed in a different area from every vendo around it');
 
     gpsInitMap();
     gpsTraceFilter();
   }catch(e){
     listEl.innerHTML='<div style="color:#dc2626;text-align:center;padding:40px 0;">Error: '+e.message+'</div>';
   }
+}
+
+async function _gpsFetchAll(table, query){
+  const all=[];
+  for(let off=0;;off+=1000){
+    const r=await fetch(`${SB_URL}/rest/v1/${table}?${query}&limit=1000&offset=${off}`,{headers:HDR});
+    if(!r.ok) throw new Error(table+' read failed ('+r.status+') — counts not shown so they are not wrong');
+    const rows=await r.json();
+    if(!Array.isArray(rows)) throw new Error(table+' read failed');
+    all.push(...rows);
+    if(rows.length<1000) break;
+  }
+  return all;
+}
+function gpsQuick(st){
+  const sel=document.getElementById('gps-status'); if(sel) sel.value=st;
+  gpsTraceFilter();
 }
 
 function gpsInitMap(){
@@ -276,9 +301,10 @@ function gpsTraceFilter(){
     if(area&&v.area!==area) return false;
     const st=_gpsStatus(v);
     if(status==='nophoto'){ if(v.photo_url) return false; }
+    else if(status==='has'){ if(st==='missing') return false; }
     else if(status&&st!==status) return false;
     if(q){
-      const hay=((v.sheet_name||'')+(v.tg_name||'')+(v.owner_name||'')+(v.address||'')).toLowerCase();
+      const hay=((v.sheet_name||'')+' '+(v.tg_name||'')+' '+(v.owner_name||'')+' '+(v.address||'')+' '+(_gpsSuspect[v.id]||'')).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -286,6 +312,9 @@ function gpsTraceFilter(){
 
   rows.sort((a,b)=>{
     if(sort==='name') return (a.sheet_name||a.tg_name||'').localeCompare(b.sheet_name||b.tg_name||'');
+    // pins to check first, then missing, then by age
+    const pa=_gpsSuspect[a.id]?0:1, pb=_gpsSuspect[b.id]?0:1;
+    if(sort==='oldest' && pa!==pb) return pa-pb;
     const aa=a.gps_updated_at?new Date(a.gps_updated_at).getTime():0;
     const bb=b.gps_updated_at?new Date(b.gps_updated_at).getTime():0;
     // missing GPS (0) should sort to top for 'oldest'
@@ -304,7 +333,8 @@ function gpsTraceRender(rows){
     const color=_gpsColor(st);
     const age=_gpsAgeDays(v.gps_updated_at);
     const name=v.sheet_name||v.tg_name||'—';
-    const statusLabel=st==='missing'?'❌ No GPS':st==='fresh'?'🟢 '+age+'d':st==='aging'?'🟡 '+age+'d':(age!=null?'🔴 '+age+'d':'🔴 unknown');
+    const statusLabel=st==='missing'?'❌ No GPS':st==='check'?'⚠ Check pin':(age!=null?'📍 saved '+age+'d ago':'📍 date unknown');
+    const why=_gpsSuspect[v.id]?`<div style="font-size:10px;color:#b45309;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${String(_gpsSuspect[v.id]).replace(/</g,'&lt;')}</div>`:'';
     const photoThumb=v.photo_url
       ? `<img src="${v.photo_url}" onclick="event.stopPropagation();collectorPhotoFullviewUrl('${v.photo_url}','${(name||'').replace(/'/g,'')}')" style="width:38px;height:38px;border-radius:8px;object-fit:cover;cursor:pointer;flex-shrink:0;border:1px solid #e5e7eb;">`
       : `<div style="width:38px;height:38px;border-radius:8px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">📷</div>`;
@@ -313,6 +343,7 @@ function gpsTraceRender(rows){
       <div style="flex:1;min-width:0;">
         <div style="font-weight:700;font-size:13px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
         <div style="font-size:10px;color:#9ca3af;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${v.area||'—'} · ${v.address||'no address'}</div>
+        ${why}
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:11px;font-weight:700;color:${color};">${statusLabel}</div>
@@ -360,15 +391,27 @@ function gpsOpenEditor(vendoId){
           <button onclick="gpsUploadPhoto(${v.id})" style="padding:7px 14px;background:#1565c0;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">📷 ${v.photo_url?'Change':'Add'} Photo</button>
         </div>
       </div>
-      <!-- GPS input -->
-      <label style="font-size:11px;color:#6b7280;font-weight:600;">GPS Coordinates (lat, lng)</label>
-      <input id="gps-edit-coords" value="${v.lat!=null?v.lat+', '+v.lng:''}" placeholder="8.59709, 123.35454"
-        style="width:100%;height:38px;padding:0 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;margin-top:4px;margin-bottom:6px;box-sizing:border-box;font-family:monospace;">
-      <div style="font-size:10px;color:#9ca3af;margin-bottom:12px;">💡 Tip: paste from the Conota camera photo overlay, or from Google Maps</div>
-      <button onclick="gpsSaveCoords(${v.id})" style="width:100%;height:40px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">💾 Save GPS</button>
+      <!-- GPS: shared reader (EXIF → stamp OCR → paste), checked against nearby vendos -->
+      ${_gpsSuspect[v.id]?`<div style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;margin-bottom:8px;">⚠ ${String(_gpsSuspect[v.id]).replace(/</g,'&lt;')}</div>`:''}
+      <div id="gps-edit-reader"></div>
     </div>
   </div>`;
   document.body.appendChild(ov);
+  gpsMountReader(v, window._gpsPickedFile||null);
+  window._gpsPickedFile=null;
+}
+function gpsMountReader(v, file){
+  const host=document.getElementById('gps-edit-reader');
+  if(!host) return;
+  if(!window.SpawnGps){ host.innerHTML='<div style="color:#dc2626;font-size:12px;">GPS reader did not load — refresh the page.</div>'; return; }
+  SpawnGps.panel(host,{kind:'vendo', id:v.id, name:v.sheet_name||v.tg_name, area:v.area, lat:v.lat, lng:v.lng, photoUrl:v.photo_url, file,
+    onSaved:(g,out)=>{
+      v.lat=g.lat; v.lng=g.lng; v.gps=g.lat+', '+g.lng; v.gps_updated_at=new Date().toISOString();
+      if(out&&out.photoUrl) v.photo_url=out.photoUrl;
+      _gpsSuspect=SpawnGps.suspects(_gpsAllVendos);
+      document.getElementById('gps-editor')?.remove();
+      gpsInitMap(); gpsTraceFilter();
+    }});
 }
 
 async function gpsSaveCoords(vendoId){
@@ -417,18 +460,10 @@ function gpsUploadPhoto(vendoId){
   inp.onchange=async()=>{
     const file=inp.files[0]; if(!file) return;
     const pw=await askAdminPw('Enter admin password to confirm.'); if(pw===null)return; if(pw!=='101510'){ markAdminPwWrong(); toast('Wrong password'); return; }
-    // Try to read GPS from photo EXIF BEFORE compression (compression strips EXIF)
-    try{
-      const gps=await readExifGps(file);
-      if(gps){
-        const inpEl=document.getElementById('gps-edit-coords');
-        if(inpEl){ inpEl.value=gps.lat.toFixed(6)+', '+gps.lng.toFixed(6); inpEl.style.background='#dcfce7'; }
-        toast('📍 GPS found in photo: '+gps.lat.toFixed(5)+', '+gps.lng.toFixed(5));
-      }
-    }catch(e){ /* no EXIF GPS — silent */ }
     toast('Compressing & uploading…');
     try{
-      const blob=await compressImage(file,600,0.82);
+      // 1600px keeps a GPS stamp readable later; 600px made the stamp text unreadable
+      const blob=await compressImage(file,1600,0.85);
       const path='vendo-profiles/vendo_'+vendoId+'.jpg';
       const up=await fetch(`${SB_URL}/storage/v1/object/harvest-photos/${path}`,{
         method:'POST',
@@ -440,11 +475,10 @@ function gpsUploadPhoto(vendoId){
         headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
         body:JSON.stringify({photo_url:publicUrl})});
       if(v) v.photo_url=publicUrl;
-      toast('✅ Photo saved!');
-      // Re-open editor but preserve any GPS we just auto-filled
-      const filled=document.getElementById('gps-edit-coords')?.value||'';
+      toast('✅ Photo saved — reading its GPS…');
+      // re-open the editor and read GPS from the ORIGINAL file (EXIF survives there, not in the compressed copy)
+      window._gpsPickedFile=file;
       gpsOpenEditor(vendoId);
-      if(filled){ const el=document.getElementById('gps-edit-coords'); if(el&&!el.value){ el.value=filled; el.style.background='#dcfce7'; } }
       gpsTraceFilter();
     }catch(e){ toast('Error: '+e.message); }
   };

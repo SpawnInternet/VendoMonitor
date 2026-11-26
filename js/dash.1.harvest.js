@@ -149,7 +149,7 @@ async function htShowVendoProfile(name, area, startTab) {
     document.body.appendChild(modal);
   }
   modal.style.display='flex';
-  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null;
+  window._vpName=name; window._vpArea=area; window._vpEditMode=false; window._vpVendo=null; window._vpHarvests=null; window._vpGpsOpen=false; window._vpGpsFile=null;
   document.getElementById('vp-title').textContent=name||'—';
   document.getElementById('vp-sub').textContent=area||'';
   document.getElementById('vp-edit-btn').textContent='Edit';
@@ -212,7 +212,9 @@ function vpRenderInfo(){
   h1+=_vf('Area',v&&v.area,null,false)+_vf('VLAN',v&&v.vlan,null,false)+_vf('Status',v&&v.status,null,false);
   h1+='<div style="margin-top:12px;font-size:10px;font-weight:600;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f5f3ff;border-radius:6px;border-left:3px solid #7c3aed;">&#128205; Location &amp; Contact</div>';
   h1+=_vf('Address',v&&v.address,'address',edit)+_vf('Contact',v&&v.contact_number,'contact_number',edit);
-  h1+=edit?'':'<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">GPS</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.lat?v.lat+', '+v.lng:'&#8212;')+gpsL+'</div></div>';
+  h1+=edit?'':'<div style="margin-bottom:8px;display:flex;gap:8px;align-items:flex-start;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;padding-top:2px;">GPS</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.lat!=null?v.lat+', '+v.lng:'<span style="color:#b45309;">none yet</span>')+gpsL
+    +(v&&v.id?' <button type="button" onclick="vpGpsTool()" style="margin-left:6px;height:24px;padding:0 10px;background:#eef2ff;color:#311A8E;border:1px solid #c7d2fe;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;">📍 '+(v.lat!=null?'Check / fix GPS':'Add GPS from photo')+'</button>':'')
+    +'</div></div><div id="vp-gps-tool"></div>';
   h1+='</div><div>';
   h1+='<div style="font-size:10px;font-weight:600;color:#15803d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;padding:6px 10px;background:#f0fdf4;border-radius:6px;border-left:3px solid #15803d;">&#127806; Harvest</div>';
   h1+='<div style="margin-bottom:8px;display:flex;gap:8px;"><div style="font-size:11px;color:#6b7280;width:110px;flex-shrink:0;">Last harvest</div><div style="font-size:13px;color:#1e293b;flex:1;">'+(v&&v.last_harvest_date||'&#8212;')+(days!==null?' <span style="font-size:11px;color:'+dc+';">('+days+'d ago)</span>':'')+'</div></div>';
@@ -222,6 +224,18 @@ function vpRenderInfo(){
   if(edit){h1+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;"><button onclick="vpSave()" style="height:34px;padding:0 18px;background:#1565c0;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Save</button><button onclick="vpToggleEdit()" style="height:34px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;cursor:pointer;background:white;color:#374151;">Cancel</button><div style="flex:1;"></div><button onclick="vpConfirmPullout()" style="height:34px;padding:0 14px;border:1px solid #dc2626;border-radius:6px;font-size:12px;cursor:pointer;background:white;color:#dc2626;font-weight:600;">&#x1F534; Pull out</button></div>';}
   else if(v&&v.status!=='pulled_out'){h1+='<div style="margin-top:12px;display:flex;justify-content:flex-end;"><button onclick="vpToggleEdit()" style="height:28px;padding:0 14px;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer;background:white;color:#374151;">Edit info</button></div>';}
   document.getElementById('vp-body').innerHTML=h1;
+  if(window._vpGpsOpen && !edit) vpGpsTool(window._vpGpsFile||null, true);
+}
+/* 2026-11-26: shared GPS reader (js/gps-reader.js) on the vendo card — reads the saved photo or a new one
+   (EXIF → stamp OCR, two reads must agree), checks it against nearby vendos, saves with the admin password. */
+function vpGpsTool(file, keepOpen){
+  const host=document.getElementById('vp-gps-tool'); const v=window._vpVendo;
+  if(!host||!v) return;
+  if(host.innerHTML && !keepOpen && !file){ host.innerHTML=''; window._vpGpsOpen=false; return; }   // second tap closes it
+  window._vpGpsOpen=true; window._vpGpsFile=null;
+  if(!window.SpawnGps){ host.innerHTML='<div style="color:#dc2626;font-size:12px;padding:6px 0;">GPS reader did not load — refresh the page.</div>'; return; }
+  SpawnGps.panel(host,{kind:'vendo', id:v.id, name:v.sheet_name, area:v.area, lat:v.lat, lng:v.lng, photoUrl:v.photo_url, file:file||null,
+    onSaved:(g,out)=>{ v.lat=g.lat; v.lng=g.lng; if(out&&out.photoUrl) v.photo_url=out.photoUrl; window._vpGpsOpen=false; vpRenderInfo(); }});
 }
 function vpRenderLedger(){
   const h=window._vpHarvests||[];
@@ -570,7 +584,8 @@ async function vpUploadPhoto(input){
       body:JSON.stringify({photo_url:publicUrl})});
     if(r.ok){
       window._vpVendo.photo_url=publicUrl;
-      toast('✅ Photo uploaded!');
+      toast('✅ Photo uploaded — reading its GPS…');
+      window._vpGpsOpen=true; window._vpGpsFile=file;   // read GPS from the original file
       vpRenderInfo();
     }else{if(msg){msg.textContent='Save failed';msg.style.color='#dc2626';}}
   }catch(e){if(msg){msg.textContent='Error: '+e.message;msg.style.color='#dc2626';}}
@@ -6175,6 +6190,8 @@ function viResetForm(){
   const gs=document.getElementById('vi-gps-state'); if(gs){ gs.style.color='#9ca3af'; gs.textContent='Paste coordinates — only real camera/Maps values, never estimated.'; }
   ['vi-k-co','vi-k-cd','vi-k-bd'].forEach(id=>{ const e=document.getElementById(id); if(e) e.checked=false; });
   const a=document.getElementById('vi-area'); if(a) a.value='';
+  const gsel=document.getElementById('vi-group'); if(gsel) gsel.value='';   // 2026-11-26: do not carry the last install's group over
+  _viGpsAuto=null;
   viAreaChanged();
   const p=document.getElementById('vi-picked'); if(p) p.style.display='none';
   const pv=document.getElementById('vi-preview'); if(pv) pv.style.display='none';
@@ -7334,6 +7351,7 @@ let _viGps = null, _viPhotoFile = null;
    Rejects anything outside Zamboanga del Norte's plausible box. */
 function viGpsParseStr(raw){
   if(!raw) return null;
+  if(window.SpawnGps){ const p = SpawnGps.parse(raw); return p ? {lat:p.lat, lng:p.lng} : null; }
   const s = String(raw).trim();
   if(!s) return null;
 
@@ -7390,6 +7408,43 @@ function viGpsParse(){
   el.innerHTML = '✅ ' + g.lat + ', ' + g.lng
     + ' · <a href="https://www.google.com/maps?q='+g.lat+','+g.lng+'" target="_blank" rel="noopener" style="color:#025AC6;font-weight:800;">view on map ↗</a>';
   viCompile();
+  viGpsArea(g);
+}
+
+/* 2026-11-26: Area + Harvest Group from the GPS — the nearest existing vendos (within 4 km)
+   vote, closest counting most. Fills Area / Group only when they are still empty or were
+   filled by an earlier GPS; a choice the user made is never overwritten, only flagged. */
+let _viGpsAuto = null;
+async function viGpsArea(g){
+  if(!window.SpawnGps) return;
+  const hint = document.getElementById('vi-group-hint');
+  let n;
+  try{ n = await SpawnGps.near(g.lat, g.lng); }catch(e){ return; }
+  if(!_viGps || _viGps.lat !== g.lat || _viGps.lng !== g.lng) return;   // GPS changed meanwhile
+  const asel = document.getElementById('vi-area'), gsel = document.getElementById('vi-group');
+  if(!asel || !gsel) return;
+  if(!n.count){
+    if(hint){ hint.style.color='#b45309'; hint.innerHTML='⚠ No vendo within 4 km of this GPS'+(n.nearest?' (nearest '+klEsc(n.nearest.name)+', '+SpawnGps.fmtDist(n.nearestKm)+')':'')+' — pick the area yourself and double-check the GPS.'; }
+    return;
+  }
+  const curA = asel.value, curG = gsel.value;
+  const autoA = !curA || (_viGpsAuto && curA === _viGpsAuto.area);
+  const autoG = !curG || (_viGpsAuto && String(curG) === String(_viGpsAuto.group||''));
+  const areaOk = n.area && Array.from(asel.options).some(o => o.value === n.area);
+  let did = [];
+  if(autoA && areaOk && n.areaShare >= 0.5){ asel.value = n.area; viAreaChanged(); did.push('Area'); }
+  const grp = n.group && n.groupShare >= 0.5 ? n.group : null;
+  if(autoG && grp && gsel.querySelector('option[value="'+grp.id+'"]')){ gsel.value = String(grp.id); did.push('Group'); }
+  _viGpsAuto = {area: did.includes('Area') ? n.area : (_viGpsAuto&&_viGpsAuto.area), group: did.includes('Group') ? grp.id : (_viGpsAuto&&_viGpsAuto.group)};
+  if(hint){
+    const why = n.areaVotes+' of '+n.count+' nearest vendos are <b>'+klEsc(n.area)+'</b>'
+      + (grp ? ', group <b>'+klEsc((grp.group_id?grp.group_id+' · ':'')+(grp.group_label||''))+'</b>' : '')
+      + ' · nearest '+SpawnGps.fmtDist(n.nearestKm);
+    const clash = asel.value && SpawnGps.family(asel.value) !== SpawnGps.family(n.area) && n.areaShare >= 0.6;
+    if(clash){ hint.style.color='#b91c1c'; hint.innerHTML='⚠ Area is '+klEsc(asel.value)+' but the GPS is among other vendos: '+why+'. Check the area or the GPS.'; }
+    else { hint.style.color='#027e60'; hint.innerHTML='📍 '+(did.length ? did.join(' + ')+' picked from the GPS — ' : 'GPS check: ')+why+'. Change it if wrong.'; }
+  }
+  viCompile();
 }
 
 function viGpsSwap(){
@@ -7424,6 +7479,38 @@ async function viPhotoPick(input){
   if(pv){ pv.src = URL.createObjectURL(f); pv.style.display='block'; }
   const size = Math.round(f.size/1024)+' KB';
   if(st){ st.style.color='#6b7280'; st.textContent='📷 '+f.name+' · '+size+' · reading GPS…'; }
+
+  // 2026-11-26: shared reader first (EXIF → stamp OCR, two reads must agree); old path below stays as fallback
+  if(window.SpawnGps){
+    let o = null;
+    try{ o = await SpawnGps.read(f, {onStatus: t => { if(_viPhotoFile===f && st){ st.style.color='#6b7280'; st.innerHTML='✅ '+klEsc(f.name)+' · '+size+'<br>🔎 '+klEsc(t); } }}); }
+    catch(e){ o = {error:String(e&&e.message||e)}; }
+    if(_viPhotoFile !== f || !st) return;   // user picked another photo meanwhile
+    const box = document.getElementById('vi-gps');
+    if(o && o.gps){
+      const sane = SpawnGps.sane(o.gps);
+      const src = o.how==='exif' ? 'camera GPS data (exact)' : (o.agree>=2 ? 'the stamp — '+o.agree+' reads agree' : 'the stamp — single read, compare with the picture');
+      const extra = (o.place ? '<br>🏷 Stamp says: '+klEsc(o.place.line) : '')
+        + (o.disagree && o.disagree.length ? '<br><span style="color:#b45309;">⚠ another read gave '+o.disagree.map(d=>d.lat+', '+d.lng).join(' / ')+' — check the digits</span>' : '');
+      if(sane.ok && box && !box.value.trim()){
+        box.value = o.gps.lat+', '+o.gps.lng; viGpsParse();
+        st.style.color = (o.how==='exif'||o.agree>=2) ? '#028867' : '#b45309';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 <b>GPS from '+src+'</b> — filled in above.'+extra;
+      } else if(sane.ok){
+        st.style.color='#025AC6';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>📍 Photo says '+o.gps.lat+', '+o.gps.lng+' ('+src+') · '
+          + '<button type="button" onclick="viUsePhotoGps('+o.gps.lat+','+o.gps.lng+')" style="padding:2px 8px;background:#025AC6;color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;">use it</button>'+extra;
+      } else {
+        st.style.color='#C01176';
+        st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br>⚠️ Read as '+o.gps.lat+', '+o.gps.lng+' — '+klEsc(sane.why)+'. Not filled in; type it from the picture.';
+      }
+    } else {
+      st.style.color='#6b7280';
+      st.innerHTML = '✅ '+klEsc(f.name)+' · '+size+'<br><span style="color:#9ca3af;">📍 No readable GPS in the photo'+(o&&o.error?' ('+klEsc(o.error)+')':'')+' — type or paste the coordinates above.</span>';
+    }
+    viCompile();
+    return;
+  }
 
   // try to lift GPS straight out of the photo's EXIF
   const g = await viExifGps(f);

@@ -676,6 +676,17 @@
     } catch (e) { pg.innerHTML = `<div class="sd-win"><div style="padding:24px;color:#d91934">Could not load: ${esc(e.message)}</div></div>`; return; }
     if (!sub) { pg.innerHTML = '<div class="sd-win"><div style="padding:24px;color:#d91934">Subscriber not found.</div></div>'; return; }
     const hasGps = sub.lat != null && sub.lng != null, gmaps = hasGps ? `https://www.google.com/maps?q=${sub.lat},${sub.lng}` : '';
+    // 2026-11-26: add / fix a subscriber's GPS from the office — shared reader (js/gps-reader.js)
+    const gpsBtn = ` <button type="button" class="sd-gps-btn" style="margin-left:6px;height:24px;padding:0 10px;background:#eef2ff;color:#311A8E;border:1px solid #c7d2fe;border-radius:999px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit">📍 ${hasGps ? 'Check / fix GPS' : 'Add GPS'}</button>`;
+    const gpsWire = () => pg.querySelectorAll('.sd-gps-btn').forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      const host = b.closest('.sd-row') && b.closest('.sd-row').nextElementSibling;
+      if (!host || !host.classList.contains('sd-gps-tool')) return;
+      if (host.innerHTML) { host.innerHTML = ''; return; }
+      if (!window.SpawnGps) { host.innerHTML = '<div style="color:#d91934;font-size:12px">GPS reader did not load — refresh the page.</div>'; return; }
+      window.SpawnGps.panel(host, {kind:'subscriber', id:sub.id, name:sub.name, area:sub.area, lat:sub.lat, lng:sub.lng, photoUrl:sub.photo_url,
+        onSaved: () => { close(); subDetail(sub.id); }});
+    });
     const textNo = (nums.find(n => n.is_primary) || nums[0] || {}).address || '';   // the number Spawn Text actually uses
     const stt = STATE[bk.state] || null;
     const row = (k, v) => `<div class="sd-row"><span>${k}</span><span>${v == null || v === '' ? '<span style="color:#9ca3af;font-weight:500">—</span>' : v}</span></div>`;
@@ -800,7 +811,7 @@
           ${row('Vendo owner', sub.is_vendo_owner ? 'yes' : '')}${notesRow(sub.notes)}
           <div class="sd-h pink" style="margin-top:14px">📍 Location &amp; contact</div>
           ${row('Address', esc(sub.address) + cpy(sub.address))}${row('Contact', (textNo ? esc(textNo) + ' <span style="color:#0146a0;font-weight:500" title="the number Spawn Text uses">📱 Spawn Text</span>' + cpy(textNo) + (sub.phone && sub.phone !== textNo ? '<br><span style="font-weight:500;color:#6b7280">record: ' + esc(sub.phone) + '</span>' + cpy(sub.phone) : '') : esc(sub.phone) + cpy(sub.phone)))}${row('Facebook', esc(sub.fb_name) + cpy(sub.fb_name))}
-          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}
+          ${row('GPS', (hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)} <a href="${gmaps}" target="_blank" rel="noopener" style="color:#025ac6">Maps ↗</a>${sub.gps_place ? ' <span style="color:#6b7280;font-weight:500">· ' + esc(sub.gps_place) + '</span>' : ''}` : '<span style="color:#b45309">none yet</span>') + gpsBtn)}<div class="sd-gps-tool"></div>
         </div>
         <div><div class="sd-h green">💳 Billing</div>
           ${row('Monthly', sub.monthly_amount ? peso(sub.monthly_amount) : '')}${row('Due', esc(dd))}${row('Pays by', esc(howOf(sub)) + (sub.usual_collector ? ' · ' + esc(sub.usual_collector) : ''))}
@@ -817,7 +828,7 @@
       ${deds.length ? `<div class="sd-card"><div class="sd-h">📶 No-internet deductions</div><div class="sc-scroll"><table class="sc-tbl"><thead><tr><th>For</th><th class="n">Days</th><th class="n">Amount</th><th>Reason</th><th>Approved by</th></tr></thead><tbody>${deds.map(d=>`<tr${d.voided_at?' style="opacity:.5;text-decoration:line-through"':''}><td>${mon(d.ym)}</td><td class="n">${d.days}</td><td class="n">−${peso(d.amount)}</td><td>${esc(d.reason||'')}</td><td>${esc(d.approved_by||'')}</td></tr>`).join('')}</tbody></table></div></div>` : ''}`;
     const contact = () => `<div class="sd-card"><div class="sd-grid"><div><div class="sd-h pink">📍 Location</div>
           ${row('Address', esc(sub.address) + cpy(sub.address))}${row('Area', esc(sub.area))}
-          ${row('GPS', hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)}` : '<span style="color:#b45309">none yet — pin it in Spawn Collect</span>')}${hasGps ? row('Pinned', [sub.gps_updated_at ? dt(sub.gps_updated_at) : '', sub.gps_source, sub.gps_place].filter(Boolean).map(esc).join(' · ')) : ''}
+          ${row('GPS', (hasGps ? `${sub.lat}, ${sub.lng}${cpy(sub.lat + ',' + sub.lng)}` : '<span style="color:#b45309">none yet</span>') + gpsBtn)}<div class="sd-gps-tool"></div>${hasGps ? row('Pinned', [sub.gps_updated_at ? dt(sub.gps_updated_at) : '', sub.gps_source, sub.gps_place].filter(Boolean).map(esc).join(' · ')) : ''}
           ${hasGps ? `<a href="${gmaps}" target="_blank" rel="noopener" style="display:inline-block;margin-top:4px;background:#025ac6;color:#fff;text-decoration:none;font-weight:800;font-size:13px;padding:9px 14px;border-radius:10px">📍 Open in Google Maps</a>` : ''}
         </div><div><div class="sd-h">Contact</div>
           ${row('Phone', sub.phone ? `<a href="tel:${esc(sub.phone)}" style="color:#025ac6">${esc(sub.phone)}</a>` + cpy(sub.phone) : '')}${row('Facebook', esc(sub.fb_name) + cpy(sub.fb_name))}${row('Usual collector', esc(sub.usual_collector))}
@@ -834,7 +845,7 @@
       </div>`; };
     const draw = k => { pg.querySelectorAll('.sd-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === k));
       if (k === 'gcash' && !gcLoaded) { pg.querySelector('.sd-body').innerHTML = '<div class="sd-card" style="color:#6b7280">Checking their GCash refs against the statements…</div>'; gcLoad().then(() => { if (document.getElementById('sd-page') === pg && pg.querySelector('.sd-tabs button.on') && pg.querySelector('.sd-tabs button.on').dataset.t === 'gcash') pg.querySelector('.sd-body').innerHTML = gcashT(); }); return; }
-      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); };
+      pg.querySelector('.sd-body').innerHTML = k === 'ledger' ? ledger() : k === 'contact' ? contact() : k === 'text' ? text() : k === 'gcash' ? gcashT() : info(); gpsWire(); };
     pg.innerHTML = `<div class="sd-win"><div class="sd-top"><div style="flex:1;min-width:0"><b>${esc(sub.name)}${sub.acct_no ? ' <span style="opacity:.8;font-weight:600">#' + esc(sub.acct_no) + '</span>' : ''}</b><small>${esc(sub.area || '—')}${sub.monthly_amount ? ' · ' + peso(sub.monthly_amount) + '/mo' : ''}${dd ? ' · due ' + esc(dd) : ''}${stt ? ' · ' + esc(stt.l) : ''}${Number(bk.owed) > 0 ? ' · <b>owes ' + peso(bk.owed) + '</b>' : ''}</small></div>
         <a class="sd-btn" href="#" id="sd-chat">💬 Open chat</a>${hasGps ? `<a class="sd-btn" href="${gmaps}" target="_blank" rel="noopener">📍 Maps</a>` : ''}<button type="button" class="sd-x" id="sd-x" aria-label="Close">✕</button></div>
       <div class="sd-tabs">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div><div class="sd-scroll"><div class="sd-body"></div></div></div>`;
