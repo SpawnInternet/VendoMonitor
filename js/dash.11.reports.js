@@ -2346,7 +2346,10 @@ window.rpAdmAdd = async function(){
 
 // ══════════════════════════════════════════════════════════
 // 3. SUBSCRIBER INCOME  — the payment ledger, cash basis
-// Source: "Spawn Subsciber 2026" (both tabs) -> bridge -> subscriber_payments
+// Source (2026-11-26): sub_months — every subscriber payment from BASHANG, the payment sheet and
+// Spawn Collect, the same source as the Dashboard and the Subscribers tab. It used to read only
+// subscriber_payments (the payment sheet), which stopped being filled in October, so November showed
+// 10 payments instead of ~300. Rows are grouped back into payments: same subscriber + paid date + OR no.
 // Counts PESOS RECEIVED, not subscribers who paid. One person can pay
 // twice in a month and most payments cover more than one month, so a
 // head-count times an average understates it.
@@ -2359,9 +2362,29 @@ async function rpRenderSubInc(){
   if(!rpSubRows){
     host.innerHTML = '<div style="padding:26px;text-align:center;color:#6b7394;font-size:13px">Loading subscriber payments\u2026</div>';
     try{
-      rpSubRows = await rpRestAll('subscriber_payments?select=id,payment_date,subscriber_name,amount,collector,'
-        + 'invoice_no,note,coverage_from,coverage_to,coverage_months,coverage_ok'
-        + '&order=payment_date.desc,id.desc');
+      const [sm, subs] = await Promise.all([
+        rpRestAll('sub_months?select=subscriber_id,ym,paid_date,amount,or_no,received_by,source&paid_date=not.is.null&order=paid_date.desc'),
+        rpRestAll('subscribers?select=id,name&order=id.asc')
+      ]);
+      const nameOf = {}; subs.forEach(function(x){ nameOf[x.id] = x.name; });
+      const SRC = {'bashang':'BASHANG', 'app':'Spawn Collect', 'log':'payment sheet', 'sheet':'payment sheet'};
+      const srcLabel = function(src){ return String(src||'').split('+').map(function(t){ return SRC[t.trim()] || t.trim(); }).filter(Boolean).join(' + '); };
+      const pay = {};
+      sm.forEach(function(r){
+        if(!r.paid_date) return;
+        const k = r.subscriber_id + '|' + r.paid_date + '|' + (r.or_no || '');
+        const ym = String(r.ym || '').slice(0,7);
+        let p = pay[k];
+        if(!p){ p = pay[k] = {id:k, payment_date:r.paid_date, subscriber_name:nameOf[r.subscriber_id] || ('#'+r.subscriber_id),
+                               amount:0, collector:r.received_by || '', invoice_no:r.or_no || '', note:srcLabel(r.source),
+                               coverage_from:ym, coverage_to:ym, coverage_months:0, coverage_ok:true}; }
+        p.amount += Number(r.amount) || 0;
+        p.coverage_months += 1;
+        if(ym && ym < p.coverage_from) p.coverage_from = ym;
+        if(ym && ym > p.coverage_to) p.coverage_to = ym;
+        if(!p.collector && r.received_by) p.collector = r.received_by;
+      });
+      rpSubRows = Object.values(pay).sort(function(a,b){ return String(b.payment_date).localeCompare(String(a.payment_date)); });
     }catch(e){
       host.innerHTML = '<div class="rp-card" style="border-color:#f3c2e2;color:#C01176;font-size:13px">'
         + 'Could not load subscriber payments.<br><span style="font-size:11px;color:#8b93ad">'+rpEsc(e.message)+'</span></div>';
@@ -2390,7 +2413,7 @@ function rpSubHtml(months){
   var h = ''
   + '<div style="background:linear-gradient(135deg,#028867,#025AC6);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
   +   '<div><div style="font-size:13px;font-weight:800">\u{1F4B5} Subscriber Income</div>'
-  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Cash received \u00b7 from the payment ledger</div></div>'
+  +   '<div style="font-size:10.5px;opacity:.85;margin-top:2px">Cash received \u00b7 BASHANG + payment sheet + Spawn Collect (same as the Dashboard)</div></div>'
   +   '<div style="display:flex;gap:6px;align-items:center">'
   +     '<button class="rp-btn" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff" onclick="rpSubRefresh()">\u21bb Refresh</button>'
   +     '<select class="rp-in" style="width:auto;min-width:150px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:#fff;font-weight:700" onchange="rpSubSetMonth(this.value)">'

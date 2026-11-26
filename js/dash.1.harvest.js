@@ -332,7 +332,7 @@ async function vpRenderRecon(){
       const we=hr.harvest_date;
       let tgInc=0,off=0;
       while(true){
-        const r=await fetch(`${SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(v.tg_name)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off}`,
+        const r=await fetch(`${_SB}/rest/v1/transactions?vendo=eq.${encodeURIComponent(v.tg_name)}&is_skipped=eq.false&date=gte.${ws}&date=lte.${we}&select=amount&limit=1000&offset=${off}`,
           {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
         if(!r.ok){ throw new Error('TG income fetch failed ('+r.status+') — cannot reconcile'); }
         const td=await r.json();
@@ -384,7 +384,7 @@ async function vpRenderNames(){
     const words = sheetName.split(/\s+/).filter(w=>w.length>3);
     const q = words.slice(0,2).join(' ');
     try{
-      const r=await fetch(`${SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=10`,
+      const r=await fetch(`${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&sheet_name=is.null&status=eq.active&select=id,tg_name,area,vlan&limit=10`,
         {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
       suggestions=await r.json();
     }catch(e){}
@@ -477,7 +477,7 @@ async function vpQuickLink(tgName){
   const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
   const u={tg_name:tgName, tg_match_confirmed:true};
   try{
-    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+    const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
       headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
@@ -499,7 +499,7 @@ async function vpTgSearch2(q){
   el.style.display='';
   el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">Searching…</div>';
   try{
-    const r=await fetch(`${SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
+    const r=await fetch(`${_SB}/rest/v1/vendos?tg_name=ilike.*${encodeURIComponent(q)}*&select=tg_name,sheet_name,area&limit=20&order=tg_name.asc`,
       {headers:{apikey:_KEY,Authorization:'Bearer '+_KEY}});
     _tgSearchResults=await r.json();
     if(!_tgSearchResults.length){el.innerHTML='<div style="padding:8px 10px;color:var(--mu);font-size:12px;">No matches</div>';return;}
@@ -528,7 +528,7 @@ async function vpSaveNames(){
   const u={sheet_name:sheet||null, tg_name:tg||null};
   if(tg) u.tg_match_confirmed=true;
   try{
-    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+    const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
       headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
@@ -538,7 +538,7 @@ async function vpSaveNames(){
       if(tg) hu.tg_name=tg;
       if(Object.keys(hu).length){
         try{
-          await fetch(SB+'/rest/v1/harvests?vendo_id=eq.'+v.id,{method:'PATCH',
+          await fetch(_SB+'/rest/v1/harvests?vendo_id=eq.'+v.id,{method:'PATCH',
             headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
             body:JSON.stringify(hu)});
         }catch(e){ console.error('harvests sync failed:',e); }
@@ -569,13 +569,13 @@ async function vpSaveHarvestWindow(){
   if(ws) u.harvest_window_start=ws;
   if(hd){ u.harvest_date=hd; }
   try{
-    const r=await fetch(SB+'/rest/v1/harvests?id=eq.'+lastH.id,{method:'PATCH',
+    const r=await fetch(_SB+'/rest/v1/harvests?id=eq.'+lastH.id,{method:'PATCH',
       headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
       body:JSON.stringify(u)});
     if(r.ok){
       // Also update vendos.last_harvest_date if harvest_date changed
       if(hd){
-        await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
+        await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
           headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},
           body:JSON.stringify({last_harvest_date:hd})});
         Object.assign(window._vpVendo,{last_harvest_date:hd});
@@ -682,7 +682,7 @@ async function vpSave(){
   const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
-    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
+    const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify(u)});
     if(r.ok){Object.assign(window._vpVendo,u);window._vpEditMode=false;document.getElementById('vp-edit-btn').textContent='Edit';document.getElementById('vp-title').textContent=u.sheet_name||v.sheet_name;vpRenderInfo();toast('Saved!');}
     else toast('Save failed');
   }catch(e){toast('Error: '+e.message);}
@@ -714,7 +714,7 @@ async function vpExecutePullout(){
   const reason=(document.getElementById('vp-po-reason')||{}).value||'';
   if(pw!=='101510'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
   try{
-    const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
+    const r=await fetch(_SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
     if(r.ok){vpCancelPullout();window._vpVendo.status='pulled_out';toast('Vendo pulled out');vpRenderInfo();}
     else{const e=document.getElementById('vp-po-err');if(e)e.textContent='Save failed';}
   }catch(e2){const e=document.getElementById('vp-po-err');if(e)e.textContent='Error: '+e2.message;}

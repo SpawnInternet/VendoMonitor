@@ -3516,9 +3516,16 @@ async function loadSkipped() {
         if (v.last_date && (cur.last_date === "—" || v.last_date > cur.last_date)) cur.last_date = v.last_date;
       }
     });
+    // 2026-11-26: some Telegram vendo names are only a number ("11", "23"); show the vendo's real name next to it
+    let tgToName = {};
+    try {
+      const vs = await sbAll("vendos", "select=tg_name,sheet_name,area&tg_name=not.is.null&sheet_name=not.is.null");
+      vs.forEach(v => { if (v.tg_name && v.sheet_name && v.sheet_name !== v.tg_name) tgToName[v.tg_name] = v.sheet_name; });
+    } catch(_) {}
     Object.values(skippedByVendo).forEach(s => {
       s.area = s.areas.join(", ");
       s.rows = Array(s.skipped_count).fill({amount:0}); // placeholder for count
+      s.realName = tgToName[s.vendo] || null;
     });
 
     const total_amt = vendoRows.reduce((s,v)=>s+parseFloat(v.total_amount||0),0);
@@ -3540,7 +3547,7 @@ function filterSkipped() {
   const q    = (document.getElementById("sk-search")?.value||"").toLowerCase();
   const area = document.getElementById("sk-area")?.value||"";
   const vendoList = Object.values(skippedByVendo).filter(v =>
-    (!q || v.vendo.toLowerCase().includes(q)) &&
+    (!q || v.vendo.toLowerCase().includes(q) || (v.realName||'').toLowerCase().includes(q)) &&
     (!area || (v.areas || [v.area]).includes(area))
   );
   renderSkippedTodo(vendoList);
@@ -3557,7 +3564,7 @@ function renderSkippedTodo(vendoList) {
       <input type="checkbox" ${done?"checked":""} onchange="toggleSkippedVendo('${esc(v.vendo)}',this.checked)" style="margin-top:3px;cursor:pointer;width:16px;height:16px;">
       <div style="flex:1;">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <span class="todo-text${done?" done":""}" style="font-weight:600;color:#d97706;cursor:pointer" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">${v.vendo}</span>
+          <span class="todo-text${done?" done":""}" style="font-weight:600;color:#d97706;cursor:pointer" onclick="openSkippedDetail('${esc(v.vendo)}','${v.area}')">${v.realName ? esc(v.realName)+' <span style="font-weight:500;color:var(--mu);font-size:11px">TG: '+esc(v.vendo)+'</span>' : (/^\d+$/.test(v.vendo) ? 'TG name “'+esc(v.vendo)+'” <span style="font-weight:500;color:var(--mu);font-size:11px">(not linked to a vendo)</span>' : esc(v.vendo))}</span>
           <span class="pill info">${v.area||"—"}</span>
           <span class="pill" style="background:#fef3c7;color:#92400e">⏭ ${count.toLocaleString()} skipped txns</span>
           <span style="font-weight:700;color:#d97706">${fmt(total)}</span>

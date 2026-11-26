@@ -21,36 +21,44 @@ async function elLoad(){
   }
 }
 
-// Pull this month's harvests from the DB and fold them into the ledger as a live column
+// 2026-11-26: every month AFTER the Excel snapshot is filled live (it used to add only the current month,
+// so Jul–Oct were missing). Per harvest: the BASHANG book record (office_harvest_records), plus any app
+// harvest with no book record for the same vendo within 3 days — one record per harvest, never both.
 async function elMergeLiveMonth(){
-  const now=new Date();
-  const ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'); // e.g. 2026-07
-  const start=ym+'-01';
-  const endD=new Date(now.getFullYear(), now.getMonth()+1, 1);
-  const end=endD.getFullYear()+'-'+String(endD.getMonth()+1).padStart(2,'0')+'-01';
-  // fetch harvests for the month (gateway-routed via _HDR)
   const sb=(typeof _SB!=='undefined')?_SB:'https://cviraqfhphhsonjmrtvu.supabase.co';
   const hdr=(typeof _HDR!=='undefined')?_HDR:{apikey:'gw',Authorization:'Bearer gw','Content-Type':'application/json','x-spawn-gw':'1'};
-  const q=`harvests?harvest_date=gte.${start}&harvest_date=lt.${end}&select=sheet_name,tg_name,area,spawn_share,collector&limit=5000`;
-  const r=await fetch(`${sb}/rest/v1/${q}`,{headers:hdr});
-  if(!r.ok) throw new Error('harvests '+r.status);
-  const rows=await r.json();
-  if(!Array.isArray(rows)||!rows.length) return;
-  // aggregate per vendo (sheet_name||area) and append as synthetic ledger records
-  const agg={};
-  rows.forEach(h=>{
-    const label=h.sheet_name||h.tg_name||'(unnamed)';
-    const area=h.area||'';
-    const key=label+'||'+area;
-    if(!agg[key]) agg[key]={sheet_name:label,area:area,spawn:0};
-    agg[key].spawn += Number(h.spawn_share||0);
+  const all=async(q)=>{ const out=[]; for(let off=0;;off+=1000){ const r=await fetch(`${sb}/rest/v1/${q}&limit=1000&offset=${off}`,{headers:hdr});
+    if(!r.ok) throw new Error(q.split('?')[0]+' '+r.status); const rows=await r.json(); if(!Array.isArray(rows)) throw new Error(q.split('?')[0]+' unreadable');
+    out.push(...rows); if(rows.length<1000) break; } return out; };
+  // first month not covered by the Excel snapshot
+  const snapMonths=_elData.filter(r=>!r._live).map(r=>String(r.collection_date||'').slice(0,7)).filter(Boolean).sort();
+  const lastSnap=snapMonths.length?snapMonths[snapMonths.length-1]:'2026-06';
+  const [y,m]=lastSnap.split('-').map(Number);
+  const firstLive=new Date(y, m, 1);                      // month after the snapshot
+  const start=firstLive.getFullYear()+'-'+String(firstLive.getMonth()+1).padStart(2,'0')+'-01';
+  const today=new Date().toISOString().slice(0,10);
+  if(start>today) return;
+  const [book, app, vend]=await Promise.all([
+    all(`office_harvest_records?record_date=gte.${start}&record_date=lte.${today}&select=vendo_id,record_date,amount,raw_name,area&order=id.asc`),
+    all(`harvests?harvest_date=gte.${start}&harvest_date=lte.${today}&select=vendo_id,harvest_date,sheet_name,tg_name,area,spawn_share&order=id.asc`),
+    all(`vendos?select=id,sheet_name,tg_name,area&order=id.asc`)
+  ]);
+  const vName={}; vend.forEach(v=>vName[v.id]={label:v.sheet_name||v.tg_name||('#'+v.id), area:v.area||''});
+  const dayN=d=>Math.round(new Date(String(d).slice(0,10)+'T00:00:00Z').getTime()/86400000);
+  const bookBy={}; book.forEach(b=>{ if(b.vendo_id!=null) (bookBy[b.vendo_id]=bookBy[b.vendo_id]||[]).push(dayN(b.record_date)); });
+  const recs=[];
+  book.forEach(b=>{
+    const v=vName[b.vendo_id]||{label:b.raw_name||'(unnamed)', area:b.area||''};
+    recs.push({sheet_name:v.label, area:v.area||b.area||'', collection_date:String(b.record_date).slice(0,10), spawn_share:Math.round(Number(b.amount||0)), _live:true, _src:'book'});
   });
-  // remove any prior live rows for this month (avoid double count on re-load)
-  _elData=_elData.filter(r=>!(r._live===true && (r.collection_date||'').startsWith(ym)));
-  Object.values(agg).forEach(a=>{
-    _elData.push({ sheet_name:a.sheet_name, area:a.area, collection_date:start, spawn_share:Math.round(a.spawn), _live:true });
+  app.forEach(h=>{
+    const bd=bookBy[h.vendo_id]||[], d=dayN(h.harvest_date);
+    if(h.vendo_id!=null && bd.some(x=>Math.abs(x-d)<=3)) return;     // already in the book — counted once
+    const v=vName[h.vendo_id]||{label:h.sheet_name||h.tg_name||'(unnamed)', area:h.area||''};
+    recs.push({sheet_name:v.label, area:v.area||h.area||'', collection_date:String(h.harvest_date).slice(0,10), spawn_share:Math.round(Number(h.spawn_share||0)), _live:true, _src:'app'});
   });
-  window._elLiveMonth=ym;
+  _elData=_elData.filter(r=>r._live!==true).concat(recs);
+  window._elLiveMonth=start.slice(0,7)+' → now';
 }
 function elFilter(){
   if(!_elData)return;
@@ -87,9 +95,9 @@ function elRender(){
   });
   var entries=Object.values(groups).sort(function(a,b){return b.total-a.total;});
   var H='<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#1565c0;color:#fff;position:sticky;top:0">';
-  H+='<th style="padding:6px 10px;text-align:left">Vendo</th><th style="padding:6px 10px;text-align:left">Area</th>';
-  months.forEach(function(m){H+='<th style="padding:6px 10px;text-align:right">'+(mName[m]||m)+'</th>';});
-  H+='<th style="padding:6px 10px;text-align:right;background:#0d47a1">TOTAL</th></tr></thead><tbody>';
+  H+='<th style="padding:6px 10px;text-align:left;color:#fff">Vendo</th><th style="padding:6px 10px;text-align:left;color:#fff">Area</th>';
+  months.forEach(function(m){H+='<th style="padding:6px 10px;text-align:right;color:#fff">'+(mName[m]||m)+'</th>';});
+  H+='<th style="padding:6px 10px;text-align:right;background:#0d47a1;color:#fff">TOTAL</th></tr></thead><tbody>';
   var gTotals={};months.forEach(function(m){gTotals[m]=0;});var grandTotal=0;
   entries.forEach(function(g,i){
     var bg=i%2===0?'#fff':'#f5f7fa';
