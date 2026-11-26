@@ -1042,9 +1042,21 @@ async function htForceLoad(){
   }
 }
 
-async function htLoad(){
-  document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
-  htAllRows = [];
+// 2026-11-26 speed: the Harvest tab, the summary, the map and the live feed all call htLoad() at the same moment —
+// run ONE load and share it, reuse rows fetched < 45 s ago, and paint the last saved copy at once while refreshing.
+let _htLoadP=null, _htLoadAt=0;
+function htLoad(force){
+  if(_htLoadP) return _htLoadP;
+  if(!force && htAllRows && htAllRows.length && Date.now()-_htLoadAt<45000){ htFilter(); return Promise.resolve(); }
+  _htLoadP=_htLoadReal().finally(()=>{ _htLoadAt=Date.now(); _htLoadP=null; });
+  return _htLoadP;
+}
+function _htSave(){ try{ localStorage.setItem('spawn_ht2', JSON.stringify({t:Date.now(), rows:htAllRows})); }catch(e){} }
+async function _htLoadReal(){
+  if(!htAllRows.length){ try{ const sv=JSON.parse(localStorage.getItem('spawn_ht2')||'null');
+    if(sv && Array.isArray(sv.rows) && sv.rows.length>500){ htAllRows=sv.rows; htFilter(); const ca=document.getElementById('ht-cache-age'); if(ca) ca.textContent='saved copy · refreshing…'; } }catch(e){} }
+  if(!htAllRows.length) document.getElementById('ht-tbody').innerHTML = '<tr><td colspan="6" style="padding:30px;text-align:center;color:var(--mu);"><span style="display:inline-block;width:18px;height:18px;border:2px solid var(--bd);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:8px;"></span>Loading…</td></tr>';
+  
   localStorage.removeItem('spawn_ht'); // always fresh — harvests table is source of truth
   // Bucket cache with 5-min expiry
   const _HT_BUCKET = 'https://cviraqfhphhsonjmrtvu.supabase.co/storage/v1/object/public/harvest-history-cache/vendos_table.json';
@@ -1061,7 +1073,7 @@ async function htLoad(){
         const rcSel = document.getElementById('rc-collector');
         if(htSel){ const prev=htSel.value; htSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ htSel.innerHTML+=`<option${c===prev?' selected':''}>${c}</option>`; }); }
         if(rcSel){ rcSel.innerHTML='<option value="">All collectors</option>'; collectors.forEach(c=>{ rcSel.innerHTML+=`<option>${c}</option>`; }); }
-        htFilter();
+        htFilter(); _htSave();
         loadTodaySummary(true);
         if(age > 60*60*1000) htRebuildCache();
         return;
@@ -1071,6 +1083,7 @@ async function htLoad(){
   // 2. Fallback: direct DB
   try {
     document.getElementById('ht-cache-age').textContent = 'loading from DB…';
+    htAllRows = [];
     let offset = 0;
     while(true){
       const r = await fetch(
@@ -1115,7 +1128,7 @@ async function htLoad(){
     rcSel.innerHTML = '<option value="">All collectors</option>';
     collectors.forEach(c=>{ rcSel.innerHTML += `<option>${c}</option>`; });
   }
-  htFilter();
+  htFilter(); _htSave();
   loadTodaySummary(true);
 }
 
@@ -1357,7 +1370,8 @@ function htFilter(){
   document.getElementById('ht-count').textContent = rows.length.toLocaleString()+' rows';
   const tb = document.getElementById('ht-tbody');
   if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--mu);">No results</td></tr>'; return; }
-  tb.innerHTML = rows.slice(0,2000).map(r=>{
+  const _seq=(window._htPaintSeq=(window._htPaintSeq||0)+1);   // 2026-11-26 speed: paint the first 150 rows now, the rest right after
+  const _rowHtml = r=>{
     const col = r.collector||r.actual_collector||'—';
     const days = r.harvest_date ? Math.floor((Date.now()-new Date(r.harvest_date))/86400000) : null;
     const daysColor = days===null?'#9ca3af':days>30?'#dc2626':days>14?'#d97706':'#15803d';
@@ -1371,8 +1385,12 @@ function htFilter(){
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${daysStr}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;">${spawn}</td>
     </tr>`;
-  }).join('');
-  if(rows.length>2000) tb.innerHTML+=`<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
+  };
+  const _all=rows.slice(0,2000);
+  tb.innerHTML=_all.slice(0,150).map(_rowHtml).join('');
+  if(_all.length>150) setTimeout(()=>{ if(_seq!==window._htPaintSeq) return; tb.insertAdjacentHTML('beforeend', _all.slice(150).map(_rowHtml).join(''));
+    if(rows.length>2000) tb.insertAdjacentHTML('beforeend',`<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`); }, 0);
+  if(false && rows.length>2000) tb.innerHTML+=`<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--mu);font-size:10px;">Showing 2,000 of ${rows.length} — use filters to narrow</td></tr>`;
 }
 
 /* ── LIVE FEED ── */
@@ -1619,11 +1637,11 @@ function lfConnect(){
           if(rec.collector && rec.harvest_date){
             lfItems.unshift({...rec, group_label:''});
             lfRender();
-            if(hvNewActiveTab==='htable') htLoad();
+            if(hvNewActiveTab==='htable') htLoad(true);
           }
           // harvest_group_items UPDATE to harvested — refresh table
           else if(rec.status==='harvested'){
-            if(hvNewActiveTab==='htable') htLoad();
+            if(hvNewActiveTab==='htable') htLoad(true);
           }
         }
       }catch(err){}
