@@ -153,7 +153,9 @@
       if (typeof window.openVendoDetail === 'function') await window.openVendoDetail(name, v.area || '');
       return true;
     }
-    // SpawnFi-only vendo: the detail view, with the SpawnFi tab in front
+    // SpawnFi-only vendo: the detail view, with the SpawnFi tab in front. First drop the previous vendo's state in dash.4
+    // (its pending downloads, currentVendo for the Harvest tab, the Monthly chart) so nothing of it can land under this name.
+    if (typeof window.vtResetForExternal === 'function') window.vtResetForExternal();
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-bar button').forEach(b => b.classList.remove('active'));
     const pv = document.getElementById('panel-vendos'); if (pv) pv.classList.add('active');
@@ -172,6 +174,8 @@
     return true;
   }
 
-  window.spawnfiPage = { sessionsOf, tilesOf, render, tab, more, enabled };
+  /* the "open the vendo page" buttons (Recon 📄, SpawnFi tab vendo link) follow the same switch as the page itself */
+  const showOpenButtons = enabled;
+  window.spawnfiPage = { sessionsOf, tilesOf, render, tab, more, enabled, showOpenButtons };
   window.openVendoById = openVendoById;
 })();

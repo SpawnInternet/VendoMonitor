@@ -264,7 +264,7 @@ async function vpGet(q){
 async function vpPw(what){
   const pw=await askAdminPw('Enter admin password to '+what+'.');
   if(pw===null) return null;
-  if(pw!=='101510'){ if(typeof markAdminPwWrong==='function') markAdminPwWrong(); toast('Wrong password'); return null; }
+  if(!window.spawnAdminPwOk(pw)){ if(typeof markAdminPwWrong==='function') markAdminPwWrong(); toast('Wrong password'); return null; }
   return pw;
 }
 async function vpLoadExtras(){
@@ -706,11 +706,12 @@ async function vpRenderNames(){
   if(window.spawnLink && v) window.spawnLink.mountCard(v.id, document.getElementById('vp-sfline'));
 }
 
-// The same admin-password check the four inline sites above use, for other modules (dash.24 link widget).
+// The ONE admin-password check (the inline sites in this file call it too, 2026-11-26) — also used by the dash.24 link widget.
+// Known debt (decisions-log): this literal sits in a public repo; move the check behind the gateway, then rotate.
 window.spawnAdminPwOk = function(pw){ return pw === '101510'; };
 async function vpQuickLink(tgName){
   const v=window._vpVendo; if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={tg_name:tgName, tg_match_confirmed:true};
   try{
     const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',
@@ -758,7 +759,7 @@ function vpTgPick(i){
 
 async function vpSaveNames(){
   const v=window._vpVendo; if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('vn-sheet')||{}).value||'';
   const tg=(document.getElementById('vn-tg')||{}).value||'';
   const u={sheet_name:sheet||null, tg_name:tg||null};
@@ -800,7 +801,7 @@ async function vpSaveHarvestWindow(){
   const ws=(document.getElementById('vn-window-start')||{}).value||'';
   const hd=(document.getElementById('vn-harvest-date')||{}).value||'';
   if(!ws&&!hd){toast('Enter at least one date to update');return;}
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd){ u.harvest_date=hd; }
@@ -914,7 +915,7 @@ async function vpRemovePhoto(){
 
 async function vpSave(){
   const v=window._vpVendo;if(!v)return;
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};['owner_name','tg_name','address','contact_number'].forEach(f=>{const el=document.getElementById('vp-f-'+f);if(el)u[f]=el.value.trim()||null;});
   if(u.tg_name)u.tg_match_confirmed=true;
   try{
@@ -948,7 +949,7 @@ async function vpExecutePullout(){
   const v=window._vpVendo;
   const pw=(document.getElementById('vp-po-pw')||{}).value||'';
   const reason=(document.getElementById('vp-po-reason')||{}).value||'';
-  if(pw!=='101510'){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
+  if(!window.spawnAdminPwOk(pw)){const e=document.getElementById('vp-po-err');if(e)e.textContent='Incorrect password.';return;}
   try{
     const r=await fetch(SB+'/rest/v1/vendos?id=eq.'+v.id,{method:'PATCH',headers:{apikey:_KEY,Authorization:'Bearer '+_KEY,'Content-Type':'application/json',Prefer:'return=minimal'},body:JSON.stringify({status:'pulled_out',pulled_out_at:new Date().toISOString(),pulled_out_by:'admin',pullout_reason:reason||null})});
     if(r.ok){vpCancelPullout();window._vpVendo.status='pulled_out';toast('Vendo pulled out');vpRenderInfo();}
@@ -1824,21 +1825,26 @@ async function rcRun(){
   // with a notice in the count line. Missing (v24 not deployed yet) → the big file as before. Switch off → exactly today's path.
   const _RC_BUCKET = _RC_BIG_URL;
   const _SI = window.spawnIncome, _sfOn = !!(_SI && _SI.spawnfiOn());
-  let _rcNotice = '', _dSmall = null;
-  if (!rcBypassCache && _sfOn) try {
-    const rs = await fetch(_RC_ROWS_URL + '?t=' + Math.floor(Date.now()/120000));
-    if (rs.ok) {
-      const ds = await rs.json();
-      const maxAge = Number((window.__hqSwitches||{}).hq_recon_cache_max_age_min) || 15;
-      const dec = _SI.cacheDecision(ds.generated_at, null, maxAge);
-      if (dec.useCache && Array.isArray(ds.rows)) _dSmall = ds; else _rcNotice = dec.notice;
+  let _rcNotice = '', _dSmall = null, _dBig = null, _use = null;
+  if (!rcBypassCache) try {
+    const maxAge = Number((window.__hqSwitches||{}).hq_recon_cache_max_age_min) || 15;
+    if (_sfOn) try {
+      const rs = await fetch(_RC_ROWS_URL + '?t=' + Math.floor(Date.now()/120000));
+      if (rs.ok) { const ds = await rs.json(); if (Array.isArray(ds.rows)) _dSmall = ds; }
+    } catch(e) {}
+    if (_sfOn && _dSmall && _SI.cacheDecision(_dSmall.generated_at, null, maxAge).useCache) _use = 'small';
+    else {
+      // small file missing or stale → the big file (writer rolled back, or its second upload failed); live only if that is stale too.
+      // Switch off: the big file as always, whatever its age (today's path).
+      const rc = await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
+      if (rc.ok) _dBig = await rc.json();
+      if (_sfOn) { const pk = _SI.pickCache(_dSmall ? _dSmall.generated_at : null, _dBig ? _dBig.generated_at : null, null, maxAge); _use = pk.use; _rcNotice = pk.notice; }
+      else _use = _dBig ? 'big' : 'live';
     }
-  } catch(e) {}
-  if (!rcBypassCache && !_rcNotice) try {
-    const rc = _dSmall ? null : await fetch(_RC_BUCKET + '?t=' + Math.floor(Date.now()/120000));
-    if (_dSmall || rc.ok) {
-      const d = _dSmall || await rc.json();
-      if (_dSmall) {
+    if (_use !== 'live') {
+      const _small = _use === 'small';
+      const d = _small ? _dSmall : _dBig;
+      if (_small) {
         window._rcSnap = Object.assign({}, window._rcSnap||{}, {rows:d.rows, ghosts:d.ghosts, feed:d.feed, aliases:d.aliases, generated_at:d.generated_at, from:d.from, to:d.to});
         setTimeout(_rcLoadBigSnap, 0);
       } else {
@@ -1881,7 +1887,7 @@ async function rcRun(){
           const stale = age >= 8;
           ageEl.innerHTML = rcAllRows.length + ' harvests · '
             + '<span style="color:' + (stale ? '#b45309' : '#6b7280') + ';" title="One-fetch snapshot, rebuilt every 5 minutes with live TG + Cloud income">'
-            + (stale ? '⚠ snapshot ' : '⚡ snapshot ') + age + 'min ago' + (_dSmall ? ' · rows file' : '') + '</span>';
+            + (stale ? '⚠ snapshot ' : '⚡ snapshot ') + age + 'min ago' + (_small ? ' · rows file' : '') + '</span>';
         }
         // The snapshot rebuilds every 5 min, so a background live read is only
         // needed when it is unexpectedly old or empty for this range.
@@ -2097,6 +2103,8 @@ async function rcRun(){
       _saved_tg:row.tg_income, _saved_gap:row.recon_gap, _saved_flag:row.recon_flag,
       collector:row.actual_collector||row.collector||'Unknown',
       tg_name:tg, ...F, spawnfi_income_live:sf?sf.income:null, spawnfi_overlap_days:sf?sf.overlap:0,
+      // what may be written back to harvests (TG + Cloud only — stored figures never include SpawnFi, spec §3)
+      _w: window.spawnIncome ? window.spawnIncome.storedFigures({...row, tg_name:tg, tg_income_live:tgInc, cloud_income_live:cloudInc}) : {tg_income:F.tg_income, gap:F.gap, flag:F.flag},
       rpc_audited:rpcAudited,
       rpc_window_start:rpcWinStart,
       rpc_submitted_at:rpcSubmit,
@@ -2114,8 +2122,10 @@ async function rcRun(){
   // matched row on every live read — hundreds of writes per Refresh click,
   // which is what made Refresh slow and the DB busy.
   const _num=v=>v==null?null:Math.round(Number(v)*100)/100;
+  // Stored figures are TG + Cloud only (r._w); the SpawnFi-inclusive verdict stays on screen and in the cache file.
+  const _wf=r=>r._w||r;
   const toSave = rcAllRows.filter(r=>r.tg_income!=null && (
-    _num(r.tg_income)!==_num(r._saved_tg) || _num(r.gap)!==_num(r._saved_gap) || (r.flag||null)!==(r._saved_flag||null)));
+    _num(r.tg_income)!==_num(r._saved_tg) || _num(_wf(r).gap)!==_num(r._saved_gap) || (_wf(r).flag||null)!==(r._saved_flag||null)));
   if(toSave.length){
     (async()=>{
       for(let i=0;i<toSave.length;i+=50){
@@ -2125,7 +2135,7 @@ async function rcRun(){
             fetch(`${_SB}/rest/v1/harvests?id=eq.${r.id}`,{
               method:'PATCH',
               headers:{..._HDR,'Prefer':'return=minimal'},
-              body:JSON.stringify({tg_income:r.tg_income,recon_gap:r.gap,recon_flag:r.flag,recon_at:new Date().toISOString()})
+              body:JSON.stringify({tg_income:r.tg_income,recon_gap:_wf(r).gap,recon_flag:_wf(r).flag,recon_at:new Date().toISOString()})
             })
           ));
         }catch(e){}
@@ -2431,7 +2441,7 @@ function rcnTgPick(i){
 }
 
 async function rcnSaveNames(vendoName){
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const sheet=(document.getElementById('rcn-sheet')?.value||'').trim();
   const tg=(document.getElementById('rcn-tg')?.value||'').trim();
   const msg=document.getElementById('rcn-msg');
@@ -2513,7 +2523,7 @@ async function rcnSaveHarvestWindow(){
   const ws=(document.getElementById('rcn-window-start')?.value||'').trim();
   const hd=(document.getElementById('rcn-harvest-date')?.value||'').trim();
   if(!ws&&!hd){ if(msg){msg.textContent='Enter at least one date';msg.style.color='#dc2626';} return; }
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   const u={};
   if(ws) u.harvest_window_start=ws;
   if(hd) u.harvest_date=hd;
@@ -2558,7 +2568,7 @@ async function rcnSaveHarvestWindow(){
 }
 
 async function rcnQuickLink(vendoName, tgName){
-  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+  const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return; if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
   try{
     // Same duplicate-name hazard as rcnUnlink — do not blind-pick with limit=1.
     const r=await fetch(`${_SB}/rest/v1/vendos?select=id,sheet_name,tg_name,area&or=(tg_name.eq.${encodeURIComponent(vendoName)},sheet_name.eq.${encodeURIComponent(vendoName)})`,{headers:_HDR});
@@ -2701,7 +2711,7 @@ async function rcnUnlink(vendoName, opts){
       ok: markNoTg?'Mark NO TG':'Unlink', danger:true });
     if(!_go) return;
     const pw=await askAdminPw('Enter admin password to confirm this change.'); if(pw===null)return;
-    if(pw!=='101510'){markAdminPwWrong();toast('Wrong password');return;}
+    if(!window.spawnAdminPwOk(pw)){markAdminPwWrong();toast('Wrong password');return;}
 
     const vendoPatch = markNoTg
       ? {tg_name:null, tg_match_confirmed:false, no_tg:true}
@@ -3250,7 +3260,7 @@ function _rcRowHtml(h, showCloud, flat){
   return `<tr class="${fcls}${done?' is-done':''}" data-id="${h.id}">
     <td class="rca-vcell">
       <div style="display:flex;align-items:center;gap:5px;min-width:0;"><span class="rca-ell" style="font-weight:800;color:#1a2250;" title="${_rcEsc(h.sheet_name||'')}">${name}</span>${noTg}
-        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button>${(h.vendo_id!=null&&window.openVendoById)?`<button class="rca-iconbtn" onclick="openVendoById(${Number(h.vendo_id)})" title="Open the vendo page (TG / Cloud / SpawnFi)">📄</button>`:''}</div>
+        <button class="rca-iconbtn" onclick="rcShowNamesById(${h.id})" title="View / edit names and harvest window">🔗</button>${(h.vendo_id!=null&&window.spawnfiPage&&window.spawnfiPage.showOpenButtons())?`<button class="rca-iconbtn" onclick="openVendoById(${Number(h.vendo_id)})" title="Open the vendo page (TG / Cloud / SpawnFi)">📄</button>`:''}</div>
       ${tgLine}
     </td>
     <td style="color:#44506b;">${_rcEsc(h.area||'—')}</td>
@@ -4911,7 +4921,7 @@ let _klItems = [];
 const KI_VAR = { original:'Original', duplicate:'Duplicate', pungpung:'Pungpung' };
 const KI_LBL = it => it.key_kind==='board' ? '🔌 BOARD KEY' : ('🪙 Coins ('+(KI_VAR[it.coin_variant]||it.coin_variant||'?')+')');
 
-/* per-key checkbox: mark a single key_items row returned (password 101510) */
+/* per-key checkbox: mark a single key_items row returned (admin password) */
 function kiToggle(itemId, makeReturned){
   const it = _klItems.find(x=>x.id===itemId); if(!it) return;
   const verb = makeReturned ? 'RETURNED' : 'NOT returned';
@@ -5457,7 +5467,7 @@ function klDetail(id){
 
 function klCloseDetail(){ const ov=document.getElementById('kl-detail-modal'); if(ov) ov.remove(); }
 
-// ── Edit a key-custody record (password 101510 required to save) ──
+// ── Edit a key-custody record (admin password required to save) ──
 function klEdit(id){
   const r = _klRows.find(x=>x.id===id); if(!r) return;
   klCloseDetail();
@@ -5512,10 +5522,10 @@ async function klSaveEdit(id){
     lineman_reason: (gv('kl-e-reason').trim())||null,
     notes:          (gv('kl-e-notes').trim())||null
   };
-  // password gate (101510) using the shared pretty popup
+  // password gate (admin password) using the shared pretty popup
   const pw = await askAdminPw('Enter admin password to save these changes.');
   if(pw===null) return;
-  if(pw!=='101510'){ markAdminPwWrong(); return; }
+  if(!window.spawnAdminPwOk(pw)){ markAdminPwWrong(); return; }
   const pwModal = document.getElementById('spawn-pw-modal'); if(pwModal) pwModal.remove();
   try{
     const r = await fetch(_SB+'/rest/v1/key_logs?id=eq.'+id, {method:'PATCH', headers:Object.assign({'Prefer':'return=minimal'},_HDR), body:JSON.stringify(body)});

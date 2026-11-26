@@ -47,12 +47,14 @@
     return getJson(`v_spawnfi_sales_v1?select=router_name,vlan,site_name,link_status,vendo_id,vendo_name,d30_pesos,last_sale&${f}&order=link_status.desc,d30_pesos.desc.nullslast&limit=20`);
   }
   let pwOk = false;   // asked once per page load, as Link Doctor's flow does
+  /* fail closed: both the prompt (dash.0) and the checker (dash.1) must be loaded, else no write (final review, minor 1) */
+  const canGate = () => typeof window.askAdminPw === 'function' && typeof window.spawnAdminPwOk === 'function';
   async function gate(){
     if (pwOk) return true;
-    if (typeof window.askAdminPw !== 'function') return true;        // no prompt available → the gateway login is the gate
+    if (!canGate()) { showErr('Password check unavailable — reload the dashboard (Ctrl+F5) and try again.'); return false; }
     const pw = await window.askAdminPw('Enter admin password to change a SpawnFi link.');
     if (pw === null) return false;
-    if (typeof window.spawnAdminPwOk === 'function' && !window.spawnAdminPwOk(pw)) { if (typeof window.toast === 'function') window.toast('Wrong password'); return false; }
+    if (!window.spawnAdminPwOk(pw)) { if (typeof window.toast === 'function') window.toast('Wrong password'); return false; }
     pwOk = true; return true;
   }
   async function apply(st){
@@ -212,6 +214,6 @@
       ${lines || '<div style="font-size:12px;color:#9ca3af;font-style:italic">No SpawnFi line linked to this vendo</div>'}
       <div style="margin-top:6px">${button(lines ? '+ Link another line ›' : 'Link a SpawnFi line ›', { vendo_id: Number(vendoId), from: 'card' })}</div></div>`;
   }
-  const api = { open, close, payload, needsConfirm, defaultSwitchDate, fromQuestionText, enabled, button, mountCard, onDone: null };
+  const api = { open, close, payload, needsConfirm, defaultSwitchDate, fromQuestionText, enabled, canGate, button, mountCard, onDone: null };
   window.spawnLink = api;
 })();

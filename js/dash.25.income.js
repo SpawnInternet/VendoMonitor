@@ -68,6 +68,23 @@
              gap, gap_pct, flag, spawnfi_overlap_days: spawnfiOn() ? Number(row.spawnfi_overlap_days || 0) : 0, sources: inc.sources };
   }
 
+  /* what the live Recon path may WRITE BACK to harvests.recon_gap / recon_flag: TG + Cloud only, whatever the switch says —
+     the spec keeps stored figures unchanged (History and the saved-gap fallback read them). Live rules: no saved-gap fallback. */
+  function storedFigures(row){
+    const r = Object.assign({}, row || {}); delete r.spawnfi_income_live; delete r.spawnfi_overlap_days;
+    const f = figures(r, false);
+    return { tg_income: f.tg_income, cloud_income: f.cloud_income, spawnfi_income: null, total_income: f.total_income, gap: f.gap, gap_pct: f.gap_pct, flag: f.flag };
+  }
+  /* which Recon cache to show: the small rows file when fresh; else the big file when fresh (writer rolled back, or the second
+     upload failed); else live, with a notice naming the newest file's age. generated_at of a file that is missing = null. */
+  function pickCache(smallGenISO, bigGenISO, nowISO, maxAgeMin){
+    const s = cacheDecision(smallGenISO, nowISO, maxAgeMin), b = cacheDecision(bigGenISO, nowISO, maxAgeMin);
+    if (s.useCache) return { use: 'small', notice: '' };
+    if (b.useCache) return { use: 'big', notice: '' };
+    const ages = [s.ageMin, b.ageMin].filter(a => a != null);
+    return { use: 'live', notice: ages.length ? 'Live numbers — cache is ' + Math.min(...ages) + ' min old' : 'Live numbers — no cache file' };
+  }
+
   function chip(source, pesos){
     const c = COLOR[source] || '#6b7280';
     return `<span style="display:inline-block;white-space:nowrap;color:${c};font-weight:700">${esc(LABEL[source] || source)} ${php(pesos)}</span>`;
@@ -82,5 +99,5 @@
       : `<div style="font-size:11px;line-height:1.35">${chips}</div>`;
   }
 
-  window.spawnIncome = { incomeOf, verdict, figures, cell, cacheDecision, chip, COLOR, LABEL, spawnfiOn };
+  window.spawnIncome = { incomeOf, verdict, figures, storedFigures, pickCache, cell, cacheDecision, chip, COLOR, LABEL, spawnfiOn };
 })();
