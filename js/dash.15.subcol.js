@@ -420,7 +420,8 @@
   function stApplySearch(){
     const body = document.getElementById('st-body'); if (!body) return;
     const words = stQ.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    body.querySelectorAll('table tbody tr').forEach(tr => { if (tr.classList.contains('tot')) return; const t = tr.textContent.toLowerCase(); tr.style.display = words.every(w => t.includes(w)) ? '' : 'none'; });
+    // 2026-11-25: never the 📒 Payments book (.pck-grid) — it has its own search and count; a word left here hid all its rows while it still said "68 subscribers"
+    body.querySelectorAll('table:not(.pck-grid) tbody tr').forEach(tr => { if (tr.classList.contains('tot')) return; const t = tr.textContent.toLowerCase(); tr.style.display = words.every(w => t.includes(w)) ? '' : 'none'; });
   }
   new MutationObserver(() => { if (!stQ) return; clearTimeout(stSearchTimer); stSearchTimer = setTimeout(stApplySearch, 60); }).observe(document.body, { childList: true, subtree: true });
   window.stCopy = (t, btn) => { const done = () => { if (btn) { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = o; }, 900); } };
@@ -493,10 +494,11 @@
     bar.innerHTML = '<span class="t">📶 Subscribers</span>' + stTabs().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}">${l}</button>`).join('')
       + `<button type="button" id="st-more" class="${inMore ? 'on' : ''}" style="color:#6b7280">More ▾</button>`
       + (stMoreOpen || inMore ? stMore().map(([k,l])=>`<button type="button" data-k="${k}" class="${stTab===k?'on':''}" style="font-weight:600">${l}</button>`).join('') : '')
-      + `<input id="st-q-all" type="search" placeholder="🔍 Search this tab" value="${esc(stQ)}" style="margin-left:auto;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;min-width:200px">`;
+      // 2026-11-25: no bar search on 📒 Payments — the book's own search box is the only one there
+      + (stTab === 'pck' ? '' : `<input id="st-q-all" type="search" placeholder="🔍 Search this tab" value="${esc(stQ)}" style="margin-left:auto;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:9px;font:inherit;font-size:13px;min-width:200px">`);
     bar.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => stGo(b.dataset.k));
     bar.querySelector('#st-more').onclick = () => { stMoreOpen = !stMoreOpen; stShell(false); };
-    const qa = bar.querySelector('#st-q-all'); qa.oninput = () => { stQ = qa.value; stApplySearch(); };
+    const qa = bar.querySelector('#st-q-all'); if (qa) qa.oninput = () => { stQ = qa.value; stApplySearch(); };
     if (gcrOk === undefined) {   // once per page load: is the GCash review on? (no rows = off, or the gateway line is missing)
       gcrOk = null;
       sb('v_gcash_review_marked', 'select=item_key', 1).then(r => { gcrOk = Array.isArray(r) && r.length > 0; }).catch(() => { gcrOk = false; })
@@ -507,6 +509,7 @@
   }
   const origInit = window.subscribersInit;
   function stGo(k){
+    if (k !== stTab) stQ = '';   // 2026-11-25: a word typed on one tab must not silently hide rows on the next
     stTab = k; try { localStorage.setItem('sub_tab', k); } catch(e){}
     if (k === 'book') { stShell(false); if (typeof origInit === 'function') origInit(); return; }
     const body = stShell(true);
